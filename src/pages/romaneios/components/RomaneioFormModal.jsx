@@ -13,7 +13,7 @@ const EMPTY_FORM = {
     motorista:'', placa:'', destino:'', status:'Aguardando', saida:'', observacoes:'',
     vehicle_id:'', distancia_km:'', custo_combustivel:'', custo_pedagio:'', custo_motorista:'',
 };
-const EMPTY_PEDIDO = { numero_pedido:'', valor_pedido:'', categoria_frete:'Ferragens', itens:[] };
+const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', itens:[] };
 
 export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRomaneio, vehicles=[], materials=[] }) {
     const [form, setForm]           = useState(EMPTY_FORM);
@@ -26,8 +26,16 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
 
     // Novo pedido sendo montado
     const [novoPedido, setNovoPedido]   = useState(EMPTY_PEDIDO);
-    const [novoItem, setNovoItem]       = useState({ material_id:'', quantidade:1 });
+    const [novoItem, setNovoItem]       = useState({ material_id:'', quantidade:1, comprimento_telha:'' });
     const [expandedPedido, setExpanded] = useState(null); // índice do pedido expandido
+    const [paradas, setParadas]         = useState([]);   // cidades intermediárias
+    const [rotaInfo, setRotaInfo]       = useState(null); // resultado do cálculo de rota
+    const [calcRota, setCalcRota]       = useState(false);
+    const [calcCustos, setCalcCustos]   = useState(false); // loading custos IA (diesel + pedágio)
+    const [custoStatus, setCustoStatus] = useState(null);  // mensagem sobre preenchimento dos custos
+    const [precoDiesel, setPrecoDiesel] = useState('6.50');    // R$/litro configurável pelo usuário
+    const [usarPedagio, setUsarPedagio] = useState(true);      // toggle pedágio na rota
+    const [pedagioPor100km, setPedagioPor100km] = useState('8.00'); // R$/100km configurável
 
     useEffect(() => {
         fetchMotoristas().then(setMotoristas);
@@ -42,7 +50,13 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 placa:             editingRomaneio.placa             || '',
                 destino:           editingRomaneio.destino           || '',
                 status:            editingRomaneio.status            || 'Aguardando',
-                saida:             editingRomaneio.saida ? editingRomaneio.saida.slice(0,16) : '',
+                saida:             editingRomaneio.saida ? (() => {
+                    // Converte UTC do banco para horário local (Brasília UTC-3) para exibir corretamente no input
+                    const d = new Date(editingRomaneio.saida);
+                    const offset = d.getTimezoneOffset(); // minutos de diferença
+                    const local = new Date(d.getTime() - offset * 60000);
+                    return local.toISOString().slice(0, 16);
+                })() : '',
                 observacoes:       editingRomaneio.observacoes       || '',
                 vehicle_id:        editingRomaneio.vehicle_id        || '',
                 distancia_km:      editingRomaneio.distancia_km      || '',
@@ -56,6 +70,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 setPedidos(pedidosExistentes.map(p => ({
                     id: p.id,
                     numero_pedido:   p.numero_pedido,
+                    cidade_destino:  p.cidade_destino || '',
                     valor_pedido:    String(p.valor_pedido || ''),
                     categoria_frete: p.categoria_frete || 'Ferragens',
                     itens: (editingRomaneio.romaneio_itens || [])
@@ -83,11 +98,24 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             setPedidos([]);
         }
         setNovoPedido(EMPTY_PEDIDO);
-        setNovoItem({ material_id:'', quantidade:1 });
+        setNovoItem({ material_id:'', quantidade:1, comprimento_telha:'' });
         setErrors({});
         setTab('dados');
         setExpanded(null);
+        setRotaInfo(null);
+        setParadas([]);
+        setCustoStatus(null);
+        setPrecoDiesel('6.50');
+        setUsarPedagio(true);
+        setPedagioPor100km('8.00');
     }, [isOpen, editingRomaneio]);
+
+    const calcularCombustivel = (vehicleId, distanciaKm) => {
+        const veh = vehicles.find(v => String(v.id) === String(vehicleId));
+        if (!veh?.consumo_km || !distanciaKm || Number(distanciaKm) <= 0) return null;
+        // litros = distancia / consumo; custo estimado não inclui preço do litro (só referência)
+        return Number((Number(distanciaKm) / Number(veh.consumo_km)).toFixed(2));
+    };
 
     const setF = (k, v) => {
         setForm(prev => {
@@ -95,6 +123,20 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             if (k === 'vehicle_id') {
                 const veh = vehicles.find(v2 => String(v2.id) === v);
                 if (veh) next.placa = veh.placa;
+            }
+            // Recalcular litros e custo combustível ao mudar veículo ou distância
+            if (k === 'vehicle_id' || k === 'distancia_km') {
+                const vid  = k === 'vehicle_id'  ? v : prev.vehicle_id;
+                const dist = k === 'distancia_km' ? v : prev.distancia_km;
+                const veh  = vehicles.find(vx => String(vx.id) === String(vid));
+                const consumo = veh?.consumo_km ? Number(veh.consumo_km) : null;
+                const distNum = Number(dist);
+                if (consumo && consumo > 0 && distNum > 0) {
+                    const litros  = distNum / consumo;
+                    const diesel  = Number(precoDiesel) || 6.50;
+                    next._litros_estimados = Math.round(litros);
+                    next.custo_combustivel = (litros * diesel).toFixed(2);
+                }
             }
             return next;
         });
@@ -118,16 +160,29 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             }
             // Auto-detect categoria_frete from material
             const catFrete = mat.categoria_frete || detectarCategoriaFrete(mat.nome);
+            // Cálculo especial para telha de zinco
+            const isTelha = mat.is_telha_zinco;
+            const compTelha = isTelha ? (Number(novoItem.comprimento_telha) || 1) : null;
+            const pesoBase = isTelha ? (Number(mat.peso_base_metro) || 3.80) : mat.peso;
+            // Telha: qty = metros_totais ÷ comprimento; peso = pesoBase × comprimento × qtdTelhas
+            const qtdTelhas = isTelha ? Math.round(qty / compTelha) : qty;
+            const pesoTotalItem = isTelha ? (pesoBase * compTelha * qtdTelhas) : (qty * mat.peso);
             return { ...p,
                 categoria_frete: p.categoria_frete || catFrete,
                 itens: [...p.itens, {
-                    material_id: mat.id, quantidade: qty,
-                    peso_total: qty * mat.peso, nome: mat.nome,
-                    unidade: mat.unidade, peso_unit: mat.peso,
+                    material_id: mat.id,
+                    quantidade: isTelha ? qtdTelhas : qty,
+                    peso_total: pesoTotalItem,
+                    nome: mat.nome,
+                    unidade: mat.unidade,
+                    peso_unit: isTelha ? (pesoBase * compTelha) : mat.peso,
+                    is_telha_zinco: isTelha || false,
+                    comprimento_telha: compTelha,
+                    metros_totais: isTelha ? qty : null,
                 }]
             };
         }));
-        setNovoItem({ material_id:'', quantidade:1 });
+        setNovoItem({ material_id:'', quantidade:1, comprimento_telha:'' });
     };
 
     const removeItemFromPedido = (pedidoIdx, itemIdx) => {
@@ -178,6 +233,106 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     }, [pedidos]);
 
     // ── Validação e submit ─────────────────────────────────────
+
+    // Monta URL do Google Maps com todas as cidades
+    const getMapsUrl = (origem, stops, destino) => {
+        const cidades = [origem, ...stops, destino].filter(Boolean);
+        return `https://www.google.com/maps/dir/${cidades.map(c => encodeURIComponent(c)).join('/')}`;
+    };
+
+    // Chama a IA para estimar distância, preço do diesel e pedágios — tudo em uma requisição
+    const calcularRotaIA = async () => {
+        const cidadeOrigem = 'Guanambi, BA';
+        const todasCidades = [cidadeOrigem, ...paradas, form.destino].filter(Boolean);
+        if (todasCidades.length < 2) return;
+
+        const veiculo = vehicles.find(v => String(v.id) === String(form.vehicle_id));
+        const consumoKm = veiculo?.consumo_km ? Number(veiculo.consumo_km) : null;
+
+        setCalcRota(true);
+        setCustoStatus(null);
+        try {
+            // Chama a Edge Function do Supabase (evita CORS — chave API fica segura no servidor)
+            const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+            const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+            const resp = await fetch(`${SUPABASE_URL}/functions/v1/calcular-rota`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${SUPABASE_ANON}`,
+                },
+                body: JSON.stringify({
+                    cidades: todasCidades,
+                    consumoKm: consumoKm || null,
+                    precoDiesel: Number(precoDiesel) || 6.50,
+                    pedagioPor100km: usarPedagio ? (Number(pedagioPor100km) || 8.00) : 0,
+                }),
+            });
+
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const info = await resp.json();
+            if (info.error) throw new Error(info.error);
+
+            setRotaInfo(info);
+
+            // Preenche distância
+            const distKm = info.distanciaTotal;
+            const statusMsgs = [];
+            const dieselUsado = Number(precoDiesel) || 6.50;
+
+            // Atualiza distância + combustível + pedágio em um único setForm para evitar race condition
+            setForm(prev => {
+                const next = { ...prev };
+
+                // Distância
+                if (distKm) next.distancia_km = String(distKm);
+
+                // Combustível
+                if (consumoKm && consumoKm > 0 && distKm) {
+                    const litros = distKm / consumoKm;
+                    next.custo_combustivel  = (litros * dieselUsado).toFixed(2);
+                    next._litros_estimados  = Math.round(litros);
+                }
+
+                // Pedágio — só preenche se toggle estiver ativo
+                if (usarPedagio && info.pedagioEstimado > 0) {
+                    next.custo_pedagio = String(info.pedagioEstimado.toFixed(2));
+                } else {
+                    next.custo_pedagio = '';
+                }
+
+                return next;
+            });
+
+            // Mensagens de status
+            if (!consumoKm) {
+                statusMsgs.push('Cadastre o consumo km/l do veículo para calcular o combustível automaticamente.');
+            } else if (distKm && consumoKm > 0) {
+                const litros = distKm / consumoKm;
+                statusMsgs.push(`Diesel S10: R$ ${dieselUsado.toFixed(2)}/l · ${Math.round(litros)} litros · R$ ${(litros * dieselUsado).toFixed(2)}`);
+            }
+            if (info.pedagioEstimado > 0) {
+                statusMsgs.push(`Pedágios (${info.rodoviasPrincipais || 'rota'}): R$ ${info.pedagioEstimado.toFixed(2)}`);
+            } else {
+                statusMsgs.push('Sem pedágios identificados na rota.');
+            }
+
+            setCustoStatus(statusMsgs);
+        } catch (e) {
+            // CORS ou erro: abre Google Maps diretamente para o usuário verificar
+            setRotaInfo({
+                distanciaTotal: null,
+                rota: todasCidades,
+                tempoEstimado: null,
+                observacao: 'Verifique a rota no Google Maps e preencha a distância manualmente.',
+                erro: true,
+            });
+            setCustoStatus(['Não foi possível buscar dados automáticos. Preencha os custos manualmente.']);
+        } finally {
+            setCalcRota(false);
+        }
+    };
+
     const validate = () => {
         const e = {};
         if (!form.motorista.trim()) e.motorista = 'Motorista é obrigatório';
@@ -203,7 +358,8 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 ...form,
                 peso_total:             totais.pesoTotal,
                 vehicle_id:             form.vehicle_id || null,
-                distancia_km:           n(form.distancia_km),
+                distancia_km:           rotaInfo?.distanciaTotal || n(form.distancia_km),
+                paradas:                JSON.stringify(paradas),
                 custo_combustivel:      n(form.custo_combustivel),
                 custo_pedagio:          n(form.custo_pedagio),
                 custo_motorista:        n(form.custo_motorista),
@@ -212,6 +368,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 valor_total_carga:      totais.valorTotalCarga,
                 _pedidos: pedidos.map(p => ({
                     numero_pedido:   p.numero_pedido || '',
+                    cidade_destino:  p.cidade_destino || '',
                     valor_pedido:    n(p.valor_pedido),
                     categoria_frete: p.categoria_frete || 'Outros',
                     percentual_frete: FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05,
@@ -274,10 +431,140 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                 <Autocomplete label="Motorista" required name="motorista"
                                     value={form.motorista} onChange={v => setF('motorista', v)}
                                     suggestions={motoristas} placeholder="Nome do motorista" error={errors.motorista} />
-                                <Autocomplete label="Destino" required name="destino"
-                                    value={form.destino} onChange={v => setF('destino', v)}
-                                    suggestions={destinos} placeholder="Cidade, UF" error={errors.destino} />
+                                <div className="flex flex-col gap-2">
+                                    <Autocomplete label="Destino Final" required name="destino"
+                                        value={form.destino} onChange={v => setF('destino', v)}
+                                        suggestions={destinos} placeholder="Cidade, UF" error={errors.destino} />
+                                </div>
                             </div>
+                            {/* Paradas intermediárias */}
+                            <div className="rounded-lg border p-3 flex flex-col gap-2" style={{ borderColor: 'var(--color-border)' }}>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-semibold font-caption" style={{ color: 'var(--color-text-primary)' }}>
+                                        Paradas intermediárias ({paradas.length})
+                                    </span>
+                                    <button type="button"
+                                        onClick={() => setParadas(prev => [...prev, ''])}
+                                        className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg transition-colors"
+                                        style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}>
+                                        <Icon name="Plus" size={12} color="#fff" /> Adicionar cidade
+                                    </button>
+                                </div>
+                                {paradas.map((p, idx) => (
+                                    <div key={idx} className="flex gap-2 items-center">
+                                        <span className="text-xs text-gray-400 w-4">{idx + 1}.</span>
+                                        <input value={p}
+                                            onChange={e => setParadas(prev => prev.map((c, i) => i === idx ? e.target.value : c))}
+                                            placeholder="Cidade, UF"
+                                            className="flex-1 h-8 px-3 rounded-lg border border-gray-200 text-xs bg-white" />
+                                        <button type="button" onClick={() => setParadas(prev => prev.filter((_, i) => i !== idx))}>
+                                            <Icon name="X" size={14} color="#DC2626" />
+                                        </button>
+                                    </div>
+                                ))}
+                                {/* Configurações de diesel e pedágio */}
+                                <div className="rounded-lg border p-3 flex flex-col gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#FAFAFA' }}>
+                                    <p className="text-xs font-semibold font-caption" style={{ color: 'var(--color-text-secondary)' }}>
+                                        Configurações para cálculo automático
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label className="block text-xs font-caption mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+                                                Preço Diesel S10 (R$/l)
+                                            </label>
+                                            <div className="relative">
+                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>R$</span>
+                                                <input type="number" min="0" step="0.01" value={precoDiesel}
+                                                    onChange={e => setPrecoDiesel(e.target.value)}
+                                                    className="w-full h-8 pl-7 pr-2 rounded border border-gray-200 text-xs font-data bg-white" />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-caption mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+                                                Pedágio por 100km (R$)
+                                            </label>
+                                            <div className="relative">
+                                                <input type="number" min="0" step="0.50"
+                                                    value={usarPedagio ? pedagioPor100km : ''}
+                                                    onChange={e => setPedagioPor100km(e.target.value)}
+                                                    disabled={!usarPedagio}
+                                                    placeholder={usarPedagio ? '8.00' : 'Sem pedágio'}
+                                                    className="w-full h-8 px-2 rounded border border-gray-200 text-xs font-data bg-white disabled:opacity-40 disabled:bg-gray-50" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                                        <div onClick={() => setUsarPedagio(p => !p)}
+                                            className="relative w-8 h-4 rounded-full transition-colors flex-shrink-0"
+                                            style={{ backgroundColor: usarPedagio ? 'var(--color-primary)' : '#D1D5DB' }}>
+                                            <div className="absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all"
+                                                style={{ left: usarPedagio ? '17px' : '2px' }} />
+                                        </div>
+                                        <span className="text-xs font-caption" style={{ color: 'var(--color-text-secondary)' }}>
+                                            {usarPedagio ? 'Rota com pedágios' : 'Rota sem pedágios'}
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <button type="button" onClick={calcularRotaIA} disabled={calcRota || (!form.destino)}
+                                    className="mt-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                                    style={{ backgroundColor: calcRota ? '#E0E7FF' : '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
+                                    {calcRota
+                                        ? <><span className="inline-block animate-spin mr-1">⟳</span> Calculando rota...</>
+                                        : <><Icon name="Navigation" size={13} color="#1D4ED8" /> Calcular rota + combustível{usarPedagio ? ' + pedágios' : ''}</>
+                                    }
+                                </button>
+
+                                {/* Resultado da rota */}
+                                {rotaInfo && (
+                                    <div className="rounded-lg p-3 text-xs flex flex-col gap-1.5"
+                                        style={{ backgroundColor: rotaInfo.erro ? '#FFF7ED' : '#F0FDF4', border: `1px solid ${rotaInfo.erro ? '#FED7AA' : '#BBF7D0'}` }}>
+                                        {rotaInfo.erro ? (
+                                            <div className="flex items-center gap-2 font-semibold text-orange-600">
+                                                <Icon name="AlertTriangle" size={13} color="#D97706" />
+                                                Preencha a distância manualmente
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center gap-2 font-semibold text-green-700">
+                                                <Icon name="CheckCircle2" size={13} color="#059669" />
+                                                {rotaInfo.distanciaTotal} km · {rotaInfo.tempoEstimado}
+                                                {rotaInfo.rodoviasPrincipais && <span className="font-normal text-green-600">· {rotaInfo.rodoviasPrincipais}</span>}
+                                            </div>
+                                        )}
+                                        {rotaInfo.rota && <p className="text-gray-500">{rotaInfo.rota.join(' → ')}</p>}
+                                        {rotaInfo.observacao && <p className="text-gray-400 italic">{rotaInfo.observacao}</p>}
+
+                                        {/* Status dos custos preenchidos */}
+                                        {custoStatus && custoStatus.map((msg, i) => (
+                                            <div key={i} className="flex items-start gap-1.5 text-gray-600 border-t pt-1.5" style={{ borderColor: rotaInfo.erro ? '#FED7AA' : '#BBF7D0' }}>
+                                                <Icon name="Info" size={11} color={rotaInfo.erro ? '#D97706' : '#059669'} className="mt-0.5 flex-shrink-0" />
+                                                <span>{msg}</span>
+                                            </div>
+                                        ))}
+
+                                        {/* Link Google Maps */}
+                                        <a href={getMapsUrl('Guanambi, BA', paradas, form.destino)}
+                                            target="_blank" rel="noreferrer"
+                                            className="flex items-center gap-1 text-blue-600 hover:underline font-medium border-t pt-1.5"
+                                            style={{ borderColor: rotaInfo.erro ? '#FED7AA' : '#BBF7D0' }}>
+                                            <Icon name="ExternalLink" size={11} color="#2563EB" />
+                                            Ver rota completa no Google Maps
+                                        </a>
+                                    </div>
+                                )}
+
+                                {/* Botão direto Google Maps (sempre visível quando tiver destino) */}
+                                {form.destino && !rotaInfo && (
+                                    <a href={getMapsUrl('Guanambi, BA', paradas, form.destino)}
+                                        target="_blank" rel="noreferrer"
+                                        className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors hover:opacity-80"
+                                        style={{ backgroundColor: '#F8FAFC', color: '#374151', border: '1px solid #E2E8F0' }}>
+                                        <Icon name="Map" size={13} color="#374151" />
+                                        Abrir no Google Maps (sem IA)
+                                    </a>
+                                )}
+                            </div>
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Veículo</label>
@@ -382,12 +669,19 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                         {isExpanded && (
                                             <div className="px-4 py-4 flex flex-col gap-4 border-t" style={{ borderColor:'var(--color-border)' }}>
                                                 {/* Fields row */}
-                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                <div className="grid grid-cols-2 gap-3">
                                                     <div>
                                                         <label className="block text-xs font-caption mb-1" style={{ color:'var(--color-text-secondary)' }}>Nº do Pedido</label>
                                                         <input value={pedido.numero_pedido}
                                                             onChange={e => updatePedidoField(pIdx,'numero_pedido',e.target.value)}
                                                             placeholder="Ex: 37443"
+                                                            className="w-full h-9 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-caption mb-1" style={{ color:'var(--color-text-secondary)' }}>Cidade de Destino</label>
+                                                        <input value={pedido.cidade_destino}
+                                                            onChange={e => updatePedidoField(pIdx,'cidade_destino',e.target.value)}
+                                                            placeholder="Ex: Paratinga"
                                                             className="w-full h-9 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data" />
                                                     </div>
                                                     <div>
@@ -423,8 +717,20 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                                 <option key={m.id} value={m.id}>{m.nome} ({m.unidade})</option>
                                                             ))}
                                                         </select>
+                                                        {/* Campo comprimento só aparece se material for telha */}
+                                                        {(() => {
+                                                            const selMat = materials.find(m => String(m.id) === String(novoItem.material_id));
+                                                            return selMat?.is_telha_zinco ? (
+                                                                <input type="number" min="0.5" step="0.5" value={novoItem.comprimento_telha}
+                                                                    onChange={e => setNovoItem(p => ({...p, comprimento_telha: e.target.value}))}
+                                                                    placeholder="Comp. (m)"
+                                                                    title="Comprimento de cada telha em metros"
+                                                                    className="w-24 h-9 px-2 rounded-lg border border-blue-300 text-sm font-data text-center bg-blue-50" />
+                                                            ) : null;
+                                                        })()}
                                                         <input type="number" min="0.001" step="0.001" value={novoItem.quantidade}
                                                             onChange={e => setNovoItem(p => ({...p, quantidade:e.target.value}))}
+                                                            placeholder={(() => { const m = materials.find(m2 => String(m2.id) === String(novoItem.material_id)); return m?.is_telha_zinco ? 'Metros totais' : 'Qtd'; })()}
                                                             className="w-20 h-9 px-2 rounded-lg border border-gray-200 text-sm font-data text-center bg-white" />
                                                         <button onClick={() => addItemToPedido(pIdx)}
                                                             className="h-9 px-3 rounded-lg text-white text-xs font-medium flex items-center gap-1 transition-colors"
@@ -563,15 +869,76 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                     Custos Operacionais da Viagem
                                 </p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <MoneyInput label="Distância (km)" name="distancia_km" value={form.distancia_km}
-                                        onChange={e => setF(e.target.name, e.target.value)} prefix="km" />
-                                    <MoneyInput label="Combustível (R$)" name="custo_combustivel" value={form.custo_combustivel}
-                                        onChange={e => setF(e.target.name, e.target.value)} />
-                                    <MoneyInput label="Pedágios (R$)" name="custo_pedagio" value={form.custo_pedagio}
-                                        onChange={e => setF(e.target.name, e.target.value)} />
-                                    <MoneyInput label="Diária Motorista (R$)" name="custo_motorista" value={form.custo_motorista}
-                                        onChange={e => setF(e.target.name, e.target.value)} />
+                                    <div className="sm:col-span-2">
+                                        <MoneyInput label="Distância (km)" name="distancia_km" value={form.distancia_km}
+                                            onChange={e => setF(e.target.name, e.target.value)} prefix="km" />
+                                    </div>
+
+                                    {/* Resumo combustível */}
+                                    {form._litros_estimados > 0 && (
+                                        <div className="sm:col-span-2 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-caption" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>
+                                            <Icon name="Fuel" size={13} color="#1D4ED8" />
+                                            <span>
+                                                {vehicles.find(v => String(v.id) === String(form.vehicle_id))?.consumo_km} km/l
+                                                · <strong>{form._litros_estimados} litros estimados</strong>
+                                                {(rotaInfo?.precoDieselS10 || rotaInfo?.['preçoDieselS10']) && <> · Diesel S10: <strong>R$ {Number(rotaInfo.precoDieselS10 || rotaInfo['preçoDieselS10']).toFixed(2)}/l</strong> (Guanambi-BA)</>}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Combustível — badge "auto" se foi preenchido pela IA */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <label className="text-xs font-medium font-caption" style={{ color:'var(--color-text-primary)' }}>Combustível (R$)</label>
+                                            {form._litros_estimados > 0 && form.custo_combustivel && (
+                                                <span className="text-xs px-1.5 py-0.5 rounded font-caption" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                                    ✓ Auto
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>R$</span>
+                                            <input type="number" name="custo_combustivel" value={form.custo_combustivel}
+                                                onChange={e => setF(e.target.name, e.target.value)} min="0" step="0.01" placeholder="0,00"
+                                                className="w-full h-10 pl-8 pr-3 rounded-lg border text-sm font-data focus:outline-none bg-white"
+                                                style={{ borderColor: form._litros_estimados > 0 && form.custo_combustivel ? '#6EE7B7' : '#E5E7EB' }} />
+                                        </div>
+                                    </div>
+
+                                    {/* Pedágio — badge "auto" se foi preenchido pela IA */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <label className="text-xs font-medium font-caption" style={{ color:'var(--color-text-primary)' }}>Pedágios (R$)</label>
+                                            {rotaInfo?.pedagioEstimado > 0 && form.custo_pedagio && (
+                                                <span className="text-xs px-1.5 py-0.5 rounded font-caption" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                                    ✓ Auto
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>R$</span>
+                                            <input type="number" name="custo_pedagio" value={form.custo_pedagio}
+                                                onChange={e => setF(e.target.name, e.target.value)} min="0" step="0.01" placeholder="0,00"
+                                                className="w-full h-10 pl-8 pr-3 rounded-lg border text-sm font-data focus:outline-none bg-white"
+                                                style={{ borderColor: rotaInfo?.pedagioEstimado > 0 && form.custo_pedagio ? '#6EE7B7' : '#E5E7EB' }} />
+                                        </div>
+                                    </div>
+
+                                    <div className="sm:col-span-2">
+                                        <MoneyInput label="Diária Motorista (R$)" name="custo_motorista" value={form.custo_motorista}
+                                            onChange={e => setF(e.target.name, e.target.value)} />
+                                    </div>
                                 </div>
+
+                                {/* Lembrete se não calculou ainda */}
+                                {!rotaInfo && form.destino && (
+                                    <button type="button" onClick={() => { calcularRotaIA(); }}
+                                        className="w-full mt-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-medium transition-colors"
+                                        style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }}>
+                                        <Icon name="Sparkles" size={12} color="#1D4ED8" />
+                                        Calcular combustível e pedágios automaticamente
+                                    </button>
+                                )}
                             </div>
 
                             {/* Resumo final */}

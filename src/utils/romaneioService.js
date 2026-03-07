@@ -5,12 +5,13 @@ export async function fetchRomaneios() {
     const { data, error } = await supabase
         .from('romaneios')
         .select(`
-            id, numero, motorista, placa, destino, status,
+            id, numero, motorista, motorista_id, placa, destino, status,
+            aprovado, aprovado_por, aprovado_em,
             peso_total, saida, observacoes, vehicle_id,
             distancia_km, custo_combustivel, custo_pedagio,
             custo_motorista, valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,
-            romaneio_pedidos(id, numero_pedido, valor_pedido, categoria_frete, percentual_frete, frete_calculado),
+            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
                 materials(id, nome, unidade, peso, categoria_frete, percentual_frete))
         `)
@@ -29,7 +30,7 @@ export async function fetchRomaneioById(id) {
             distancia_km, custo_combustivel, custo_pedagio,
             custo_motorista, valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,
-            romaneio_pedidos(id, numero_pedido, valor_pedido, categoria_frete, percentual_frete, frete_calculado),
+            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
                 materials(id, nome, unidade, peso, categoria_frete, percentual_frete))
         `)
@@ -56,6 +57,21 @@ export async function fetchDestinos() {
 }
 
 // ── Build payload ─────────────────────────────────────────────────────────────
+// Converte datetime-local (ex: "2026-03-09T02:00") para ISO UTC
+// O input datetime-local retorna horário local do browser sem timezone
+// Supabase armazena em UTC — sem conversão fica 3h adiantado (fuso Brasília UTC-3)
+function localDatetimeToUTC(str) {
+    if (!str) return null;
+    // Se já tem timezone (ex: 'Z' ou '+00:00'), usa direto
+    if (str.includes('Z') || str.includes('+') || (str.length > 19 && str[19] === '-')) {
+        return new Date(str).toISOString();
+    }
+    // Trata como horário local de Brasília (UTC-3) e converte para UTC
+    const local = new Date(str);
+    if (isNaN(local.getTime())) return null;
+    return local.toISOString();
+}
+
 function buildPayload(r) {
     return {
         motorista:              r.motorista              || null,
@@ -63,7 +79,7 @@ function buildPayload(r) {
         destino:                r.destino                || null,
         status:                 r.status                 || 'Aguardando',
         peso_total:             r.peso_total             || 0,
-        saida:                  r.saida                  || null,
+        saida:                  localDatetimeToUTC(r.saida),
         observacoes:            r.observacoes            || null,
         distancia_km:           r.distancia_km           || 0,
         custo_combustivel:      r.custo_combustivel      || 0,
@@ -187,4 +203,34 @@ export async function deleteRomaneio(id) {
     await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
     const { error } = await supabase.from('romaneios').delete().eq('id', id);
     if (error) throw error;
+}
+
+// ── Aprovação de romaneios ────────────────────────────────────────────────────
+export async function aprovarRomaneio(id, adminId) {
+    const { data, error } = await supabase
+        .from('romaneios')
+        .update({
+            aprovado: true,
+            aprovado_por: adminId,
+            aprovado_em: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function fetchRomaneiosPorMotorista(motoristaId) {
+    const { data, error } = await supabase
+        .from('romaneios')
+        .select(`
+            id, numero, motorista, motorista_id, placa, destino, status,
+            aprovado, aprovado_em, peso_total, saida, created_at,
+            romaneio_itens(id, quantidade, peso_total, material_id,
+                materials(id, nome, unidade, peso, categoria_frete))
+        `)
+        .eq('motorista_id', motoristaId)
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
 }

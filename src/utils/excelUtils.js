@@ -168,6 +168,326 @@ export function exportRomaneioModeloAraguaia(romaneio) {
     XLSX.writeFile(wb, filename);
 }
 
+// ── MODELO 1: Romaneio Individual ────────────────────────────────────────────
+/**
+ * Guia 1 — Romaneio: cabeçalho empresa + dados viagem + materiais por pedido (vertical)
+ * Guia 2 — Financeiro: pedidos com frete, valor da carga e resumo
+ */
+export function exportRomaneioModelo1(romaneio) {
+    if (!romaneio) return;
+    const wb   = XLSX.utils.book_new();
+    const fmt  = v => 'R$ ' + brl(v);
+    const pedidos = romaneio.romaneio_pedidos || [];
+    const itens   = romaneio.romaneio_itens   || [];
+    const dtCriado = new Date(romaneio.created_at || Date.now()).toLocaleDateString('pt-BR');
+    const dtSaida  = romaneio.saida
+        ? new Date(romaneio.saida).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
+        : '—';
+
+    // ════════════════════════════════════════════════════════════
+    // GUIA 1 — ROMANEIO + MATERIAIS
+    // ════════════════════════════════════════════════════════════
+    const g1 = [];
+
+    // Cabeçalho empresa
+    g1.push(['COMERCIAL ARAGUAIA LTDA']);
+    g1.push(['Rodovia BR-122, S/Nº KM 02 – Guanambi – BA – 46430-000']);
+    g1.push(['Fone: (77) 3451-2175']);
+    g1.push([]);
+
+    // Dados do romaneio (vertical)
+    g1.push(['ROMANEIO',      romaneio.numero || '']);
+    g1.push(['Data',          dtCriado]);
+    g1.push(['Motorista',     romaneio.motorista || '']);
+    g1.push(['Placa',         romaneio.placa     || '']);
+    g1.push(['Destino',       romaneio.destino   || '']);
+    g1.push(['Saída',         dtSaida]);
+    if (romaneio.distancia_km) g1.push(['Distância', romaneio.distancia_km + ' km']);
+    g1.push(['Status',        romaneio.status    || '']);
+    g1.push([]);
+
+    // Materiais por pedido
+    if (pedidos.length > 0) {
+        pedidos.forEach((ped, idx) => {
+            const itensDoPedido = itens.filter(i => i.pedido_id === ped.id);
+            const pesoTotal = itensDoPedido.reduce((s, i) => s + n(i.peso_total), 0);
+
+            // Cabeçalho do pedido
+            g1.push([`PEDIDO ${idx + 1}${ped.numero_pedido ? ' – Nº ' + ped.numero_pedido : ''}`]);
+            if (ped.cidade_destino) g1.push(['Cidade de Destino', ped.cidade_destino]);
+            g1.push([]);
+
+            // Tabela de materiais
+            g1.push(['Material', 'Unidade', 'Quantidade', 'Peso Unit. (kg)', 'Peso Total (kg)']);
+            if (itensDoPedido.length > 0) {
+                itensDoPedido.forEach(item => {
+                    const mat = item.materials || {};
+                    g1.push([
+                        mat.nome || `Material #${item.material_id}`,
+                        mat.unidade  || '',
+                        item.quantidade || 0,
+                        mat.peso || 0,
+                        n(item.peso_total),
+                    ]);
+                });
+            } else {
+                g1.push(['(sem materiais cadastrados)', '', '', '', '']);
+            }
+            g1.push(['', '', '', 'Peso do Pedido:', pesoTotal.toLocaleString('pt-BR', {minimumFractionDigits:2}) + ' kg']);
+            g1.push([]);
+        });
+    } else {
+        // Fallback sem pedidos estruturados
+        g1.push(['MATERIAIS TRANSPORTADOS']);
+        g1.push(['Material', 'Unidade', 'Quantidade', 'Peso Unit. (kg)', 'Peso Total (kg)']);
+        itens.forEach(item => {
+            const mat = item.materials || {};
+            g1.push([mat.nome || `#${item.material_id}`, mat.unidade || '', item.quantidade || 0, mat.peso || 0, n(item.peso_total)]);
+        });
+        g1.push([]);
+    }
+
+    // Peso total geral
+    const pesoGeral = itens.reduce((s, i) => s + n(i.peso_total), 0);
+    g1.push(['PESO TOTAL DA CARGA', pesoGeral.toLocaleString('pt-BR', {minimumFractionDigits:2}) + ' kg']);
+    g1.push([]);
+
+    // Assinaturas
+    g1.push([]);
+    g1.push(['______________________________', '', '______________________________']);
+    g1.push(['Motorista', '', 'Responsável']);
+
+    if (romaneio.observacoes) {
+        g1.push([]);
+        g1.push(['OBSERVAÇÕES']);
+        g1.push([romaneio.observacoes]);
+    }
+
+    const ws1 = XLSX.utils.aoa_to_sheet(g1);
+    ws1['!cols'] = [{wch:38},{wch:18},{wch:14},{wch:18},{wch:18}];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Romaneio');
+
+    // ════════════════════════════════════════════════════════════
+    // GUIA 2 — FINANCEIRO (pedidos + frete + resumo)
+    // ════════════════════════════════════════════════════════════
+    const g2 = [];
+
+    g2.push(['COMERCIAL ARAGUAIA LTDA – FINANCEIRO DO ROMANEIO']);
+    g2.push([`Romaneio Nº ${romaneio.numero || ''}  |  Motorista: ${romaneio.motorista || ''}  |  Destino: ${romaneio.destino || ''}  |  Data: ${dtCriado}`]);
+    g2.push([]);
+
+    // Tabela de pedidos
+    g2.push(['PEDIDOS DA CARGA', '', '', '', '', '']);
+    g2.push(['Nº Pedido', 'Cidade Destino', 'Categoria de Frete', '% Frete', 'Valor do Pedido (R$)', 'Frete Calculado (R$)']);
+
+    let totalCarga = 0, totalFrete = 0;
+    if (pedidos.length > 0) {
+        pedidos.forEach(p => {
+            const pct   = n(p.percentual_frete) || 0.05;
+            const frete = n(p.frete_calculado) || (n(p.valor_pedido) * pct);
+            totalCarga += n(p.valor_pedido);
+            totalFrete += frete;
+            g2.push([
+                p.numero_pedido  || '—',
+                p.cidade_destino || romaneio.destino || '—',
+                p.categoria_frete || '',
+                fmtPct(pct),
+                brl(p.valor_pedido),
+                brl(frete),
+            ]);
+        });
+    } else {
+        g2.push(['(sem pedidos cadastrados)', '', '', '', '', '']);
+    }
+    g2.push([]);
+    g2.push(['', '', '', '', 'TOTAL VALOR DA CARGA:', brl(totalCarga || n(romaneio.valor_total_carga))]);
+    g2.push(['', '', '', '', 'TOTAL FRETE CALCULADO:', brl(totalFrete || n(romaneio.valor_frete_calculado || romaneio.valor_frete))]);
+    g2.push([]);
+
+    // Custos operacionais
+    const freteTotal = totalFrete || n(romaneio.valor_frete_calculado || romaneio.valor_frete);
+    const custoComb  = n(romaneio.custo_combustivel);
+    const custoPed   = n(romaneio.custo_pedagio);
+    const custoDia   = n(romaneio.custo_motorista);
+    const custoTotal = custoComb + custoPed + custoDia;
+    const margem     = freteTotal - custoTotal;
+
+    g2.push(['CUSTOS OPERACIONAIS', '', '', '', '', '']);
+    g2.push(['Combustível',      '', '', '', '', fmt(custoComb)]);
+    g2.push(['Pedágios',         '', '', '', '', fmt(custoPed)]);
+    g2.push(['Diária Motorista', '', '', '', '', fmt(custoDia)]);
+    if (romaneio.distancia_km) g2.push(['Distância da Rota', '', '', '', '', romaneio.distancia_km + ' km']);
+    g2.push([]);
+    g2.push(['RESUMO FINANCEIRO', '', '', '', '', '']);
+    g2.push(['Frete Total',      '', '', '', '', fmt(freteTotal)]);
+    g2.push(['(-) Custo Total',  '', '', '', '', fmt(custoTotal)]);
+    g2.push(['MARGEM DA VIAGEM', '', '', '', '', fmt(margem)]);
+    if (freteTotal > 0) g2.push(['% Margem s/ Frete', '', '', '', '', ((margem / freteTotal) * 100).toFixed(2) + '%']);
+
+    const ws2 = XLSX.utils.aoa_to_sheet(g2);
+    ws2['!cols'] = [{wch:20},{wch:20},{wch:22},{wch:10},{wch:24},{wch:22}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'Financeiro');
+
+    XLSX.writeFile(wb, `romaneio_${romaneio.numero || 'sem-numero'}_${today()}.xlsx`);
+}
+
+// ── MODELO 2: Relatório Consolidado ──────────────────────────────────────────
+/**
+ * Exporta relatório consolidado com múltiplas abas:
+ * - Aba 1: Todos os romaneios do período
+ * - Aba 2: Agrupado por motorista com bonificações
+ * - Aba 3: Totais por categoria de frete
+ */
+export function exportRelatorioConsolidado(romaneios, periodo) {
+    if (!romaneios || romaneios.length === 0) return;
+    const wb = XLSX.utils.book_new();
+    const n2 = v => Number(v || 0);
+    const fmt = v => 'R$ ' + brl(v);
+    const periodoStr = periodo || today();
+
+    // ── ABA 1: Listagem de Romaneios ─────────────────────────────────────────
+    const rowsRom = [];
+    rowsRom.push([`RELATÓRIO CONSOLIDADO DE ROMANEIOS — ${periodoStr.toUpperCase()}`, '', '', '', '', '', '', '', '', '', '']);
+    rowsRom.push([`Gerado em: ${new Date().toLocaleString('pt-BR')}`, '', '', '', '', '', '', '', '', '', '']);
+    rowsRom.push([]);
+    rowsRom.push(['Nº Romaneio', 'Motorista', 'Placa', 'Destino', 'Status', 'Aprovado', 'Data Saída', 'Peso Total (kg)', 'Valor Carga (R$)', 'Frete (R$)', 'Margem (R$)']);
+
+    let totPeso = 0, totCarga = 0, totFrete = 0, totMargem = 0;
+    romaneios.forEach(r => {
+        const frete  = n2(r.valor_frete_calculado || r.valor_frete);
+        const custo  = n2(r.custo_combustivel) + n2(r.custo_pedagio) + n2(r.custo_motorista);
+        const margem = frete - custo;
+        const peso   = n2(r.peso_total);
+        const carga  = n2(r.valor_total_carga);
+        totPeso   += peso;
+        totCarga  += carga;
+        totFrete  += frete;
+        totMargem += margem;
+        rowsRom.push([
+            r.numero || '',
+            r.motorista || '',
+            r.placa || '',
+            r.destino || '',
+            r.status || '',
+            r.aprovado ? 'Sim' : 'Não',
+            r.saida ? new Date(r.saida).toLocaleDateString('pt-BR') : '',
+            peso,
+            brl(carga),
+            brl(frete),
+            brl(margem),
+        ]);
+    });
+    rowsRom.push([]);
+    rowsRom.push(['TOTAIS', '', '', '', '', `${romaneios.length} romaneios`, '', totPeso.toLocaleString('pt-BR', {maximumFractionDigits:0}) + ' kg', fmt(totCarga), fmt(totFrete), fmt(totMargem)]);
+
+    const wsRom = XLSX.utils.aoa_to_sheet(rowsRom);
+    wsRom['!cols'] = [{wch:14},{wch:22},{wch:10},{wch:22},{wch:14},{wch:10},{wch:12},{wch:16},{wch:18},{wch:16},{wch:16}];
+    XLSX.utils.book_append_sheet(wb, wsRom, 'Romaneios');
+
+    // ── ABA 2: Por Motorista + Bonificações ──────────────────────────────────
+    const porMotorista = {};
+    romaneios.forEach(r => {
+        const key = r.motorista || 'Sem motorista';
+        if (!porMotorista[key]) {
+            porMotorista[key] = { romaneios: 0, peso: 0, frete: 0, margem: 0, kgFerragem: 0, temCimento: false };
+        }
+        const m    = porMotorista[key];
+        const frete = n2(r.valor_frete_calculado || r.valor_frete);
+        const custo = n2(r.custo_combustivel) + n2(r.custo_pedagio) + n2(r.custo_motorista);
+        m.romaneios++;
+        m.peso   += n2(r.peso_total);
+        m.frete  += frete;
+        m.margem += frete - custo;
+        // Bonificação: calcular ferragem e cimento pelos itens
+        const itens = r.romaneio_itens || [];
+        itens.forEach(item => {
+            const cat = item.materials?.categoria_frete || '';
+            if (cat.toLowerCase().includes('cimento')) {
+                m.temCimento = true;
+            } else {
+                m.kgFerragem += n2(item.peso_total);
+            }
+        });
+    });
+
+    const rowsMot = [];
+    rowsMot.push([`RELATÓRIO POR MOTORISTA — ${periodoStr.toUpperCase()}`, '', '', '', '', '', '', '', '']);
+    rowsMot.push([]);
+    rowsMot.push(['Motorista', 'Romaneios', 'Peso Total (kg)', 'Frete Total (R$)', 'Margem Total (R$)', 'Ton. Ferragem', 'Bônus Ferragem (R$)', 'Bônus Cimento (R$)', 'Total Bônus (R$)']);
+
+    let totBonusGeral = 0;
+    Object.entries(porMotorista).sort((a,b) => b[1].frete - a[1].frete).forEach(([nome, d]) => {
+        const tonsFerragem  = d.kgFerragem / 1000;
+        const bonusFerragem = tonsFerragem * 9; // R$ 0,009 por kg = 0,9% = R$ 9,00 por tonelada
+        const bonusCimento  = d.temCimento ? 40 : 0;
+        const totalBonus    = bonusFerragem + bonusCimento;
+        totBonusGeral      += totalBonus;
+        rowsMot.push([
+            nome,
+            d.romaneios,
+            d.peso.toLocaleString('pt-BR', {maximumFractionDigits:0}) + ' kg',
+            brl(d.frete),
+            brl(d.margem),
+            tonsFerragem.toFixed(3) + ' t',
+            brl(bonusFerragem),
+            d.temCimento ? brl(bonusCimento) : '—',
+            brl(totalBonus),
+        ]);
+    });
+    rowsMot.push([]);
+    rowsMot.push(['TOTAL BÔNUS PERÍODO', '', '', '', '', '', '', '', brl(totBonusGeral)]);
+
+    const wsMot = XLSX.utils.aoa_to_sheet(rowsMot);
+    wsMot['!cols'] = [{wch:24},{wch:12},{wch:16},{wch:18},{wch:18},{wch:16},{wch:20},{wch:18},{wch:18}];
+    XLSX.utils.book_append_sheet(wb, wsMot, 'Por Motorista');
+
+    // ── ABA 3: Por Categoria de Frete ────────────────────────────────────────
+    const porCategoria = {};
+    romaneios.forEach(r => {
+        const pedidos = r.romaneio_pedidos || [];
+        pedidos.forEach(p => {
+            const cat = p.categoria_frete || 'Outros';
+            if (!porCategoria[cat]) porCategoria[cat] = { pedidos: 0, valorCarga: 0, frete: 0 };
+            const pct   = n2(p.percentual_frete) || 0.05;
+            const frete = n2(p.frete_calculado) || (n2(p.valor_pedido) * pct);
+            porCategoria[cat].pedidos++;
+            porCategoria[cat].valorCarga += n2(p.valor_pedido);
+            porCategoria[cat].frete      += frete;
+        });
+        // Fallback para romaneios sem pedidos detalhados
+        if (pedidos.length === 0) {
+            const cat = 'Não categorizado';
+            if (!porCategoria[cat]) porCategoria[cat] = { pedidos: 0, valorCarga: 0, frete: 0 };
+            porCategoria[cat].pedidos++;
+            porCategoria[cat].valorCarga += n2(r.valor_total_carga);
+            porCategoria[cat].frete      += n2(r.valor_frete_calculado || r.valor_frete);
+        }
+    });
+
+    const rowsCat = [];
+    rowsCat.push([`TOTAIS POR CATEGORIA DE FRETE — ${periodoStr.toUpperCase()}`, '', '', '', '']);
+    rowsCat.push([]);
+    rowsCat.push(['Categoria', 'Qtd Pedidos', 'Valor Total da Carga (R$)', 'Frete Total (R$)', '% do Frete Total']);
+    const totalFreteGeral = Object.values(porCategoria).reduce((s, d) => s + d.frete, 0);
+    Object.entries(porCategoria).sort((a,b) => b[1].frete - a[1].frete).forEach(([cat, d]) => {
+        rowsCat.push([
+            cat,
+            d.pedidos,
+            brl(d.valorCarga),
+            brl(d.frete),
+            totalFreteGeral > 0 ? ((d.frete / totalFreteGeral) * 100).toFixed(1) + '%' : '0%',
+        ]);
+    });
+    rowsCat.push([]);
+    rowsCat.push(['TOTAL GERAL', Object.values(porCategoria).reduce((s,d)=>s+d.pedidos,0), brl(Object.values(porCategoria).reduce((s,d)=>s+d.valorCarga,0)), brl(totalFreteGeral), '100%']);
+
+    const wsCat = XLSX.utils.aoa_to_sheet(rowsCat);
+    wsCat['!cols'] = [{wch:26},{wch:14},{wch:26},{wch:20},{wch:18}];
+    XLSX.utils.book_append_sheet(wb, wsCat, 'Por Categoria');
+
+    XLSX.writeFile(wb, `relatorio_consolidado_${periodoStr}.xlsx`);
+}
+
 // ── Import ────────────────────────────────────────────────────────────────────
 export function parseMaterialsFromFile(file) {
     return new Promise((resolve, reject) => {

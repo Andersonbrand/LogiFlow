@@ -79,3 +79,9 @@ export async function addVehicleHistory(vehicleId, entry) {
     if (error) throw error;
     return data;
 }
+
+// ── Cálculo de consumo estimado ───────────────────────────────────────────────
+export function calcularConsumoEstimado(distanciaKm, consumoKmL) {
+    if (!distanciaKm || !consumoKmL || consumoKmL <= 0) return null;
+    return Number((distanciaKm / consumoKmL).toFixed(2)); // litros
+}

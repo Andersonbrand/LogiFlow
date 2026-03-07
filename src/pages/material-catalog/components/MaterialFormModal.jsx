@@ -10,7 +10,7 @@ const CATEGORIAS_PRODUTO = [
     'Hidráulico', 'Químico', 'Outros',
 ];
 
-const EMPTY = { nome: '', categoria: 'Construção', unidade: 'kg', peso: '', categoria_frete: '', percentual_frete: '' };
+const EMPTY = { nome: '', categoria: 'Construção', unidade: 'kg', peso: '', categoria_frete: '', percentual_frete: '', is_telha_zinco: false, peso_base_metro: '3.80' };
 
 export default function MaterialFormModal({ isOpen, onClose, onSave, editingMaterial }) {
     const [form, setForm]       = useState(EMPTY);
@@ -28,6 +28,8 @@ export default function MaterialFormModal({ isOpen, onClose, onSave, editingMate
                 categoria_frete:  editingMaterial.categoria_frete || '',
                 percentual_frete: editingMaterial.percentual_frete != null
                                     ? String(Number(editingMaterial.percentual_frete) * 100) : '',
+                is_telha_zinco:   editingMaterial.is_telha_zinco  || false,
+                peso_base_metro:  editingMaterial.peso_base_metro != null ? String(editingMaterial.peso_base_metro) : '3.80',
             });
         } else { setForm(EMPTY); }
         setErrors({});
@@ -69,8 +71,10 @@ export default function MaterialFormModal({ isOpen, onClose, onSave, editingMate
                 ...(editingMaterial?.id ? { id: editingMaterial.id } : {}),
                 nome: form.nome.trim(), categoria: form.categoria,
                 unidade: form.unidade, peso: Number(form.peso),
-                categoria_frete:  form.categoria_frete  || null,
-                percentual_frete: pctRaw,
+                categoria_frete:   form.categoria_frete   || null,
+                percentual_frete:  pctRaw,
+                is_telha_zinco:    form.is_telha_zinco,
+                peso_base_metro:   form.is_telha_zinco ? Number(form.peso_base_metro) || 3.80 : null,
             });
             onClose();
         } finally { setLoading(false); }
@@ -128,6 +132,34 @@ export default function MaterialFormModal({ isOpen, onClose, onSave, editingMate
                         <input type="number" min="0.001" step="0.001" value={form.peso} onChange={e => set('peso', e.target.value)} placeholder="Ex: 11.55"
                             className={`w-full h-10 px-3 rounded-lg border text-sm font-data focus:outline-none bg-white ${errors.peso ? 'border-red-400':'border-gray-200'}`} />
                         {errors.peso && <p className="text-xs mt-1 text-red-500">{errors.peso}</p>}
+                    </div>
+
+                    {/* Telha de Zinco */}
+                    <div className="rounded-lg border p-3 flex flex-col gap-3" style={{ borderColor: form.is_telha_zinco ? '#3B82F6' : 'var(--color-border)', backgroundColor: form.is_telha_zinco ? '#EFF6FF' : 'transparent' }}>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" checked={form.is_telha_zinco}
+                                onChange={e => set('is_telha_zinco', e.target.checked)}
+                                className="w-4 h-4 rounded" />
+                            <span className="text-xs font-semibold font-caption" style={{ color: 'var(--color-text-primary)' }}>
+                                Produto especial: Telha de Zinco (vendida por metro)
+                            </span>
+                        </label>
+                        {form.is_telha_zinco && (
+                            <div>
+                                <label className="block text-xs font-medium font-caption mb-1.5" style={{ color: 'var(--color-text-primary)' }}>
+                                    Peso base por metro (kg/m)
+                                </label>
+                                <div className="relative w-40">
+                                    <input type="number" min="0.1" step="0.01" value={form.peso_base_metro}
+                                        onChange={e => set('peso_base_metro', e.target.value)}
+                                        className="w-full h-9 pl-3 pr-10 rounded-lg border border-blue-300 text-sm font-data focus:outline-none bg-white" />
+                                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400">kg/m</span>
+                                </div>
+                                <p className="text-xs mt-1.5 font-caption" style={{ color: '#3B82F6' }}>
+                                    Fórmula: peso total = {form.peso_base_metro || '3.80'} kg/m × comprimento × qtd de telhas
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     <div className="border-t pt-4" style={{ borderColor:'var(--color-border)' }}>

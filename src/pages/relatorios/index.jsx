@@ -12,7 +12,7 @@ import { fetchRomaneios } from 'utils/romaneioService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { fetchMaterials } from 'utils/materialService';
 import { useToast } from 'utils/useToast';
-import { exportRomaneiosToExcel } from 'utils/excelUtils';
+import { exportRomaneiosToExcel, exportRelatorioConsolidado } from 'utils/excelUtils';
 import * as XLSX from 'xlsx';
 
 const COLORS = ['#1E3A5F', '#4A6741', '#D97706', '#059669', '#DC2626', '#7C3AED', '#0891B2'];
@@ -300,9 +300,12 @@ export default function Relatorios() {
                     {/* ── TAB: FINANCEIRO ── */}
                     {tab === 'financeiro' && (
                         <div className="flex flex-col gap-6">
-                            <div className="flex justify-end">
+                            <div className="flex justify-end gap-2">
                                 <Button variant="outline" iconName="FileSpreadsheet" iconSize={14} onClick={exportFinanceiroExcel}>
                                     Exportar Financeiro Excel
+                                </Button>
+                                <Button variant="default" iconName="Download" iconSize={14} onClick={exportConsolidadoExcel}>
+                                    Relatório Consolidado
                                 </Button>
                             </div>
 

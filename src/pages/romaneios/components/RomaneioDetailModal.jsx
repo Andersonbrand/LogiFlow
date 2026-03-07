@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
-import { exportRomaneioModeloAraguaia } from 'utils/excelUtils';
+import { exportRomaneioModelo1 } from 'utils/excelUtils';
 import { getCategoriaConfig, fmtPct } from 'utils/freteConfig';
 
 const STATUS_COLORS = {
@@ -59,7 +59,7 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                     </div>
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => exportRomaneioModeloAraguaia(romaneio)}
+                            onClick={() => exportRomaneioModelo1(romaneio)}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-caption font-medium border hover:bg-green-50 transition-colors"
                             style={{ borderColor:'var(--color-border)', color:'#059669' }}
                             title="Exportar no modelo Excel Araguaia">
