@@ -274,9 +274,11 @@ export default function Relatorios() {
                                 <ChartCard title="Status dos Romaneios" height={220}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
-                                            <Pie data={porStatus} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`}>
-                                                {porStatus.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                                            </Pie>
+                                            {porStatus.filter(d => d.value > 0).length > 0 && (
+                                                <Pie data={porStatus.filter(d => d.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`}>
+                                                    {porStatus.filter(d => d.value > 0).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                                                </Pie>
+                                            )}
                                             <Tooltip />
                                         </PieChart>
                                     </ResponsiveContainer>
@@ -343,10 +345,12 @@ export default function Relatorios() {
                                     <ChartCard title="Composição dos Custos" height={200}>
                                         <ResponsiveContainer width="100%" height="100%">
                                             <PieChart>
-                                                <Pie data={custosBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75}
+                                                {custosBreakdown.length > 0 && custosBreakdown.some(d => d.value > 0) && (
+                                                <Pie data={custosBreakdown.filter(d => d.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75}
                                                     label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`}>
-                                                    {custosBreakdown.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                                                    {custosBreakdown.filter(d => d.value > 0).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                                                 </Pie>
+                                                )}
                                                 <Tooltip formatter={v => fmtBRL(v)} />
                                             </PieChart>
                                         </ResponsiveContainer>
@@ -439,10 +443,12 @@ export default function Relatorios() {
                                 <ChartCard title="Status da Frota" height={220}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
-                                            <Pie data={frotaStatus} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}
-                                                label={({ name, value }) => `${name}: ${value}`}>
-                                                {frotaStatus.map((_, i) => <Cell key={i} fill={['#059669','#D97706','#DC2626'][i]} />)}
-                                            </Pie>
+                                            {frotaStatus.filter(d => d.value > 0).length > 0 && (
+                                                <Pie data={frotaStatus.filter(d => d.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}
+                                                    label={({ name, value }) => `${name}: ${value}`}>
+                                                    {frotaStatus.filter(d => d.value > 0).map((_, i) => <Cell key={i} fill={['#059669','#D97706','#DC2626'][i]} />)}
+                                                </Pie>
+                                            )}
                                             <Tooltip />
                                             <Legend />
                                         </PieChart>

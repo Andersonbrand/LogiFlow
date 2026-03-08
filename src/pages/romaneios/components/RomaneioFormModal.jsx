@@ -344,14 +344,17 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     const handleSubmit = async () => {
         if (!validate()) { setTab('dados'); return; }
         setLoading(true);
+        // Timeout de segurança: libera o botão após 30s mesmo sem resposta do banco
+        const safetyTimer = setTimeout(() => {
+            setLoading(false);
+        }, 30000);
         try {
-            // Flatten all itens across all pedidos
             const allItens = pedidos.flatMap((p, pIdx) =>
                 p.itens.map(i => ({
                     material_id:    i.material_id,
                     quantidade:     i.quantidade,
                     peso_total:     i.peso_total,
-                    pedido_index:   pIdx, // used to link to pedido in service
+                    pedido_index:   pIdx,
                 }))
             );
             await onSave({
@@ -363,7 +366,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 custo_combustivel:      n(form.custo_combustivel),
                 custo_pedagio:          n(form.custo_pedagio),
                 custo_motorista:        n(form.custo_motorista),
-                valor_frete:            totais.freteCalculado,   // frete calculado pelos pedidos
+                valor_frete:            totais.freteCalculado,
                 valor_frete_calculado:  totais.freteCalculado,
                 valor_total_carga:      totais.valorTotalCarga,
                 _pedidos: pedidos.map(p => ({
@@ -374,7 +377,11 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     percentual_frete: FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05,
                 })),
             }, allItens);
+        } catch (err) {
+            // Erro explícito — mostra mensagem e libera o botão
+            alert('Erro ao salvar romaneio: ' + (err.message || 'Verifique sua conexão e tente novamente.'));
         } finally {
+            clearTimeout(safetyTimer);
             setLoading(false);
         }
     };

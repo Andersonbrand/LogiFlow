@@ -25,6 +25,16 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 const FleetUtilizationChart = ({ data }) => {
+    // Guard: filtra dados inválidos que causam erro de arc no SVG
+    const safeData = (data || []).filter(d => d && isFinite(d.utilizacao) && d.utilizacao >= 0);
+    if (safeData.length === 0) return (
+        <div className="bg-white rounded-lg border border-slate-200 shadow-card overflow-hidden">
+            <div className="px-4 md:px-6 py-4 border-b border-slate-200" style={{ backgroundColor: "#404040" }}>
+                <h2 className="text-base md:text-lg font-heading font-semibold text-white">Utilização da Frota por Veículo</h2>
+            </div>
+            <div className="p-8 text-center text-gray-400 text-sm">Nenhum veículo cadastrado</div>
+        </div>
+    );
     return (
         <div className="bg-white rounded-lg border border-slate-200 shadow-card overflow-hidden">
             <div
@@ -38,7 +48,7 @@ const FleetUtilizationChart = ({ data }) => {
             <div className="p-4 md:p-5">
                 <div className="w-full h-48 md:h-56" aria-label="Gráfico de utilização da frota por veículo">
                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={data} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+                        <BarChart data={safeData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                             <XAxis
                                 dataKey="placa"
@@ -54,8 +64,8 @@ const FleetUtilizationChart = ({ data }) => {
                                 tickFormatter={(v) => `${v}%`}
                             />
                             <Tooltip content={<CustomTooltip />} />
-                            <Bar dataKey="utilizacao" radius={[4, 4, 0, 0]}>
-                                {data?.map((entry, index) => (
+                            <Bar dataKey="utilizacao" radius={[4, 4, 0, 0]} minPointSize={0} isAnimationActive={false}>
+                                {safeData?.map((entry, index) => (
                                     <Cell
                                         key={`cell-${index}`}
                                         fill={

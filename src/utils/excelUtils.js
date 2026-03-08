@@ -173,163 +173,399 @@ export function exportRomaneioModeloAraguaia(romaneio) {
  * Guia 1 — Romaneio: cabeçalho empresa + dados viagem + materiais por pedido (vertical)
  * Guia 2 — Financeiro: pedidos com frete, valor da carga e resumo
  */
+// ── Geração de XLSX com estilos reais via XML binário ─────────────────────────
+// SheetJS free não suporta estilos — usamos XML OOXML direto para ter cores,
+// negrito, bordas e mesclagens exatamente como o modelo
+
+function _xlsxCrc32(buf) {
+    const t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+        t[i] = c;
+    }
+    let crc = 0xFFFFFFFF;
+    for (const b of buf) crc = t[(crc ^ b) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function _xlsxBuildZip(files) {
+    const enc = new TextEncoder();
+    const entries = Object.entries(files).map(([name, content]) => {
+        const nameB = enc.encode(name);
+        const dataB = enc.encode(content);
+        return { nameB, dataB, crc: _xlsxCrc32(dataB) };
+    });
+
+    const localParts = [];
+    const cdParts    = [];
+    let offset = 0;
+
+    for (const e of entries) {
+        const lh = new Uint8Array(30 + e.nameB.length);
+        const dv = new DataView(lh.buffer);
+        dv.setUint32(0, 0x04034b50, true);
+        dv.setUint16(4, 20, true); dv.setUint16(6, 0, true); dv.setUint16(8, 0, true);
+        dv.setUint16(10, 0, true); dv.setUint16(12, 0, true);
+        dv.setUint32(14, e.crc, true);
+        dv.setUint32(18, e.dataB.length, true); dv.setUint32(22, e.dataB.length, true);
+        dv.setUint16(26, e.nameB.length, true); dv.setUint16(28, 0, true);
+        lh.set(e.nameB, 30);
+
+        const cd = new Uint8Array(46 + e.nameB.length);
+        const cv = new DataView(cd.buffer);
+        cv.setUint32(0, 0x02014b50, true);
+        cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+        cv.setUint16(8, 0, true); cv.setUint16(10, 0, true);
+        cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
+        cv.setUint32(16, e.crc, true);
+        cv.setUint32(20, e.dataB.length, true); cv.setUint32(24, e.dataB.length, true);
+        cv.setUint16(28, e.nameB.length, true);
+        for (let i = 30; i < 42; i += 2) cv.setUint16(i, 0, true);
+        cv.setUint32(42, offset, true);
+        cd.set(e.nameB, 46);
+
+        localParts.push(lh, e.dataB);
+        cdParts.push(cd);
+        offset += lh.length + e.dataB.length;
+    }
+
+    const cdSize = cdParts.reduce((s, b) => s + b.length, 0);
+    const eocd   = new Uint8Array(22);
+    const ev     = new DataView(eocd.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+    ev.setUint16(8, entries.length, true); ev.setUint16(10, entries.length, true);
+    ev.setUint32(12, cdSize, true); ev.setUint32(16, offset, true);
+    ev.setUint16(20, 0, true);
+
+    const all   = [...localParts, ...cdParts, eocd];
+    const total = all.reduce((s, b) => s + b.length, 0);
+    const out   = new Uint8Array(total);
+    let pos = 0;
+    for (const b of all) { out.set(b, pos); pos += b.length; }
+    return out;
+}
+
+function _xlsxEsc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function _xlsxCol(n) {
+    let s = ''; n++;
+    while (n > 0) { const r = (n-1)%26; s = String.fromCharCode(65+r)+s; n = Math.floor((n-1)/26); }
+    return s;
+}
+
 export function exportRomaneioModelo1(romaneio) {
     if (!romaneio) return;
-    const wb   = XLSX.utils.book_new();
-    const fmt  = v => 'R$ ' + brl(v);
+
     const pedidos = romaneio.romaneio_pedidos || [];
     const itens   = romaneio.romaneio_itens   || [];
-    const dtCriado = new Date(romaneio.created_at || Date.now()).toLocaleDateString('pt-BR');
-    const dtSaida  = romaneio.saida
-        ? new Date(romaneio.saida).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})
+    const dtSaida = romaneio.saida
+        ? new Date(romaneio.saida).toLocaleString('pt-BR', {
+            day:'2-digit', month:'2-digit', year:'numeric',
+            hour:'2-digit', minute:'2-digit'
+          })
         : '—';
 
-    // ════════════════════════════════════════════════════════════
-    // GUIA 1 — ROMANEIO + MATERIAIS
-    // ════════════════════════════════════════════════════════════
-    const g1 = [];
+    // ── Agrupar itens por cidade + material ──────────────────────────────────
+    const pedMap = {};
+    pedidos.forEach(p => { pedMap[p.id] = p; });
 
-    // Cabeçalho empresa
-    g1.push(['COMERCIAL ARAGUAIA LTDA']);
-    g1.push(['Rodovia BR-122, S/Nº KM 02 – Guanambi – BA – 46430-000']);
-    g1.push(['Fone: (77) 3451-2175']);
-    g1.push([]);
+    const grupos = {};
+    itens.forEach(item => {
+        const mat    = item.materials || {};
+        const pedido = pedMap[item.pedido_id] || {};
+        const cidade = pedido.cidade_destino || romaneio.destino || '—';
+        const mid    = String(item.material_id || mat.nome || 'x');
 
-    // Dados do romaneio (vertical)
-    g1.push(['ROMANEIO',      romaneio.numero || '']);
-    g1.push(['Data',          dtCriado]);
-    g1.push(['Motorista',     romaneio.motorista || '']);
-    g1.push(['Placa',         romaneio.placa     || '']);
-    g1.push(['Destino',       romaneio.destino   || '']);
-    g1.push(['Saída',         dtSaida]);
-    if (romaneio.distancia_km) g1.push(['Distância', romaneio.distancia_km + ' km']);
-    g1.push(['Status',        romaneio.status    || '']);
-    g1.push([]);
+        if (!grupos[cidade]) grupos[cidade] = {};
+        if (!grupos[cidade][mid]) {
+            grupos[cidade][mid] = {
+                nome:     mat.nome     || `#${mid}`,
+                unidade:  mat.unidade  || '',
+                pesoUnit: Number(mat.peso || 0),
+                quant: 0, pesoTotal: 0, peds: [],
+            };
+        }
+        grupos[cidade][mid].quant     += Number(item.quantidade  || 0);
+        grupos[cidade][mid].pesoTotal += Number(item.peso_total  || 0);
+        const np = pedido.numero_pedido;
+        if (np && !grupos[cidade][mid].peds.includes(np)) grupos[cidade][mid].peds.push(np);
+    });
 
-    // Materiais por pedido
-    if (pedidos.length > 0) {
-        pedidos.forEach((ped, idx) => {
-            const itensDoPedido = itens.filter(i => i.pedido_id === ped.id);
-            const pesoTotal = itensDoPedido.reduce((s, i) => s + n(i.peso_total), 0);
+    const cidadesArr = Object.entries(grupos)
+        .sort(([a],[b]) => a.localeCompare(b,'pt-BR'))
+        .map(([cidade, mats]) => ({
+            cidade,
+            itens: Object.values(mats).sort((a,b) => a.nome.localeCompare(b.nome,'pt-BR')),
+        }));
 
-            // Cabeçalho do pedido
-            g1.push([`PEDIDO ${idx + 1}${ped.numero_pedido ? ' – Nº ' + ped.numero_pedido : ''}`]);
-            if (ped.cidade_destino) g1.push(['Cidade de Destino', ped.cidade_destino]);
-            g1.push([]);
+    const pesoTotal = itens.reduce((s,i) => s + Number(i.peso_total||0), 0);
 
-            // Tabela de materiais
-            g1.push(['Material', 'Unidade', 'Quantidade', 'Peso Unit. (kg)', 'Peso Total (kg)']);
-            if (itensDoPedido.length > 0) {
-                itensDoPedido.forEach(item => {
-                    const mat = item.materials || {};
-                    g1.push([
-                        mat.nome || `Material #${item.material_id}`,
-                        mat.unidade  || '',
-                        item.quantidade || 0,
-                        mat.peso || 0,
-                        n(item.peso_total),
-                    ]);
-                });
-            } else {
-                g1.push(['(sem materiais cadastrados)', '', '', '', '']);
-            }
-            g1.push(['', '', '', 'Peso do Pedido:', pesoTotal.toLocaleString('pt-BR', {minimumFractionDigits:2}) + ' kg']);
-            g1.push([]);
+    // ── Cores ────────────────────────────────────────────────────────────────
+    const AZUL   = 'BDD7EE';
+    const AZUL2  = 'D9E1F2';
+    const AMAR   = 'FFF2CC';
+    const CINZA  = 'F2F2F2';
+
+    // ── Shared strings ───────────────────────────────────────────────────────
+    const ss = []; const ssIdx = {};
+    const S = v => {
+        const k = String(v);
+        if (ssIdx[k] === undefined) { ssIdx[k] = ss.length; ss.push(k); }
+        return ssIdx[k];
+    };
+
+    // ── Linhas e merges ──────────────────────────────────────────────────────
+    // Cada linha: array de { si, num, styleId, isNull }
+    // si = shared string idx, num = número direto
+    const rowsData  = [];  // [ [ {si?, num?, s, null?}, ... ], ... ]
+    const rowsHt    = [];  // altura de cada linha
+    const merges    = [];  // [{r1,c1,r2,c2}]
+
+    // Estilos fixos (índice = posição no cellXfs)
+    // 0=default  1=tit_azul14b  2=dest_azul11b  3=lbl_azul10b  4=val_bold11
+    // 5=hdr_azul2_10b  6=cidade_amar11b  7=dado_left  8=dado_center
+    // 9=sub_cinza_b_right  10=sub_cinza_b_center  11=sub_cinza_vazio
+    // 12=tot_azul11b  13=assin_center  14=dado_right
+
+    const NULL = { null: true };
+    const c = (v, s) => ({ si: S(v), s });
+    const n = (v, s) => ({ num: v,   s });
+    const e = (s)    => ({ si: S(''),s });
+
+    let R = 0;
+
+    // Linha 1
+    rowsData.push([
+        c(`ROMANEIO DE N.º  ${romaneio.numero||''}`, 1), NULL, NULL, NULL, NULL, NULL,
+        c(String(romaneio.destino||''), 2), NULL,
+    ]);
+    rowsHt.push(26);
+    merges.push({r1:R,c1:0,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:7}); R++;
+
+    // Linha 2: labels
+    rowsData.push([c('Motorista',3), NULL, NULL, c('Placa',3), c('Saída',3), NULL, c('Peso Total',3), NULL]);
+    rowsHt.push(16);
+    merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:4,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:7}); R++;
+
+    // Linha 3: valores
+    const ptFmt = pesoTotal.toLocaleString('pt-BR',{minimumFractionDigits:2})+' kg';
+    rowsData.push([c(String(romaneio.motorista||''),4),NULL,NULL,c(String(romaneio.placa||''),4),c(dtSaida,4),NULL,c(ptFmt,4),NULL]);
+    rowsHt.push(20);
+    merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:4,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:7}); R++;
+
+    // Linha 4: cabeçalhos
+    rowsData.push(['Material','Un.','Quant.','Peso Unit.(kg)','Peso Total(kg)','Pedido(s)','Valor Pedido','Frete']
+        .map(v => c(v, 5)));
+    rowsHt.push(26); R++;
+
+    // Dados por cidade
+    cidadesArr.forEach(({ cidade, itens: itensCidade }) => {
+        rowsData.push([c(`📍 ${cidade}`, 6), NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
+        rowsHt.push(18);
+        merges.push({r1:R,c1:0,r2:R,c2:7}); R++;
+
+        let pesoCidade = 0;
+        itensCidade.forEach(item => {
+            pesoCidade += item.pesoTotal;
+            rowsData.push([
+                c(item.nome, 7),
+                c(item.unidade, 8),
+                n(item.quant, 8),
+                n(item.pesoUnit > 0 ? item.pesoUnit : 0, 8),
+                n(Math.round(item.pesoTotal*100)/100, 8),
+                c(item.peds.join(' / ')||'—', 8),
+                e(14), e(14),
+            ]);
+            rowsHt.push(15); R++;
         });
-    } else {
-        // Fallback sem pedidos estruturados
-        g1.push(['MATERIAIS TRANSPORTADOS']);
-        g1.push(['Material', 'Unidade', 'Quantidade', 'Peso Unit. (kg)', 'Peso Total (kg)']);
-        itens.forEach(item => {
-            const mat = item.materials || {};
-            g1.push([mat.nome || `#${item.material_id}`, mat.unidade || '', item.quantidade || 0, mat.peso || 0, n(item.peso_total)]);
-        });
-        g1.push([]);
-    }
 
-    // Peso total geral
-    const pesoGeral = itens.reduce((s, i) => s + n(i.peso_total), 0);
-    g1.push(['PESO TOTAL DA CARGA', pesoGeral.toLocaleString('pt-BR', {minimumFractionDigits:2}) + ' kg']);
-    g1.push([]);
+        // Subtotal
+        rowsData.push([
+            e(11), e(11), e(11),
+            c(`Subtotal ${cidade}:`, 9),
+            n(Math.round(pesoCidade*100)/100, 10),
+            e(11), e(11), e(11),
+        ]);
+        rowsHt.push(14); R++;
+    });
+
+    // Total geral
+    rowsData.push([c('PESO TOTAL DA CARGA',12),NULL,NULL,NULL,n(Math.round(pesoTotal*100)/100,12),e(12),e(12),e(12)]);
+    rowsHt.push(20);
+    merges.push({r1:R,c1:0,r2:R,c2:3}); R++;
 
     // Assinaturas
-    g1.push([]);
-    g1.push(['______________________________', '', '______________________________']);
-    g1.push(['Motorista', '', 'Responsável']);
+    rowsData.push(Array(8).fill(e(0))); rowsHt.push(14); R++;
+    rowsData.push(Array(8).fill(e(0))); rowsHt.push(14); R++;
+    rowsData.push([
+        c('________________________________',13), NULL, NULL,
+        c('________________________________',13), NULL, NULL,
+        c('________________________________',13), NULL,
+    ]);
+    rowsHt.push(14);
+    merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:3,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:7}); R++;
+    rowsData.push([
+        c('Motorista',13), NULL, NULL,
+        c('Conferente',13), NULL, NULL,
+        c('Responsável',13), NULL,
+    ]);
+    rowsHt.push(14);
+    merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:3,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:7}); R++;
 
-    if (romaneio.observacoes) {
-        g1.push([]);
-        g1.push(['OBSERVAÇÕES']);
-        g1.push([romaneio.observacoes]);
-    }
+    // ── Montar sheetData XML ─────────────────────────────────────────────────
+    let sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetFormatPr defaultRowHeight="15"/>
+<cols>
+  <col min="1" max="1" width="38" customWidth="1"/>
+  <col min="2" max="2" width="7"  customWidth="1"/>
+  <col min="3" max="3" width="9"  customWidth="1"/>
+  <col min="4" max="4" width="16" customWidth="1"/>
+  <col min="5" max="5" width="16" customWidth="1"/>
+  <col min="6" max="6" width="20" customWidth="1"/>
+  <col min="7" max="7" width="18" customWidth="1"/>
+  <col min="8" max="8" width="14" customWidth="1"/>
+</cols>
+<sheetData>`;
 
-    const ws1 = XLSX.utils.aoa_to_sheet(g1);
-    ws1['!cols'] = [{wch:38},{wch:18},{wch:14},{wch:18},{wch:18}];
-    XLSX.utils.book_append_sheet(wb, ws1, 'Romaneio');
-
-    // ════════════════════════════════════════════════════════════
-    // GUIA 2 — FINANCEIRO (pedidos + frete + resumo)
-    // ════════════════════════════════════════════════════════════
-    const g2 = [];
-
-    g2.push(['COMERCIAL ARAGUAIA LTDA – FINANCEIRO DO ROMANEIO']);
-    g2.push([`Romaneio Nº ${romaneio.numero || ''}  |  Motorista: ${romaneio.motorista || ''}  |  Destino: ${romaneio.destino || ''}  |  Data: ${dtCriado}`]);
-    g2.push([]);
-
-    // Tabela de pedidos
-    g2.push(['PEDIDOS DA CARGA', '', '', '', '', '']);
-    g2.push(['Nº Pedido', 'Cidade Destino', 'Categoria de Frete', '% Frete', 'Valor do Pedido (R$)', 'Frete Calculado (R$)']);
-
-    let totalCarga = 0, totalFrete = 0;
-    if (pedidos.length > 0) {
-        pedidos.forEach(p => {
-            const pct   = n(p.percentual_frete) || 0.05;
-            const frete = n(p.frete_calculado) || (n(p.valor_pedido) * pct);
-            totalCarga += n(p.valor_pedido);
-            totalFrete += frete;
-            g2.push([
-                p.numero_pedido  || '—',
-                p.cidade_destino || romaneio.destino || '—',
-                p.categoria_frete || '',
-                fmtPct(pct),
-                brl(p.valor_pedido),
-                brl(frete),
-            ]);
+    rowsData.forEach((row, ri) => {
+        const ht = rowsHt[ri] ? ` ht="${rowsHt[ri]}" customHeight="1"` : '';
+        sheetXml += `\n<row r="${ri+1}"${ht}>`;
+        row.forEach((cell, ci) => {
+            if (!cell || cell.null) return;
+            const addr = `${_xlsxCol(ci)}${ri+1}`;
+            if (cell.num !== undefined) {
+                sheetXml += `<c r="${addr}" s="${cell.s}" t="n"><v>${cell.num}</v></c>`;
+            } else {
+                sheetXml += `<c r="${addr}" s="${cell.s}" t="s"><v>${cell.si}</v></c>`;
+            }
         });
-    } else {
-        g2.push(['(sem pedidos cadastrados)', '', '', '', '', '']);
+        sheetXml += `</row>`;
+    });
+
+    sheetXml += `\n</sheetData>`;
+
+    if (merges.length) {
+        sheetXml += `\n<mergeCells count="${merges.length}">`;
+        merges.forEach(m => {
+            sheetXml += `<mergeCell ref="${_xlsxCol(m.c1)}${m.r1+1}:${_xlsxCol(m.c2)}${m.r2+1}"/>`;
+        });
+        sheetXml += `</mergeCells>`;
     }
-    g2.push([]);
-    g2.push(['', '', '', '', 'TOTAL VALOR DA CARGA:', brl(totalCarga || n(romaneio.valor_total_carga))]);
-    g2.push(['', '', '', '', 'TOTAL FRETE CALCULADO:', brl(totalFrete || n(romaneio.valor_frete_calculado || romaneio.valor_frete))]);
-    g2.push([]);
 
-    // Custos operacionais
-    const freteTotal = totalFrete || n(romaneio.valor_frete_calculado || romaneio.valor_frete);
-    const custoComb  = n(romaneio.custo_combustivel);
-    const custoPed   = n(romaneio.custo_pedagio);
-    const custoDia   = n(romaneio.custo_motorista);
-    const custoTotal = custoComb + custoPed + custoDia;
-    const margem     = freteTotal - custoTotal;
+    sheetXml += `
+<pageMargins left="0.4" right="0.4" top="0.4" bottom="0.4" header="0" footer="0"/>
+<pageSetup paperSize="9" orientation="portrait"/>
+</worksheet>`;
 
-    g2.push(['CUSTOS OPERACIONAIS', '', '', '', '', '']);
-    g2.push(['Combustível',      '', '', '', '', fmt(custoComb)]);
-    g2.push(['Pedágios',         '', '', '', '', fmt(custoPed)]);
-    g2.push(['Diária Motorista', '', '', '', '', fmt(custoDia)]);
-    if (romaneio.distancia_km) g2.push(['Distância da Rota', '', '', '', '', romaneio.distancia_km + ' km']);
-    g2.push([]);
-    g2.push(['RESUMO FINANCEIRO', '', '', '', '', '']);
-    g2.push(['Frete Total',      '', '', '', '', fmt(freteTotal)]);
-    g2.push(['(-) Custo Total',  '', '', '', '', fmt(custoTotal)]);
-    g2.push(['MARGEM DA VIAGEM', '', '', '', '', fmt(margem)]);
-    if (freteTotal > 0) g2.push(['% Margem s/ Frete', '', '', '', '', ((margem / freteTotal) * 100).toFixed(2) + '%']);
+    // ── Shared strings XML ───────────────────────────────────────────────────
+    let ssXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${ss.length}" uniqueCount="${ss.length}">`;
+    ss.forEach(s => { ssXml += `<si><t xml:space="preserve">${_xlsxEsc(s)}</t></si>`; });
+    ssXml += `</sst>`;
 
-    const ws2 = XLSX.utils.aoa_to_sheet(g2);
-    ws2['!cols'] = [{wch:20},{wch:20},{wch:22},{wch:10},{wch:24},{wch:22}];
-    XLSX.utils.book_append_sheet(wb, ws2, 'Financeiro');
+    // ── Styles XML ───────────────────────────────────────────────────────────
+    const TB = `<left style="thin"><color rgb="FFAAAAAA"/></left><right style="thin"><color rgb="FFAAAAAA"/></right><top style="thin"><color rgb="FFAAAAAA"/></top><bottom style="thin"><color rgb="FFAAAAAA"/></bottom>`;
+    const NB = `<left/><right/><top/><bottom/>`;
+    const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="6">
+  <font><sz val="10"/><name val="Calibri"/></font>
+  <font><b/><sz val="14"/><name val="Calibri"/></font>
+  <font><b/><sz val="11"/><name val="Calibri"/></font>
+  <font><b/><sz val="10"/><name val="Calibri"/></font>
+  <font><sz val="11"/><name val="Calibri"/></font>
+  <font><b/><sz val="11"/><name val="Calibri"/></font>
+</fonts>
+<fills count="8">
+  <fill><patternFill patternType="none"/></fill>
+  <fill><patternFill patternType="gray125"/></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF${AZUL}"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF${AZUL2}"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF${AMAR}"/></patternFill></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF${CINZA}"/></patternFill></fill>
+  <fill><patternFill patternType="none"/></fill>
+  <fill><patternFill patternType="none"/></fill>
+</fills>
+<borders count="2">
+  <border><left/><right/><top/><bottom/><diagonal/></border>
+  <border><left style="thin"><color rgb="FFAAAAAA"/></left><right style="thin"><color rgb="FFAAAAAA"/></right><top style="thin"><color rgb="FFAAAAAA"/></top><bottom style="thin"><color rgb="FFAAAAAA"/></bottom><diagonal/></border>
+</borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="15">
+  <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+  <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  <xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  <xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  <xf numFmtId="0" fontId="3" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+  <xf numFmtId="0" fontId="5" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+  <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+  <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  <xf numFmtId="0" fontId="3" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+  <xf numFmtId="0" fontId="3" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  <xf numFmtId="0" fontId="4" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  <xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+</cellXfs>
+</styleSheet>`;
 
-    XLSX.writeFile(wb, `romaneio_${romaneio.numero || 'sem-numero'}_${today()}.xlsx`);
+    // ── Workbook + Rels + Content Types ──────────────────────────────────────
+    const wbXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Romaneio" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+
+    const wbRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>
+</Relationships>`;
+
+    const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+
+    const ctXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  <Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>
+</Types>`;
+
+    // ── Montar ZIP e fazer download ───────────────────────────────────────────
+    const zipBytes = _xlsxBuildZip({
+        '[Content_Types].xml':         ctXml,
+        '_rels/.rels':                 rootRels,
+        'xl/workbook.xml':             wbXml,
+        'xl/_rels/workbook.xml.rels':  wbRels,
+        'xl/worksheets/sheet1.xml':    sheetXml,
+        'xl/styles.xml':               stylesXml,
+        'xl/sharedStrings.xml':        ssXml,
+    });
+
+    const blob = new Blob([zipBytes], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `romaneio_${romaneio.numero || 'sem-numero'}_${today()}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
+
 
 // ── MODELO 2: Relatório Consolidado ──────────────────────────────────────────
 /**
@@ -496,17 +732,32 @@ export function parseMaterialsFromFile(file) {
             try {
                 const wb = XLSX.read(e.target.result, { type:'array' });
                 const ws = wb.Sheets[wb.SheetNames[0]];
-                const rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+
+                // Detecta automaticamente a linha do cabeçalho buscando pela coluna "Nome"
+                // Funciona mesmo que o cabeçalho não esteja na linha 1
+                const allRows = XLSX.utils.sheet_to_json(ws, { header:1, defval:'' });
+                let headerRow = 0;
+                for (let i = 0; i < Math.min(allRows.length, 10); i++) {
+                    const row = allRows[i].map(v => String(v||'').trim().toLowerCase());
+                    if (row.includes('nome') || row.includes('name')) { headerRow = i; break; }
+                }
+
+                const rows = XLSX.utils.sheet_to_json(ws, { defval:'', range: headerRow });
                 const materials = rows
-                    .filter(r => r['Nome'] || r['nome'])
+                    .filter(r => r['Nome'] || r['nome'] || r['NOME'])
                     .map(r => ({
-                        nome: String(r['Nome']||r['nome']||'').trim(),
-                        categoria: String(r['Categoria']||r['categoria']||'Outros').trim(),
-                        unidade: String(r['Unidade']||r['unidade']||'un').trim(),
-                        peso: Number(r['Peso (kg)']||r['peso']||r['Peso']||0),
+                        nome:      String(r['Nome']||r['nome']||r['NOME']||'').trim(),
+                        categoria: String(r['Categoria']||r['categoria']||r['CATEGORIA']||'Outros').trim(),
+                        unidade:   String(r['Unidade']||r['unidade']||r['UNIDADE']||'un').trim(),
+                        peso:      Number(r['Peso (kg)']||r['peso']||r['Peso']||r['PESO (KG)']||r['PESO']||0),
                     })).filter(m => m.nome && m.peso > 0);
-                resolve(materials);
-            } catch (err) { reject(new Error('Arquivo inválido. Use o modelo fornecido.')); }
+
+                if (materials.length === 0) {
+                    reject(new Error('Nenhum material válido encontrado. Verifique se as colunas Nome e Peso (kg) estão preenchidas corretamente.'));
+                } else {
+                    resolve(materials);
+                }
+            } catch (err) { reject(new Error('Arquivo inválido: ' + err.message)); }
         };
         reader.onerror = () => reject(new Error('Erro ao ler o arquivo.'));
         reader.readAsArrayBuffer(file);

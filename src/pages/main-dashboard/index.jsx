@@ -127,7 +127,12 @@ export default function MainDashboard() {
         }
     };
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        load();
+        // Atualiza automaticamente a cada 60 segundos
+        const interval = setInterval(load, 60000);
+        return () => clearInterval(interval);
+    }, []);
 
     const handleResolveAlert = async (id) => {
         try {
@@ -183,6 +188,15 @@ export default function MainDashboard() {
                                 {adminCheck() && (
                                     <Button variant="outline" iconName="Shield" iconPosition="left" iconSize={15} onClick={() => navigate("/admin")}>Admin</Button>
                                 )}
+                                <button
+                                    onClick={load}
+                                    disabled={loading}
+                                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors hover:bg-gray-50 disabled:opacity-50"
+                                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}
+                                    title="Atualizar dados agora">
+                                    <svg className={loading ? 'animate-spin' : ''} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                                    Atualizar
+                                </button>
                                 <QuickActionPanel />
                             </div>
                         </div>

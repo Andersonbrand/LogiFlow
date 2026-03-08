@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from 'components/AppIcon';
 
@@ -11,8 +11,21 @@ const PRIORITY = {
 function buildSuggestions(romaneios, vehicles) {
     const list = [];
     let id = 1;
+    const now = Date.now();
 
-    // 1. Romaneios com mesmo destino aguardando → consolidar
+    // 1. Romaneios pendentes de aprovação
+    const pendentesAprovacao = romaneios.filter(r => !r.aprovado && r.status !== 'Cancelado' && r.status !== 'Finalizado');
+    if (pendentesAprovacao.length > 0) {
+        list.push({
+            id: id++, priority: 'alta',
+            title: `${pendentesAprovacao.length} romaneio(s) aguardando aprovação`,
+            description: `${pendentesAprovacao.slice(0, 3).map(r => r.numero).join(', ')}${pendentesAprovacao.length > 3 ? ` e mais ${pendentesAprovacao.length - 3}` : ''} precisam ser aprovados pelo administrador para serem exportados.`,
+            action: 'Ir para Aprovações', route: '/admin',
+            saving: null,
+        });
+    }
+
+    // 2. Romaneios com mesmo destino aguardando → consolidar
     const aguardando = romaneios.filter(r => r.status === 'Aguardando' || r.status === 'Carregando');
     const byDest = {};
     aguardando.forEach(r => {
@@ -25,15 +38,15 @@ function buildSuggestions(romaneios, vehicles) {
         if (group.length < 2) return;
         const nums = group.slice(0, 3).map(r => r.numero).join(', ');
         list.push({
-            id: id++, priority: 'alta',
+            id: id++, priority: 'media',
             title: `Consolidar cargas para ${group[0].destino.split(',')[0]}`,
             description: `${nums}${group.length > 3 ? ` e mais ${group.length - 3}` : ''} têm destino próximo. Consolidação pode reduzir ${group.length - 1} viagem(ns).`,
-            action: 'Ver consolidação', route: '/consolidacao',
+            action: 'Ver Romaneios', route: '/romaneios',
             saving: `R$ ${(group.length * 320).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
         });
     });
 
-    // 2. Romaneios sem veículo alocado
+    // 3. Romaneios sem veículo alocado
     const semVeiculo = aguardando.filter(r => !r.vehicle_id && !r.placa);
     if (semVeiculo.length > 0) {
         list.push({
@@ -44,20 +57,19 @@ function buildSuggestions(romaneios, vehicles) {
         });
     }
 
-    // 3. Veículos com utilização baixa e disponíveis
+    // 4. Veículos com utilização baixa e disponíveis
     const baixaUtil = (vehicles || []).filter(v => v.status === 'Disponível' && (v.utilizacao ?? 100) < 60);
     baixaUtil.slice(0, 2).forEach(v => {
         list.push({
-            id: id++, priority: 'media',
+            id: id++, priority: 'baixa',
             title: `Veículo subutilizado: ${v.placa}`,
-            description: `${v.placa} (${v.tipo}) está disponível com ${v.utilizacao ?? 0}% de capacidade. Considere adicionar carga.`,
-            action: 'Alocar carga', route: '/romaneios',
-            saving: `R$ ${((v.capacidadePeso || 5000) * 0.01).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`,
+            description: `${v.placa} (${v.tipo}) disponível com ${v.utilizacao ?? 0}% de capacidade utilizada.`,
+            action: 'Ver frota', route: '/vehicle-fleet-management',
+            saving: null,
         });
     });
 
-    // 4. Romaneios em trânsito há mais de 3 dias
-    const now = Date.now();
+    // 5. Romaneios em trânsito há mais de 3 dias
     const emAtraso = romaneios.filter(r => {
         if (r.status !== 'Em Trânsito' || !r.saida) return false;
         return (now - new Date(r.saida).getTime()) / 86400000 > 3;
@@ -71,7 +83,7 @@ function buildSuggestions(romaneios, vehicles) {
         });
     }
 
-    // 5. Nenhum veículo disponível
+    // 6. Nenhum veículo disponível
     const dispVeiculos = (vehicles || []).filter(v => v.status === 'Disponível');
     if (vehicles?.length > 0 && dispVeiculos.length === 0) {
         list.push({
@@ -82,7 +94,7 @@ function buildSuggestions(romaneios, vehicles) {
         });
     }
 
-    // 6. Romaneios com frete sem custo (margem não calculada)
+    // 7. Romaneios sem dados financeiros
     const semFinanceiro = romaneios.filter(r =>
         (r.status === 'Aguardando' || r.status === 'Carregando') &&
         !r.valor_frete && !r.custo_combustivel
@@ -111,11 +123,11 @@ function buildSuggestions(romaneios, vehicles) {
 export default function AISuggestionsPanel({ romaneios = [], vehicles = [] }) {
     const navigate = useNavigate();
     const [dismissed, setDismissed] = useState([]);
-    const [suggestions, setSuggestions] = useState([]);
 
-    useEffect(() => {
-        setSuggestions(buildSuggestions(romaneios, vehicles));
-        setDismissed([]); // reset on data change
+    // useMemo garante recálculo sempre que romaneios/vehicles mudarem
+    const suggestions = useMemo(() => {
+        setDismissed([]); // limpa dismissed ao atualizar dados
+        return buildSuggestions(romaneios, vehicles);
     }, [romaneios, vehicles]);
 
     const visible = suggestions.filter(s => !dismissed.includes(s.id));

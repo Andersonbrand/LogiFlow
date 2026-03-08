@@ -77,6 +77,8 @@ export default function MaterialFormModal({ isOpen, onClose, onSave, editingMate
                 peso_base_metro:   form.is_telha_zinco ? Number(form.peso_base_metro) || 3.80 : null,
             });
             onClose();
+        } catch (err) {
+            alert('Erro ao salvar: ' + (err.message || 'Verifique sua conexão.'));
         } finally { setLoading(false); }
     };
 

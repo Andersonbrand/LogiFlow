@@ -90,6 +90,19 @@ export default function AdminPanel() {
         }
     };
 
+    const handleReprovar = async (romaneio) => {
+        const motivo = window.prompt(`Motivo da reprovação do romaneio ${romaneio.numero}:
+(deixe em branco para não informar)`);
+        if (motivo === null) return; // cancelou o prompt
+        try {
+            await reprovarRomaneio(romaneio.id, profile.id, motivo);
+            setRomaneios(prev => prev.filter(r => r.id !== romaneio.id));
+            showToast(`Romaneio ${romaneio.numero} reprovado.`, 'warning');
+        } catch (err) {
+            showToast('Erro ao reprovar: ' + err.message, 'error');
+        }
+    };
+
     const TABS = [
         ['usuarios', 'Usuários', 'Users'],
         ['motoristas', 'Motoristas', 'Truck'],
@@ -264,10 +277,26 @@ export default function AdminPanel() {
                                                     )}
                                                 </div>
                                             </div>
-                                            <Button variant="default" size="sm" iconName="Check" iconSize={14}
-                                                onClick={() => handleAprovar(r)}>
-                                                Aprovar
-                                            </Button>
+                                            <div className="flex flex-col gap-1.5">
+                                                <Button variant="default" size="sm" iconName="Check" iconSize={14}
+                                                    onClick={() => handleAprovar(r)}>
+                                                    Aprovar
+                                                </Button>
+                                                <button
+                                                    onClick={() => handleReprovar(r)}
+                                                    className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors hover:bg-red-50"
+                                                    style={{ borderColor: '#FECACA', color: '#DC2626' }}>
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                                    Reprovar
+                                                </button>
+                                                <button
+                                                    onClick={() => navigate('/romaneios')}
+                                                    className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors hover:bg-blue-50"
+                                                    style={{ borderColor: '#BFDBFE', color: '#1D4ED8' }}>
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                                                    Ver Romaneio
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 );

@@ -286,8 +286,8 @@ export default function Financeiro() {
                                     ) : (
                                         <ResponsiveContainer width="100%" height={230}>
                                             <PieChart>
-                                                <Pie data={costsPie} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={55} outerRadius={85}>
-                                                    {costsPie.map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
+                                                <Pie data={costsPie.filter(d => d.value > 0 && isFinite(d.value))} dataKey="value" nameKey="name" cx="50%" cy="45%" innerRadius={55} outerRadius={85}>
+                                                    {costsPie.filter(d => d.value > 0 && isFinite(d.value)).map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
                                                 </Pie>
                                                 <Tooltip formatter={v => BRL(v)} />
                                                 <Legend iconSize={10} iconType="circle" />

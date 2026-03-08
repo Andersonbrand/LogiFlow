@@ -3,6 +3,7 @@ import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 import { exportRomaneioModelo1 } from 'utils/excelUtils';
 import { getCategoriaConfig, fmtPct } from 'utils/freteConfig';
+import { useAuth } from 'utils/AuthContext';
 
 const STATUS_COLORS = {
     'Aguardando':  { bg:'#FEF9C3', text:'#B45309', border:'#FDE68A' },
@@ -16,7 +17,11 @@ const n   = v => Number(v||0);
 
 export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit, onDelete }) {
     const [tab, setTab] = useState('info');
+    const { isAdmin } = useAuth();
     if (!isOpen || !romaneio) return null;
+
+    const aprovado = romaneio.aprovado === true;
+    const podeExportar = aprovado || isAdmin();
 
     const s = STATUS_COLORS[romaneio.status] || STATUS_COLORS['Aguardando'];
     const pedidos = romaneio.romaneio_pedidos || [];
@@ -58,14 +63,23 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => exportRomaneioModelo1(romaneio)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-caption font-medium border hover:bg-green-50 transition-colors"
-                            style={{ borderColor:'var(--color-border)', color:'#059669' }}
-                            title="Exportar no modelo Excel Araguaia">
-                            <Icon name="FileSpreadsheet" size={14} color="#059669" />
-                            Exportar Excel
-                        </button>
+                        {podeExportar ? (
+                            <button
+                                onClick={() => exportRomaneioModelo1(romaneio)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-caption font-medium border hover:bg-green-50 transition-colors"
+                                style={{ borderColor:'var(--color-border)', color:'#059669' }}
+                                title="Exportar no modelo Excel Araguaia">
+                                <Icon name="FileSpreadsheet" size={14} color="#059669" />
+                                Exportar Excel
+                            </button>
+                        ) : (
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-caption font-medium border cursor-not-allowed"
+                                style={{ borderColor:'#FDE68A', color:'#B45309', backgroundColor:'#FEF9C3' }}
+                                title="Aguardando aprovação do administrador">
+                                <Icon name="Clock" size={14} color="#B45309" />
+                                Aguard. Aprovação
+                            </div>
+                        )}
                         <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100">
                             <Icon name="X" size={18} color="var(--color-muted-foreground)" />
                         </button>

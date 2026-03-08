@@ -211,6 +211,7 @@ export default function Romaneios() {
                                             <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Saída</th>
                                             <th className="px-4 py-3 text-right font-medium hidden xl:table-cell">Frete</th>
                                             <th className="px-4 py-3 text-right font-medium hidden xl:table-cell">Margem</th>
+                                            <th className="px-4 py-3 text-center font-medium hidden md:table-cell">Aprovação</th>
                                             <th className="px-4 py-3 text-center font-medium">Status</th>
                                             <th className="px-4 py-3 text-center font-medium">Ações</th>
                                         </tr>
@@ -244,6 +245,24 @@ export default function Romaneios() {
                                                                 {r.margem_lucro >= 0 ? '+' : ''}{Number(r.margem_lucro).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                                             </span>
                                                         ) : '—'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center hidden md:table-cell">
+                                                        {r.aprovado ? (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
+                                                                Aprovado
+                                                            </span>
+                                                        ) : r.status_aprovacao === 'reprovado' ? (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#FEE2E2', color: '#991B1B' }} title={r.motivo_reprovacao || ''}>
+                                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                                                Reprovado
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#FEF9C3', color: '#B45309' }}>
+                                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                                                Pendente
+                                                            </span>
+                                                        )}
                                                     </td>
                                                     <td className="px-4 py-3 text-center">
                                                         <select
