@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial } from 'utils/materialService';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { exportMaterialsToExcel, parseMaterialsFromFile } from 'utils/excelUtils';
+import { useAuth } from 'utils/AuthContext';
+import AccessDeniedModal from 'components/ui/AccessDeniedModal';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import QuickActionPanel from 'components/ui/QuickActionPanel';
@@ -19,6 +22,7 @@ const DEFAULT_FILTERS = { categoria: 'Todas', unidade: 'Todas', pesoMax: 50000 }
 const DEFAULT_SORT = { key: 'nome', dir: 'asc' };
 
 export default function MaterialCatalog() {
+    const { isAdmin } = useAuth();
     const [materials, setMaterials] = useState([]);
     const [dbLoading, setDbLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -30,6 +34,7 @@ export default function MaterialCatalog() {
     const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
     const [toast, setToast] = useState(null);
     const [page, setPage] = useState(1);
+    const [accessDenied, setAccessDenied] = useState(false);
     const PAGE_SIZE = 30;
 
     const showToast = (msg, type = 'success') => {
@@ -37,19 +42,20 @@ export default function MaterialCatalog() {
         setTimeout(() => setToast(null), 3000);
     };
 
-    useEffect(() => {
-        (async () => {
-            try {
-                setDbLoading(true);
-                const data = await fetchMaterials();
-                setMaterials(data);
+    const loadMaterials = React.useCallback(async () => {
+        try {
+            setDbLoading(true);
+            const data = await fetchMaterials();
+            setMaterials(data);
             } catch (err) {
                 showToast('Erro ao carregar materiais: ' + err.message, 'warning');
             } finally {
                 setDbLoading(false);
             }
-        })();
-    }, []);
+    }, [setDbLoading, setMaterials]);
+
+    useEffect(() => { loadMaterials(); }, [loadMaterials]);
+    useRecarregarAoVoltar(loadMaterials);
 
     const handleSort = (key) => {
         setSortConfig((prev) =>
@@ -99,6 +105,7 @@ export default function MaterialCatalog() {
     const isPaginated = !search?.trim() && filters?.categoria === 'Todas' && filters?.unidade === 'Todas' && filters?.pesoMax >= 50000;
 
     const handleSave = async (data) => {
+        if (!isAdmin()) { setAccessDenied(true); return; }
         try {
             if (data?.id) {
                 const updated = await updateMaterial(data.id, data);
@@ -115,6 +122,7 @@ export default function MaterialCatalog() {
     };
 
     const handleDelete = async (id) => {
+        if (!isAdmin()) { setAccessDenied(true); return; }
         try {
             const mat = materials?.find((m) => m?.id === id);
             await deleteMaterial(id);
@@ -132,6 +140,7 @@ export default function MaterialCatalog() {
     };
 
     const handleImportExcel = async (file) => {
+        if (!isAdmin()) { setAccessDenied(true); return; }
         try {
             const parsed = await parseMaterialsFromFile(file);
             if (!parsed.length) { showToast('Nenhum material válido encontrado no arquivo.', 'warning'); return; }
@@ -157,11 +166,12 @@ export default function MaterialCatalog() {
         }
     };
 
-    const openAdd = () => { setEditingMaterial(null); setModalOpen(true); };
-    const openEdit = (m) => { setEditingMaterial(m); setModalOpen(true); };
+    const openAdd  = () => { if (!isAdmin()) { setAccessDenied(true); return; } setEditingMaterial(null); setModalOpen(true); };
+    const openEdit = (m) => { if (!isAdmin()) { setAccessDenied(true); return; } setEditingMaterial(m); setModalOpen(true); };
 
     return (
         <div className="min-h-screen bg-[var(--color-background)]">
+            <AccessDeniedModal show={accessDenied} onClose={() => setAccessDenied(false)} />
             <NavigationBar />
             <main className="main-content">
                 <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6">
@@ -369,7 +379,7 @@ export default function MaterialCatalog() {
             {/* Toast */}
             {toast && (
                 <div
-                    className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[500] flex items-center gap-2 px-5 py-3 rounded-xl shadow-modal text-white text-sm font-medium transition-all duration-300 ${toast?.type === 'warning' ? 'bg-[var(--color-warning)]' : 'bg-[var(--color-success)]'
+                    className={`fixed top-6 left-1/2 -translate-x-1/2 z-[500] flex items-center gap-2 px-5 py-3 rounded-xl shadow-modal text-white text-sm font-medium transition-all duration-300 ${toast?.type === 'warning' ? 'bg-[var(--color-warning)]' : 'bg-[var(--color-success)]'
                         }`}
                     style={{ minWidth: 240, maxWidth: 'calc(100vw - 32px)' }}
                 >

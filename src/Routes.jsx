@@ -16,6 +16,7 @@ import AdminPanel         from "pages/admin";
 import Financeiro         from "pages/financeiro";
 import Consolidacao       from "pages/consolidacao";
 import MotoristaDashboard from "pages/motorista";
+import ResetPassword      from "pages/reset-password";
 
 const Routes = () => (
     <BrowserRouter>
@@ -23,7 +24,8 @@ const Routes = () => (
             <ErrorBoundary>
                 <ScrollToTop />
                 <RouterRoutes>
-                    <Route path="/login" element={<Login />} />
+                    <Route path="/login"          element={<Login />} />
+                    <Route path="/reset-password" element={<ResetPassword />} />
 
                     {/* Rotas para admin e operador */}
                     <Route path="/"                         element={<StaffRoute><MainDashboard /></StaffRoute>} />

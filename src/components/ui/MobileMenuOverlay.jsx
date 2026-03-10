@@ -88,7 +88,7 @@ export default function MobileMenuOverlay({ isOpen, onClose, navItems = [], acti
                         const active = activeChecker ? activeChecker(item?.path) : false;
                         return (
                             <button
-                                key={item?.id}
+                                key={item?.path || item?.name}
                                 className={`mobile-nav-item${active ? ' active' : ''}`}
                                 aria-current={active ? 'page' : undefined}
                                 onClick={() => handleItemClick(item?.path)}

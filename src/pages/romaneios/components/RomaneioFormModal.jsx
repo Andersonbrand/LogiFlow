@@ -3,6 +3,8 @@ import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 import Autocomplete from 'components/ui/Autocomplete';
 import { fetchMotoristas, fetchDestinos } from 'utils/romaneioService';
+import { fetchVehicles } from 'utils/vehicleService';
+import { fetchMaterials } from 'utils/materialService';
 import { FRETE_CATEGORIAS, detectarCategoriaFrete, calcularFretePedido, getCategoriaConfig, fmtPct } from 'utils/freteConfig';
 
 const STATUS_OPTIONS = ['Aguardando', 'Carregando', 'Em Trânsito', 'Finalizado', 'Cancelado'];
@@ -15,14 +17,41 @@ const EMPTY_FORM = {
 };
 const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', itens:[] };
 
-export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRomaneio, vehicles=[], materials=[] }) {
+export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRomaneio, vehicles: vehiclesProp=[], materials: materialsProp=[] }) {
     const [form, setForm]           = useState(EMPTY_FORM);
-    const [pedidos, setPedidos]     = useState([]);           // array de pedidos com seus itens
-    const [tab, setTab]             = useState('dados');       // dados | pedidos | financeiro
+    const [pedidos, setPedidos]     = useState([]);
+    const [tab, setTab]             = useState('dados');
     const [errors, setErrors]       = useState({});
     const [loading, setLoading]     = useState(false);
     const [motoristas, setMotoristas] = useState([]);
     const [destinos, setDestinos]   = useState([]);
+
+    // Estado interno de vehicles/materials — usa props quando disponíveis,
+    // mas busca do banco se as props chegarem vazias (Supabase acordando lento)
+    const [vehicles, setVehicles]   = useState(vehiclesProp);
+    const [materials, setMaterials] = useState(materialsProp);
+    const [loadingRefs, setLoadingRefs] = useState(false);
+
+    // Sincroniza props → estado interno quando props são atualizadas
+    useEffect(() => { if (vehiclesProp.length > 0) setVehicles(vehiclesProp); }, [vehiclesProp]);
+    useEffect(() => { if (materialsProp.length > 0) setMaterials(materialsProp); }, [materialsProp]);
+
+    // Quando modal abre e props chegaram vazias, busca diretamente do banco
+    useEffect(() => {
+        if (!isOpen) return;
+        const precisaBuscar = vehiclesProp.length === 0 || materialsProp.length === 0;
+        if (!precisaBuscar) return;
+        setLoadingRefs(true);
+        Promise.all([
+            vehiclesProp.length === 0 ? fetchVehicles() : Promise.resolve(vehiclesProp),
+            materialsProp.length === 0 ? fetchMaterials() : Promise.resolve(materialsProp),
+        ]).then(([veh, mat]) => {
+            setVehicles(veh);
+            setMaterials(mat);
+        }).catch(err => {
+            console.warn('Modal: erro ao buscar veículos/materiais:', err.message);
+        }).finally(() => setLoadingRefs(false));
+    }, [isOpen]); // eslint-disable-line
 
     // Novo pedido sendo montado
     const [novoPedido, setNovoPedido]   = useState(EMPTY_PEDIDO);
@@ -572,15 +601,16 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                 )}
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Veículo</label>
-                                    <select value={form.vehicle_id} onChange={e => setF('vehicle_id', e.target.value)}
-                                        className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white">
-                                        <option value="">Selecione um veículo</option>
-                                        {vehicles.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.tipo}</option>)}
-                                    </select>
-                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Veículo</label>
+                                        <select value={form.vehicle_id} onChange={e => setF('vehicle_id', e.target.value)}
+                                            disabled={loadingRefs}
+                                            className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60">
+                                            <option value="">{loadingRefs ? '⏳ Carregando veículos...' : vehicles.length === 0 ? 'Nenhum veículo cadastrado' : 'Selecione um veículo'}</option>
+                                            {vehicles.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.tipo}</option>)}
+                                        </select>
+                                    </div>
                                 <div>
                                     <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Placa</label>
                                     <input value={form.placa} onChange={e => setF('placa', e.target.value)} placeholder="ABC-1234"
@@ -718,8 +748,9 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                     <div className="flex gap-2">
                                                         <select value={novoItem.material_id}
                                                             onChange={e => setNovoItem(p => ({...p, material_id:e.target.value}))}
-                                                            className="flex-1 h-9 px-3 rounded-lg border border-gray-200 text-xs bg-white">
-                                                            <option value="">Selecionar material...</option>
+                                                            disabled={loadingRefs}
+                                                            className="flex-1 h-9 px-3 rounded-lg border border-gray-200 text-xs bg-white disabled:opacity-60">
+                                                            <option value="">{loadingRefs ? '⏳ Carregando materiais...' : materials.length === 0 ? 'Nenhum material cadastrado' : 'Selecionar material...'}</option>
                                                             {materials.map(m => (
                                                                 <option key={m.id} value={m.id}>{m.nome} ({m.unidade})</option>
                                                             ))}

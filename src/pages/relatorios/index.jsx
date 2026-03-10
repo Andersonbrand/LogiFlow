@@ -176,7 +176,17 @@ export default function Relatorios() {
         .sort((a, b) => b.utilizacao - a.utilizacao);
 
     // ─── Export financeiro Excel ────────────────────────────
+    const exportConsolidadoExcel = () => {
+        try {
+            exportRelatorioConsolidado(romaneios, periodo);
+            showToast('Relatório consolidado exportado!');
+        } catch (e) {
+            showToast('Erro ao exportar: ' + e.message, 'error');
+        }
+    };
+
     const exportFinanceiroExcel = () => {
+        if (romFinalizados.length === 0) { showToast('Nenhum romaneio finalizado no período', 'error'); return; }
         const rows = romFinalizados.map(r => ({
             'Número':      r.numero,
             'Motorista':   r.motorista || '',

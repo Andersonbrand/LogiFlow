@@ -4,6 +4,8 @@ import { fetchVehicles } from "utils/vehicleService";
 import { fetchMaintenanceAlerts, resolveMaintenanceAlert, createMaintenanceAlert } from "utils/userService";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "utils/AuthContext";
+import { subscribeTabela } from "utils/supabaseClient";
+import { useRecarregarAoVoltar } from "utils/useRecarregarAoVoltar";
 
 import NavigationBar from "components/ui/NavigationBar";
 import BreadcrumbTrail from "components/ui/BreadcrumbTrail";
@@ -78,14 +80,15 @@ export default function MainDashboard() {
         return false;
     }, [isAdmin]);
 
-    const load = async () => {
+    const load = useCallback(async () => {
         try {
             setLoading(true);
             const [rom, veh, alerts] = await Promise.all([
                 fetchRomaneios(), fetchVehicles(), fetchMaintenanceAlerts()
             ]);
-            setRomaneios(rom);
-            setVehicles(veh);
+            // Forçar novos arrays/objetos para garantir que useMemo recompute
+            setRomaneios([...rom]);
+            setVehicles([...veh]);
 
             // ✅ FIX: Batch alert creation with Promise.all (no N+1 loop)
             // Only create alerts that don't already exist
@@ -125,14 +128,18 @@ export default function MainDashboard() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []); // eslint-disable-line
 
     useEffect(() => {
         load();
-        // Atualiza automaticamente a cada 60 segundos
-        const interval = setInterval(load, 60000);
-        return () => clearInterval(interval);
+        // Polling a cada 15s — garante atualização mesmo sem Realtime
+        const interval = setInterval(load, 15000);
+        // Realtime: atualiza instantaneamente quando há mudança no banco
+        const unsubRom = subscribeTabela('romaneios', load);
+        const unsubVeh = subscribeTabela('vehicles', load);
+        return () => { clearInterval(interval); unsubRom(); unsubVeh(); };
     }, []);
+    useRecarregarAoVoltar(load);
 
     const handleResolveAlert = async (id) => {
         try {
@@ -148,8 +155,30 @@ export default function MainDashboard() {
     const metrics = useMemo(() => {
         const ativos = romaneios.filter(r => ['Aguardando', 'Carregando', 'Em Trânsito'].includes(r.status)).length;
         const disponiveis = vehicles.filter(v => v.status === 'Disponível').length;
-        const utilizacaoMedia = vehicles.length > 0
-            ? Math.round(vehicles.reduce((s, v) => s + (v.utilizacao || 0), 0) / vehicles.length) : 0;
+        // Utilização média real: baseada em romaneios ativos × capacidade de cada veículo
+        const statusAtivo = ['Aguardando', 'Carregando', 'Em Trânsito'];
+        const pertenceAoVeic = (rom, veiculo) => {
+            if (rom.vehicle_id && veiculo.id) return String(rom.vehicle_id) === String(veiculo.id);
+            return rom.placa && veiculo.placa &&
+                rom.placa.trim().toUpperCase() === veiculo.placa.trim().toUpperCase();
+        };
+        const utilizacoes = vehicles.map(v => {
+            const pesoAtivo = romaneios
+                .filter(r => pertenceAoVeic(r, v) && statusAtivo.includes(r.status))
+                .reduce((s, r) => s + Number(r.peso_total || 0), 0);
+            const cap = Number(v.capacidade_peso || v.capacidadePeso || 0);
+            if (cap > 0) return Math.min(100, Math.round((pesoAtivo / cap) * 100));
+            // Sem capacidade: contar viagens do mês
+            const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+            const viagens = romaneios.filter(r => {
+                if (!pertenceAoVeic(r, v)) return false;
+                const d = r.saida ? new Date(r.saida) : new Date(r.created_at);
+                return d >= inicioMes;
+            }).length;
+            return Math.min(100, Math.round((viagens / 8) * 100));
+        });
+        const utilizacaoMedia = utilizacoes.length > 0
+            ? Math.round(utilizacoes.reduce((s, u) => s + u, 0) / utilizacoes.length) : 0;
         const pesoHoje = romaneios
             .filter(r => r.saida && new Date(r.saida).toDateString() === new Date().toDateString())
             .reduce((s, r) => s + (r.peso_total || 0), 0);
@@ -162,7 +191,64 @@ export default function MainDashboard() {
         ];
     }, [romaneios, vehicles]);
 
-    const fleetData = useMemo(() => vehicles.map(v => ({ placa: v.placa, utilizacao: v.utilizacao ?? 0 })), [vehicles]);
+    // Utilização real: peso dos romaneios ativos do veículo ÷ capacidade máxima
+    // Usa vehicle_id quando disponível, cai para comparação de placa quando nulo
+    // (romaneios antigos criados antes do campo vehicle_id existir)
+    const fleetData = useMemo(() => {
+        const statusAtivo = ['Aguardando', 'Carregando', 'Em Trânsito'];
+        const hoje        = new Date();
+        const inicioMes   = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+
+        // Helper: verifica se um romaneio pertence a um veículo (por id OU por placa)
+        const pertenceAo = (rom, veiculo) => {
+            if (rom.vehicle_id && veiculo.id) {
+                return String(rom.vehicle_id) === String(veiculo.id);
+            }
+            // Fallback para romaneios antigos sem vehicle_id
+            return rom.placa && veiculo.placa &&
+                rom.placa.trim().toUpperCase() === veiculo.placa.trim().toUpperCase();
+        };
+
+        return vehicles.map(v => {
+            const capacidade = Number(v.capacidade_peso || v.capacidadePeso || 0);
+
+            // Prioridade 1: romaneio ativo agora para este veículo
+            const romAtivo = romaneios.find(r =>
+                pertenceAo(r, v) && statusAtivo.includes(r.status)
+            );
+            if (romAtivo && capacidade > 0) {
+                const utilizacao = Math.min(100, Math.round(
+                    (Number(romAtivo.peso_total || 0) / capacidade) * 100
+                ));
+                return { placa: v.placa, utilizacao };
+            }
+
+            // Prioridade 2: viagens do mês como proxy
+            const viagensMes = romaneios.filter(r => {
+                if (!pertenceAo(r, v)) return false;
+                const data = r.saida ? new Date(r.saida) : new Date(r.created_at);
+                return data >= inicioMes;
+            }).length;
+
+            if (capacidade === 0) {
+                // Sem capacidade cadastrada: usa viagens/mês (8 viagens = 100%)
+                const utilizacao = Math.min(100, Math.round((viagensMes / 8) * 100));
+                return { placa: v.placa, utilizacao };
+            }
+
+            // Prioridade 3: maior carga do mês para este veículo
+            const pesoMaxMes = romaneios
+                .filter(r => {
+                    if (!pertenceAo(r, v)) return false;
+                    const data = r.saida ? new Date(r.saida) : new Date(r.created_at);
+                    return data >= inicioMes;
+                })
+                .reduce((max, r) => Math.max(max, Number(r.peso_total || 0)), 0);
+
+            const utilizacao = Math.min(100, Math.round((pesoMaxMes / capacidade) * 100));
+            return { placa: v.placa, utilizacao };
+        });
+    }, [vehicles, romaneios]);
 
     return (
         <div className="min-h-screen" style={{ backgroundColor: "var(--color-background)" }}>

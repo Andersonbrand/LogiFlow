@@ -12,6 +12,8 @@ import VehicleFormModal from "./components/VehicleFormModal";
 import StatusUpdateModal from "./components/StatusUpdateModal";
 import HistoryModal from "./components/HistoryModal";
 import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate } from "utils/excelUtils";
+import { useAuth } from "utils/AuthContext";
+import AccessDeniedModal from "components/ui/AccessDeniedModal";
 import {
   fetchVehicles,
   createVehicle,
@@ -23,6 +25,8 @@ import {
 const EMPTY_FILTERS = { search: "", tipo: "Todos", status: "Todos" };
 
 export default function VehicleFleetManagement() {
+    const { isAdmin } = useAuth();
+    const [accessDenied, setAccessDenied] = useState(false);
     const [vehicles, setVehicles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState(EMPTY_FILTERS);
@@ -64,6 +68,7 @@ export default function VehicleFleetManagement() {
     }, [vehicles, filters]);
 
     const handleSave = async (data) => {
+        if (!isAdmin()) { setAccessDenied(true); return; }
         try {
             if (formModal?.vehicle) {
                 const updated = await updateVehicle(formModal.vehicle.id, data);
@@ -81,6 +86,7 @@ export default function VehicleFleetManagement() {
     };
 
     const handleStatusUpdate = async (id, newStatus) => {
+        if (!isAdmin()) { setAccessDenied(true); return; }
         try {
             const updated = await updateVehicle(id, { status: newStatus });
             setVehicles((prev) => prev.map((v) => (v.id === id ? { ...v, status: updated.status } : v)));
@@ -91,6 +97,7 @@ export default function VehicleFleetManagement() {
     };
 
     const handleDelete = async (id) => {
+        if (!isAdmin()) { setAccessDenied(true); return; }
         try {
             await deleteVehicle(id);
             setVehicles((prev) => prev.filter((v) => v.id !== id));
@@ -125,6 +132,7 @@ export default function VehicleFleetManagement() {
 
     return (
         <div className="min-h-screen" style={{ backgroundColor: "var(--color-background)" }}>
+            <AccessDeniedModal show={accessDenied} onClose={() => setAccessDenied(false)} />
             <NavigationBar />
             <main className="main-content">
                 <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8 py-6">
@@ -149,7 +157,7 @@ export default function VehicleFleetManagement() {
                                     Exportar Excel
                                 </Button>
                                 <Button variant="outline" size="sm" iconName="FileUp" iconSize={14}
-                                    onClick={() => importFileRef.current?.click()} title="Importar veículos de Excel">
+                                    onClick={() => { if (!isAdmin()) { setAccessDenied(true); return; } importFileRef.current?.click(); }} title="Importar veículos de Excel">
                                     Importar Excel
                                 </Button>
                                 <Button variant="ghost" size="sm" iconName="FileSpreadsheet" iconSize={14}
@@ -157,7 +165,7 @@ export default function VehicleFleetManagement() {
                                     Modelo
                                 </Button>
                                 <Button variant="default" iconName="Plus" iconSize={16}
-                                    onClick={() => setFormModal({ open: true, vehicle: null })}>
+                                    onClick={() => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: null }); }}>
                                     Cadastrar Veículo
                                 </Button>
                                 <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
@@ -181,8 +189,8 @@ export default function VehicleFleetManagement() {
                     <div className="hidden md:block">
                         <VehicleTable
                             vehicles={filtered}
-                            onEdit={(v) => setFormModal({ open: true, vehicle: v })}
-                            onStatusChange={(v) => setStatusModal({ open: true, vehicle: v })}
+                            onEdit={(v) => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: v }); }}
+                            onStatusChange={(v) => { if (!isAdmin()) { setAccessDenied(true); return; } setStatusModal({ open: true, vehicle: v }); }}
                             onViewHistory={(v) => setHistoryModal({ open: true, vehicle: v })}
                         />
                     </div>
@@ -191,8 +199,8 @@ export default function VehicleFleetManagement() {
                     <div className="md:hidden">
                         <VehicleCards
                             vehicles={filtered}
-                            onEdit={(v) => setFormModal({ open: true, vehicle: v })}
-                            onStatusChange={(v) => setStatusModal({ open: true, vehicle: v })}
+                            onEdit={(v) => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: v }); }}
+                            onStatusChange={(v) => { if (!isAdmin()) { setAccessDenied(true); return; } setStatusModal({ open: true, vehicle: v }); }}
                             onViewHistory={(v) => setHistoryModal({ open: true, vehicle: v })}
                         />
                     </div>
@@ -224,7 +232,7 @@ export default function VehicleFleetManagement() {
             {/* Toast */}
             {toast && (
                 <div
-                    className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-3 px-5 py-3 rounded-xl shadow-modal text-sm font-caption font-medium"
+                    className="fixed top-6 left-1/2 -translate-x-1/2 z-[300] flex items-center gap-3 px-5 py-3 rounded-xl shadow-modal text-sm font-caption font-medium"
                     style={{
                         backgroundColor: toast?.type === "success" ? "var(--color-success)" : "var(--color-destructive)",
                         color: "#FFFFFF",

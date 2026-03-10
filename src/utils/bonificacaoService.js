@@ -79,15 +79,16 @@ export async function fetchBonificacoes(motoristaId, periodo) {
 // Busca bonificações consolidadas — calcula diretamente dos romaneios aprovados
 // (não depende da tabela bonificacoes estar preenchida)
 export async function fetchBonificacoesConsolidadas() {
-    // Busca todos os romaneios aprovados com seus itens
+    // Busca romaneios que foram aprovados OU finalizados (compatível com registros antigos)
+    // Alguns têm aprovado=true, outros têm status_aprovacao='aprovado', outros apenas status='Finalizado'
     const { data: romaneios, error } = await supabase
         .from('romaneios')
         .select(`
-            id, numero, motorista, motorista_id, destino, saida, status, aprovado,
+            id, numero, motorista, motorista_id, destino, saida, status, aprovado, status_aprovacao,
             romaneio_itens(id, quantidade, peso_total, material_id,
                 materials(id, nome, categoria_frete))
         `)
-        .eq('aprovado', true)
+        .or('aprovado.eq.true,status_aprovacao.eq.aprovado,status.eq.Finalizado')
         .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -108,13 +109,28 @@ export async function fetchBonificacoesConsolidadas() {
         // Chave: motorista_id se existir, senão nome do motorista
         const chave = rom.motorista_id || rom.motorista || 'desconhecido';
         const nome = (rom.motorista_id && nomesMap[rom.motorista_id]) || rom.motorista || 'Sem nome';
+        const pesoRom = (rom.romaneio_itens || []).reduce((s, it) => s + (Number(it.peso_total) || 0), 0);
         if (!porMotorista[chave]) {
-            porMotorista[chave] = { motoristaId: rom.motorista_id, nome, romaneios: 0, valorTotal: 0, toneladasTotal: 0 };
+            porMotorista[chave] = {
+                motoristaId: rom.motorista_id,
+                // campos que o admin/motorista renderizam:
+                motorista: nome,
+                nome,
+                total_viagens: 0,
+                romaneios: 0,
+                peso_total: 0,
+                toneladasTotal: 0,
+                bonificacao_total: 0,
+                valorTotal: 0,
+            };
         }
+        porMotorista[chave].total_viagens++;
         porMotorista[chave].romaneios++;
-        porMotorista[chave].valorTotal += bonif.valorTotal;
-        porMotorista[chave].toneladasTotal += bonif.toneladasFerragem;
+        porMotorista[chave].peso_total      += pesoRom;
+        porMotorista[chave].toneladasTotal  += bonif.toneladasFerragem;
+        porMotorista[chave].bonificacao_total += bonif.valorTotal;
+        porMotorista[chave].valorTotal      += bonif.valorTotal;
     }
 
-    return Object.values(porMotorista).sort((a, b) => b.valorTotal - a.valorTotal);
+    return Object.values(porMotorista).sort((a, b) => b.bonificacao_total - a.bonificacao_total);
 }

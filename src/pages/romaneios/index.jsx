@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -9,9 +9,11 @@ import RomaneioDetailModal from './components/RomaneioDetailModal';
 import RomaneioImportModal  from './components/RomaneioImportModal';
 import { exportRomaneiosToExcel } from 'utils/excelUtils';
 import { fetchRomaneios, createRomaneio, updateRomaneio, updateRomaneioStatus, deleteRomaneio, duplicateRomaneio } from 'utils/romaneioService';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { fetchMaterials } from 'utils/materialService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { useToast } from 'utils/useToast';
+import { subscribeTabela } from 'utils/supabaseClient';
 
 const STATUS_COLORS = {
     'Aguardando':  { bg: '#FEF9C3', text: '#B45309' },
@@ -35,7 +37,18 @@ export default function Romaneios() {
     const { toast, showToast } = useToast();
     const [importModal, setImportModal] = useState(false);
 
-    const load = async () => {
+    // Carrega APENAS romaneios (usado pelo Realtime — não recarrega veículos/materiais desnecessariamente)
+    const loadRomaneios = useCallback(async () => {
+        try {
+            const rom = await fetchRomaneios();
+            setRomaneios(rom);
+        } catch (err) {
+            console.warn('Erro ao recarregar romaneios:', err.message);
+        }
+    }, []);
+
+    // Carregamento inicial completo (romaneios + materiais + veículos)
+    const load = useCallback(async () => {
         try {
             setLoading(true);
             const [rom, mat, veh] = await Promise.all([fetchRomaneios(), fetchMaterials(), fetchVehicles()]);
@@ -47,9 +60,15 @@ export default function Romaneios() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []); // eslint-disable-line
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => {
+        load();
+        // Realtime: só atualiza a lista de romaneios (não recarrega vehicles/materials)
+        const unsub = subscribeTabela('romaneios', loadRomaneios);
+        return () => unsub();
+    }, []);
+    useRecarregarAoVoltar(load);
 
     const filtered = useMemo(() => {
         return romaneios.filter(r => {

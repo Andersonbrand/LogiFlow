@@ -77,13 +77,26 @@ export function AuthProvider({ children }) {
     };
 
     const signUp = async (email, password, name) => {
-        const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { name } } });
+        const { data, error } = await supabase.auth.signUp({
+            email, password,
+            options: {
+                data: { name },
+                emailRedirectTo: `${window.location.origin}/`,
+            }
+        });
         if (error) throw error;
         if (data.user && data.session) {
             await supabase.from('user_profiles')
                 .upsert({ id: data.user.id, name: name || email.split('@')[0], role: 'operador' }, { onConflict: 'id' });
         }
         return data;
+    };
+
+    const sendPasswordReset = async (email) => {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) throw error;
     };
 
     const signOut = async () => {
@@ -115,7 +128,7 @@ export function AuthProvider({ children }) {
     return (
         <AuthContext.Provider value={{
             user, profile, loading,
-            signIn, signUp, signOut,
+            signIn, signUp, signOut, sendPasswordReset,
             isAdmin, isOperador, isMotorista, hasRole, can,
         }}>
             {children}

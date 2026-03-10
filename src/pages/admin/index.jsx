@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -7,8 +7,11 @@ import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import { fetchAllUsers, updateUserProfile, fetchMaintenanceAlerts, resolveMaintenanceAlert } from 'utils/userService';
-import { fetchRomaneios, aprovarRomaneio } from 'utils/romaneioService';
-import { fetchBonificacoesConsolidadas, calcularBonificacao } from 'utils/bonificacaoService';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
+import { fetchRomaneios, aprovarRomaneio, reprovarRomaneio } from 'utils/romaneioService';
+import { fetchBonificacoesConsolidadas } from 'utils/bonificacaoService';
+import { subscribeTabela } from 'utils/supabaseClient';
+import { fetchCorredores, upsertCorredor, deleteCorredor, invalidarCache } from 'utils/corredoresService';
 import { useNavigate } from 'react-router-dom';
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -23,19 +26,15 @@ export default function AdminPanel() {
     const { profile, isAdmin } = useAuth();
     const navigate = useNavigate();
     const { toast, showToast } = useToast();
-    const [users, setUsers]           = useState([]);
-    const [alerts, setAlerts]         = useState([]);
-    const [romaneios, setRomaneios]   = useState([]);
-    const [bonifs, setBonifs]         = useState([]);
-    const [tab, setTab]               = useState('usuarios');
-    const [loading, setLoading]       = useState(true);
+    const [users, setUsers]         = useState([]);
+    const [alerts, setAlerts]       = useState([]);
+    const [romaneios, setRomaneios] = useState([]);
+    const [bonifs, setBonifs]       = useState([]);
+    const [tab, setTab]             = useState('usuarios');
+    const [loading, setLoading]     = useState(true);
 
-    useEffect(() => {
-        if (profile && !isAdmin()) { navigate('/'); return; }
-        if (profile) load();
-    }, [profile]);
-
-    const load = async () => {
+    // ✅ FIX: useCallback garante referência estável para o hook useRecarregarAoVoltar
+    const load = useCallback(async () => {
         setLoading(true);
         try {
             const [u, a, rom] = await Promise.all([
@@ -49,7 +48,6 @@ export default function AdminPanel() {
         } catch (err) {
             showToast('Erro ao carregar dados: ' + err.message, 'error');
         }
-        // Bonificações isoladas para não travar o painel se falhar
         try {
             const bon = await fetchBonificacoesConsolidadas();
             setBonifs(bon || []);
@@ -58,7 +56,23 @@ export default function AdminPanel() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []); // eslint-disable-line
+
+    // ✅ FIX: useEffect e useRecarregarAoVoltar no nível raiz do componente
+    useEffect(() => {
+        if (profile && !isAdmin()) { navigate('/'); return; }
+        if (profile) load();
+    }, [profile]); // eslint-disable-line
+
+    // Realtime: bonificações e aprovações atualizam sem precisar de refresh
+    useEffect(() => {
+        const unsubRom      = subscribeTabela('romaneios', load);
+        const unsubProfiles = subscribeTabela('user_profiles', load);
+        const unsubBonif    = subscribeTabela('bonificacoes', load);
+        return () => { unsubRom(); unsubProfiles(); unsubBonif(); };
+    }, []);
+
+    useRecarregarAoVoltar(load);
 
     const handleRoleChange = async (userId, role) => {
         try {
@@ -67,6 +81,28 @@ export default function AdminPanel() {
             showToast('Permissão atualizada!', 'success');
         } catch (err) {
             showToast('Erro: ' + err.message, 'error');
+        }
+    };
+
+    const handleAprovar = async (romaneio) => {
+        try {
+            await aprovarRomaneio(romaneio.id, profile?.id);
+            setRomaneios(prev => prev.filter(r => r.id !== romaneio.id));
+            showToast(`Romaneio ${romaneio.numero} aprovado!`, 'success');
+        } catch (err) {
+            showToast('Erro ao aprovar: ' + err.message, 'error');
+        }
+    };
+
+    const handleReprovar = async (romaneio) => {
+        const motivo = prompt(`Motivo da reprovação do romaneio ${romaneio.numero}:`);
+        if (motivo === null) return;
+        try {
+            await reprovarRomaneio(romaneio.id, profile?.id, motivo);
+            setRomaneios(prev => prev.filter(r => r.id !== romaneio.id));
+            showToast(`Romaneio ${romaneio.numero} reprovado.`, 'success');
+        } catch (err) {
+            showToast('Erro ao reprovar: ' + err.message, 'error');
         }
     };
 
@@ -80,288 +116,595 @@ export default function AdminPanel() {
         }
     };
 
-    const handleAprovar = async (romaneio) => {
-        try {
-            await aprovarRomaneio(romaneio.id, profile.id);
-            setRomaneios(prev => prev.filter(r => r.id !== romaneio.id));
-            showToast(`Romaneio ${romaneio.numero} aprovado!`, 'success');
-        } catch (err) {
-            showToast('Erro ao aprovar: ' + err.message, 'error');
-        }
-    };
-
-    const handleReprovar = async (romaneio) => {
-        const motivo = window.prompt(`Motivo da reprovação do romaneio ${romaneio.numero}:
-(deixe em branco para não informar)`);
-        if (motivo === null) return; // cancelou o prompt
-        try {
-            await reprovarRomaneio(romaneio.id, profile.id, motivo);
-            setRomaneios(prev => prev.filter(r => r.id !== romaneio.id));
-            showToast(`Romaneio ${romaneio.numero} reprovado.`, 'warning');
-        } catch (err) {
-            showToast('Erro ao reprovar: ' + err.message, 'error');
-        }
-    };
-
     const TABS = [
-        ['usuarios', 'Usuários', 'Users'],
-        ['motoristas', 'Motoristas', 'Truck'],
-        ['aprovacoes', 'Aprovações', 'CheckSquare', romaneios.length],
-        ['bonificacoes', 'Bonificações', 'DollarSign'],
-        ['alertas', 'Alertas', 'AlertTriangle', alerts.length],
+        { id: 'usuarios',    label: 'Usuários',    icon: 'Users' },
+        { id: 'aprovacoes',  label: 'Aprovações',  icon: 'CheckSquare', badge: romaneios.length || null },
+        { id: 'alertas',     label: 'Alertas',     icon: 'AlertTriangle', badge: alerts.length || null },
+        { id: 'bonificacoes',label: 'Bonificações',icon: 'Award' },
+        { id: 'corredores',  label: 'Corredores',  icon: 'Map' },
     ];
+
+    if (loading) return (
+        <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
+            <NavigationBar />
+            <div className="flex items-center justify-center h-64">
+                <div className="flex flex-col items-center gap-3">
+                    <svg className="animate-spin h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    <p className="text-sm text-slate-500">Carregando painel admin...</p>
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-xl mx-auto px-4 md:px-6 lg:px-8 py-6">
-                    <BreadcrumbTrail className="mb-4" />
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="flex items-center justify-center rounded-xl" style={{ width: 44, height: 44, backgroundColor: '#7C3AED1A' }}>
-                            <Icon name="Shield" size={22} color="#7C3AED" />
-                        </div>
+                <div className="border-b border-slate-200 bg-white">
+                    <div className="max-w-screen-xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
                         <div>
-                            <h1 className="font-heading font-bold text-2xl" style={{ color: 'var(--color-text-primary)' }}>Painel Admin</h1>
-                            <p className="text-sm font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Usuários, aprovações, bonificações e alertas</p>
+                            <BreadcrumbTrail items={[{ label: 'Dashboard', path: '/' }, { label: 'Administração' }]} />
+                            <h1 className="text-xl font-bold text-slate-800 mt-1">Painel Administrativo</h1>
                         </div>
+                        <Button variant="outline" iconName="RefreshCw" iconSize={15} onClick={load}>
+                            Atualizar
+                        </Button>
                     </div>
+                </div>
 
+                <div className="max-w-screen-xl mx-auto px-4 md:px-6 py-6 space-y-6">
                     {/* Tabs */}
-                    <div className="flex border-b mb-6 overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-                        {TABS.map(([key, label, icon, count]) => (
-                            <button key={key} onClick={() => setTab(key)}
-                                className={`flex items-center gap-1.5 px-5 py-3 text-sm font-medium font-caption border-b-2 transition-colors whitespace-nowrap ${tab === key ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                                <Icon name={icon} size={15} color="currentColor" />
-                                {label}
-                                {count > 0 && (
-                                    <span className="ml-1 text-xs bg-red-500 text-white rounded-full px-1.5 py-0.5">{count}</span>
-                                )}
+                    <div className="flex gap-1 bg-slate-100 rounded-lg p-1 overflow-x-auto">
+                        {TABS.map(t => (
+                            <button key={t.id} onClick={() => { setTab(t.id); if (t.id === 'bonificacoes') load(); }}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${tab === t.id ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>
+                                <Icon name={t.icon} size={15} color="currentColor" />
+                                {t.label}
+                                {t.badge ? <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">{t.badge}</span> : null}
                             </button>
                         ))}
                     </div>
 
-                    {loading ? (
-                        <div className="flex justify-center py-20">
-                            <div className="animate-spin h-8 w-8 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
-                        </div>
-                    ) : tab === 'usuarios' ? (
-                        <div className="bg-white rounded-xl border shadow-card overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                            <table className="w-full text-sm">
-                                <thead className="text-xs font-caption border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                    <tr>
-                                        <th className="px-4 py-3 text-left font-medium">Usuário</th>
-                                        <th className="px-4 py-3 text-left font-medium">Perfil</th>
-                                        <th className="px-4 py-3 text-left font-medium">Alterar Para</th>
-                                        <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Membro desde</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {users.map(u => {
-                                        const rc = ROLE_CONFIG[u.role] || ROLE_CONFIG.operador;
-                                        const isMe = u.id === profile?.id;
-                                        return (
-                                            <tr key={u.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>
+                    {/* ── ABA USUÁRIOS ─────────────────────────────────────── */}
+                    {tab === 'usuarios' && (
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+                                <Icon name="Users" size={18} color="#1D4ED8" />
+                                <h2 className="text-base font-semibold text-slate-800">Usuários do Sistema</h2>
+                                <span className="ml-auto text-xs text-slate-400">{users.length} usuários</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            {['Nome', 'Email', 'Perfil', 'Ação'].map(h => (
+                                                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {users.length === 0 ? (
+                                            <tr><td colSpan={4} className="text-center py-8 text-slate-400">Nenhum usuário encontrado</td></tr>
+                                        ) : users.map(u => (
+                                            <tr key={u.id} className="hover:bg-slate-50">
+                                                <td className="px-4 py-3 font-medium text-slate-800">{u.name || '—'}</td>
+                                                <td className="px-4 py-3 text-slate-500">{u.email || '—'}</td>
                                                 <td className="px-4 py-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: rc.color }}>
-                                                            {(u.name || '?')[0].toUpperCase()}
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{u.name || 'Sem nome'}</p>
-                                                            {isMe && <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#EDE9FE', color: '#7C3AED' }}>Você</span>}
-                                                        </div>
-                                                    </div>
+                                                    {u.role && ROLE_CONFIG[u.role] ? (
+                                                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                                                            style={{ color: ROLE_CONFIG[u.role].color, backgroundColor: ROLE_CONFIG[u.role].bg }}>
+                                                            {ROLE_CONFIG[u.role].label}
+                                                        </span>
+                                                    ) : <span className="text-slate-400 text-xs">{u.role}</span>}
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium font-caption" style={{ backgroundColor: rc.bg, color: rc.color }}>{rc.label}</span>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    {isMe ? (
-                                                        <span className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Não pode alterar próprio perfil</span>
-                                                    ) : (
-                                                        <select value={u.role} onChange={e => handleRoleChange(u.id, e.target.value)}
-                                                            className="h-8 px-2 rounded-lg border border-gray-200 text-xs bg-white focus:outline-none">
-                                                            <option value="operador">Operador</option>
-                                                            <option value="admin">Admin</option>
-                                                            <option value="motorista">Motorista</option>
-                                                        </select>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3 hidden md:table-cell text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                    {u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '—'}
+                                                    <select value={u.role || 'operador'}
+                                                        onChange={e => handleRoleChange(u.id, e.target.value)}
+                                                        className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700">
+                                                        <option value="admin">Admin</option>
+                                                        <option value="operador">Operador</option>
+                                                        <option value="motorista">Motorista</option>
+                                                    </select>
                                                 </td>
                                             </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-
-                    ) : tab === 'motoristas' ? (
-                        <div className="bg-white rounded-xl border shadow-card overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--color-border)' }}>
-                                <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Motoristas Cadastrados</h3>
-                                <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
-                                    Para cadastrar um motorista, crie um usuário na aba Usuários e defina o perfil como <strong>Motorista</strong>
-                                </p>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
-                            <table className="w-full text-sm">
-                                <thead className="text-xs font-caption border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                    <tr>
-                                        <th className="px-4 py-3 text-left font-medium">Nome</th>
-                                        <th className="px-4 py-3 text-left font-medium">Membro desde</th>
-                                        <th className="px-4 py-3 text-left font-medium">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {users.filter(u => u.role === 'motorista').length === 0 ? (
-                                        <tr><td colSpan={3} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                                            <div className="flex flex-col items-center gap-2">
-                                                <Icon name="Truck" size={32} color="var(--color-muted-foreground)" />
-                                                <p>Nenhum motorista cadastrado</p>
-                                                <p className="text-xs">Vá até a aba <strong>Usuários</strong>, crie um novo usuário e defina o perfil como <strong>Motorista</strong></p>
-                                            </div>
-                                        </td></tr>
-                                    ) : users.filter(u => u.role === 'motorista').map((u, idx) => (
-                                        <tr key={u.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: '#065F46' }}>
-                                                        {(u.name || '?')[0].toUpperCase()}
-                                                    </div>
-                                                    <span className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>{u.name || 'Sem nome'}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3 text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                {u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '—'}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>Ativo</span>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
                         </div>
+                    )}
 
-                    ) : tab === 'aprovacoes' ? (
-                        <div className="flex flex-col gap-3">
+                    {/* ── ABA APROVAÇÕES ───────────────────────────────────── */}
+                    {tab === 'aprovacoes' && (
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+                                <Icon name="CheckSquare" size={18} color="#1D4ED8" />
+                                <h2 className="text-base font-semibold text-slate-800">Romaneios Pendentes de Aprovação</h2>
+                                <span className="ml-auto text-xs text-slate-400">{romaneios.length} pendentes</span>
+                            </div>
                             {romaneios.length === 0 ? (
-                                <div className="bg-white rounded-xl border shadow-card p-12 text-center" style={{ borderColor: 'var(--color-border)' }}>
-                                    <Icon name="CheckCircle2" size={40} color="#059669" />
-                                    <p className="mt-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>Nenhum romaneio pendente de aprovação</p>
+                                <div className="py-12 text-center text-slate-400">
+                                    <Icon name="CheckCircle2" size={32} color="#86EFAC" />
+                                    <p className="mt-2 text-sm">Nenhum romaneio pendente de aprovação</p>
                                 </div>
-                            ) : romaneios.map(r => {
-                                const bonif = calcularBonificacao(r);
-                                return (
-                                    <div key={r.id} className="bg-white rounded-xl border shadow-card p-4" style={{ borderColor: 'var(--color-border)' }}>
-                                        <div className="flex items-start gap-4">
-                                            <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 40, height: 40, backgroundColor: '#FEF9C3' }}>
-                                                <Icon name="FileText" size={18} color="#D97706" />
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-50">
+                                            <tr>
+                                                {['Número', 'Motorista', 'Destino', 'Peso', 'Status', 'Ações'].map(h => (
+                                                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {romaneios.map(r => (
+                                                <tr key={r.id} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-3 font-mono font-semibold text-slate-800">{r.numero}</td>
+                                                    <td className="px-4 py-3 text-slate-700">{r.motorista || '—'}</td>
+                                                    <td className="px-4 py-3 text-slate-500">{r.destino || '—'}</td>
+                                                    <td className="px-4 py-3 text-slate-500">{Number(r.peso_total||0).toLocaleString('pt-BR')} kg</td>
+                                                    <td className="px-4 py-3">
+                                                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+                                                            {r.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <button onClick={() => handleAprovar(r)}
+                                                                className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 transition-colors">
+                                                                Aprovar
+                                                            </button>
+                                                            <button onClick={() => handleReprovar(r)}
+                                                                className="text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors">
+                                                                Reprovar
+                                                            </button>
+                                                            <button onClick={() => navigate('/romaneios')}
+                                                                className="text-xs text-blue-600 underline hover:text-blue-800">
+                                                                Ver
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── ABA ALERTAS ──────────────────────────────────────── */}
+                    {tab === 'alertas' && (
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+                                <Icon name="AlertTriangle" size={18} color="#D97706" />
+                                <h2 className="text-base font-semibold text-slate-800">Alertas de Manutenção</h2>
+                                <span className="ml-auto text-xs text-slate-400">{alerts.length} alertas</span>
+                            </div>
+                            {alerts.length === 0 ? (
+                                <div className="py-12 text-center text-slate-400">
+                                    <Icon name="CheckCircle2" size={32} color="#86EFAC" />
+                                    <p className="mt-2 text-sm">Nenhum alerta ativo</p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-slate-100">
+                                    {alerts.map(a => (
+                                        <div key={a.id} className="flex items-start gap-4 p-4 hover:bg-slate-50">
+                                            <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                <Icon name="AlertTriangle" size={16} color="#D97706" />
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <p className="font-medium text-sm font-data text-blue-700">{r.numero}</p>
-                                                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#FEF9C3', color: '#B45309' }}>{r.status}</span>
-                                                </div>
-                                                <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                    {r.motorista || 'Sem motorista'} · {r.destino || 'Sem destino'} · {Number(r.peso_total||0).toLocaleString('pt-BR')} kg
-                                                </p>
-                                                <div className="flex gap-4 mt-2 flex-wrap">
-                                                    <span className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                        Bônus estimado: <strong className="text-purple-600">{BRL(bonif.valorTotal)}</strong>
-                                                    </span>
-                                                    {bonif.temCimento && (
-                                                        <span className="text-xs font-caption text-blue-600">+ Cimento: {BRL(bonif.valorCimento)}</span>
-                                                    )}
-                                                </div>
+                                                <p className="text-sm font-medium text-slate-800">{a.vehicles?.placa} — {a.tipo}</p>
+                                                <p className="text-xs text-slate-500 mt-0.5">{a.mensagem}</p>
                                             </div>
-                                            <div className="flex flex-col gap-1.5">
-                                                <Button variant="default" size="sm" iconName="Check" iconSize={14}
-                                                    onClick={() => handleAprovar(r)}>
-                                                    Aprovar
-                                                </Button>
-                                                <button
-                                                    onClick={() => handleReprovar(r)}
-                                                    className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors hover:bg-red-50"
-                                                    style={{ borderColor: '#FECACA', color: '#DC2626' }}>
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                                                    Reprovar
-                                                </button>
-                                                <button
-                                                    onClick={() => navigate('/romaneios')}
-                                                    className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors hover:bg-blue-50"
-                                                    style={{ borderColor: '#BFDBFE', color: '#1D4ED8' }}>
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                                                    Ver Romaneio
-                                                </button>
-                                            </div>
+                                            <button onClick={() => handleResolveAlert(a.id)}
+                                                className="flex-shrink-0 text-xs font-medium text-green-600 hover:text-green-800 underline">
+                                                Resolver
+                                            </button>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                    ) : tab === 'bonificacoes' ? (
-                        <div className="bg-white rounded-xl border shadow-card overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="px-5 py-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                                <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                                    Bonificações Consolidadas por Motorista
-                                </h3>
-                            </div>
-                            <table className="w-full text-sm">
-                                <thead className="text-xs font-caption border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                    <tr>
-                                        <th className="px-4 py-3 text-left font-medium">Motorista</th>
-                                        <th className="px-4 py-3 text-right font-medium">Romaneios</th>
-                                        <th className="px-4 py-3 text-right font-medium">Ton. Ferragem</th>
-                                        <th className="px-4 py-3 text-right font-medium">Total Bônus</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {bonifs.length === 0 ? (
-                                        <tr><td colSpan={4} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                                            Nenhuma bonificação registrada ainda
-                                        </td></tr>
-                                    ) : bonifs.map((b, idx) => (
-                                        <tr key={b.motoristaId} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                            <td className="px-4 py-3 font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>{b.nome}</td>
-                                            <td className="px-4 py-3 text-right font-data text-xs">{b.romaneios}</td>
-                                            <td className="px-4 py-3 text-right font-data text-xs">{b.toneladasTotal.toFixed(3)} t</td>
-                                            <td className="px-4 py-3 text-right font-data font-semibold text-purple-600">{BRL(b.valorTotal)}</td>
-                                        </tr>
                                     ))}
-                                </tbody>
-                            </table>
+                                </div>
+                            )}
                         </div>
+                    )}
 
-                    ) : (
-                        <div className="flex flex-col gap-3">
-                            {alerts.length === 0 ? (
-                                <div className="bg-white rounded-xl border shadow-card p-12 text-center" style={{ borderColor: 'var(--color-border)' }}>
-                                    <Icon name="CheckCircle2" size={40} color="#059669" />
-                                    <p className="mt-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>Nenhum alerta pendente</p>
+                    {/* ── ABA BONIFICAÇÕES ─────────────────────────────────── */}
+                    {tab === 'bonificacoes' && (
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                    <Icon name="Award" size={18} color="#D97706" />
+                                    <h2 className="text-base font-semibold text-slate-800">Bonificações dos Motoristas</h2>
                                 </div>
-                            ) : alerts.map(a => (
-                                <div key={a.id} className="bg-white rounded-xl border shadow-card p-4 flex items-start gap-4" style={{ borderColor: 'var(--color-border)' }}>
-                                    <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 40, height: 40, backgroundColor: '#FEE2E2' }}>
-                                        <Icon name="AlertTriangle" size={18} color="#DC2626" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>{a.mensagem}</p>
-                                        <p className="text-xs mt-0.5 font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
-                                            {a.vehicles?.placa} · {a.vehicles?.tipo} · {new Date(a.created_at).toLocaleDateString('pt-BR')}
-                                        </p>
-                                    </div>
-                                    <Button variant="outline" size="sm" iconName="Check" iconSize={14} onClick={() => handleResolveAlert(a.id)}>Resolver</Button>
+                                <button onClick={load}
+                                    className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors">
+                                    <Icon name="RefreshCw" size={13} color="currentColor" />
+                                    Atualizar
+                                </button>
+                            </div>
+                            {bonifs.length === 0 ? (
+                                <div className="py-12 text-center text-slate-400">
+                                    <Icon name="Award" size={32} color="#CBD5E1" />
+                                    <p className="mt-2 text-sm">Nenhuma bonificação calculada ainda</p>
+                                    <p className="text-xs mt-1">Aprove romaneios para que as bonificações apareçam aqui</p>
                                 </div>
-                            ))}
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-50">
+                                            <tr>
+                                                {['Motorista', 'Viagens', 'Peso Total', 'Bonificação'].map(h => (
+                                                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {bonifs.map((b, i) => (
+                                                <tr key={i} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-3 font-medium text-slate-800">{b.motorista}</td>
+                                                    <td className="px-4 py-3 text-slate-600">{b.total_viagens}</td>
+                                                    <td className="px-4 py-3 text-slate-600">{Number(b.peso_total||0).toLocaleString('pt-BR')} kg</td>
+                                                    <td className="px-4 py-3 font-semibold text-green-700">{BRL(b.bonificacao_total)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
                         </div>
+                    )}
+
+                    {/* ── ABA CORREDORES ─────────────────────────────────── */}
+                    {tab === 'corredores' && (
+                        <CorredoresManager showToast={showToast} />
                     )}
                 </div>
             </main>
             <Toast toast={toast} />
+        </div>
+    );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Componente de gerenciamento de corredores
+// ────────────────────────────────────────────────────────────────────────────
+const ICONES_DISPONIVEIS = [
+    { value: 'ArrowUp',        label: '↑ Cima'         },
+    { value: 'ArrowDown',      label: '↓ Baixo'        },
+    { value: 'ArrowLeft',      label: '← Esquerda'     },
+    { value: 'ArrowRight',     label: '→ Direita'      },
+    { value: 'ArrowUpRight',   label: '↗ Cima-Direita' },
+    { value: 'ArrowUpLeft',    label: '↖ Cima-Esquerda'},
+    { value: 'ArrowDownRight', label: '↘ Baixo-Dir.'   },
+    { value: 'ArrowDownLeft',  label: '↙ Baixo-Esq.'   },
+    { value: 'MapPin',         label: '📍 Pino'        },
+];
+
+function CorredoresManager({ showToast }) {
+    const [corredores, setCorredores] = useState([]);
+    const [loading, setLoading]       = useState(true);
+    const [editando, setEditando]     = useState(null);
+    const [criando, setCriando]       = useState(false);
+    const [saving, setSaving]         = useState(false);
+    const [confirmDel, setConfirmDel] = useState(null);
+    const [expandidos, setExpandidos] = useState({}); // { [nome]: true/false }
+
+    const [form, setForm] = useState({ nome: '', label: '', icone: 'ArrowRight', cidades: '' });
+    const [novaCidade, setNovaCidade] = useState('');
+
+    const load = useCallback(async () => {
+        try {
+            setLoading(true);
+            invalidarCache();
+            const data = await fetchCorredores();
+            setCorredores(data);
+        } catch (err) {
+            showToast('Erro ao carregar corredores: ' + err.message, 'error');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { load(); }, []);
+
+    const abrirEdicao = (corredor) => {
+        setEditando(corredor.nome);
+        setCriando(false);
+        setForm({
+            nome:    corredor.nome,
+            label:   corredor.label,
+            icone:   corredor.icone || 'ArrowRight',
+            cidades: corredor.cidades.join('\n'),
+        });
+        setNovaCidade('');
+    };
+
+    const abrirCriacao = () => {
+        setCriando(true);
+        setEditando(null);
+        setForm({ nome: '', label: '', icone: 'ArrowRight', cidades: '' });
+        setNovaCidade('');
+    };
+
+    const fecharForm = () => { setEditando(null); setCriando(false); setNovaCidade(''); };
+
+    const cidadesDoForm = () =>
+        form.cidades
+            .split('\n')
+            .map(c => c.trim().toLowerCase())
+            .filter(Boolean);
+
+    const adicionarCidade = () => {
+        if (!novaCidade.trim()) return;
+        const atual = cidadesDoForm();
+        const nova  = novaCidade.trim().toLowerCase();
+        if (atual.includes(nova)) { showToast('Cidade já existe neste corredor', 'error'); return; }
+        setForm(p => ({ ...p, cidades: [...atual, nova].join('\n') }));
+        setNovaCidade('');
+    };
+
+    const removerCidade = (idx) => {
+        const lista = cidadesDoForm().filter((_, i) => i !== idx);
+        setForm(p => ({ ...p, cidades: lista.join('\n') }));
+    };
+
+    const salvar = async () => {
+        if (!form.nome.trim()) { showToast('Nome do corredor é obrigatório', 'error'); return; }
+        if (!form.label.trim()) { showToast('Rótulo é obrigatório', 'error'); return; }
+        const cidades = cidadesDoForm();
+        if (cidades.length === 0) { showToast('Adicione ao menos uma cidade', 'error'); return; }
+
+        setSaving(true);
+        try {
+            await upsertCorredor({
+                nome:   form.nome.trim().toLowerCase().replace(/\s+/g, '_'),
+                label:  form.label.trim(),
+                icone:  form.icone,
+                cidades,
+            });
+            showToast('Corredor salvo com sucesso!', 'success');
+            fecharForm();
+            await load();
+        } catch (err) {
+            showToast('Erro ao salvar: ' + err.message, 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const confirmarDelete = async () => {
+        if (!confirmDel) return;
+        try {
+            await deleteCorredor(confirmDel);
+            showToast('Corredor removido.', 'success');
+            setConfirmDel(null);
+            await load();
+        } catch (err) {
+            showToast('Erro ao remover: ' + err.message, 'error');
+        }
+    };
+
+    if (loading) return (
+        <div className="flex justify-center py-16">
+            <div className="animate-spin h-7 w-7 rounded-full border-4 border-slate-300" style={{ borderTopColor: 'var(--color-primary)' }} />
+        </div>
+    );
+
+    return (
+        <div className="flex flex-col gap-5">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                        <Icon name="Map" size={18} color="var(--color-primary)" />
+                        Corredores de Rota
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                        Defina as cidades de cada corredor para o sistema de consolidação de cargas.
+                        Base: <strong>Guanambi, BA</strong>.
+                    </p>
+                </div>
+                <Button variant="default" iconName="Plus" iconSize={14} onClick={abrirCriacao}>
+                    Novo Corredor
+                </Button>
+            </div>
+
+            {/* Formulário de criação / edição */}
+            {(criando || editando) && (
+                <div className="bg-slate-50 rounded-xl border-2 border-blue-200 p-5">
+                    <h3 className="font-semibold text-sm text-slate-800 mb-4">
+                        {criando ? '+ Novo Corredor' : `✏️ Editando: ${form.label}`}
+                    </h3>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                        {/* Nome interno */}
+                        <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">
+                                Nome interno <span className="text-slate-400">(sem espaços)</span>
+                            </label>
+                            <input
+                                value={form.nome}
+                                onChange={e => setForm(p => ({ ...p, nome: e.target.value }))}
+                                placeholder="ex: norte, sul_proximo"
+                                disabled={!!editando}
+                                className="w-full h-9 px-3 rounded-lg border border-slate-200 text-sm bg-white font-mono disabled:opacity-50 disabled:bg-slate-100"
+                            />
+                        </div>
+
+                        {/* Ícone */}
+                        <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Ícone / Direção</label>
+                            <select
+                                value={form.icone}
+                                onChange={e => setForm(p => ({ ...p, icone: e.target.value }))}
+                                className="w-full h-9 px-3 rounded-lg border border-slate-200 text-sm bg-white">
+                                {ICONES_DISPONIVEIS.map(ic => (
+                                    <option key={ic.value} value={ic.value}>{ic.label}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Rótulo */}
+                        <div className="sm:col-span-2">
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Rótulo exibido</label>
+                            <input
+                                value={form.label}
+                                onChange={e => setForm(p => ({ ...p, label: e.target.value }))}
+                                placeholder="ex: ↑ Norte (BR-030 → Lapa / Ibotirama)"
+                                className="w-full h-9 px-3 rounded-lg border border-slate-200 text-sm bg-white"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Cidades */}
+                    <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-2">
+                            Cidades do corredor <span className="text-slate-400">({cidadesDoForm().length} cadastradas)</span>
+                        </label>
+
+                        {/* Adicionar nova cidade */}
+                        <div className="flex gap-2 mb-3">
+                            <input
+                                value={novaCidade}
+                                onChange={e => setNovaCidade(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), adicionarCidade())}
+                                placeholder="Digite o nome da cidade e pressione Enter ou clique em +"
+                                className="flex-1 h-9 px-3 rounded-lg border border-blue-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+                            />
+                            <button
+                                onClick={adicionarCidade}
+                                className="h-9 px-4 rounded-lg text-white text-sm font-medium flex items-center gap-1 transition-colors"
+                                style={{ backgroundColor: 'var(--color-primary)' }}>
+                                <Icon name="Plus" size={14} color="#fff" /> Adicionar
+                            </button>
+                        </div>
+
+                        {/* Lista de cidades com chip + remoção */}
+                        <div className="flex flex-wrap gap-2 min-h-[40px] p-3 rounded-lg border border-slate-200 bg-white">
+                            {cidadesDoForm().length === 0 ? (
+                                <span className="text-xs text-slate-400 italic">Nenhuma cidade adicionada ainda...</span>
+                            ) : cidadesDoForm().map((cidade, idx) => (
+                                <span key={idx}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                                    {cidade}
+                                    <button
+                                        onClick={() => removerCidade(idx)}
+                                        className="ml-0.5 hover:text-red-600 transition-colors">
+                                        <Icon name="X" size={10} color="currentColor" />
+                                    </button>
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex gap-2 mt-4 justify-end">
+                        <Button variant="outline" onClick={fecharForm} disabled={saving}>Cancelar</Button>
+                        <Button variant="default" iconName="Save" iconSize={14} onClick={salvar} loading={saving}>
+                            Salvar Corredor
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de confirmação de exclusão */}
+            {confirmDel && (
+                <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/40" onClick={() => setConfirmDel(null)} />
+                    <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
+                        <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
+                            <Icon name="Trash2" size={22} color="#DC2626" />
+                        </div>
+                        <h3 className="font-bold text-slate-800 mb-1">Remover corredor?</h3>
+                        <p className="text-sm text-slate-500 mb-5">
+                            O corredor <strong>"{confirmDel}"</strong> será removido permanentemente. Romaneios existentes não serão afetados.
+                        </p>
+                        <div className="flex gap-3 justify-center">
+                            <Button variant="outline" onClick={() => setConfirmDel(null)}>Cancelar</Button>
+                            <Button variant="destructive" iconName="Trash2" onClick={confirmarDelete}>Remover</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Lista de corredores */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {corredores.map(corredor => (
+                    <div key={corredor.nome}
+                        className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        {/* Header do card */}
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100"
+                            style={{ backgroundColor: 'var(--color-muted)' }}>
+                            <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+                                    style={{ backgroundColor: 'var(--color-primary)' }}>
+                                    <Icon name={corredor.icone || 'MapPin'} size={14} color="#fff" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-semibold text-slate-800">{corredor.label}</p>
+                                    <p className="text-xs text-slate-400 font-mono">{corredor.nome}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                                    {(corredor.cidades || []).length} cidades
+                                </span>
+                                <button
+                                    onClick={() => abrirEdicao(corredor)}
+                                    className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors ml-1">
+                                    <Icon name="Pencil" size={13} color="#475569" />
+                                </button>
+                                <button
+                                    onClick={() => setConfirmDel(corredor.nome)}
+                                    className="p-1.5 rounded-lg hover:bg-red-100 transition-colors">
+                                    <Icon name="Trash2" size={13} color="#DC2626" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Cidades em chips — expansíveis */}
+                        <div className="px-4 py-3">
+                            <div className="flex flex-wrap gap-1.5">
+                                {(corredor.cidades || [])
+                                    .slice(0, expandidos[corredor.nome] ? undefined : 12)
+                                    .map((cidade, i) => (
+                                        <span key={i}
+                                            className="inline-block px-2 py-0.5 rounded-full text-xs bg-slate-100 text-slate-600 border border-slate-200 capitalize">
+                                            {cidade}
+                                        </span>
+                                    ))
+                                }
+                                {(corredor.cidades || []).length === 0 && (
+                                    <span className="text-xs text-slate-400 italic">Sem cidades cadastradas</span>
+                                )}
+                            </div>
+                            {(corredor.cidades || []).length > 12 && (
+                                <button
+                                    onClick={() => setExpandidos(prev => ({ ...prev, [corredor.nome]: !prev[corredor.nome] }))}
+                                    className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors">
+                                    <Icon
+                                        name={expandidos[corredor.nome] ? 'ChevronUp' : 'ChevronDown'}
+                                        size={13} color="currentColor" />
+                                    {expandidos[corredor.nome]
+                                        ? 'Mostrar menos'
+                                        : `Ver todas as ${corredor.cidades.length} cidades`}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {corredores.length === 0 && !loading && (
+                <div className="text-center py-12 text-slate-400">
+                    <Icon name="Map" size={36} color="#CBD5E1" />
+                    <p className="mt-2 text-sm">Nenhum corredor cadastrado</p>
+                    <p className="text-xs mt-1">Clique em "Novo Corredor" para começar</p>
+                </div>
+            )}
         </div>
     );
 }
