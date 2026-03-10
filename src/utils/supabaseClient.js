@@ -1,10 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl     = import.meta.env.VITE_SUPABASE_URL     || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
+// Expõe flag global — App.jsx detecta e mostra tela de erro amigável
+// em vez de tela branca quando as variáveis não estão no Vercel
 if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('⚠️  Variáveis VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY não configuradas no .env');
+    console.error('LOGIFLOW: VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY não configuradas. Configure as Environment Variables no Vercel.');
+    window.__SUPABASE_MISSING__ = true;
+} else {
+    window.__SUPABASE_MISSING__ = false;
 }
 
 // ─── Camada 1: Fetch com retry automático ─────────────────────────────────
@@ -34,7 +39,13 @@ async function fetchComRetry(url, options = {}, tentativa = 1) {
     }
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Fallback seguro: se as variáveis não existirem, cria um cliente com URL
+// placeholder para evitar exceção no módulo que causaria tela branca total.
+// O app vai detectar window.__SUPABASE_MISSING__ e mostrar erro amigável.
+const _url = supabaseUrl  || 'https://placeholder.supabase.co';
+const _key = supabaseAnonKey || 'placeholder-key';
+
+export const supabase = createClient(_url, _key, {
     auth: {
         persistSession:     true,
         autoRefreshToken:   true,
