@@ -122,8 +122,7 @@ function BrandPanel() {
                     <Icon name="Truck" size={24} color="#fff" />
                 </div>
                 <div>
-                    <p className="font-black text-2xl text-white tracking-tight leading-none">LogiFlow</p>
-                    {""}
+                    <p className="font-black text-2xl text-white tracking-tight leading-none mb-3">LogiFlow</p>
                     <p className="text-xs font-semibold tracking-widest uppercase" style={{ color: '#7DD3FC' }}>
                         Gestão Logística
                     </p>
