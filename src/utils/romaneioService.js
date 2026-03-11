@@ -6,7 +6,7 @@ export async function fetchRomaneios() {
         .from('romaneios')
         .select(`
             id, numero, motorista, motorista_id, placa, destino, status,
-            aprovado, aprovado_por, aprovado_em,
+            aprovado, aprovado_por, aprovado_em, status_aprovacao, motivo_reprovacao,
             peso_total, saida, observacoes, vehicle_id,
             distancia_km, custo_combustivel, custo_pedagio,
             custo_motorista, valor_frete, valor_frete_calculado,
@@ -211,6 +211,7 @@ export async function aprovarRomaneio(id, adminId) {
         .from('romaneios')
         .update({
             aprovado: true,
+            status_aprovacao: 'aprovado',
             aprovado_por: adminId,
             aprovado_em: new Date().toISOString(),
         })

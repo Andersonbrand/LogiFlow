@@ -238,8 +238,58 @@ export default function Romaneios() {
                                     <tbody>
                                         {filtered.map(r => {
                                             const sc = STATUS_COLORS[r.status] || STATUS_COLORS['Aguardando'];
+                                            const isReprovado = r.status_aprovacao === 'reprovado';
                                             return (
-                                                <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
+                                                <React.Fragment key={r.id}>
+                                                {/* Banner de reprovação — visível apenas para o operador */}
+                                                {isReprovado && (
+                                                    <tr style={{ backgroundColor: '#FFF5F5' }}>
+                                                        <td colSpan={9} style={{ padding: 0 }}>
+                                                            <div className="flex items-start gap-3 px-4 py-3"
+                                                                style={{ borderTop: '2px solid #FCA5A5', borderBottom: '1px solid #FEE2E2', background: 'linear-gradient(90deg, #FEF2F2, #FFF5F5)' }}>
+                                                                <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#FEE2E2', marginTop: 1 }}>
+                                                                    <Icon name="XCircle" size={18} color="#DC2626" />
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                                        <span className="text-xs font-bold" style={{ color: '#DC2626' }}>
+                                                                            ⚠ Romaneio #{r.numero} reprovado pelo admin
+                                                                        </span>
+                                                                    </div>
+                                                                    {r.motivo_reprovacao && (
+                                                                        <p className="text-xs mt-1 font-medium" style={{ color: '#7F1D1D', lineHeight: 1.6 }}>
+                                                                            <span style={{ color: '#9F1239' }}>Motivo:</span> {r.motivo_reprovacao}
+                                                                        </p>
+                                                                    )}
+                                                                    <div className="flex items-center gap-3 mt-2 flex-wrap">
+                                                                        <span className="text-xs" style={{ color: '#B45309', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', padding: '2px 8px', borderRadius: 20 }}>
+                                                                            💡 Corrija os dados e reenvie para aprovação
+                                                                        </span>
+                                                                        <button
+                                                                            onClick={() => setFormModal({ open: true, romaneio: r })}
+                                                                            className="text-xs font-semibold flex items-center gap-1 px-3 py-1 rounded-lg transition-all"
+                                                                            style={{ backgroundColor: '#1D4ED8', color: 'white', border: 'none', cursor: 'pointer' }}
+                                                                            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#1E40AF'}
+                                                                            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#1D4ED8'}>
+                                                                            <Icon name="Pencil" size={12} color="white" />
+                                                                            Editar e reenviar
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleDelete(r.id)}
+                                                                            className="text-xs font-semibold flex items-center gap-1 px-3 py-1 rounded-lg transition-all"
+                                                                            style={{ backgroundColor: 'white', color: '#DC2626', border: '1px solid #FCA5A5', cursor: 'pointer' }}
+                                                                            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#FEF2F2'}
+                                                                            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'white'}>
+                                                                            <Icon name="Trash2" size={12} color="#DC2626" />
+                                                                            Excluir
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                                <tr className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', backgroundColor: isReprovado ? '#FFF8F8' : undefined }}>
                                                     <td className="px-4 py-3">
                                                         <button onClick={() => setDetailModal({ open: true, romaneio: r })}
                                                             className="font-data text-xs font-semibold hover:underline" style={{ color: 'var(--color-primary)' }}>
@@ -309,6 +359,7 @@ export default function Romaneios() {
                                                         </div>
                                                     </td>
                                                 </tr>
+                                                </React.Fragment>
                                             );
                                         })}
                                     </tbody>

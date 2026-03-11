@@ -28,6 +28,7 @@ export default function AdminPanel() {
     const { toast, showToast } = useToast();
     const [users, setUsers]         = useState([]);
     const [alerts, setAlerts]       = useState([]);
+    const [modalReprovar, setModalReprovar] = useState({ open: false, romaneio: null, motivo: '' });
     const [romaneios, setRomaneios] = useState([]);
     const [bonifs, setBonifs]       = useState([]);
     const [tab, setTab]             = useState('usuarios');
@@ -44,7 +45,7 @@ export default function AdminPanel() {
             ]);
             setUsers(u || []);
             setAlerts(a || []);
-            setRomaneios((rom || []).filter(r => !r.aprovado && r.status !== 'Cancelado'));
+            setRomaneios((rom || []).filter(r => !r.aprovado && r.status !== 'Cancelado' && r.status_aprovacao !== 'reprovado'));
         } catch (err) {
             showToast('Erro ao carregar dados: ' + err.message, 'error');
         }
@@ -94,12 +95,17 @@ export default function AdminPanel() {
         }
     };
 
-    const handleReprovar = async (romaneio) => {
-        const motivo = prompt(`Motivo da reprovação do romaneio ${romaneio.numero}:`);
-        if (motivo === null) return;
+    const handleReprovar = (romaneio) => {
+        setModalReprovar({ open: true, romaneio, motivo: '' });
+    };
+
+    const confirmarReprovacao = async () => {
+        const { romaneio, motivo } = modalReprovar;
+        if (!motivo.trim()) { showToast('Informe o motivo da reprovação.', 'error'); return; }
         try {
-            await reprovarRomaneio(romaneio.id, profile?.id, motivo);
+            await reprovarRomaneio(romaneio.id, profile?.id, motivo.trim());
             setRomaneios(prev => prev.filter(r => r.id !== romaneio.id));
+            setModalReprovar({ open: false, romaneio: null, motivo: '' });
             showToast(`Romaneio ${romaneio.numero} reprovado.`, 'success');
         } catch (err) {
             showToast('Erro ao reprovar: ' + err.message, 'error');
@@ -226,7 +232,7 @@ export default function AdminPanel() {
                                 <span className="ml-auto text-xs text-slate-400">{romaneios.length} pendentes</span>
                             </div>
                             {romaneios.length === 0 ? (
-                                <div className="py-12 text-center text-slate-400 flex flex-col items-center">
+                                <div className="py-12 text-center text-slate-400">
                                     <Icon name="CheckCircle2" size={32} color="#86EFAC" />
                                     <p className="mt-2 text-sm">Nenhum romaneio pendente de aprovação</p>
                                 </div>
@@ -286,7 +292,7 @@ export default function AdminPanel() {
                                 <span className="ml-auto text-xs text-slate-400">{alerts.length} alertas</span>
                             </div>
                             {alerts.length === 0 ? (
-                                <div className="py-12 text-center text-slate-400 flex flex-col items-center">
+                                <div className="py-12 text-center text-slate-400">
                                     <Icon name="CheckCircle2" size={32} color="#86EFAC" />
                                     <p className="mt-2 text-sm">Nenhum alerta ativo</p>
                                 </div>
@@ -365,6 +371,93 @@ export default function AdminPanel() {
                 </div>
             </main>
             <Toast toast={toast} />
+
+            {/* ── MODAL DE REPROVAÇÃO ──────────────────────────────────────── */}
+            {modalReprovar.open && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+                        style={{ border: '1px solid #FEE2E2' }}>
+
+                        {/* Header */}
+                        <div className="flex items-center gap-3 px-6 py-4"
+                            style={{ background: 'linear-gradient(135deg, #FEF2F2, #FFF5F5)', borderBottom: '1px solid #FEE2E2' }}>
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                                style={{ backgroundColor: '#FEE2E2' }}>
+                                <Icon name="XCircle" size={22} color="#DC2626" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-base" style={{ color: '#1E293B' }}>
+                                    Reprovar Romaneio
+                                </h3>
+                                <p className="text-xs mt-0.5" style={{ color: '#64748B' }}>
+                                    Romaneio <strong style={{ color: '#DC2626' }}>#{modalReprovar.romaneio?.numero}</strong> — {modalReprovar.romaneio?.motorista}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Body */}
+                        <div className="px-6 py-5">
+                            <div className="flex gap-2 p-3 rounded-xl mb-4"
+                                style={{ backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' }}>
+                                <Icon name="TriangleAlert" size={16} color="#D97706" />
+                                <p className="text-xs leading-relaxed" style={{ color: '#78350F' }}>
+                                    O operador verá o motivo da reprovação e receberá instruções para corrigir ou refazer o romaneio.
+                                </p>
+                            </div>
+
+                            <label className="block text-sm font-semibold mb-2" style={{ color: '#374151' }}>
+                                Motivo da reprovação <span style={{ color: '#DC2626' }}>*</span>
+                            </label>
+                            <textarea
+                                autoFocus
+                                rows={4}
+                                value={modalReprovar.motivo}
+                                onChange={e => setModalReprovar(prev => ({ ...prev, motivo: e.target.value }))}
+                                placeholder="Descreva o motivo com clareza para que o operador possa corrigir..."
+                                className="w-full rounded-xl text-sm resize-none focus:outline-none"
+                                style={{
+                                    padding: '12px 14px',
+                                    border: '2px solid',
+                                    borderColor: modalReprovar.motivo.trim() ? '#EF4444' : '#E2E8F0',
+                                    backgroundColor: '#FAFAFA',
+                                    color: '#1E293B',
+                                    lineHeight: '1.6',
+                                    fontFamily: 'inherit',
+                                    transition: 'border-color 0.2s',
+                                }}
+                                onFocus={e => e.target.style.borderColor = '#EF4444'}
+                            />
+                            <p className="text-xs mt-1.5" style={{ color: '#94A3B8' }}>
+                                {modalReprovar.motivo.trim().length} caracteres — seja específico para facilitar a correção
+                            </p>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex justify-end gap-2 px-6 py-4"
+                            style={{ borderTop: '1px solid #F1F5F9', backgroundColor: '#FAFAFA' }}>
+                            <button
+                                onClick={() => setModalReprovar({ open: false, romaneio: null, motivo: '' })}
+                                className="px-4 py-2 rounded-xl text-sm font-semibold"
+                                style={{ border: '1.5px solid #E2E8F0', color: '#64748B', backgroundColor: 'white' }}>
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={confirmarReprovacao}
+                                disabled={!modalReprovar.motivo.trim()}
+                                className="px-5 py-2 rounded-xl text-sm font-bold text-white flex items-center gap-2"
+                                style={{
+                                    backgroundColor: modalReprovar.motivo.trim() ? '#DC2626' : '#FCA5A5',
+                                    cursor: modalReprovar.motivo.trim() ? 'pointer' : 'not-allowed',
+                                    boxShadow: modalReprovar.motivo.trim() ? '0 2px 8px rgba(220,38,38,0.3)' : 'none',
+                                }}>
+                                <Icon name="XCircle" size={15} color="white" />
+                                Confirmar Reprovação
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

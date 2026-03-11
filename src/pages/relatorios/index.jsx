@@ -12,7 +12,7 @@ import { fetchRomaneios } from 'utils/romaneioService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { fetchMaterials } from 'utils/materialService';
 import { useToast } from 'utils/useToast';
-import { exportRomaneiosToExcel, exportRelatorioConsolidado } from 'utils/excelUtils';
+import { exportRomaneiosToExcel, exportRelatorioConsolidado, exportRelatorioBonificacoes } from 'utils/excelUtils';
 import * as XLSX from 'xlsx';
 
 const COLORS = ['#1E3A5F', '#4A6741', '#D97706', '#059669', '#DC2626', '#7C3AED', '#0891B2'];
@@ -185,28 +185,98 @@ export default function Relatorios() {
         }
     };
 
+    const exportBonificacoesExcel = () => {
+        // Filtra apenas romaneios aprovados/finalizados no período selecionado
+        const romBonif = romFinalizados.filter(r =>
+            r.aprovado || r.status_aprovacao === 'aprovado' || r.status === 'Finalizado'
+        );
+        if (romBonif.length === 0) { showToast('Nenhum romaneio aprovado no período', 'error'); return; }
+        try {
+            const di = periodo?.inicio ? new Date(periodo.inicio).toLocaleDateString('pt-BR') : '';
+            const df = periodo?.fim    ? new Date(periodo.fim).toLocaleDateString('pt-BR')    : '';
+            exportRelatorioBonificacoes(romBonif, di, df);
+            showToast('Relatório de bonificações exportado!', 'success');
+        } catch(e) {
+            showToast('Erro ao exportar: ' + e.message, 'error');
+        }
+    };
+
     const exportFinanceiroExcel = () => {
         if (romFinalizados.length === 0) { showToast('Nenhum romaneio finalizado no período', 'error'); return; }
-        const rows = romFinalizados.map(r => ({
-            'Número':      r.numero,
-            'Motorista':   r.motorista || '',
-            'Destino':     r.destino || '',
-            'Saída':       r.saida ? new Date(r.saida).toLocaleDateString('pt-BR') : '',
-            'Peso (kg)':   r.peso_total || 0,
-            'Frete (R$)':  r.valor_frete || 0,
-            'Combustível': r.custo_combustivel || 0,
-            'Pedágio':     r.custo_pedagio || 0,
-            'Motorista $': r.custo_motorista || 0,
-            'Custo Total': (r.custo_combustivel||0)+(r.custo_pedagio||0)+(r.custo_motorista||0),
-            'Margem (R$)': (r.valor_frete||0) - ((r.custo_combustivel||0)+(r.custo_pedagio||0)+(r.custo_motorista||0)),
-            'Margem (%)':  r.valor_frete > 0 ? (((r.valor_frete||0)-((r.custo_combustivel||0)+(r.custo_pedagio||0)+(r.custo_motorista||0)))/r.valor_frete*100).toFixed(1)+'%' : '0%',
-        }));
-        const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = Object.keys(rows[0] || {}).map(() => ({ wch: 16 }));
+
+        const n = v => Number(v) || 0;
+        const brl = v => n(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Financeiro');
-        XLSX.writeFile(wb, `relatorio_financeiro_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
-        showToast('Relatório financeiro exportado!');
+
+        // ── Aba 1: Resumo por romaneio ────────────────────────────────────────
+        const rowsResumo = romFinalizados.map(r => {
+            const frete = n(r.valor_frete_calculado || r.valor_frete);
+            const custo = n(r.custo_combustivel) + n(r.custo_pedagio) + n(r.custo_motorista);
+            const margem = frete - custo;
+            return {
+                'Número':           r.numero,
+                'Motorista':        r.motorista || '',
+                'Destino':          r.destino || '',
+                'Saída':            r.saida ? new Date(r.saida).toLocaleDateString('pt-BR') : '',
+                'Peso (kg)':        n(r.peso_total),
+                'Valor Carga (R$)': n(r.valor_total_carga),
+                'Frete (R$)':       frete,
+                'Combustível (R$)': n(r.custo_combustivel),
+                'Pedágio (R$)':     n(r.custo_pedagio),
+                'Diária Mot. (R$)': n(r.custo_motorista),
+                'Custo Total (R$)': custo,
+                'Margem (R$)':      margem,
+                'Margem (%)':       frete > 0 ? ((margem / frete) * 100).toFixed(1) + '%' : '0%',
+            };
+        });
+        const wsResumo = XLSX.utils.json_to_sheet(rowsResumo);
+        wsResumo['!cols'] = Object.keys(rowsResumo[0] || {}).map(() => ({ wch: 18 }));
+        XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo Viagens');
+
+        // ── Aba 2: Pedidos individuais por romaneio ───────────────────────────
+        const rowsPedidos = [];
+        romFinalizados.forEach(r => {
+            const pedidos = r.romaneio_pedidos || [];
+            if (pedidos.length === 0) {
+                rowsPedidos.push({
+                    'Romaneio':          r.numero,
+                    'Motorista':         r.motorista || '',
+                    'Destino':           r.destino || '',
+                    'Saída':             r.saida ? new Date(r.saida).toLocaleDateString('pt-BR') : '',
+                    'Nº Pedido':         '(sem pedidos)',
+                    'Cidade Destino':    '',
+                    'Categoria Frete':   '',
+                    '% Frete':           '',
+                    'Valor Pedido (R$)': 0,
+                    'Frete Calc. (R$)':  0,
+                });
+            } else {
+                pedidos.forEach(p => {
+                    const pct = n(p.percentual_frete) || 0.05;
+                    const frete = n(p.frete_calculado) || (n(p.valor_pedido) * pct);
+                    rowsPedidos.push({
+                        'Romaneio':          r.numero,
+                        'Motorista':         r.motorista || '',
+                        'Destino':           r.destino || '',
+                        'Saída':             r.saida ? new Date(r.saida).toLocaleDateString('pt-BR') : '',
+                        'Nº Pedido':         p.numero_pedido || '',
+                        'Cidade Destino':    p.cidade_destino || '',
+                        'Categoria Frete':   p.categoria_frete || '',
+                        '% Frete':           (pct * 100).toFixed(1) + '%',
+                        'Valor Pedido (R$)': n(p.valor_pedido),
+                        'Frete Calc. (R$)':  frete,
+                    });
+                });
+            }
+        });
+        const wsPedidos = XLSX.utils.json_to_sheet(rowsPedidos);
+        wsPedidos['!cols'] = Object.keys(rowsPedidos[0] || {}).map(() => ({ wch: 18 }));
+        XLSX.utils.book_append_sheet(wb, wsPedidos, 'Pedidos por Viagem');
+
+        const dataStr = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+        XLSX.writeFile(wb, `relatorio_financeiro_${dataStr}.xlsx`);
+        showToast('Relatório exportado com 2 abas: Resumo + Pedidos!');
     };
 
     if (loading) return (
@@ -315,6 +385,9 @@ export default function Relatorios() {
                             <div className="flex justify-end gap-2">
                                 <Button variant="outline" iconName="FileSpreadsheet" iconSize={14} onClick={exportFinanceiroExcel}>
                                     Exportar Financeiro Excel
+                                </Button>
+                                <Button variant="outline" iconName="Award" iconSize={14} onClick={exportBonificacoesExcel}>
+                                    Bonificações Motoristas
                                 </Button>
                                 <Button variant="default" iconName="Download" iconSize={14} onClick={exportConsolidadoExcel}>
                                     Relatório Consolidado
