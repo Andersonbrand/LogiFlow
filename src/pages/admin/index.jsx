@@ -226,7 +226,7 @@ export default function AdminPanel() {
                                 <span className="ml-auto text-xs text-slate-400">{romaneios.length} pendentes</span>
                             </div>
                             {romaneios.length === 0 ? (
-                                <div className="py-12 text-center text-slate-400">
+                                <div className="py-12 text-center text-slate-400 flex flex-col items-center">
                                     <Icon name="CheckCircle2" size={32} color="#86EFAC" />
                                     <p className="mt-2 text-sm">Nenhum romaneio pendente de aprovação</p>
                                 </div>
@@ -286,7 +286,7 @@ export default function AdminPanel() {
                                 <span className="ml-auto text-xs text-slate-400">{alerts.length} alertas</span>
                             </div>
                             {alerts.length === 0 ? (
-                                <div className="py-12 text-center text-slate-400">
+                                <div className="py-12 text-center text-slate-400 flex flex-col items-center">
                                     <Icon name="CheckCircle2" size={32} color="#86EFAC" />
                                     <p className="mt-2 text-sm">Nenhum alerta ativo</p>
                                 </div>
