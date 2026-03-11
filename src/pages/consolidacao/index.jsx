@@ -143,14 +143,14 @@ export default function Consolidacao() {
                     </div>
 
                     {/* Abas */}
-                    <div className="flex gap-1 p-1 rounded-xl mb-6 w-fit" style={{ backgroundColor: 'var(--color-muted)' }}>
+                    <div className="flex gap-1 p-1 rounded-xl mb-6 overflow-x-auto" style={{ backgroundColor: 'var(--color-muted)' }}>
                         {[
                             { id: 'consolidar', label: 'Consolidar Cargas', icon: 'GitMerge' },
                             { id: 'corredores', label: 'Corredores de Rota', icon: 'Map' },
                         ].map(aba => (
                             <button key={aba.id}
                                 onClick={() => setAbaAtiva(aba.id)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${abaAtiva === aba.id ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>
+                                className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${abaAtiva === aba.id ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>
                                 <Icon name={aba.icon} size={14} color={abaAtiva === aba.id ? 'var(--color-primary)' : 'currentColor'} />
                                 {aba.label}
                             </button>

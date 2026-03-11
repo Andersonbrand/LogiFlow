@@ -319,11 +319,12 @@ export default function Relatorios() {
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit mb-6">
+                    <div className="flex gap-1 bg-slate-100 p-1 rounded-xl mb-6 overflow-x-auto">
                         {TABS.map(t => (
                             <button key={t.id} onClick={() => setTab(t.id)}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                                <Icon name={t.icon} size={15} color="currentColor" />{t.label}
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${tab === t.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                                <Icon name={t.icon} size={14} color="currentColor" />
+                                <span className="hidden xs:inline sm:inline">{t.label}</span>
                             </button>
                         ))}
                     </div>
@@ -465,9 +466,12 @@ export default function Relatorios() {
                                         <table className="w-full text-sm">
                                             <thead className="bg-slate-50">
                                                 <tr>
-                                                    {['Romaneio','Destino','Frete','Custo','Margem','Margem %'].map(h => (
-                                                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                                                    ))}
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Romaneio</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Destino</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Frete</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Custo</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Margem</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">%</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -477,12 +481,15 @@ export default function Relatorios() {
                                                     const pct = r.valor_frete > 0 ? margem/r.valor_frete*100 : 0;
                                                     return (
                                                         <tr key={r.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                                            <td className="px-4 py-2.5 font-data font-medium text-blue-700">{r.numero}</td>
-                                                            <td className="px-4 py-2.5 text-slate-600">{r.destino}</td>
-                                                            <td className="px-4 py-2.5 font-data text-green-700">{fmtBRL(r.valor_frete)}</td>
-                                                            <td className="px-4 py-2.5 font-data text-red-600">{fmtBRL(custo)}</td>
-                                                            <td className="px-4 py-2.5 font-data font-semibold" style={{ color: margem >= 0 ? '#059669' : '#DC2626' }}>{fmtBRL(margem)}</td>
                                                             <td className="px-4 py-2.5">
+                                                                <p className="font-data font-medium text-blue-700 text-xs">{r.numero}</p>
+                                                                <p className="text-slate-400 text-xs sm:hidden">{r.destino}</p>
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-slate-600 text-xs hidden sm:table-cell">{r.destino}</td>
+                                                            <td className="px-4 py-2.5 font-data text-green-700 text-xs">{fmtBRL(r.valor_frete)}</td>
+                                                            <td className="px-4 py-2.5 font-data text-red-600 text-xs hidden md:table-cell">{fmtBRL(custo)}</td>
+                                                            <td className="px-4 py-2.5 font-data font-semibold text-xs" style={{ color: margem >= 0 ? '#059669' : '#DC2626' }}>{fmtBRL(margem)}</td>
+                                                            <td className="px-4 py-2.5 hidden sm:table-cell">
                                                                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pct >= 20 ? 'bg-green-100 text-green-700' : pct >= 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
                                                                     {pct.toFixed(1)}%
                                                                 </span>

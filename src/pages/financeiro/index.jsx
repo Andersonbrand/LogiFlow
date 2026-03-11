@@ -243,7 +243,7 @@ export default function Financeiro() {
                             </div>
 
                             {/* Extra KPIs */}
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 {[
                                     { l: 'km Rodados', v: `${kpis.km.toLocaleString('pt-BR')} km`, i: 'Route' },
                                     { l: 'Custo/km',   v: kpis.km > 0 ? BRL(kpis.custo / kpis.km) : '—', i: 'Fuel' },

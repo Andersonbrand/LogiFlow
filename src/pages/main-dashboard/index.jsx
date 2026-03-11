@@ -315,11 +315,11 @@ export default function MainDashboard() {
 
                     {/* KPI Cards */}
                     {loading ? (
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                             {[1,2,3,4].map(i => <div key={i} className="bg-white rounded-xl border border-slate-200 h-24 animate-pulse" />)}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                             {metrics.map((m, i) => <MetricCard key={i} {...m} />)}
                         </div>
                     )}

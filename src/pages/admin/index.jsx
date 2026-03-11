@@ -166,9 +166,9 @@ export default function AdminPanel() {
                     <div className="flex gap-1 bg-slate-100 rounded-lg p-1 overflow-x-auto">
                         {TABS.map(t => (
                             <button key={t.id} onClick={() => { setTab(t.id); if (t.id === 'bonificacoes') load(); }}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${tab === t.id ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>
-                                <Icon name={t.icon} size={15} color="currentColor" />
-                                {t.label}
+                                className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${tab === t.id ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>
+                                <Icon name={t.icon} size={14} color="currentColor" />
+                                <span className="hidden xs:inline">{t.label}</span>
                                 {t.badge ? <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">{t.badge}</span> : null}
                             </button>
                         ))}
@@ -186,9 +186,10 @@ export default function AdminPanel() {
                                 <table className="w-full text-sm">
                                     <thead className="bg-slate-50">
                                         <tr>
-                                            {['Nome', 'Email', 'Perfil', 'Ação'].map(h => (
-                                                <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                                            ))}
+                                            <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Nome</th>
+                                            <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Email</th>
+                                            <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Perfil</th>
+                                            <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Alterar</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
@@ -196,8 +197,11 @@ export default function AdminPanel() {
                                             <tr><td colSpan={4} className="text-center py-8 text-slate-400">Nenhum usuário encontrado</td></tr>
                                         ) : users.map(u => (
                                             <tr key={u.id} className="hover:bg-slate-50">
-                                                <td className="px-4 py-3 font-medium text-slate-800">{u.name || '—'}</td>
-                                                <td className="px-4 py-3 text-slate-500">{u.email || '—'}</td>
+                                                <td className="px-4 py-3">
+                                                    <p className="font-medium text-slate-800 text-xs">{u.name || '—'}</p>
+                                                    <p className="text-slate-400 text-xs sm:hidden truncate max-w-[120px]">{u.email || ''}</p>
+                                                </td>
+                                                <td className="px-4 py-3 text-slate-500 text-xs hidden sm:table-cell">{u.email || '—'}</td>
                                                 <td className="px-4 py-3">
                                                     {u.role && ROLE_CONFIG[u.role] ? (
                                                         <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
@@ -241,35 +245,44 @@ export default function AdminPanel() {
                                     <table className="w-full text-sm">
                                         <thead className="bg-slate-50">
                                             <tr>
-                                                {['Número', 'Motorista', 'Destino', 'Peso', 'Status', 'Ações'].map(h => (
-                                                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                                                ))}
+                                                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Número</th>
+                                                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Motorista</th>
+                                                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Destino</th>
+                                                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Peso</th>
+                                                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Status</th>
+                                                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Ações</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {romaneios.map(r => (
                                                 <tr key={r.id} className="hover:bg-slate-50">
-                                                    <td className="px-4 py-3 font-mono font-semibold text-slate-800">{r.numero}</td>
-                                                    <td className="px-4 py-3 text-slate-700">{r.motorista || '—'}</td>
-                                                    <td className="px-4 py-3 text-slate-500">{r.destino || '—'}</td>
-                                                    <td className="px-4 py-3 text-slate-500">{Number(r.peso_total||0).toLocaleString('pt-BR')} kg</td>
                                                     <td className="px-4 py-3">
+                                                        <p className="font-mono font-semibold text-slate-800 text-xs">{r.numero}</p>
+                                                        <p className="text-xs text-slate-400 sm:hidden">{r.status}</p>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-slate-700 text-xs">
+                                                        <p>{r.motorista || '—'}</p>
+                                                        <p className="text-slate-400 md:hidden text-xs">{r.destino || ''}</p>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-slate-500 text-xs hidden md:table-cell">{r.destino || '—'}</td>
+                                                    <td className="px-4 py-3 text-slate-500 text-xs hidden lg:table-cell">{Number(r.peso_total||0).toLocaleString('pt-BR')} kg</td>
+                                                    <td className="px-4 py-3 hidden sm:table-cell">
                                                         <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
                                                             {r.status}
                                                         </span>
                                                     </td>
                                                     <td className="px-4 py-3">
-                                                        <div className="flex items-center gap-2">
+                                                        <div className="flex items-center gap-1.5 flex-wrap">
                                                             <button onClick={() => handleAprovar(r)}
-                                                                className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 transition-colors">
-                                                                Aprovar
+                                                                className="text-xs bg-green-600 text-white px-2.5 py-1 rounded-lg hover:bg-green-700 transition-colors font-semibold">
+                                                                ✓ Aprovar
                                                             </button>
                                                             <button onClick={() => handleReprovar(r)}
-                                                                className="text-xs bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 transition-colors">
-                                                                Reprovar
+                                                                className="text-xs bg-red-500 text-white px-2.5 py-1 rounded-lg hover:bg-red-600 transition-colors font-semibold">
+                                                                ✕ Reprovar
                                                             </button>
                                                             <button onClick={() => navigate('/romaneios')}
-                                                                className="text-xs text-blue-600 underline hover:text-blue-800">
+                                                                className="text-xs text-blue-600 underline hover:text-blue-800 hidden sm:inline">
                                                                 Ver
                                                             </button>
                                                         </div>

@@ -154,7 +154,7 @@ export default function Romaneios() {
                         </div>
                         <div className="flex gap-2">
                             <Button variant="outline" iconName="FileDown" iconSize={15}
-                                onClick={() => { exportRomaneiosToExcel(romaneios); showToast('Exportado como Excel!'); }}>
+                                onClick={() => { const aptos = romaneios.filter(r => r.status_aprovacao !== 'reprovado'); exportRomaneiosToExcel(aptos); showToast(`${aptos.length} romaneio(s) exportados. Reprovados excluídos.`); }}>
                                 Excel
                             </Button>
                             <Button variant="outline" iconName="FileSpreadsheet" iconSize={15} onClick={() => setImportModal(true)}>
@@ -241,55 +241,15 @@ export default function Romaneios() {
                                             const isReprovado = r.status_aprovacao === 'reprovado';
                                             return (
                                                 <React.Fragment key={r.id}>
-                                                {/* Banner de reprovação — visível apenas para o operador */}
-                                                {isReprovado && (
-                                                    <tr style={{ backgroundColor: '#FFF5F5' }}>
-                                                        <td colSpan={9} style={{ padding: 0 }}>
-                                                            <div className="flex items-start gap-3 px-4 py-3"
-                                                                style={{ borderTop: '2px solid #FCA5A5', borderBottom: '1px solid #FEE2E2', background: 'linear-gradient(90deg, #FEF2F2, #FFF5F5)' }}>
-                                                                <div className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#FEE2E2', marginTop: 1 }}>
-                                                                    <Icon name="XCircle" size={18} color="#DC2626" />
-                                                                </div>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                                        <span className="text-xs font-bold" style={{ color: '#DC2626' }}>
-                                                                            ⚠ Romaneio #{r.numero} reprovado pelo admin
-                                                                        </span>
-                                                                    </div>
-                                                                    {r.motivo_reprovacao && (
-                                                                        <p className="text-xs mt-1 font-medium" style={{ color: '#7F1D1D', lineHeight: 1.6 }}>
-                                                                            <span style={{ color: '#9F1239' }}>Motivo:</span> {r.motivo_reprovacao}
-                                                                        </p>
-                                                                    )}
-                                                                    <div className="flex items-center gap-3 mt-2 flex-wrap">
-                                                                        <span className="text-xs" style={{ color: '#B45309', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', padding: '2px 8px', borderRadius: 20 }}>
-                                                                            💡 Corrija os dados e reenvie para aprovação
-                                                                        </span>
-                                                                        <button
-                                                                            onClick={() => setFormModal({ open: true, romaneio: r })}
-                                                                            className="text-xs font-semibold flex items-center gap-1 px-3 py-1 rounded-lg transition-all"
-                                                                            style={{ backgroundColor: '#1D4ED8', color: 'white', border: 'none', cursor: 'pointer' }}
-                                                                            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#1E40AF'}
-                                                                            onMouseLeave={e => e.currentTarget.style.backgroundColor = '#1D4ED8'}>
-                                                                            <Icon name="Pencil" size={12} color="white" />
-                                                                            Editar e reenviar
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => handleDelete(r.id)}
-                                                                            className="text-xs font-semibold flex items-center gap-1 px-3 py-1 rounded-lg transition-all"
-                                                                            style={{ backgroundColor: 'white', color: '#DC2626', border: '1px solid #FCA5A5', cursor: 'pointer' }}
-                                                                            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#FEF2F2'}
-                                                                            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'white'}>
-                                                                            <Icon name="Trash2" size={12} color="#DC2626" />
-                                                                            Excluir
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                                <tr className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', backgroundColor: isReprovado ? '#FFF8F8' : undefined }}>
+                                                {/* Linha principal do romaneio */}
+                                                <tr className="border-t transition-colors"
+                                                    style={{
+                                                        borderColor: isReprovado ? '#FCA5A5' : 'var(--color-border)',
+                                                        borderLeft: isReprovado ? '3px solid #EF4444' : '3px solid transparent',
+                                                        backgroundColor: isReprovado ? '#FFF8F8' : undefined,
+                                                    }}
+                                                    onMouseEnter={e => { if (!isReprovado) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = isReprovado ? '#FFF8F8' : ''; }}>
                                                     <td className="px-4 py-3">
                                                         <button onClick={() => setDetailModal({ open: true, romaneio: r })}
                                                             className="font-data text-xs font-semibold hover:underline" style={{ color: 'var(--color-primary)' }}>
@@ -359,6 +319,47 @@ export default function Romaneios() {
                                                         </div>
                                                     </td>
                                                 </tr>
+                                                {/* Painel de reprovação — aparece abaixo da linha, dentro do Fragment */}
+                                                {isReprovado && (
+                                                    <tr style={{ backgroundColor: '#FEF2F2' }}>
+                                                        <td colSpan={10} style={{ padding: 0, borderBottom: '2px solid #FCA5A5' }}>
+                                                            <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3"
+                                                                style={{ borderLeft: '3px solid #EF4444' }}>
+                                                                {/* Ícone + texto */}
+                                                                <div className="flex items-start gap-2 flex-1 min-w-0">
+                                                                    <Icon name="AlertCircle" size={15} color="#DC2626" style={{ flexShrink: 0, marginTop: 1 }} />
+                                                                    <div className="min-w-0">
+                                                                        <p className="text-xs font-bold" style={{ color: '#DC2626' }}>
+                                                                            Reprovado pelo admin
+                                                                        </p>
+                                                                        {r.motivo_reprovacao && (
+                                                                            <p className="text-xs mt-0.5 leading-relaxed" style={{ color: '#7F1D1D' }}>
+                                                                                {r.motivo_reprovacao}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                                {/* Ações */}
+                                                                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                                                                    <button
+                                                                        onClick={() => setFormModal({ open: true, romaneio: r })}
+                                                                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                                                                        style={{ backgroundColor: '#1D4ED8', color: 'white', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                                                        <Icon name="Pencil" size={11} color="white" />
+                                                                        Editar e reenviar
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleDelete(r.id)}
+                                                                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
+                                                                        style={{ backgroundColor: 'white', color: '#DC2626', border: '1px solid #FCA5A5', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                                                        <Icon name="Trash2" size={11} color="#DC2626" />
+                                                                        Excluir
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
                                                 </React.Fragment>
                                             );
                                         })}
