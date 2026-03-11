@@ -59,9 +59,9 @@
   },
   "scripts": {
     "start": "vite",
-    "build": "rm -rf build && vite build",
+    "build": "vite build",
     "serve": "vite preview",
-    "vercel-build": "rm -rf build && vite build"
+    "vercel-build": "vite build"
   },
   "eslintConfig": {
     "extends": [

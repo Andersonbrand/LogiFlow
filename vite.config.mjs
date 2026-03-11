@@ -6,16 +6,19 @@ import tsconfigPaths from "vite-tsconfig-paths";
 export default defineConfig({
     root: ".",
     build: {
-        outDir: "build",
+        outDir: "dist",
         emptyOutDir: true,
+        sourcemap: false,
         chunkSizeWarningLimit: 2000,
         rollupOptions: {
             input: "./index.html",
             output: {
-                manualChunks: {
-                    vendor:   ["react", "react-dom", "react-router-dom"],
-                    charts:   ["recharts"],
-                    supabase: ["@supabase/supabase-js"],
+                manualChunks(id) {
+                    if (id.includes('node_modules')) {
+                        if (id.includes('@supabase')) return 'supabase';
+                        if (id.includes('recharts') || id.includes('d3-') || id.includes('victory')) return 'charts';
+                        return 'vendor';
+                    }
                 },
             },
         },
