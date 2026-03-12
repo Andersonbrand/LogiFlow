@@ -329,7 +329,7 @@ export default function Romaneios() {
                                                 {/* Painel de reprovação — aparece abaixo da linha, dentro do Fragment */}
                                                 {isReprovado && (
                                                     <tr style={{ backgroundColor: '#FFF8F8' }}>
-                                                        <td colSpan={10} style={{ padding: 0, borderBottom: '2px solid #FCA5A5', borderLeft: '3px solid #EF4444', borderRight: '1px solid #FCA5A5', borderTop: 'none' }}>
+                                                        <td colSpan={11} style={{ padding: 0, borderBottom: '2px solid #FCA5A5', borderLeft: '3px solid #EF4444', borderRight: '1px solid #FCA5A5', borderTop: 'none' }}>
                                                             <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3" style={{ backgroundColor: '#FEF2F2' }}>
                                                                 {/* Ícone + texto */}
                                                                 <div className="flex items-start gap-2 flex-1 min-w-0">
