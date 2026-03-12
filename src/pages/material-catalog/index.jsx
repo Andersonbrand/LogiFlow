@@ -63,6 +63,12 @@ export default function MaterialCatalog() {
         );
     };
 
+    // Categorias dinâmicas extraídas dos materiais cadastrados no banco
+    const categoriasDinamicas = useMemo(() => {
+        const set = new Set(materials.map(m => m.categoria).filter(Boolean));
+        return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    }, [materials]);
+
     // Reset para página 1 ao mudar busca ou filtros
     const prevFiltersRef = React.useRef({ search, filters });
     React.useEffect(() => {
@@ -249,6 +255,7 @@ export default function MaterialCatalog() {
                                 onReset={() => setFilters(DEFAULT_FILTERS)}
                                 totalCount={materials?.length}
                                 filteredCount={filteredMaterials?.length}
+                                categorias={categoriasDinamicas}
                             />
                         </aside>
 
@@ -358,6 +365,7 @@ export default function MaterialCatalog() {
                 filteredCount={filteredMaterials?.length}
                 mobileOpen={mobileFilterOpen}
                 onMobileClose={() => setMobileFilterOpen(false)}
+                categorias={categoriasDinamicas}
             />
             {/* Form Modal */}
             <MaterialFormModal

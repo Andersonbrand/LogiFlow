@@ -236,9 +236,9 @@ export default function AdminPanel() {
                                 <span className="ml-auto text-xs text-slate-400">{romaneios.length} pendentes</span>
                             </div>
                             {romaneios.length === 0 ? (
-                                <div className="py-12 text-center text-slate-400">
-                                    <Icon name="CheckCircle2" size={32} color="#86EFAC" />
-                                    <p className="mt-2 text-sm">Nenhum romaneio pendente de aprovação</p>
+                                <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
+                                    <Icon name="CheckCircle2" size={36} color="#86EFAC" />
+                                    <p className="text-sm">Nenhum romaneio pendente de aprovação</p>
                                 </div>
                             ) : (
                                 <div className="overflow-x-auto">
@@ -305,9 +305,9 @@ export default function AdminPanel() {
                                 <span className="ml-auto text-xs text-slate-400">{alerts.length} alertas</span>
                             </div>
                             {alerts.length === 0 ? (
-                                <div className="py-12 text-center text-slate-400">
-                                    <Icon name="CheckCircle2" size={32} color="#86EFAC" />
-                                    <p className="mt-2 text-sm">Nenhum alerta ativo</p>
+                                <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
+                                    <Icon name="CheckCircle2" size={36} color="#86EFAC" />
+                                    <p className="text-sm">Nenhum alerta ativo</p>
                                 </div>
                             ) : (
                                 <div className="divide-y divide-slate-100">
@@ -339,17 +339,13 @@ export default function AdminPanel() {
                                     <Icon name="Award" size={18} color="#D97706" />
                                     <h2 className="text-base font-semibold text-slate-800">Bonificações dos Motoristas</h2>
                                 </div>
-                                <button onClick={load}
-                                    className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors">
-                                    <Icon name="RefreshCw" size={13} color="currentColor" />
-                                    Atualizar
-                                </button>
+
                             </div>
                             {bonifs.length === 0 ? (
-                                <div className="py-12 text-center text-slate-400">
-                                    <Icon name="Award" size={32} color="#CBD5E1" />
-                                    <p className="mt-2 text-sm">Nenhuma bonificação calculada ainda</p>
-                                    <p className="text-xs mt-1">Aprove romaneios para que as bonificações apareçam aqui</p>
+                                <div className="py-12 flex flex-col items-center justify-center gap-1.5 text-slate-400">
+                                    <Icon name="Award" size={36} color="#CBD5E1" />
+                                    <p className="text-sm">Nenhuma bonificação calculada ainda</p>
+                                    <p className="text-xs text-slate-300">Aprove romaneios para que as bonificações apareçam aqui</p>
                                 </div>
                             ) : (
                                 <div className="overflow-x-auto">

@@ -28,6 +28,7 @@ export default function VehicleFleetManagement() {
     const { isAdmin } = useAuth();
     const [accessDenied, setAccessDenied] = useState(false);
     const [vehicles, setVehicles] = useState([]);
+    const [romaneios, setRomaneios] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState(EMPTY_FILTERS);
     const [formModal, setFormModal] = useState({ open: false, vehicle: null });
@@ -45,8 +46,9 @@ export default function VehicleFleetManagement() {
         (async () => {
             try {
                 setLoading(true);
-                const data = await fetchVehicles();
+                const [data, roms] = await Promise.all([fetchVehicles(), fetchRomaneios()]);
                 setVehicles(data);
+                setRomaneios(roms);
             } catch (err) {
                 showToast("Erro ao carregar veículos: " + err.message, "error");
             } finally {
@@ -175,7 +177,7 @@ export default function VehicleFleetManagement() {
                     </div>
 
                     {/* Metric Cards */}
-                    <MetricCards vehicles={vehicles} />
+                    <MetricCards vehicles={vehicles} romaneios={romaneios} />
 
                     {/* Filter Bar */}
                     <FilterBar

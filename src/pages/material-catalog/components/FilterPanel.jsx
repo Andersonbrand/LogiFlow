@@ -2,11 +2,11 @@ import React from 'react';
 import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 
-const CATEGORIAS = ['Todas', 'Construção', 'Elétrico', 'Hidráulico', 'Ferramentas', 'Químico', 'Outros'];
 const UNIDADES = ['Todas', 'kg', 'ton', 'm³', 'un', 'cx', 'pç'];
 
-export default function FilterPanel({ filters, onChange, onReset, totalCount, filteredCount, mobileOpen, onMobileClose }) {
+export default function FilterPanel({ filters, onChange, onReset, totalCount, filteredCount, mobileOpen, onMobileClose, categorias = [] }) {
     const handleChange = (key, val) => onChange({ ...filters, [key]: val });
+    const CATEGORIAS = ['Todas', ...categorias];
 
     const content = (
         <div className="space-y-4">

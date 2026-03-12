@@ -273,6 +273,18 @@ export function exportRomaneioModelo1(romaneio) {
     const pedMap = {};
     pedidos.forEach(p => { pedMap[p.id] = p; });
 
+    // Mapa de valor e frete por pedido_id
+    const pedValorMap = {};
+    pedidos.forEach(p => {
+        if (p.id) {
+            pedValorMap[p.id] = {
+                valor: Number(p.valor_pedido || 0),
+                frete: Number(p.frete_calculado || 0),
+                pct:   Number(p.percentual_frete || 0),
+            };
+        }
+    });
+
     const grupos = {};
     itens.forEach(item => {
         const mat    = item.materials || {};
@@ -287,19 +299,34 @@ export function exportRomaneioModelo1(romaneio) {
                 unidade:  mat.unidade  || '',
                 pesoUnit: Number(mat.peso || 0),
                 quant: 0, pesoTotal: 0, peds: [],
+                pedidoIds: new Set(),
             };
         }
         grupos[cidade][mid].quant     += Number(item.quantidade  || 0);
         grupos[cidade][mid].pesoTotal += Number(item.peso_total  || 0);
         const np = pedido.numero_pedido;
         if (np && !grupos[cidade][mid].peds.includes(np)) grupos[cidade][mid].peds.push(np);
+        if (item.pedido_id) grupos[cidade][mid].pedidoIds.add(item.pedido_id);
     });
 
     const cidadesArr = Object.entries(grupos)
         .sort(([a],[b]) => a.localeCompare(b,'pt-BR'))
         .map(([cidade, mats]) => ({
             cidade,
-            itens: Object.values(mats).sort((a,b) => a.nome.localeCompare(b.nome,'pt-BR')),
+            itens: Object.values(mats)
+                .sort((a,b) => a.nome.localeCompare(b.nome,'pt-BR'))
+                .map(item => {
+                    // Somar valor_pedido e frete de todos os pedidos associados a este item
+                    let totalValorPedido = 0, totalFrete = 0;
+                    item.pedidoIds.forEach(pid => {
+                        const pv = pedValorMap[pid];
+                        if (pv) {
+                            totalValorPedido += pv.valor;
+                            totalFrete += pv.frete || (pv.valor * pv.pct);
+                        }
+                    });
+                    return { ...item, valorPedido: totalValorPedido, fretePedido: totalFrete };
+                }),
         }));
 
     const pesoTotal = itens.reduce((s,i) => s + Number(i.peso_total||0), 0);
@@ -378,7 +405,8 @@ export function exportRomaneioModelo1(romaneio) {
                 n(item.pesoUnit > 0 ? item.pesoUnit : 0, 8),
                 n(Math.round(item.pesoTotal*100)/100, 8),
                 c(item.peds.join(' / ')||'—', 8),
-                e(14), e(14),
+                item.valorPedido > 0 ? n(item.valorPedido, 14) : e(14),
+                item.fretePedido > 0 ? n(item.fretePedido, 14) : e(14),
             ]);
             rowsHt.push(15); R++;
         });

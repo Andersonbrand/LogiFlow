@@ -9,7 +9,6 @@ import { useRecarregarAoVoltar } from "utils/useRecarregarAoVoltar";
 
 import NavigationBar from "components/ui/NavigationBar";
 import BreadcrumbTrail from "components/ui/BreadcrumbTrail";
-import QuickActionPanel from "components/ui/QuickActionPanel";
 import Button from "components/ui/Button";
 import Icon from "components/AppIcon";
 import Toast from "components/ui/Toast";
@@ -267,13 +266,7 @@ export default function MainDashboard() {
                                     {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" })}
                                 </p>
                             </div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <Button variant="outline" iconName="Package" iconPosition="left" iconSize={15} onClick={() => navigate("/material-catalog")}>Materiais</Button>
-                                <Button variant="outline" iconName="Truck" iconPosition="left" iconSize={15} onClick={() => navigate("/vehicle-fleet-management")}>Veículos</Button>
-                                <Button variant="outline" iconName="BarChart2" iconPosition="left" iconSize={15} onClick={() => navigate("/relatorios")}>Relatórios</Button>
-                                {adminCheck() && (
-                                    <Button variant="outline" iconName="Shield" iconPosition="left" iconSize={15} onClick={() => navigate("/admin")}>Admin</Button>
-                                )}
+                            <div className="flex items-center gap-2">
                                 <button
                                     onClick={load}
                                     disabled={loading}
@@ -283,7 +276,6 @@ export default function MainDashboard() {
                                     <svg className={loading ? 'animate-spin' : ''} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                                     Atualizar
                                 </button>
-                                <QuickActionPanel />
                             </div>
                         </div>
                     </div>

@@ -246,6 +246,7 @@ export default function Romaneios() {
                                                     style={{
                                                         borderColor: isReprovado ? '#FCA5A5' : 'var(--color-border)',
                                                         borderLeft: isReprovado ? '3px solid #EF4444' : '3px solid transparent',
+                                                        borderBottom: isReprovado ? 'none' : undefined,
                                                         backgroundColor: isReprovado ? '#FFF8F8' : undefined,
                                                     }}
                                                     onMouseEnter={e => { if (!isReprovado) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
@@ -321,10 +322,9 @@ export default function Romaneios() {
                                                 </tr>
                                                 {/* Painel de reprovação — aparece abaixo da linha, dentro do Fragment */}
                                                 {isReprovado && (
-                                                    <tr style={{ backgroundColor: '#FEF2F2' }}>
-                                                        <td colSpan={10} style={{ padding: 0, borderBottom: '2px solid #FCA5A5' }}>
-                                                            <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3"
-                                                                style={{ borderLeft: '3px solid #EF4444' }}>
+                                                    <tr style={{ backgroundColor: '#FFF8F8' }}>
+                                                        <td colSpan={10} style={{ padding: 0, borderBottom: '2px solid #FCA5A5', borderLeft: '3px solid #EF4444', borderTop: '1px solid #FEE2E2' }}>
+                                                            <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3" style={{ backgroundColor: '#FEF2F2' }}>
                                                                 {/* Ícone + texto */}
                                                                 <div className="flex items-start gap-2 flex-1 min-w-0">
                                                                     <Icon name="AlertCircle" size={15} color="#DC2626" style={{ flexShrink: 0, marginTop: 1 }} />

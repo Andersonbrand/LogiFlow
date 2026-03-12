@@ -383,16 +383,28 @@ export default function Relatorios() {
                     {/* ── TAB: FINANCEIRO ── */}
                     {tab === 'financeiro' && (
                         <div className="flex flex-col gap-6">
-                            <div className="flex justify-end gap-2">
-                                <Button variant="outline" iconName="FileSpreadsheet" iconSize={14} onClick={exportFinanceiroExcel}>
-                                    Exportar Financeiro Excel
-                                </Button>
-                                <Button variant="outline" iconName="Award" iconSize={14} onClick={exportBonificacoesExcel}>
-                                    Bonificações Motoristas
-                                </Button>
-                                <Button variant="default" iconName="Download" iconSize={14} onClick={exportConsolidadoExcel}>
-                                    Relatório Consolidado
-                                </Button>
+                            <div className="flex flex-wrap gap-2 justify-end">
+                                <button onClick={exportFinanceiroExcel}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors hover:bg-slate-50 whitespace-nowrap"
+                                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                                    <Icon name="FileSpreadsheet" size={13} color="currentColor" />
+                                    <span className="hidden xs:inline sm:inline">Financeiro Excel</span>
+                                    <span className="xs:hidden sm:hidden">Fin.</span>
+                                </button>
+                                <button onClick={exportBonificacoesExcel}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors hover:bg-slate-50 whitespace-nowrap"
+                                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                                    <Icon name="Award" size={13} color="currentColor" />
+                                    <span className="hidden sm:inline">Bonificações</span>
+                                    <span className="sm:hidden">Bonif.</span>
+                                </button>
+                                <button onClick={exportConsolidadoExcel}
+                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
+                                    style={{ backgroundColor: 'var(--color-primary)', color: 'white' }}>
+                                    <Icon name="Download" size={13} color="white" />
+                                    <span className="hidden sm:inline">Rel. Consolidado</span>
+                                    <span className="sm:hidden">Consolidado</span>
+                                </button>
                             </div>
 
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

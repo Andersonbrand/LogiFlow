@@ -1,11 +1,29 @@
 import React from "react";
 import Icon from "components/AppIcon";
 
-export default function MetricCards({ vehicles }) {
-    const total = vehicles?.length;
-    const available = vehicles?.filter((v) => v?.status === "Disponível")?.length;
-    const inTransit = vehicles?.filter((v) => v?.status === "Em Trânsito")?.length;
-    const avgUtil = total > 0 ? Math.round((inTransit / total) * 100) : 0;
+export default function MetricCards({ vehicles, romaneios = [] }) {
+    const total = vehicles?.length || 0;
+    const available = vehicles?.filter((v) => v?.status === "Disponível")?.length || 0;
+    const manutencao = vehicles?.filter((v) => v?.status === "Manutenção")?.length || 0;
+
+    // Em Trânsito real: veículos com romaneio ativo
+    const statusAtivo = ["Aguardando", "Carregando", "Em Trânsito"];
+    const placasAtivas = new Set(
+        romaneios
+            .filter(r => statusAtivo.includes(r.status))
+            .map(r => r.placa)
+            .filter(Boolean)
+    );
+    // Contar por status do veículo OU por ter romaneio ativo
+    const inTransit = vehicles?.filter(
+        v => v?.status === "Em Trânsito" || placasAtivas.has(v?.placa)
+    )?.length || 0;
+
+    // Utilização média real: % de veículos em uso
+    const emUso = vehicles?.filter(
+        v => v?.status !== "Disponível" && v?.status !== "Manutenção"
+    )?.length || 0;
+    const avgUtil = total > 0 ? Math.round(((inTransit) / total) * 100) : 0;
 
     const cards = [
         {
@@ -14,6 +32,7 @@ export default function MetricCards({ vehicles }) {
             icon: "Truck",
             color: "var(--color-primary)",
             bg: "#EFF6FF",
+            sub: `${manutencao > 0 ? manutencao + " em manutenção" : "todos operacionais"}`,
         },
         {
             label: "Disponíveis",
@@ -21,6 +40,7 @@ export default function MetricCards({ vehicles }) {
             icon: "CheckCircle",
             color: "var(--color-success)",
             bg: "#ECFDF5",
+            sub: "prontos para uso",
         },
         {
             label: "Em Trânsito",
@@ -28,6 +48,7 @@ export default function MetricCards({ vehicles }) {
             icon: "Navigation",
             color: "var(--color-accent)",
             bg: "#FFFBEB",
+            sub: inTransit > 0 ? `${placasAtivas.size} com romaneio ativo` : "nenhum ativo",
         },
         {
             label: "Utilização Média",
@@ -35,6 +56,7 @@ export default function MetricCards({ vehicles }) {
             icon: "BarChart2",
             color: "#7C3AED",
             bg: "#F5F3FF",
+            sub: `${inTransit} de ${total} veículos`,
             isPercent: true,
             percent: avgUtil,
         },
@@ -63,11 +85,16 @@ export default function MetricCards({ vehicles }) {
                         </div>
                     </div>
                     <div
-                        className="text-2xl md:text-3xl font-heading font-bold mb-2"
+                        className="text-2xl md:text-3xl font-heading font-bold mb-1"
                         style={{ color: "var(--color-text-primary)" }}
                     >
                         {card?.value}
                     </div>
+                    {card?.sub && (
+                        <p className="text-xs mb-2" style={{ color: "var(--color-muted-foreground)" }}>
+                            {card.sub}
+                        </p>
+                    )}
                     {card?.isPercent && (
                         <div className="w-full h-1.5 rounded-full" style={{ backgroundColor: "var(--color-muted)" }}>
                             <div
