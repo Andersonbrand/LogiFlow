@@ -6,24 +6,23 @@ export default function MetricCards({ vehicles, romaneios = [] }) {
     const available = vehicles?.filter((v) => v?.status === "Disponível")?.length || 0;
     const manutencao = vehicles?.filter((v) => v?.status === "Manutenção")?.length || 0;
 
-    // Em Trânsito real: veículos com romaneio ativo
-    const statusAtivo = ["Aguardando", "Carregando", "Em Trânsito"];
-    const placasAtivas = new Set(
+    // Romaneios que realmente ocupam o veículo: Carregando ou Em Trânsito
+    const statusOcupado = ["Carregando", "Em Trânsito"];
+    const placasOcupadas = new Set(
         romaneios
-            .filter(r => statusAtivo.includes(r.status))
-            .map(r => r.placa)
+            .filter(r => statusOcupado.includes(r.status))
+            .map(r => (r.placa || "").trim().toUpperCase())
             .filter(Boolean)
     );
-    // Contar por status do veículo OU por ter romaneio ativo
+    // Veículos ocupados: status "Em Trânsito" no banco OU placa com romaneio Carregando/Em Trânsito
     const inTransit = vehicles?.filter(
-        v => v?.status === "Em Trânsito" || placasAtivas.has(v?.placa)
+        v => v?.status === "Em Trânsito" || placasOcupadas.has((v?.placa || "").trim().toUpperCase())
     )?.length || 0;
 
-    // Utilização média real: % de veículos em uso
-    const emUso = vehicles?.filter(
-        v => v?.status !== "Disponível" && v?.status !== "Manutenção"
-    )?.length || 0;
-    const avgUtil = total > 0 ? Math.round(((inTransit) / total) * 100) : 0;
+    // Disponíveis reais: total menos os ocupados menos manutenção
+    const realAvailable = total - inTransit - manutencao;
+
+    const avgUtil = total > 0 ? Math.round((inTransit / total) * 100) : 0;
 
     const cards = [
         {
@@ -36,7 +35,7 @@ export default function MetricCards({ vehicles, romaneios = [] }) {
         },
         {
             label: "Disponíveis",
-            value: available,
+            value: realAvailable > 0 ? realAvailable : 0,
             icon: "CheckCircle",
             color: "var(--color-success)",
             bg: "#ECFDF5",
@@ -48,7 +47,7 @@ export default function MetricCards({ vehicles, romaneios = [] }) {
             icon: "Navigation",
             color: "var(--color-accent)",
             bg: "#FFFBEB",
-            sub: inTransit > 0 ? `${placasAtivas.size} com romaneio ativo` : "nenhum ativo",
+            sub: inTransit > 0 ? `${inTransit} carregando ou em rota` : "nenhum ativo",
         },
         {
             label: "Utilização Média",

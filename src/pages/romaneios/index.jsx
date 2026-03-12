@@ -248,6 +248,8 @@ export default function Romaneios() {
                                                     style={{
                                                         borderColor: isReprovado ? '#FCA5A5' : 'var(--color-border)',
                                                         borderLeft: isReprovado ? '3px solid #EF4444' : isCancelado ? '3px solid #9CA3AF' : '3px solid transparent',
+                                                        borderRight: isReprovado ? '1px solid #FCA5A5' : undefined,
+                                                        borderTop: isReprovado ? '2px solid #FCA5A5' : undefined,
                                                         borderBottom: isReprovado ? 'none' : undefined,
                                                         backgroundColor: isReprovado ? '#FFF8F8' : isCancelado ? '#F9FAFB' : undefined,
                                                     }}
@@ -327,7 +329,7 @@ export default function Romaneios() {
                                                 {/* Painel de reprovação — aparece abaixo da linha, dentro do Fragment */}
                                                 {isReprovado && (
                                                     <tr style={{ backgroundColor: '#FFF8F8' }}>
-                                                        <td colSpan={10} style={{ padding: 0, borderBottom: '2px solid #FCA5A5', borderLeft: '3px solid #EF4444', borderTop: '1px solid #FEE2E2' }}>
+                                                        <td colSpan={10} style={{ padding: 0, borderBottom: '2px solid #FCA5A5', borderLeft: '3px solid #EF4444', borderRight: '1px solid #FCA5A5', borderTop: 'none' }}>
                                                             <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3" style={{ backgroundColor: '#FEF2F2' }}>
                                                                 {/* Ícone + texto */}
                                                                 <div className="flex items-start gap-2 flex-1 min-w-0">
