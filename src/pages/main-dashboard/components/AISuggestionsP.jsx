@@ -47,7 +47,7 @@ function buildSuggestions(romaneios, vehicles) {
     const now = Date.now();
 
     // 1. Romaneios pendentes de aprovação — ação só para admins (flag adminOnly)
-    const pendentesAprovacao = romaneios.filter(r => !r.aprovado && r.status !== 'Cancelado' && r.status !== 'Finalizado');
+    const pendentesAprovacao = romaneios.filter(r => !r.aprovado && r.status !== 'Cancelado' && r.status !== 'Finalizado' && r.status_aprovacao !== 'reprovado');
     if (pendentesAprovacao.length > 0) {
         list.push({
             id: id++, priority: 'alta',

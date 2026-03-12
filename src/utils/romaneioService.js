@@ -9,6 +9,20 @@ const STATUS_VEICULO = {
     'Cancelado':   'Disponível',
 };
 
+// Helper: sincroniza status do veículo no banco
+export async function sincronizarStatusVeiculo(vehicleId, placa, statusRomaneio) {
+    const novoStatus = STATUS_VEICULO[statusRomaneio];
+    if (!novoStatus) return;
+    try {
+        if (vehicleId) {
+            await supabase.from('vehicles').update({ status: novoStatus }).eq('id', vehicleId);
+        } else if (placa) {
+            await supabase.from('vehicles').update({ status: novoStatus })
+                .ilike('placa', placa.trim()); // ilike = case-insensitive
+        }
+    } catch (_) {}
+}
+
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 export async function fetchRomaneios() {
     const { data, error } = await supabase
@@ -206,7 +220,7 @@ export async function updateRomaneioStatus(id, status) {
             } else if (data.placa) {
                 await supabase.from('vehicles')
                     .update({ status: novoStatusVeiculo })
-                    .eq('placa', data.placa);
+                    .ilike('placa', data.placa.trim()); // ilike = case-insensitive
             }
         } catch (_) {}
     }

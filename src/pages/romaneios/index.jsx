@@ -8,7 +8,7 @@ import RomaneioFormModal from './components/RomaneioFormModal';
 import RomaneioDetailModal from './components/RomaneioDetailModal';
 import RomaneioImportModal  from './components/RomaneioImportModal';
 import { exportRomaneiosToExcel } from 'utils/excelUtils';
-import { fetchRomaneios, createRomaneio, updateRomaneio, updateRomaneioStatus, deleteRomaneio, duplicateRomaneio } from 'utils/romaneioService';
+import { fetchRomaneios, createRomaneio, updateRomaneio, updateRomaneioStatus, deleteRomaneio, duplicateRomaneio, sincronizarStatusVeiculo } from 'utils/romaneioService';
 import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { fetchMaterials } from 'utils/materialService';
 import { fetchVehicles } from 'utils/vehicleService';
@@ -250,19 +250,19 @@ export default function Romaneios() {
                                                         borderLeft: isReprovado ? '3px solid #EF4444' : isCancelado ? '3px solid #9CA3AF' : '3px solid transparent',
                                                         borderBottom: isReprovado ? 'none' : undefined,
                                                         backgroundColor: isReprovado ? '#FFF8F8' : isCancelado ? '#F9FAFB' : undefined,
-                                                        opacity: isCancelado ? 0.72 : 1,
                                                     }}
                                                     onMouseEnter={e => { if (!isReprovado && !isCancelado) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
                                                     onMouseLeave={e => { e.currentTarget.style.backgroundColor = isReprovado ? '#FFF8F8' : isCancelado ? '#F9FAFB' : ''; }}>
                                                     <td className="px-3 py-3">
                                                         <button onClick={() => setDetailModal({ open: true, romaneio: r })}
-                                                            className="font-data text-xs font-semibold hover:underline whitespace-nowrap" style={{ color: 'var(--color-primary)' }}>
+                                                            className="font-data text-xs font-semibold hover:underline whitespace-nowrap"
+                                                            style={{ color: isCancelado ? '#6B7280' : 'var(--color-primary)', textDecoration: isCancelado ? 'line-through' : 'none' }}>
                                                             {r.numero}
                                                         </button>
-                                                        <p className="text-xs text-slate-500 mt-0.5 sm:hidden">{r.motorista || ''}</p>
+                                                        <p className="text-xs mt-0.5 sm:hidden" style={{ color: isCancelado ? '#9CA3AF' : '#64748b' }}>{r.motorista || ''}</p>
                                                     </td>
-                                                    <td className="px-3 py-3 hidden sm:table-cell" style={{ color: 'var(--color-text-primary)' }}>{r.motorista || '—'}</td>
-                                                    <td className="px-3 py-3 hidden md:table-cell" style={{ color: 'var(--color-text-secondary)' }}>{r.destino || '—'}</td>
+                                                    <td className="px-3 py-3 hidden sm:table-cell" style={{ color: isCancelado ? '#9CA3AF' : 'var(--color-text-primary)' }}>{r.motorista || '—'}</td>
+                                                    <td className="px-3 py-3 hidden md:table-cell" style={{ color: isCancelado ? '#9CA3AF' : 'var(--color-text-secondary)' }}>{r.destino || '—'}</td>
                                                     <td className="px-3 py-3 hidden lg:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>{r.placa || '—'}</td>
                                                     <td className="px-3 py-3 text-right hidden lg:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                                                         {r.peso_total ? `${Number(r.peso_total).toLocaleString('pt-BR')} kg` : '—'}
