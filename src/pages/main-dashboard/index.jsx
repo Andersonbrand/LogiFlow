@@ -21,14 +21,14 @@ import FleetUtilizationChart from "./components/FleetUtilizationChart";
 // ─── Metric Card ──────────────────────────────────────────────────────────────
 function MetricCard({ label, value, unit, icon, bg, iconColor, sub, onClick }) {
     return (
-        <div onClick={onClick} className={`bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-center gap-4 ${onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}>
-            <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: bg }}>
-                <Icon name={icon} size={24} color={iconColor} />
+        <div onClick={onClick} className={`bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-5 flex items-center gap-3 sm:gap-4 ${onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}>
+            <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: bg }}>
+                <Icon name={icon} size={18} color={iconColor} />
             </div>
-            <div>
-                <p className="text-xs font-caption text-slate-500">{label}</p>
-                <p className="text-2xl font-bold font-data text-slate-800">{value}<span className="text-sm font-normal text-slate-500 ml-1">{unit}</span></p>
-                {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+            <div className="min-w-0 flex-1">
+                <p className="text-xs font-caption text-slate-500 leading-tight">{label}</p>
+                <p className="text-lg sm:text-2xl font-bold font-data text-slate-800 truncate">{value}<span className="text-xs sm:text-sm font-normal text-slate-500 ml-1">{unit}</span></p>
+                {sub && <p className="text-xs text-slate-400 mt-0.5 truncate">{sub}</p>}
             </div>
         </div>
     );

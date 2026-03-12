@@ -20,6 +20,7 @@ import {
   updateVehicle,
   deleteVehicle,
 } from "utils/vehicleService";
+import { fetchRomaneios } from "utils/romaneioService";
 
 
 const EMPTY_FILTERS = { search: "", tipo: "Todos", status: "Todos" };

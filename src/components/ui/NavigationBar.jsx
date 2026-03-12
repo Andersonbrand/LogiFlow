@@ -6,24 +6,24 @@ import { useAuth } from 'utils/AuthContext';
 import NotificationBell from 'components/ui/NotificationBell';
 
 const NAV_ITEMS = [
-    { id: 'dashboard',    name: 'Dashboard',   path: '/',                         icon: 'LayoutDashboard', roles: ['admin','operador'] },
-    { id: 'romaneios',    name: 'Romaneios',   path: '/romaneios',                icon: 'FileText',        roles: ['admin','operador'] },
-    { id: 'materiais',    name: 'Materiais',   path: '/material-catalog',         icon: 'Package',         roles: ['admin','operador'] },
-    { id: 'veiculos',     name: 'Veículos',    path: '/vehicle-fleet-management', icon: 'Truck',           roles: ['admin','operador'] },
-    { id: 'financeiro',   name: 'Financeiro',  path: '/financeiro',               icon: 'DollarSign',      roles: ['admin'] },
-    { id: 'consolidacao', name: 'Consolidação',path: '/consolidacao',             icon: 'GitMerge',        roles: ['admin','operador'] },
-    { id: 'relatorios',   name: 'Relatórios',  path: '/relatorios',               icon: 'BarChart3',       roles: ['admin','operador'] },
-    { id: 'admin',        name: 'Admin',       path: '/admin',                    icon: 'Shield',          roles: ['admin'] },
+    { id: 'dashboard', name: 'Dashboard', path: '/', icon: 'LayoutDashboard', roles: ['admin', 'operador'] },
+    { id: 'romaneios', name: 'Romaneios', path: '/romaneios', icon: 'FileText', roles: ['admin', 'operador'] },
+    { id: 'materiais', name: 'Materiais', path: '/material-catalog', icon: 'Package', roles: ['admin', 'operador'] },
+    { id: 'veiculos', name: 'Veículos', path: '/vehicle-fleet-management', icon: 'Truck', roles: ['admin', 'operador'] },
+    { id: 'financeiro', name: 'Financeiro', path: '/financeiro', icon: 'DollarSign', roles: ['admin'] },
+    { id: 'consolidacao', name: 'Consolidação', path: '/consolidacao', icon: 'GitMerge', roles: ['admin', 'operador'] },
+    { id: 'relatorios', name: 'Relatórios', path: '/relatorios', icon: 'BarChart3', roles: ['admin', 'operador'] },
+    { id: 'admin', name: 'Admin', path: '/admin', icon: 'Shield', roles: ['admin'] },
     // Motorista
-    { id: 'motorista',    name: 'Minhas Viagens', path: '/motorista',             icon: 'Truck',           roles: ['motorista'] },
+    { id: 'motorista', name: 'Minhas Viagens', path: '/motorista', icon: 'Truck', roles: ['motorista'] },
 ];
 
 export default function NavigationBar() {
-    const location  = useLocation();
-    const navigate  = useNavigate();
+    const location = useLocation();
+    const navigate = useNavigate();
     const { user, profile, signOut, isAdmin } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
-    const [scrolled, setScrolled]     = useState(false);
+    const [scrolled, setScrolled] = useState(false);
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 4);
@@ -40,7 +40,7 @@ export default function NavigationBar() {
     );
 
     const handleLogout = async () => {
-        try { await signOut(); navigate('/login'); } catch {}
+        try { await signOut(); navigate('/login'); } catch { }
     };
 
     return (
@@ -50,7 +50,7 @@ export default function NavigationBar() {
                     <div className="nav-logo-area">
                         <div className="nav-logo-icon"><Icon name="Truck" size={20} color="#FFFFFF" strokeWidth={2} /></div>
                         <div className="flex flex-col leading-none">
-                            <span className="nav-logo-text">LogiFlow</span>
+                            <span className="nav-logo-text mb-2">LogiFlow</span>
                             <span className="nav-logo-sub">Gestão Logística</span>
                         </div>
                     </div>

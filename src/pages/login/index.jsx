@@ -13,14 +13,14 @@ import Icon from 'components/AppIcon';
 ───────────────────────────────────────────── */
 
 const MSGS_ERRO = {
-    'Invalid login credentials':               'E-mail ou senha incorretos.',
-    'User already registered':                 'Este e-mail já está cadastrado. Faça login.',
-    'Password should be at least 6 characters':'A senha deve ter pelo menos 6 caracteres.',
-    'Email not confirmed':                     'Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada.',
+    'Invalid login credentials': 'E-mail ou senha incorretos.',
+    'User already registered': 'Este e-mail já está cadastrado. Faça login.',
+    'Password should be at least 6 characters': 'A senha deve ter pelo menos 6 caracteres.',
+    'Email not confirmed': 'Confirme seu e-mail antes de entrar. Verifique sua caixa de entrada.',
     'For security purposes, you can only request this once every 60 seconds':
-                                               'Aguarde 60 segundos antes de solicitar outro e-mail.',
-    'User not found':                          'Nenhuma conta encontrada com este e-mail.',
-    'Email rate limit exceeded':               'Muitas tentativas. Aguarde alguns minutos.',
+        'Aguarde 60 segundos antes de solicitar outro e-mail.',
+    'User not found': 'Nenhuma conta encontrada com este e-mail.',
+    'Email rate limit exceeded': 'Muitas tentativas. Aguarde alguns minutos.',
 };
 
 function translateError(msg) {
@@ -122,7 +122,7 @@ function BrandPanel() {
                     <Icon name="Truck" size={24} color="#fff" />
                 </div>
                 <div>
-                    <p className="font-black text-2xl text-white tracking-tight leading-none mb-3">LogiFlow</p>
+                    <p className="font-black text-2xl text-white tracking-tight leading-none mb-2">LogiFlow</p>
                     <p className="text-xs font-semibold tracking-widest uppercase" style={{ color: '#7DD3FC' }}>
                         Gestão Logística
                     </p>
@@ -142,9 +142,9 @@ function BrandPanel() {
                 <div className="flex flex-col gap-3">
                     {[
                         { icon: 'FileText', text: 'Romaneios digitais com aprovação em tempo real' },
-                        { icon: 'Truck',    text: 'Rastreamento de frota e utilização por veículo'  },
-                        { icon: 'Award',    text: 'Bonificações automáticas por performance'        },
-                        { icon: 'Map',      text: 'Consolidação inteligente de cargas por corredor' },
+                        { icon: 'Truck', text: 'Rastreamento de frota e utilização por veículo' },
+                        { icon: 'Award', text: 'Bonificações automáticas por performance' },
+                        { icon: 'Map', text: 'Consolidação inteligente de cargas por corredor' },
                     ].map((f, i) => (
                         <div key={i} className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
@@ -225,9 +225,9 @@ export default function Login() {
     const { signIn, signUp, sendPasswordReset } = useAuth();
     const navigate = useNavigate();
 
-    const [mode, setMode]       = useState('login');
-    const [form, setForm]       = useState({ name: '', email: '', password: '', confirmPassword: '' });
-    const [error, setError]     = useState('');
+    const [mode, setMode] = useState('login');
+    const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' });
+    const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [loading, setLoading] = useState(false);
     const [registeredEmail, setRegisteredEmail] = useState('');
@@ -240,16 +240,16 @@ export default function Login() {
     }, []);
 
     const change = (e) => { setForm(p => ({ ...p, [e.target.name]: e.target.value })); setError(''); };
-    const goTo   = (m) => { setMode(m); setError(''); setSuccess(''); };
+    const goTo = (m) => { setMode(m); setError(''); setSuccess(''); };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError(''); setSuccess('');
 
         if (mode === 'register') {
-            if (form.name.trim().length < 2)              { setError('Informe seu nome completo.'); return; }
-            if (form.password.length < 6)                 { setError('A senha deve ter pelo menos 6 caracteres.'); return; }
-            if (form.password !== form.confirmPassword)   { setError('As senhas não coincidem.'); return; }
+            if (form.name.trim().length < 2) { setError('Informe seu nome completo.'); return; }
+            if (form.password.length < 6) { setError('A senha deve ter pelo menos 6 caracteres.'); return; }
+            if (form.password !== form.confirmPassword) { setError('As senhas não coincidem.'); return; }
         }
 
         setLoading(true);
@@ -313,7 +313,7 @@ export default function Login() {
                         Verifique também sua pasta de <strong>spam</strong>.
                     </p>
 
-                    {error   && <ErrorBox msg={error} />}
+                    {error && <ErrorBox msg={error} />}
                     {success && <SuccessBox msg={success} />}
 
                     <button onClick={handleResend} disabled={loading}
@@ -390,14 +390,14 @@ export default function Login() {
                     {/* Título */}
                     <div className="mb-8">
                         <h1 className="text-[2.2rem] font-black text-slate-800 leading-tight">
-                            {mode === 'login'    && <>Bem-vindo<br /><span style={{ color: '#1E3A5F' }}>de volta.</span></>}
+                            {mode === 'login' && <>Bem-vindo<br /><span style={{ color: '#1E3A5F' }}>de volta.</span></>}
                             {mode === 'register' && <>Criar<br /><span style={{ color: '#1E3A5F' }}>nova conta.</span></>}
-                            {mode === 'forgot'   && <>Redefinir<br /><span style={{ color: '#1E3A5F' }}>sua senha.</span></>}
+                            {mode === 'forgot' && <>Redefinir<br /><span style={{ color: '#1E3A5F' }}>sua senha.</span></>}
                         </h1>
                         <p className="text-slate-500 text-sm mt-2.5 leading-relaxed">
-                            {mode === 'login'    && 'Informe suas credenciais para acessar o painel logístico.'}
+                            {mode === 'login' && 'Informe suas credenciais para acessar o painel logístico.'}
                             {mode === 'register' && 'Preencha os dados abaixo para criar sua conta de acesso.'}
-                            {mode === 'forgot'   && 'Informe seu e-mail e enviaremos um link de redefinição de senha.'}
+                            {mode === 'forgot' && 'Informe seu e-mail e enviaremos um link de redefinição de senha.'}
                         </p>
                     </div>
 
@@ -446,9 +446,9 @@ export default function Login() {
                                     <Icon
                                         name={mode === 'login' ? 'LogIn' : mode === 'register' ? 'UserPlus' : 'Send'}
                                         size={16} color="#fff" />
-                                    {mode === 'login'    && 'Entrar na conta'}
+                                    {mode === 'login' && 'Entrar na conta'}
                                     {mode === 'register' && 'Criar minha conta'}
-                                    {mode === 'forgot'   && 'Enviar link de redefinição'}
+                                    {mode === 'forgot' && 'Enviar link de redefinição'}
                                 </>
                             )}
                         </button>

@@ -152,16 +152,16 @@ export default function Romaneios() {
                                 Gerencie as ordens de transporte e alocação de cargas
                             </p>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
                             <Button variant="outline" iconName="FileDown" iconSize={15}
                                 onClick={() => { const aptos = romaneios.filter(r => r.status_aprovacao !== 'reprovado'); exportRomaneiosToExcel(aptos); showToast(`${aptos.length} romaneio(s) exportados. Reprovados excluídos.`); }}>
-                                Excel
+                                <span className="hidden sm:inline">Exportar </span>Excel
                             </Button>
                             <Button variant="outline" iconName="FileSpreadsheet" iconSize={15} onClick={() => setImportModal(true)}>
-                                Importar Excel
+                                <span className="hidden sm:inline">Importar </span>Excel
                             </Button>
                             <Button variant="default" iconName="Plus" iconSize={16} onClick={() => setFormModal({ open: true, romaneio: null })}>
-                                Novo Romaneio
+                                <span className="hidden xs:inline sm:inline">Novo </span>Romaneio
                             </Button>
                         </div>
                     </div>
@@ -174,21 +174,21 @@ export default function Romaneios() {
                             { label: 'Carregando', value: metrics.carregando, icon: 'Package', color: '#1D4ED8', bg: '#DBEAFE' },
                             { label: 'Finalizados', value: metrics.finalizados, icon: 'CheckCircle2', color: '#374151', bg: '#F3F4F6' },
                         ].map(m => (
-                            <div key={m.label} className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-card" style={{ borderColor: 'var(--color-border)' }}>
-                                <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 40, height: 40, backgroundColor: m.bg }}>
-                                    <Icon name={m.icon} size={18} color={m.color} />
+                            <div key={m.label} className="bg-white rounded-xl border p-3 sm:p-4 flex items-center gap-2 sm:gap-3 shadow-card" style={{ borderColor: 'var(--color-border)' }}>
+                                <div className="rounded-lg flex items-center justify-center flex-shrink-0" style={{ width: 34, height: 34, backgroundColor: m.bg }}>
+                                    <Icon name={m.icon} size={16} color={m.color} />
                                 </div>
-                                <div>
-                                    <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>{m.label}</p>
-                                    <p className="text-2xl font-bold font-data" style={{ color: 'var(--color-text-primary)' }}>{m.value}</p>
+                                <div className="min-w-0">
+                                    <p className="text-xs font-caption leading-tight" style={{ color: 'var(--color-muted-foreground)' }}>{m.label}</p>
+                                    <p className="text-xl font-bold font-data leading-tight" style={{ color: 'var(--color-text-primary)' }}>{m.value}</p>
                                 </div>
                             </div>
                         ))}
                     </div>
 
                     {/* Filters */}
-                    <div className="flex flex-col sm:flex-row gap-3 mb-4">
-                        <div className="relative flex-1">
+                    <div className="flex flex-col gap-3 mb-4">
+                        <div className="relative">
                             <Icon name="Search" size={15} color="var(--color-muted-foreground)" className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                             <input
                                 value={search} onChange={e => setSearch(e.target.value)}
@@ -197,11 +197,11 @@ export default function Romaneios() {
                                 style={{ borderColor: 'var(--color-border)' }}
                             />
                         </div>
-                        <div className="flex gap-2 flex-wrap">
+                        <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
                             {ALL_STATUS.map(s => (
                                 <button key={s}
                                     onClick={() => setFilterStatus(s)}
-                                    className="px-3 py-1.5 rounded-lg text-xs font-medium font-caption border transition-all"
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium font-caption border transition-all flex-shrink-0 whitespace-nowrap"
                                     style={filterStatus === s
                                         ? { backgroundColor: 'var(--color-primary)', color: '#fff', borderColor: 'var(--color-primary)' }
                                         : { backgroundColor: 'white', color: 'var(--color-muted-foreground)', borderColor: 'var(--color-border)' }
@@ -222,17 +222,17 @@ export default function Romaneios() {
                                 <table className="w-full text-sm">
                                     <thead className="text-xs font-caption border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                                         <tr>
-                                            <th className="px-4 py-3 text-left font-medium">Número</th>
-                                            <th className="px-4 py-3 text-left font-medium">Motorista</th>
-                                            <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Destino</th>
-                                            <th className="px-4 py-3 text-left font-medium hidden lg:table-cell">Placa</th>
-                                            <th className="px-4 py-3 text-right font-medium hidden lg:table-cell">Peso</th>
-                                            <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Saída</th>
-                                            <th className="px-4 py-3 text-right font-medium hidden xl:table-cell">Frete</th>
-                                            <th className="px-4 py-3 text-right font-medium hidden xl:table-cell">Margem</th>
-                                            <th className="px-4 py-3 text-center font-medium hidden md:table-cell">Aprovação</th>
-                                            <th className="px-4 py-3 text-center font-medium">Status</th>
-                                            <th className="px-4 py-3 text-center font-medium">Ações</th>
+                                            <th className="px-3 py-3 text-left font-medium">Número</th>
+                                            <th className="px-3 py-3 text-left font-medium hidden sm:table-cell">Motorista</th>
+                                            <th className="px-3 py-3 text-left font-medium hidden md:table-cell">Destino</th>
+                                            <th className="px-3 py-3 text-left font-medium hidden lg:table-cell">Placa</th>
+                                            <th className="px-3 py-3 text-right font-medium hidden lg:table-cell">Peso</th>
+                                            <th className="px-3 py-3 text-left font-medium hidden md:table-cell">Saída</th>
+                                            <th className="px-3 py-3 text-right font-medium hidden xl:table-cell">Frete</th>
+                                            <th className="px-3 py-3 text-right font-medium hidden xl:table-cell">Margem</th>
+                                            <th className="px-3 py-3 text-center font-medium hidden md:table-cell">Aprovação</th>
+                                            <th className="px-3 py-3 text-center font-medium">Status</th>
+                                            <th className="px-3 py-3 text-center font-medium">Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -251,32 +251,33 @@ export default function Romaneios() {
                                                     }}
                                                     onMouseEnter={e => { if (!isReprovado) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
                                                     onMouseLeave={e => { e.currentTarget.style.backgroundColor = isReprovado ? '#FFF8F8' : ''; }}>
-                                                    <td className="px-4 py-3">
+                                                    <td className="px-3 py-3">
                                                         <button onClick={() => setDetailModal({ open: true, romaneio: r })}
-                                                            className="font-data text-xs font-semibold hover:underline" style={{ color: 'var(--color-primary)' }}>
+                                                            className="font-data text-xs font-semibold hover:underline whitespace-nowrap" style={{ color: 'var(--color-primary)' }}>
                                                             {r.numero}
                                                         </button>
+                                                        <p className="text-xs text-slate-500 mt-0.5 sm:hidden">{r.motorista || ''}</p>
                                                     </td>
-                                                    <td className="px-4 py-3" style={{ color: 'var(--color-text-primary)' }}>{r.motorista || '—'}</td>
-                                                    <td className="px-4 py-3 hidden md:table-cell" style={{ color: 'var(--color-text-secondary)' }}>{r.destino || '—'}</td>
-                                                    <td className="px-4 py-3 hidden lg:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>{r.placa || '—'}</td>
-                                                    <td className="px-4 py-3 text-right hidden lg:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    <td className="px-3 py-3 hidden sm:table-cell" style={{ color: 'var(--color-text-primary)' }}>{r.motorista || '—'}</td>
+                                                    <td className="px-3 py-3 hidden md:table-cell" style={{ color: 'var(--color-text-secondary)' }}>{r.destino || '—'}</td>
+                                                    <td className="px-3 py-3 hidden lg:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>{r.placa || '—'}</td>
+                                                    <td className="px-3 py-3 text-right hidden lg:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                                                         {r.peso_total ? `${Number(r.peso_total).toLocaleString('pt-BR')} kg` : '—'}
                                                     </td>
-                                                    <td className="px-4 py-3 hidden md:table-cell text-xs font-caption" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    <td className="px-3 py-3 hidden md:table-cell text-xs font-caption" style={{ color: 'var(--color-text-secondary)' }}>
                                                         {r.saida ? new Date(r.saida).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
                                                     </td>
-                                                    <td className="px-4 py-3 text-right hidden xl:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    <td className="px-3 py-3 text-right hidden xl:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                                                         {r.valor_frete ? Number(r.valor_frete).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
                                                     </td>
-                                                    <td className="px-4 py-3 text-right hidden xl:table-cell font-data text-xs font-semibold">
+                                                    <td className="px-3 py-3 text-right hidden xl:table-cell font-data text-xs font-semibold">
                                                         {r.margem_lucro != null ? (
                                                             <span style={{ color: r.margem_lucro >= 0 ? '#059669' : '#DC2626' }}>
                                                                 {r.margem_lucro >= 0 ? '+' : ''}{Number(r.margem_lucro).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                                             </span>
                                                         ) : '—'}
                                                     </td>
-                                                    <td className="px-4 py-3 text-center hidden md:table-cell">
+                                                    <td className="px-3 py-3 text-center hidden md:table-cell">
                                                         {r.aprovado ? (
                                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
                                                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>

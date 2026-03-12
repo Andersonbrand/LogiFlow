@@ -24,17 +24,17 @@ const TABS = [
 
 function KpiCard({ label, value, sub, icon, color = '#1E3A5F', trend }) {
     return (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 flex items-start gap-4">
-            <div className="flex-shrink-0 w-11 h-11 rounded-xl flex items-center justify-center" style={{ backgroundColor: color + '18' }}>
-                <Icon name={icon} size={22} color={color} />
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-5 flex items-start gap-3 sm:gap-4">
+            <div className="flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ backgroundColor: color + '18' }}>
+                <Icon name={icon} size={18} color={color} />
             </div>
             <div className="flex-1 min-w-0">
-                <p className="text-xs font-caption text-slate-500 mb-0.5">{label}</p>
-                <p className="text-2xl font-bold font-data text-slate-800 leading-none">{value}</p>
-                {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
+                <p className="text-xs font-caption text-slate-500 mb-0.5 leading-tight">{label}</p>
+                <p className="text-lg sm:text-2xl font-bold font-data text-slate-800 leading-tight break-words">{value}</p>
+                {sub && <p className="text-xs text-slate-400 mt-0.5 leading-tight">{sub}</p>}
                 {trend !== undefined && (
                     <p className={`text-xs font-medium mt-1 ${trend >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                        {trend >= 0 ? '▲' : '▼'} {Math.abs(trend).toFixed(1)}% vs período anterior
+                        {trend >= 0 ? '▲' : '▼'} {Math.abs(trend).toFixed(1)}%
                     </p>
                 )}
             </div>
@@ -493,8 +493,8 @@ export default function Relatorios() {
                                                     const pct = r.valor_frete > 0 ? margem/r.valor_frete*100 : 0;
                                                     return (
                                                         <tr key={r.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                                            <td className="px-4 py-2.5">
-                                                                <p className="font-data font-medium text-blue-700 text-xs">{r.numero}</p>
+                                                            <td className="px-3 py-2.5">
+                                                                <p className="font-data font-medium text-blue-700 text-xs whitespace-nowrap">{r.numero}</p>
                                                                 <p className="text-slate-400 text-xs sm:hidden">{r.destino}</p>
                                                             </td>
                                                             <td className="px-4 py-2.5 text-slate-600 text-xs hidden sm:table-cell">{r.destino}</td>
@@ -567,29 +567,35 @@ export default function Relatorios() {
                                     <table className="w-full text-sm">
                                         <thead className="bg-slate-50">
                                             <tr>
-                                                {['Placa','Tipo','Status','Cap. Peso','Cap. Volume','Utilização'].map(h => (
-                                                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                                                ))}
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Placa</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Tipo</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Cap. Peso</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Cap. Volume</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Utilização</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {vehicles.map((v, i) => (
                                                 <tr key={v.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                                    <td className="px-4 py-2.5 font-data font-bold text-slate-800">{v.placa}</td>
-                                                    <td className="px-4 py-2.5 text-slate-600">{v.tipo}</td>
                                                     <td className="px-4 py-2.5">
-                                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                                        <p className="font-data font-bold text-slate-800 text-xs">{v.placa}</p>
+                                                        <p className="text-xs text-slate-400 sm:hidden">{v.tipo}</p>
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-slate-600 text-xs hidden sm:table-cell">{v.tipo}</td>
+                                                    <td className="px-4 py-2.5">
+                                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${
                                                             v.status === 'Disponível' ? 'bg-green-100 text-green-700' :
                                                             v.status === 'Em Trânsito' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
                                                             {v.status}
                                                         </span>
                                                     </td>
-                                                    <td className="px-4 py-2.5 font-data">{(v.capacidadePeso||0).toLocaleString('pt-BR')} kg</td>
-                                                    <td className="px-4 py-2.5 font-data">{(v.capacidadeVolume||0).toLocaleString('pt-BR')} m³</td>
-                                                    <td className="px-4 py-2.5">
+                                                    <td className="px-4 py-2.5 font-data text-xs hidden md:table-cell">{(v.capacidadePeso||0).toLocaleString('pt-BR')} kg</td>
+                                                    <td className="px-4 py-2.5 font-data text-xs hidden lg:table-cell">{(v.capacidadeVolume||0).toLocaleString('pt-BR')} m³</td>
+                                                    <td className="px-4 py-2.5 hidden sm:table-cell">
                                                         <div className="flex items-center gap-2">
-                                                            <div className="flex-1 bg-slate-100 rounded-full h-2">
-                                                                <div className="h-2 rounded-full" style={{ width: `${v.utilizacao||0}%`, backgroundColor: (v.utilizacao||0) > 90 ? '#DC2626' : '#059669' }} />
+                                                            <div className="flex-1 bg-slate-100 rounded-full h-1.5">
+                                                                <div className="h-1.5 rounded-full" style={{ width: `${v.utilizacao||0}%`, backgroundColor: (v.utilizacao||0) > 90 ? '#DC2626' : '#059669' }} />
                                                             </div>
                                                             <span className="text-xs font-data">{v.utilizacao||0}%</span>
                                                         </div>
