@@ -74,7 +74,8 @@ export default function Romaneios() {
         return romaneios.filter(r => {
             const q = search.toLowerCase();
             const matchSearch = !q || r.numero?.toLowerCase().includes(q) || r.motorista?.toLowerCase().includes(q) || r.destino?.toLowerCase().includes(q) || r.placa?.toLowerCase().includes(q);
-            const matchStatus = filterStatus === 'Todos' || r.status === filterStatus;
+            // Comparação case-insensitive para garantir que "Cancelado" == "cancelado"
+            const matchStatus = filterStatus === 'Todos' || (r.status || '').toLowerCase() === filterStatus.toLowerCase();
             return matchSearch && matchStatus;
         });
     }, [romaneios, search, filterStatus]);
@@ -239,18 +240,20 @@ export default function Romaneios() {
                                         {filtered.map(r => {
                                             const sc = STATUS_COLORS[r.status] || STATUS_COLORS['Aguardando'];
                                             const isReprovado = r.status_aprovacao === 'reprovado';
+                                            const isCancelado = r.status === 'Cancelado';
                                             return (
                                                 <React.Fragment key={r.id}>
                                                 {/* Linha principal do romaneio */}
                                                 <tr className="border-t transition-colors"
                                                     style={{
                                                         borderColor: isReprovado ? '#FCA5A5' : 'var(--color-border)',
-                                                        borderLeft: isReprovado ? '3px solid #EF4444' : '3px solid transparent',
+                                                        borderLeft: isReprovado ? '3px solid #EF4444' : isCancelado ? '3px solid #9CA3AF' : '3px solid transparent',
                                                         borderBottom: isReprovado ? 'none' : undefined,
-                                                        backgroundColor: isReprovado ? '#FFF8F8' : undefined,
+                                                        backgroundColor: isReprovado ? '#FFF8F8' : isCancelado ? '#F9FAFB' : undefined,
+                                                        opacity: isCancelado ? 0.72 : 1,
                                                     }}
-                                                    onMouseEnter={e => { if (!isReprovado) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
-                                                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = isReprovado ? '#FFF8F8' : ''; }}>
+                                                    onMouseEnter={e => { if (!isReprovado && !isCancelado) e.currentTarget.style.backgroundColor = '#F8FAFC'; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = isReprovado ? '#FFF8F8' : isCancelado ? '#F9FAFB' : ''; }}>
                                                     <td className="px-3 py-3">
                                                         <button onClick={() => setDetailModal({ open: true, romaneio: r })}
                                                             className="font-data text-xs font-semibold hover:underline whitespace-nowrap" style={{ color: 'var(--color-primary)' }}>

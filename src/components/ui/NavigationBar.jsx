@@ -6,24 +6,24 @@ import { useAuth } from 'utils/AuthContext';
 import NotificationBell from 'components/ui/NotificationBell';
 
 const NAV_ITEMS = [
-    { id: 'dashboard', name: 'Dashboard', path: '/', icon: 'LayoutDashboard', roles: ['admin', 'operador'] },
-    { id: 'romaneios', name: 'Romaneios', path: '/romaneios', icon: 'FileText', roles: ['admin', 'operador'] },
-    { id: 'materiais', name: 'Materiais', path: '/material-catalog', icon: 'Package', roles: ['admin', 'operador'] },
-    { id: 'veiculos', name: 'Veículos', path: '/vehicle-fleet-management', icon: 'Truck', roles: ['admin', 'operador'] },
-    { id: 'financeiro', name: 'Financeiro', path: '/financeiro', icon: 'DollarSign', roles: ['admin'] },
-    { id: 'consolidacao', name: 'Consolidação', path: '/consolidacao', icon: 'GitMerge', roles: ['admin', 'operador'] },
-    { id: 'relatorios', name: 'Relatórios', path: '/relatorios', icon: 'BarChart3', roles: ['admin', 'operador'] },
-    { id: 'admin', name: 'Admin', path: '/admin', icon: 'Shield', roles: ['admin'] },
+    { id: 'dashboard',    name: 'Dashboard',   path: '/',                         icon: 'LayoutDashboard', roles: ['admin','operador'] },
+    { id: 'romaneios',    name: 'Romaneios',   path: '/romaneios',                icon: 'FileText',        roles: ['admin','operador'] },
+    { id: 'materiais',    name: 'Materiais',   path: '/material-catalog',         icon: 'Package',         roles: ['admin','operador'] },
+    { id: 'veiculos',     name: 'Veículos',    path: '/vehicle-fleet-management', icon: 'Truck',           roles: ['admin','operador'] },
+    { id: 'financeiro',   name: 'Financeiro',  path: '/financeiro',               icon: 'DollarSign',      roles: ['admin'] },
+    { id: 'consolidacao', name: 'Consolidação',path: '/consolidacao',             icon: 'GitMerge',        roles: ['admin','operador'] },
+    { id: 'relatorios',   name: 'Relatórios',  path: '/relatorios',               icon: 'BarChart3',       roles: ['admin','operador'] },
+    { id: 'admin',        name: 'Admin',       path: '/admin',                    icon: 'Shield',          roles: ['admin'] },
     // Motorista
-    { id: 'motorista', name: 'Minhas Viagens', path: '/motorista', icon: 'Truck', roles: ['motorista'] },
+    { id: 'motorista',    name: 'Minhas Viagens', path: '/motorista',             icon: 'Truck',           roles: ['motorista'] },
 ];
 
 export default function NavigationBar() {
-    const location = useLocation();
-    const navigate = useNavigate();
+    const location  = useLocation();
+    const navigate  = useNavigate();
     const { user, profile, signOut, isAdmin } = useAuth();
     const [mobileOpen, setMobileOpen] = useState(false);
-    const [scrolled, setScrolled] = useState(false);
+    const [scrolled, setScrolled]     = useState(false);
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 4);
@@ -40,7 +40,7 @@ export default function NavigationBar() {
     );
 
     const handleLogout = async () => {
-        try { await signOut(); navigate('/login'); } catch { }
+        try { await signOut(); navigate('/login'); } catch {}
     };
 
     return (
@@ -89,8 +89,16 @@ export default function NavigationBar() {
                                 </div>
                             </div>
                         )}
-                        <button className="nav-mobile-toggle hidden md:flex" title="Sair" onClick={handleLogout}>
-                            <Icon name="LogOut" size={18} color="currentColor" />
+                        <button
+                            onClick={handleLogout}
+                            title="Sair da conta"
+                            className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer border"
+                            style={{ color: '#DC2626', borderColor: '#FECACA', backgroundColor: 'transparent' }}
+                            onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                        >
+                            <Icon name="LogOut" size={14} color="#DC2626" strokeWidth={2} />
+                            <span>Sair</span>
                         </button>
                         <button className="nav-mobile-toggle md:hidden" aria-label="Abrir menu" onClick={() => setMobileOpen(true)}>
                             <Icon name="Menu" size={22} color="currentColor" />
@@ -104,6 +112,9 @@ export default function NavigationBar() {
                 navItems={visibleItems}
                 activeChecker={isActive}
                 onNavigate={(path) => navigate(path)}
+                onLogout={handleLogout}
+                user={user}
+                profile={profile}
             />
         </>
     );

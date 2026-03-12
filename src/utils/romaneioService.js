@@ -1,5 +1,14 @@
 import { supabase } from './supabaseClient';
 
+// Mapa de status do romaneio → status do veículo
+const STATUS_VEICULO = {
+    'Em Trânsito': 'Em Trânsito',
+    'Carregando':  'Em Trânsito',
+    'Aguardando':  'Disponível',
+    'Finalizado':  'Disponível',
+    'Cancelado':   'Disponível',
+};
+
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 export async function fetchRomaneios() {
     const { data, error } = await supabase
@@ -183,8 +192,25 @@ export async function updateRomaneio(id, romaneio, itens) {
 // ── Status update ─────────────────────────────────────────────────────────────
 export async function updateRomaneioStatus(id, status) {
     const { data, error } = await supabase.from('romaneios')
-        .update({ status }).eq('id', id).select('id, status').single();
+        .update({ status }).eq('id', id).select('id, status, vehicle_id, placa').single();
     if (error) throw error;
+
+    // Sincronizar status do veículo automaticamente
+    const novoStatusVeiculo = STATUS_VEICULO[status];
+    if (novoStatusVeiculo) {
+        try {
+            if (data.vehicle_id) {
+                await supabase.from('vehicles')
+                    .update({ status: novoStatusVeiculo })
+                    .eq('id', data.vehicle_id);
+            } else if (data.placa) {
+                await supabase.from('vehicles')
+                    .update({ status: novoStatusVeiculo })
+                    .eq('placa', data.placa);
+            }
+        } catch (_) {}
+    }
+
     try {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) await supabase.from('notifications').insert({
