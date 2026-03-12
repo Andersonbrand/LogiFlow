@@ -55,7 +55,7 @@ export default function NavigationBar() {
                         </div>
                     </div>
 
-                    <div className="nav-items hidden md:flex">
+                    <div className="nav-items hidden tab:flex">
                         {visibleItems.map(item => {
                             const active = isActive(item.path);
                             return (
@@ -74,7 +74,7 @@ export default function NavigationBar() {
                     <div className="flex items-center gap-1">
                         {user && <NotificationBell />}
                         {user && (
-                            <div className="hidden md:flex items-center gap-2 mr-2">
+                            <div className="hidden tab:flex items-center gap-2 mr-2">
                                 <div className="flex items-center justify-center rounded-full text-xs font-semibold text-white"
                                     style={{ width: 30, height: 30, backgroundColor: 'var(--color-primary)', fontSize: 12 }}>
                                     {(profile?.name || user.email || 'U')[0].toUpperCase()}
@@ -92,7 +92,7 @@ export default function NavigationBar() {
                         <button
                             onClick={handleLogout}
                             title="Sair da conta"
-                            className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer border"
+                            className="hidden tab:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer border"
                             style={{ color: '#DC2626', borderColor: '#FECACA', backgroundColor: 'transparent' }}
                             onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#FEF2F2'; }}
                             onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; }}
@@ -100,7 +100,7 @@ export default function NavigationBar() {
                             <Icon name="LogOut" size={14} color="#DC2626" strokeWidth={2} />
                             <span>Sair</span>
                         </button>
-                        <button className="nav-mobile-toggle md:hidden" aria-label="Abrir menu" onClick={() => setMobileOpen(true)}>
+                        <button className="nav-mobile-toggle tab:hidden" aria-label="Abrir menu" onClick={() => setMobileOpen(true)}>
                             <Icon name="Menu" size={22} color="currentColor" />
                         </button>
                     </div>

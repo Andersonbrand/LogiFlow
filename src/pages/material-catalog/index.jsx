@@ -180,7 +180,7 @@ export default function MaterialCatalog() {
             <AccessDeniedModal show={accessDenied} onClose={() => setAccessDenied(false)} />
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8 py-4 md:py-6">
+                <div className="max-w-screen-2xl mx-auto px-4 tab:px-6 lg:px-8 py-4 md:py-6">
 
                     {/* Breadcrumb */}
                     <BreadcrumbTrail className="mb-4" />

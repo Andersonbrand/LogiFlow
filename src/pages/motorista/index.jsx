@@ -108,7 +108,7 @@ export default function MotoristaDashboard() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-xl mx-auto px-4 md:px-6 lg:px-8 py-6">
+                <div className="max-w-screen-xl mx-auto px-4 tab:px-6 lg:px-8 py-6">
                     <BreadcrumbTrail className="mb-4" />
 
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">

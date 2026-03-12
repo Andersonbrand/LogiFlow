@@ -62,7 +62,7 @@ export default function MetricCards({ vehicles, romaneios = [] }) {
     ];
 
     return (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+        <div className="grid grid-cols-2 tab:grid-cols-4 gap-3 tab:gap-4 mb-6">
             {cards?.map((card) => (
                 <div
                     key={card?.label}

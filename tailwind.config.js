@@ -6,6 +6,16 @@ module.exports = {
         './public/index.html',
     ],
     theme: {
+        screens: {
+            // Bootstrap 5 standard breakpoints (mobile-first)
+            'xs':  '480px',   // Celular paisagem / muito pequeno
+            'sm':  '576px',   // SM — telefones paisagem, tablets menores
+            'md':  '768px',   // MD — tablets retrato
+            'tab': '900px',   // Tablet intermediário (mantido para compatibilidade)
+            'lg':  '992px',   // LG — laptops/notebooks
+            'xl':  '1200px',  // XL — desktops padrão
+            '2xl': '1400px',  // XXL — desktops grandes / 4K
+        },
         extend: {
             colors: {
                 background: 'var(--color-background)',       // slate-50 / slate-900 dark

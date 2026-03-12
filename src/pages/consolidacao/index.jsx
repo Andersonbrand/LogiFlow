@@ -180,8 +180,8 @@ export default function Consolidacao() {
                             </div>
                         </div>
                     ) : step === 'review' ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            <div className="lg:col-span-2 flex flex-col gap-4">
+                        <div className="grid grid-cols-1 tab:grid-cols-3 gap-6">
+                            <div className="tab:col-span-2 flex flex-col gap-4">
                                 <div className="bg-white rounded-xl border shadow-card p-5" style={{ borderColor: 'var(--color-border)' }}>
                                     <h3 className="font-heading font-semibold text-sm mb-4" style={{ color: 'var(--color-text-primary)' }}>Romaneios Selecionados</h3>
                                     <div className="space-y-2">
@@ -259,7 +259,7 @@ export default function Consolidacao() {
                         </div>
                     ) : (
                         /* ── SELECT STEP ── */
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 tab:grid-cols-3 gap-6">
                             {/* Sugestões */}
                             <div className="flex flex-col gap-4">
 
@@ -345,7 +345,7 @@ export default function Consolidacao() {
                             </div>
 
                             {/* Tabela principal */}
-                            <div className="lg:col-span-2 flex flex-col gap-4">
+                            <div className="tab:col-span-2 flex flex-col gap-4">
                                 <div className="flex items-center justify-between">
                                     <p className="text-sm font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
                                         {selected.length} selecionado(s) de {romaneios.length} disponíveis

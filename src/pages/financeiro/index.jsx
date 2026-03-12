@@ -139,7 +139,7 @@ export default function Financeiro() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8 py-6">
+                <div className="max-w-screen-2xl mx-auto px-4 tab:px-6 lg:px-8 py-6">
                     <BreadcrumbTrail className="mb-4" />
 
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -223,7 +223,7 @@ export default function Financeiro() {
                     ) : (
                         <div className="flex flex-col gap-6">
                             {/* KPIs */}
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 tab:grid-cols-4 gap-4">
                                 {[
                                     { l: 'Receita',   v: BRL(kpis.frete),  i: 'TrendingUp',   c: '#059669', bg: '#D1FAE5' },
                                     { l: 'Custos',    v: BRL(kpis.custo),  i: 'TrendingDown', c: '#DC2626', bg: '#FEE2E2' },
@@ -260,8 +260,8 @@ export default function Financeiro() {
                             </div>
 
                             {/* Charts */}
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <div className="lg:col-span-2 bg-white rounded-xl border shadow-card p-5" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="grid grid-cols-1 tab:grid-cols-3 gap-6">
+                                <div className="tab:col-span-2 bg-white rounded-xl border shadow-card p-5" style={{ borderColor: 'var(--color-border)' }}>
                                     <h3 className="font-heading font-semibold text-sm mb-4" style={{ color: 'var(--color-text-primary)' }}>Receita vs Custo por Rota</h3>
                                     {byRota.length === 0 ? (
                                         <div className="flex items-center justify-center h-48 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem finalizada no período com dados financeiros</div>

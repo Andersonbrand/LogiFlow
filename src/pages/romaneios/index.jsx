@@ -140,7 +140,7 @@ export default function Romaneios() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8 py-6">
+                <div className="max-w-screen-2xl mx-auto px-4 tab:px-6 lg:px-8 py-6">
                     <BreadcrumbTrail className="mb-4" />
 
                     {/* Header */}
@@ -168,7 +168,7 @@ export default function Romaneios() {
                     </div>
 
                     {/* Metric Cards */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+                    <div className="grid grid-cols-2 tab:grid-cols-4 gap-3 mb-6">
                         {[
                             { label: 'Total', value: metrics.total, icon: 'FileText', color: '#1D4ED8', bg: '#DBEAFE' },
                             { label: 'Em Trânsito', value: metrics.emTransito, icon: 'Truck', color: '#065F46', bg: '#D1FAE5' },
@@ -226,12 +226,12 @@ export default function Romaneios() {
                                             <th className="px-3 py-3 text-left font-medium">Número</th>
                                             <th className="px-3 py-3 text-left font-medium hidden sm:table-cell">Motorista</th>
                                             <th className="px-3 py-3 text-left font-medium hidden md:table-cell">Destino</th>
-                                            <th className="px-3 py-3 text-left font-medium hidden lg:table-cell">Placa</th>
-                                            <th className="px-3 py-3 text-right font-medium hidden lg:table-cell">Peso</th>
-                                            <th className="px-3 py-3 text-left font-medium hidden md:table-cell">Saída</th>
-                                            <th className="px-3 py-3 text-right font-medium hidden xl:table-cell">Frete</th>
-                                            <th className="px-3 py-3 text-right font-medium hidden xl:table-cell">Margem</th>
-                                            <th className="px-3 py-3 text-center font-medium hidden md:table-cell">Aprovação</th>
+                                            <th className="px-3 py-3 text-left font-medium hidden tab:table-cell">Placa</th>
+                                            <th className="px-3 py-3 text-right font-medium hidden tab:table-cell">Peso</th>
+                                            <th className="px-3 py-3 text-left font-medium hidden tab:table-cell">Saída</th>
+                                            <th className="px-3 py-3 text-right font-medium hidden lg:table-cell">Frete</th>
+                                            <th className="px-3 py-3 text-right font-medium hidden lg:table-cell">Margem</th>
+                                            <th className="px-3 py-3 text-center font-medium hidden tab:table-cell">Aprovação</th>
                                             <th className="px-3 py-3 text-center font-medium">Status</th>
                                             <th className="px-3 py-3 text-center font-medium">Ações</th>
                                         </tr>
@@ -265,24 +265,24 @@ export default function Romaneios() {
                                                     </td>
                                                     <td className="px-3 py-3 hidden sm:table-cell" style={{ color: isCancelado ? '#9CA3AF' : 'var(--color-text-primary)' }}>{r.motorista || '—'}</td>
                                                     <td className="px-3 py-3 hidden md:table-cell" style={{ color: isCancelado ? '#9CA3AF' : 'var(--color-text-secondary)' }}>{r.destino || '—'}</td>
-                                                    <td className="px-3 py-3 hidden lg:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>{r.placa || '—'}</td>
-                                                    <td className="px-3 py-3 text-right hidden lg:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    <td className="px-3 py-3 hidden tab:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>{r.placa || '—'}</td>
+                                                    <td className="px-3 py-3 text-right hidden tab:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                                                         {r.peso_total ? `${Number(r.peso_total).toLocaleString('pt-BR')} kg` : '—'}
                                                     </td>
-                                                    <td className="px-3 py-3 hidden md:table-cell text-xs font-caption" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    <td className="px-3 py-3 hidden tab:table-cell text-xs font-caption" style={{ color: 'var(--color-text-secondary)' }}>
                                                         {r.saida ? new Date(r.saida).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
                                                     </td>
-                                                    <td className="px-3 py-3 text-right hidden xl:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    <td className="px-3 py-3 text-right hidden lg:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                                                         {r.valor_frete ? Number(r.valor_frete).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
                                                     </td>
-                                                    <td className="px-3 py-3 text-right hidden xl:table-cell font-data text-xs font-semibold">
+                                                    <td className="px-3 py-3 text-right hidden lg:table-cell font-data text-xs font-semibold">
                                                         {r.margem_lucro != null ? (
                                                             <span style={{ color: r.margem_lucro >= 0 ? '#059669' : '#DC2626' }}>
                                                                 {r.margem_lucro >= 0 ? '+' : ''}{Number(r.margem_lucro).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                                             </span>
                                                         ) : '—'}
                                                     </td>
-                                                    <td className="px-3 py-3 text-center hidden md:table-cell">
+                                                    <td className="px-3 py-3 text-center hidden tab:table-cell">
                                                         {r.aprovado ? (
                                                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
                                                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>

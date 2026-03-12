@@ -733,7 +733,7 @@ function CorredoresManager({ showToast }) {
             )}
 
             {/* Lista de corredores */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 tab:grid-cols-2 gap-4">
                 {corredores.map(corredor => (
                     <div key={corredor.nome}
                         className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">

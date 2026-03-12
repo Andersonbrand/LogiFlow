@@ -88,8 +88,20 @@ export default function NotificationBell() {
 
             {open && (
                 <div
-                    className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-2xl border z-[500] overflow-hidden"
-                    style={{ borderColor: 'var(--color-border)' }}
+                    className="notification-dropdown"
+                    style={{
+                        position: 'fixed',
+                        top: '64px',
+                        right: '8px',
+                        left: 'auto',
+                        width: 'min(320px, calc(100vw - 16px))',
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: '12px',
+                        boxShadow: '0 10px 40px rgba(15,23,42,0.18), 0 2px 8px rgba(15,23,42,0.08)',
+                        border: '1px solid var(--color-border)',
+                        zIndex: 9999,
+                        overflow: 'hidden',
+                    }}
                 >
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
@@ -158,7 +170,7 @@ export default function NotificationBell() {
 
                     {/* Footer */}
                     {notifs.length > 0 && (
-                        <div className="px-4 py-2.5 border-t text-center" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="px-4 py-2.5 border-t text-center" style={{ borderColor: 'var(--color-border)', backgroundColor: '#FAFAFA' }}>
                             <span className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
                                 {notifs.length} notificação{notifs.length !== 1 ? 'ões' : ''} no histórico
                             </span>

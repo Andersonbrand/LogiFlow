@@ -255,7 +255,7 @@ export default function MainDashboard() {
             <main className="main-content">
                 {/* Header */}
                 <div className="border-b border-slate-200 bg-white">
-                    <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8 py-4">
+                    <div className="max-w-screen-2xl mx-auto px-4 tab:px-6 lg:px-8 py-4">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                                 <BreadcrumbTrail />
@@ -281,7 +281,7 @@ export default function MainDashboard() {
                     </div>
                 </div>
 
-                <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8 flex flex-col gap-6">
+                <div className="max-w-screen-2xl mx-auto px-4 tab:px-6 lg:px-8 py-5 tab:py-6 lg:py-8 flex flex-col gap-6">
 
                     {/* Maintenance Alerts Banner */}
                     {maintenanceAlerts.length > 0 && (
@@ -307,18 +307,18 @@ export default function MainDashboard() {
 
                     {/* KPI Cards */}
                     {loading ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                        <div className="grid grid-cols-2 tab:grid-cols-4 gap-3 tab:gap-4">
                             {[1,2,3,4].map(i => <div key={i} className="bg-white rounded-xl border border-slate-200 h-24 animate-pulse" />)}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                        <div className="grid grid-cols-2 tab:grid-cols-4 gap-3 tab:gap-4">
                             {metrics.map((m, i) => <MetricCard key={i} {...m} />)}
                         </div>
                     )}
 
                     {/* Main Grid */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="lg:col-span-2 flex flex-col gap-6">
+                    <div className="grid grid-cols-1 tab:grid-cols-3 gap-6">
+                        <div className="tab:col-span-2 flex flex-col gap-6">
                             <RomaneiosTable romaneios={romaneios} />
                             <FleetUtilizationChart data={fleetData} />
                         </div>

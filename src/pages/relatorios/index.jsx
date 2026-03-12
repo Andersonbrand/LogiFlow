@@ -295,7 +295,7 @@ export default function Relatorios() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8 py-6">
+                <div className="max-w-screen-2xl mx-auto px-4 tab:px-6 lg:px-8 py-6">
                     <BreadcrumbTrail className="mb-4" />
 
                     {/* Header */}
@@ -332,14 +332,14 @@ export default function Relatorios() {
                     {/* ── TAB: OPERACIONAL ── */}
                     {tab === 'operacional' && (
                         <div className="flex flex-col gap-6">
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 tab:grid-cols-4 gap-4">
                                 <KpiCard label="Total de Viagens" value={totalViagens} icon="FileText" color="#1E3A5F" sub={`Últimos ${periodo} dias`} />
                                 <KpiCard label="Finalizadas" value={finalizados} icon="CheckCircle2" color="#059669" sub={`${totalViagens > 0 ? Math.round(finalizados/totalViagens*100) : 0}% do total`} />
                                 <KpiCard label="Peso Transportado" value={fmtKg(pesoTotal)} icon="Weight" color="#D97706" sub="Entregas finalizadas" />
                                 <KpiCard label="Média / Dia" value={mediaDia} icon="TrendingUp" color="#7C3AED" sub="Viagens por dia" />
                             </div>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                            <div className="grid grid-cols-1 tab:grid-cols-2 gap-5">
                                 <ChartCard title="Romaneios por Dia (últimos 14 dias)" height={220}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={porDia}>
@@ -407,7 +407,7 @@ export default function Relatorios() {
                                 </button>
                             </div>
 
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 tab:grid-cols-4 gap-4">
                                 <KpiCard label="Receita Total" value={fmtBRL(receitaTotal)} icon="TrendingUp" color="#059669" sub="Fretes cobrados" />
                                 <KpiCard label="Custo Total" value={fmtBRL(custoTotal)} icon="TrendingDown" color="#DC2626" sub="Operacional" />
                                 <KpiCard label="Margem de Lucro" value={`${margemLucro.toFixed(1)}%`} icon="Percent" color={margemLucro >= 20 ? '#059669' : '#D97706'} sub={fmtBRL(receitaTotal - custoTotal) + ' líquido'} />
@@ -436,7 +436,7 @@ export default function Relatorios() {
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                            <div className="grid grid-cols-1 tab:grid-cols-2 gap-5">
                                 {custosBreakdown.length > 0 && (
                                     <ChartCard title="Composição dos Custos" height={200}>
                                         <ResponsiveContainer width="100%" height="100%">
@@ -479,11 +479,11 @@ export default function Relatorios() {
                                             <thead className="bg-slate-50">
                                                 <tr>
                                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Romaneio</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Destino</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden tab:table-cell">Destino</th>
                                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Frete</th>
                                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Custo</th>
                                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Margem</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">%</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden tab:table-cell">%</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -497,11 +497,11 @@ export default function Relatorios() {
                                                                 <p className="font-data font-medium text-blue-700 text-xs whitespace-nowrap">{r.numero}</p>
                                                                 <p className="text-slate-400 text-xs sm:hidden">{r.destino}</p>
                                                             </td>
-                                                            <td className="px-4 py-2.5 text-slate-600 text-xs hidden sm:table-cell">{r.destino}</td>
+                                                            <td className="px-4 py-2.5 text-slate-600 text-xs hidden tab:table-cell">{r.destino}</td>
                                                             <td className="px-4 py-2.5 font-data text-green-700 text-xs">{fmtBRL(r.valor_frete)}</td>
                                                             <td className="px-4 py-2.5 font-data text-red-600 text-xs hidden md:table-cell">{fmtBRL(custo)}</td>
                                                             <td className="px-4 py-2.5 font-data font-semibold text-xs" style={{ color: margem >= 0 ? '#059669' : '#DC2626' }}>{fmtBRL(margem)}</td>
-                                                            <td className="px-4 py-2.5 hidden sm:table-cell">
+                                                            <td className="px-4 py-2.5 hidden tab:table-cell">
                                                                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pct >= 20 ? 'bg-green-100 text-green-700' : pct >= 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
                                                                     {pct.toFixed(1)}%
                                                                 </span>
@@ -520,14 +520,14 @@ export default function Relatorios() {
                     {/* ── TAB: FROTA ── */}
                     {tab === 'frota' && (
                         <div className="flex flex-col gap-6">
-                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 tab:grid-cols-4 gap-4">
                                 <KpiCard label="Total de Veículos" value={frota} icon="Truck" color="#1E3A5F" />
                                 <KpiCard label="Disponíveis" value={disponiveis} icon="CheckCircle2" color="#059669" sub={frota > 0 ? `${Math.round(disponiveis/frota*100)}% da frota` : ''} />
                                 <KpiCard label="Em Trânsito" value={emTransito} icon="Navigation" color="#D97706" />
                                 <KpiCard label="Utilização Média" value={`${utilizacaoMedia.toFixed(0)}%`} icon="Activity" color={utilizacaoMedia > 80 ? '#DC2626' : '#059669'} sub={manutencao > 0 ? `${manutencao} em manutenção` : undefined} />
                             </div>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                            <div className="grid grid-cols-1 tab:grid-cols-2 gap-5">
                                 <ChartCard title="Utilização por Veículo (%)" height={Math.max(200, vehicles.length * 35)}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={utilizacaoVeiculos} layout="vertical">
@@ -568,11 +568,11 @@ export default function Relatorios() {
                                         <thead className="bg-slate-50">
                                             <tr>
                                                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Placa</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Tipo</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden tab:table-cell">Tipo</th>
                                                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
                                                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Cap. Peso</th>
                                                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Cap. Volume</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Utilização</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden tab:table-cell">Utilização</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -582,7 +582,7 @@ export default function Relatorios() {
                                                         <p className="font-data font-bold text-slate-800 text-xs">{v.placa}</p>
                                                         <p className="text-xs text-slate-400 sm:hidden">{v.tipo}</p>
                                                     </td>
-                                                    <td className="px-4 py-2.5 text-slate-600 text-xs hidden sm:table-cell">{v.tipo}</td>
+                                                    <td className="px-4 py-2.5 text-slate-600 text-xs hidden tab:table-cell">{v.tipo}</td>
                                                     <td className="px-4 py-2.5">
                                                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${
                                                             v.status === 'Disponível' ? 'bg-green-100 text-green-700' :
@@ -592,7 +592,7 @@ export default function Relatorios() {
                                                     </td>
                                                     <td className="px-4 py-2.5 font-data text-xs hidden md:table-cell">{(v.capacidadePeso||0).toLocaleString('pt-BR')} kg</td>
                                                     <td className="px-4 py-2.5 font-data text-xs hidden lg:table-cell">{(v.capacidadeVolume||0).toLocaleString('pt-BR')} m³</td>
-                                                    <td className="px-4 py-2.5 hidden sm:table-cell">
+                                                    <td className="px-4 py-2.5 hidden tab:table-cell">
                                                         <div className="flex items-center gap-2">
                                                             <div className="flex-1 bg-slate-100 rounded-full h-1.5">
                                                                 <div className="h-1.5 rounded-full" style={{ width: `${v.utilizacao||0}%`, backgroundColor: (v.utilizacao||0) > 90 ? '#DC2626' : '#059669' }} />
