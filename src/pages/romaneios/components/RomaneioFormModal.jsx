@@ -426,17 +426,17 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center sm:p-4">
             <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col">
+            <div className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[95vh] sm:max-h-[92vh] flex flex-col">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor:'var(--color-border)' }}>
+                <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b" style={{ borderColor:'var(--color-border)' }}>
                     <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center rounded-lg" style={{ width:36, height:36, backgroundColor:'var(--color-primary)' }}>
+                        <div className="flex items-center justify-center rounded-lg flex-shrink-0" style={{ width:36, height:36, backgroundColor:'var(--color-primary)' }}>
                             <Icon name="FileText" size={18} color="#fff" />
                         </div>
                         <div>
-                            <h2 className="font-heading font-bold text-lg" style={{ color:'var(--color-text-primary)' }}>
+                            <h2 className="font-heading font-bold text-base sm:text-lg" style={{ color:'var(--color-text-primary)' }}>
                                 {editingRomaneio ? 'Editar Romaneio' : 'Novo Romaneio'}
                             </h2>
                             <p className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
@@ -444,29 +444,29 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                             </p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100">
+                    <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 flex-shrink-0">
                         <Icon name="X" size={18} color="var(--color-muted-foreground)" />
                     </button>
                 </div>
 
-                {/* Tabs */}
-                <div className="flex border-b px-6" style={{ borderColor:'var(--color-border)' }}>
+                {/* Tabs — scroll horizontal no mobile */}
+                <div className="flex border-b overflow-x-auto" style={{ borderColor:'var(--color-border)', scrollbarWidth:'none' }}>
                     {[
-                        ['dados',      'Dados da Viagem', 'Truck'],
+                        ['dados',      'Viagem', 'Truck'],
                         ['pedidos',    `Pedidos (${pedidos.length})`, 'ShoppingCart'],
-                        ['financeiro', 'Frete & Financeiro', 'DollarSign'],
+                        ['financeiro', 'Financeiro', 'DollarSign'],
                     ].map(([key, label, icon]) => (
                         <button key={key} onClick={() => setTab(key)}
-                            className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium font-caption border-b-2 transition-colors whitespace-nowrap
+                            className={`flex items-center gap-1.5 px-3 sm:px-4 py-3 text-xs sm:text-sm font-medium font-caption border-b-2 transition-colors whitespace-nowrap flex-shrink-0
                                 ${tab === key ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                            <Icon name={icon} size={14} color="currentColor" />
+                            <Icon name={icon} size={13} color="currentColor" />
                             {label}
                         </button>
                     ))}
                 </div>
 
                 {/* Body */}
-                <div className="overflow-y-auto flex-1 px-6 py-5">
+                <div className="overflow-y-auto flex-1 px-4 sm:px-6 py-4 sm:py-5">
 
                     {/* ── TAB: DADOS ──────────────────────────────── */}
                     {tab === 'dados' && (
@@ -741,15 +741,16 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                     {/* Empresa — seleção visual por botões */}
                                                     <div className="col-span-2">
                                                         <label className="block text-xs font-caption mb-1.5" style={{ color:'var(--color-text-secondary)' }}>Empresa</label>
-                                                        <div className="flex gap-2">
+                                                        <div className="grid grid-cols-1 xs:grid-cols-3 gap-2">
                                                             {EMPRESAS.map(emp => (
                                                                 <button key={emp.value} type="button"
                                                                     onClick={() => updatePedidoField(pIdx, 'empresa', emp.value)}
-                                                                    className="flex-1 py-2 rounded-lg text-xs font-semibold font-caption border-2 transition-all"
+                                                                    className="w-full py-2.5 rounded-lg text-xs font-semibold font-caption border-2 transition-all text-center"
                                                                     style={{
                                                                         borderColor: pedido.empresa === emp.value ? emp.color : '#E5E7EB',
                                                                         backgroundColor: pedido.empresa === emp.value ? emp.bg : 'white',
                                                                         color: pedido.empresa === emp.value ? emp.color : '#9CA3AF',
+                                                                        minHeight: '44px',
                                                                     }}>
                                                                     {emp.label}
                                                                 </button>
@@ -1043,8 +1044,8 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 border-t flex justify-between items-center gap-2" style={{ borderColor:'var(--color-border)' }}>
-                    <div className="flex items-center gap-3">
+                <div className="px-4 sm:px-6 py-3 sm:py-4 border-t flex flex-col xs:flex-row justify-between items-start xs:items-center gap-2" style={{ borderColor:'var(--color-border)' }}>
+                    <div className="flex items-center gap-3 flex-wrap">
                         <span className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
                             {pedidos.length} pedido(s) · {totais.pesoTotal.toLocaleString('pt-BR',{maximumFractionDigits:0})} kg
                         </span>
@@ -1054,10 +1055,10 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                             </span>
                         )}
                     </div>
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={onClose} disabled={loading}>Cancelar</Button>
-                        <Button variant="default" onClick={handleSubmit} loading={loading} iconName="Save" iconSize={15}>
-                            {editingRomaneio ? 'Salvar Alterações' : 'Criar Romaneio'}
+                    <div className="flex gap-2 w-full xs:w-auto">
+                        <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1 xs:flex-none">Cancelar</Button>
+                        <Button variant="default" onClick={handleSubmit} loading={loading} iconName="Save" iconSize={15} className="flex-1 xs:flex-none">
+                            {editingRomaneio ? 'Salvar' : 'Criar'}
                         </Button>
                     </div>
                 </div>

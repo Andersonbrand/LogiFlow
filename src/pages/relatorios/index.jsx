@@ -87,6 +87,14 @@ export default function Relatorios() {
         })();
     }, []);
 
+    // Recarrega romaneios ao trocar empresa ou mês na aba Por Empresa
+    useEffect(() => {
+        if (tab !== 'empresas') return;
+        fetchRomaneios()
+            .then(setRomaneios)
+            .catch(err => showToast('Erro ao atualizar: ' + err.message, 'error'));
+    }, [tab, empresaFiltro, mesFiltro]); // eslint-disable-line
+
     const cutoff = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - Number(periodo)); return d; }, [periodo]);
     const romFiltrados = useMemo(() => romaneios.filter(r => r.saida && new Date(r.saida) >= cutoff), [romaneios, cutoff]);
     const romFinalizados = romFiltrados.filter(r => r.status === 'Finalizado');
@@ -621,7 +629,12 @@ export default function Relatorios() {
                             const mesRom = (r.saida || r.created_at || '').slice(0, 7);
                             if (mesRom !== mesFiltro) return [];
                             return (r.romaneio_pedidos || []).map(p => ({ ...p, _rom: r }));
-                        }).filter(p => (p.empresa || 'Comercial Araguaia') === empresaFiltro);
+                        }).filter(p => {
+                            // Só filtra por empresa se o campo estiver preenchido
+                            // Pedidos sem empresa NÃO aparecem em nenhuma empresa (evita falso positivo)
+                            const empPedido = p.empresa || '';
+                            return empPedido === empresaFiltro;
+                        });
 
                         // KPIs da empresa no mês
                         const totalPedidos    = pedidosDoMes.length;
@@ -636,7 +649,7 @@ export default function Relatorios() {
                             const rom = romaneios.find(r => r.id === romId);
                             if (!rom) return s;
                             const pedidosRom = (rom.romaneio_pedidos || []);
-                            const pedidosEmpresa = pedidosRom.filter(p => (p.empresa || 'Comercial Araguaia') === empresaFiltro);
+                            const pedidosEmpresa = pedidosRom.filter(p => p.empresa === empresaFiltro);
                             if (pedidosRom.length === 0) return s;
                             const proporcao = pedidosEmpresa.length / pedidosRom.length;
                             const custoRom = (Number(rom.custo_combustivel||0) + Number(rom.custo_pedagio||0) + Number(rom.custo_motorista||0)) * proporcao;
@@ -684,36 +697,39 @@ export default function Relatorios() {
                         return (
                             <div className="flex flex-col gap-6">
                                 {/* Filtros */}
-                                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-end">
-                                    {/* Seleção de empresa */}
-                                    <div className="flex-1">
+                                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col gap-4">
+                                    {/* Empresa */}
+                                    <div>
                                         <label className="block text-xs font-caption font-semibold mb-2 text-slate-500 uppercase tracking-wide">Empresa</label>
-                                        <div className="flex flex-wrap gap-2">
+                                        <div className="grid grid-cols-1 xs:grid-cols-3 gap-2">
                                             {EMPRESAS.map(emp => (
                                                 <button key={emp.value} onClick={() => setEmpresaFiltro(emp.value)}
-                                                    className="px-4 py-2 rounded-lg text-sm font-semibold border-2 transition-all"
+                                                    className="w-full py-2.5 rounded-lg text-sm font-semibold border-2 transition-all text-center"
                                                     style={{
                                                         borderColor: empresaFiltro === emp.value ? emp.color : '#E5E7EB',
                                                         backgroundColor: empresaFiltro === emp.value ? emp.bg : 'white',
                                                         color: empresaFiltro === emp.value ? emp.color : '#9CA3AF',
+                                                        minHeight: '44px',
                                                     }}>
                                                     {emp.label}
                                                 </button>
                                             ))}
                                         </div>
                                     </div>
-                                    {/* Seleção de mês */}
-                                    <div>
-                                        <label className="block text-xs font-caption font-semibold mb-2 text-slate-500 uppercase tracking-wide">Mês de Referência</label>
-                                        <input type="month" value={mesFiltro} onChange={e => setMesFiltro(e.target.value)}
-                                            className="h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data" />
+                                    {/* Mês + Exportar */}
+                                    <div className="flex flex-col xs:flex-row gap-3 items-start xs:items-center">
+                                        <div className="flex-1 w-full xs:w-auto">
+                                            <label className="block text-xs font-caption font-semibold mb-1.5 text-slate-500 uppercase tracking-wide">Mês de Referência</label>
+                                            <input type="month" value={mesFiltro} onChange={e => setMesFiltro(e.target.value)}
+                                                className="w-full h-11 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data" />
+                                        </div>
+                                        <button onClick={exportEmpresaExcel}
+                                            className="flex items-center justify-center gap-2 px-4 h-11 rounded-lg text-sm font-semibold text-white transition-colors w-full xs:w-auto mt-auto"
+                                            style={{ backgroundColor: empConfig.color }}>
+                                            <Icon name="FileSpreadsheet" size={15} color="white" />
+                                            Exportar Excel
+                                        </button>
                                     </div>
-                                    <button onClick={exportEmpresaExcel}
-                                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors whitespace-nowrap"
-                                        style={{ backgroundColor: empConfig.color }}>
-                                        <Icon name="FileSpreadsheet" size={15} color="white" />
-                                        Exportar Excel
-                                    </button>
                                 </div>
 
                                 {/* KPIs */}
@@ -739,20 +755,20 @@ export default function Relatorios() {
                                             return (
                                                 <div key={rom.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                                                     {/* Header do romaneio */}
-                                                    <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-slate-100"
+                                                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3 border-b border-slate-100"
                                                         style={{ backgroundColor: empConfig.bg + '60' }}>
                                                         <div className="flex items-center gap-2 flex-1 min-w-0">
                                                             <Icon name="FileText" size={16} color={empConfig.color} />
                                                             <span className="font-data font-bold text-sm" style={{ color: empConfig.color }}>{rom.numero}</span>
-                                                            <span className="text-xs text-slate-500 font-caption hidden sm:inline">· {rom.motorista}</span>
-                                                            <span className="text-xs text-slate-400 font-caption hidden md:inline">· {rom.destino}</span>
+                                                            <span className="text-xs text-slate-500 font-caption truncate">· {rom.motorista}</span>
                                                         </div>
-                                                        <div className="flex items-center gap-4 text-xs font-caption flex-shrink-0">
+                                                        <div className="flex items-center flex-wrap gap-x-3 gap-y-1 text-xs font-caption">
+                                                            <span className="text-slate-400 hidden sm:inline">{rom.destino}</span>
                                                             <span className="text-slate-500">
                                                                 {rom.saida ? new Date(rom.saida).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' }) : '—'}
                                                             </span>
                                                             <span className="font-semibold" style={{ color: empConfig.color }}>
-                                                                {fmtBRL(valorRom)} carga
+                                                                {fmtBRL(valorRom)}
                                                             </span>
                                                             <span className="text-green-700 font-semibold">{fmtBRL(freteRom)} frete</span>
                                                             <span className={`px-2 py-0.5 rounded-full font-medium ${
@@ -813,10 +829,10 @@ export default function Relatorios() {
                                         })}
 
                                         {/* Totalizador final */}
-                                        <div className="rounded-xl border-2 p-4 flex flex-wrap gap-6 items-center justify-between"
+                                        <div className="rounded-xl border-2 p-4 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between"
                                             style={{ borderColor: empConfig.color, backgroundColor: empConfig.bg + '40' }}>
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: empConfig.color }}>
+                                                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: empConfig.color }}>
                                                     <Icon name="Building2" size={20} color="white" />
                                                 </div>
                                                 <div>
@@ -824,18 +840,18 @@ export default function Relatorios() {
                                                     <p className="text-xs text-slate-500 font-caption">{mesLabel} · {totalPedidos} pedidos · {romaneiosComPedidos.length} romaneios</p>
                                                 </div>
                                             </div>
-                                            <div className="flex gap-6 text-right">
-                                                <div>
-                                                    <p className="text-xs text-slate-400 font-caption">Valor Total Carga</p>
-                                                    <p className="text-lg font-bold font-data" style={{ color: empConfig.color }}>{fmtBRL(valorCarga)}</p>
+                                            <div className="grid grid-cols-3 sm:flex sm:gap-6 gap-3">
+                                                <div className="text-center sm:text-right">
+                                                    <p className="text-xs text-slate-400 font-caption">Valor Carga</p>
+                                                    <p className="text-base sm:text-lg font-bold font-data" style={{ color: empConfig.color }}>{fmtBRL(valorCarga)}</p>
                                                 </div>
-                                                <div>
+                                                <div className="text-center sm:text-right">
                                                     <p className="text-xs text-slate-400 font-caption">Frete Total</p>
-                                                    <p className="text-lg font-bold font-data text-green-700">{fmtBRL(freteTotal)}</p>
+                                                    <p className="text-base sm:text-lg font-bold font-data text-green-700">{fmtBRL(freteTotal)}</p>
                                                 </div>
-                                                <div>
-                                                    <p className="text-xs text-slate-400 font-caption">Margem Estimada</p>
-                                                    <p className="text-lg font-bold font-data" style={{ color: margemTotal >= 0 ? '#059669' : '#DC2626' }}>{fmtBRL(margemTotal)}</p>
+                                                <div className="text-center sm:text-right">
+                                                    <p className="text-xs text-slate-400 font-caption">Margem</p>
+                                                    <p className="text-base sm:text-lg font-bold font-data" style={{ color: margemTotal >= 0 ? '#059669' : '#DC2626' }}>{fmtBRL(margemTotal)}</p>
                                                 </div>
                                             </div>
                                         </div>

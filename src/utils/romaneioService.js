@@ -34,7 +34,7 @@ export async function fetchRomaneios() {
             distancia_km, custo_combustivel, custo_pedagio,
             custo_motorista, valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,
-            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado),
+            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado, empresa),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
                 materials(id, nome, unidade, peso, categoria_frete, percentual_frete))
         `)
@@ -53,7 +53,7 @@ export async function fetchRomaneioById(id) {
             distancia_km, custo_combustivel, custo_pedagio,
             custo_motorista, valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,
-            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado),
+            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado, empresa),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
                 materials(id, nome, unidade, peso, categoria_frete, percentual_frete))
         `)
@@ -160,8 +160,12 @@ export async function duplicateRomaneio(romaneio) {
         material_id: i.material_id, quantidade: i.quantidade, peso_total: i.peso_total,
     }));
     const pedidos = (romaneio.romaneio_pedidos || []).map(p => ({
-        numero_pedido: p.numero_pedido, valor_pedido: p.valor_pedido,
-        categoria_frete: p.categoria_frete, percentual_frete: p.percentual_frete,
+        numero_pedido:    p.numero_pedido,
+        cidade_destino:   p.cidade_destino   || '',
+        valor_pedido:     p.valor_pedido,
+        categoria_frete:  p.categoria_frete,
+        percentual_frete: p.percentual_frete,
+        empresa:          p.empresa          || 'Comercial Araguaia',
     }));
     return createRomaneio({
         ...buildPayload(romaneio), status:'Aguardando', saida:null,
