@@ -11,11 +11,17 @@ const STATUS_OPTIONS = ['Aguardando', 'Carregando', 'Em Trânsito', 'Finalizado'
 const brl = v => Number(v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
 const n   = v => Number(v||0);
 
+export const EMPRESAS = [
+    { value: 'Comercial Araguaia', label: 'Comercial Araguaia', color: '#1E3A5F', bg: '#DBEAFE' },
+    { value: 'Aços Confiance',     label: 'Aços Confiance',     color: '#065F46', bg: '#D1FAE5' },
+    { value: 'Confiance',          label: 'Confiance',          color: '#92400E', bg: '#FEF3C7' },
+];
+
 const EMPTY_FORM = {
     motorista:'', placa:'', destino:'', status:'Aguardando', saida:'', observacoes:'',
     vehicle_id:'', distancia_km:'', custo_combustivel:'', custo_pedagio:'', custo_motorista:'',
 };
-const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', itens:[] };
+const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', empresa:'Comercial Araguaia', itens:[] };
 
 export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRomaneio, vehicles: vehiclesProp=[], materials: materialsProp=[] }) {
     const [form, setForm]           = useState(EMPTY_FORM);
@@ -102,6 +108,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     cidade_destino:  p.cidade_destino || '',
                     valor_pedido:    String(p.valor_pedido || ''),
                     categoria_frete: p.categoria_frete || 'Ferragens',
+                    empresa:         p.empresa || 'Comercial Araguaia',
                     itens: (editingRomaneio.romaneio_itens || [])
                         .filter(i => i.pedido_id === p.id)
                         .map(i => ({
@@ -403,6 +410,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     cidade_destino:  p.cidade_destino || '',
                     valor_pedido:    n(p.valor_pedido),
                     categoria_frete: p.categoria_frete || 'Outros',
+                    empresa:         p.empresa || 'Comercial Araguaia',
                     percentual_frete: FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05,
                 })),
             }, allItens);
@@ -676,6 +684,15 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                     <span className="text-sm font-medium font-caption" style={{ color:'var(--color-text-primary)' }}>
                                                         {pedido.numero_pedido ? `Pedido ${pedido.numero_pedido}` : `Pedido ${pIdx + 1}`}
                                                     </span>
+                                                    {(() => {
+                                                        const emp = EMPRESAS.find(e => e.value === pedido.empresa);
+                                                        return emp ? (
+                                                            <span className="text-xs px-2 py-0.5 rounded-full font-caption font-semibold"
+                                                                style={{ backgroundColor: emp.bg, color: emp.color }}>
+                                                                {emp.label}
+                                                            </span>
+                                                        ) : null;
+                                                    })()}
                                                     <span className="text-xs px-2 py-0.5 rounded-full font-caption"
                                                         style={{ backgroundColor: cfg.bg, color: cfg.cor }}>
                                                         {pedido.categoria_frete}
@@ -720,6 +737,24 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                             onChange={e => updatePedidoField(pIdx,'cidade_destino',e.target.value)}
                                                             placeholder="Ex: Paratinga"
                                                             className="w-full h-9 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data" />
+                                                    </div>
+                                                    {/* Empresa — seleção visual por botões */}
+                                                    <div className="col-span-2">
+                                                        <label className="block text-xs font-caption mb-1.5" style={{ color:'var(--color-text-secondary)' }}>Empresa</label>
+                                                        <div className="flex gap-2">
+                                                            {EMPRESAS.map(emp => (
+                                                                <button key={emp.value} type="button"
+                                                                    onClick={() => updatePedidoField(pIdx, 'empresa', emp.value)}
+                                                                    className="flex-1 py-2 rounded-lg text-xs font-semibold font-caption border-2 transition-all"
+                                                                    style={{
+                                                                        borderColor: pedido.empresa === emp.value ? emp.color : '#E5E7EB',
+                                                                        backgroundColor: pedido.empresa === emp.value ? emp.bg : 'white',
+                                                                        color: pedido.empresa === emp.value ? emp.color : '#9CA3AF',
+                                                                    }}>
+                                                                    {emp.label}
+                                                                </button>
+                                                            ))}
+                                                        </div>
                                                     </div>
                                                     <div>
                                                         <label className="block text-xs font-caption mb-1" style={{ color:'var(--color-text-secondary)' }}>Valor do Pedido (R$)</label>

@@ -13,6 +13,7 @@ import { fetchVehicles } from 'utils/vehicleService';
 import { fetchMaterials } from 'utils/materialService';
 import { useToast } from 'utils/useToast';
 import { exportRomaneiosToExcel, exportRelatorioConsolidado, exportRelatorioBonificacoes } from 'utils/excelUtils';
+import { EMPRESAS } from 'pages/romaneios/components/RomaneioFormModal';
 import * as XLSX from 'xlsx';
 
 const COLORS = ['#1E3A5F', '#4A6741', '#D97706', '#059669', '#DC2626', '#7C3AED', '#0891B2'];
@@ -20,6 +21,7 @@ const TABS = [
     { id: 'operacional', label: 'Operacional', icon: 'BarChart2' },
     { id: 'financeiro',  label: 'Financeiro',  icon: 'DollarSign' },
     { id: 'frota',       label: 'Frota',        icon: 'Truck' },
+    { id: 'empresas',    label: 'Por Empresa',  icon: 'Building2' },
 ];
 
 function KpiCard({ label, value, sub, icon, color = '#1E3A5F', trend }) {
@@ -70,6 +72,8 @@ export default function Relatorios() {
     const [loading, setLoading] = useState(true);
     const [periodo, setPeriodo] = useState('30');
     const [tab, setTab] = useState('operacional');
+    const [empresaFiltro, setEmpresaFiltro] = useState('Comercial Araguaia');
+    const [mesFiltro, setMesFiltro] = useState(() => new Date().toISOString().slice(0, 7)); // YYYY-MM
     const { toast, showToast } = useToast();
 
     useEffect(() => {
@@ -608,6 +612,239 @@ export default function Relatorios() {
                             </div>
                         </div>
                     )}
+                    {/* ── TAB: POR EMPRESA ── */}
+                    {tab === 'empresas' && (() => {
+                        const empConfig = EMPRESAS.find(e => e.value === empresaFiltro) || EMPRESAS[0];
+
+                        // Todos os pedidos de todos os romaneios no mês selecionado
+                        const pedidosDoMes = romaneios.flatMap(r => {
+                            const mesRom = (r.saida || r.created_at || '').slice(0, 7);
+                            if (mesRom !== mesFiltro) return [];
+                            return (r.romaneio_pedidos || []).map(p => ({ ...p, _rom: r }));
+                        }).filter(p => (p.empresa || 'Comercial Araguaia') === empresaFiltro);
+
+                        // KPIs da empresa no mês
+                        const totalPedidos    = pedidosDoMes.length;
+                        const valorCarga      = pedidosDoMes.reduce((s, p) => s + Number(p.valor_pedido || 0), 0);
+                        const freteTotal      = pedidosDoMes.reduce((s, p) => {
+                            const pct = Number(p.percentual_frete || 0.05);
+                            return s + Number(p.valor_pedido || 0) * pct;
+                        }, 0);
+                        // Margem: proporcional aos pedidos da empresa em cada romaneio
+                        const romaneiosComPedidos = [...new Set(pedidosDoMes.map(p => p._rom.id))];
+                        const margemTotal = romaneiosComPedidos.reduce((s, romId) => {
+                            const rom = romaneios.find(r => r.id === romId);
+                            if (!rom) return s;
+                            const pedidosRom = (rom.romaneio_pedidos || []);
+                            const pedidosEmpresa = pedidosRom.filter(p => (p.empresa || 'Comercial Araguaia') === empresaFiltro);
+                            if (pedidosRom.length === 0) return s;
+                            const proporcao = pedidosEmpresa.length / pedidosRom.length;
+                            const custoRom = (Number(rom.custo_combustivel||0) + Number(rom.custo_pedagio||0) + Number(rom.custo_motorista||0)) * proporcao;
+                            const freteEmpresa = pedidosEmpresa.reduce((sf, p) => sf + Number(p.valor_pedido||0) * Number(p.percentual_frete||0.05), 0);
+                            return s + freteEmpresa - custoRom;
+                        }, 0);
+
+                        // Agrupar pedidos por romaneio para exibição
+                        const pedidosPorRomaneio = romaneiosComPedidos.map(romId => {
+                            const rom = romaneios.find(r => r.id === romId);
+                            const peds = pedidosDoMes.filter(p => p._rom.id === romId);
+                            return { rom, peds };
+                        });
+
+                        // Export Excel da empresa no mês
+                        const exportEmpresaExcel = () => {
+                            if (pedidosDoMes.length === 0) { showToast('Nenhum pedido no período', 'error'); return; }
+                            const wb = XLSX.utils.book_new();
+                            const rows = pedidosDoMes.map(p => {
+                                const pct = Number(p.percentual_frete || 0.05);
+                                const frete = Number(p.valor_pedido || 0) * pct;
+                                return {
+                                    'Romaneio':          p._rom.numero || '',
+                                    'Motorista':         p._rom.motorista || '',
+                                    'Saída':             p._rom.saida ? new Date(p._rom.saida).toLocaleDateString('pt-BR') : '',
+                                    'Nº Pedido':         p.numero_pedido || '',
+                                    'Cidade Destino':    p.cidade_destino || p._rom.destino || '',
+                                    'Empresa':           p.empresa || empresaFiltro,
+                                    'Categoria Frete':   p.categoria_frete || '',
+                                    '% Frete':           (pct * 100).toFixed(1) + '%',
+                                    'Valor Pedido (R$)': Number(p.valor_pedido || 0),
+                                    'Frete (R$)':        frete,
+                                    'Status Romaneio':   p._rom.status || '',
+                                };
+                            });
+                            const ws = XLSX.utils.json_to_sheet(rows);
+                            ws['!cols'] = Object.keys(rows[0] || {}).map(() => ({ wch: 20 }));
+                            XLSX.utils.book_append_sheet(wb, ws, empresaFiltro.slice(0, 31));
+                            XLSX.writeFile(wb, `relatorio_${empresaFiltro.replace(/\s/g,'_')}_${mesFiltro}.xlsx`);
+                            showToast('Relatório exportado!');
+                        };
+
+                        const mesLabel = new Date(mesFiltro + '-02').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+
+                        return (
+                            <div className="flex flex-col gap-6">
+                                {/* Filtros */}
+                                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+                                    {/* Seleção de empresa */}
+                                    <div className="flex-1">
+                                        <label className="block text-xs font-caption font-semibold mb-2 text-slate-500 uppercase tracking-wide">Empresa</label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {EMPRESAS.map(emp => (
+                                                <button key={emp.value} onClick={() => setEmpresaFiltro(emp.value)}
+                                                    className="px-4 py-2 rounded-lg text-sm font-semibold border-2 transition-all"
+                                                    style={{
+                                                        borderColor: empresaFiltro === emp.value ? emp.color : '#E5E7EB',
+                                                        backgroundColor: empresaFiltro === emp.value ? emp.bg : 'white',
+                                                        color: empresaFiltro === emp.value ? emp.color : '#9CA3AF',
+                                                    }}>
+                                                    {emp.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    {/* Seleção de mês */}
+                                    <div>
+                                        <label className="block text-xs font-caption font-semibold mb-2 text-slate-500 uppercase tracking-wide">Mês de Referência</label>
+                                        <input type="month" value={mesFiltro} onChange={e => setMesFiltro(e.target.value)}
+                                            className="h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data" />
+                                    </div>
+                                    <button onClick={exportEmpresaExcel}
+                                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors whitespace-nowrap"
+                                        style={{ backgroundColor: empConfig.color }}>
+                                        <Icon name="FileSpreadsheet" size={15} color="white" />
+                                        Exportar Excel
+                                    </button>
+                                </div>
+
+                                {/* KPIs */}
+                                <div className="grid grid-cols-2 tab:grid-cols-4 gap-4">
+                                    <KpiCard label="Pedidos no Mês"   value={totalPedidos}        icon="ShoppingCart" color={empConfig.color} sub={mesLabel} />
+                                    <KpiCard label="Valor da Carga"   value={fmtBRL(valorCarga)}  icon="Package"      color={empConfig.color} sub="Total transportado" />
+                                    <KpiCard label="Frete Gerado"     value={fmtBRL(freteTotal)}  icon="TrendingUp"   color="#059669"         sub="Receita de frete" />
+                                    <KpiCard label="Margem Estimada"  value={fmtBRL(margemTotal)} icon="Percent"      color={margemTotal >= 0 ? '#059669' : '#DC2626'} sub="Frete − custos proporcionais" />
+                                </div>
+
+                                {/* Lista de pedidos agrupados por romaneio */}
+                                {pedidosPorRomaneio.length === 0 ? (
+                                    <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+                                        <Icon name="Building2" size={40} color="#CBD5E1" />
+                                        <p className="mt-3 text-sm font-medium text-slate-500">Nenhum pedido encontrado</p>
+                                        <p className="text-xs mt-1 text-slate-400">Selecione outro mês ou verifique se os pedidos têm a empresa associada</p>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-4">
+                                        {pedidosPorRomaneio.map(({ rom, peds }) => {
+                                            const freteRom = peds.reduce((s, p) => s + Number(p.valor_pedido||0) * Number(p.percentual_frete||0.05), 0);
+                                            const valorRom = peds.reduce((s, p) => s + Number(p.valor_pedido||0), 0);
+                                            return (
+                                                <div key={rom.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                                    {/* Header do romaneio */}
+                                                    <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-slate-100"
+                                                        style={{ backgroundColor: empConfig.bg + '60' }}>
+                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                            <Icon name="FileText" size={16} color={empConfig.color} />
+                                                            <span className="font-data font-bold text-sm" style={{ color: empConfig.color }}>{rom.numero}</span>
+                                                            <span className="text-xs text-slate-500 font-caption hidden sm:inline">· {rom.motorista}</span>
+                                                            <span className="text-xs text-slate-400 font-caption hidden md:inline">· {rom.destino}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-4 text-xs font-caption flex-shrink-0">
+                                                            <span className="text-slate-500">
+                                                                {rom.saida ? new Date(rom.saida).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' }) : '—'}
+                                                            </span>
+                                                            <span className="font-semibold" style={{ color: empConfig.color }}>
+                                                                {fmtBRL(valorRom)} carga
+                                                            </span>
+                                                            <span className="text-green-700 font-semibold">{fmtBRL(freteRom)} frete</span>
+                                                            <span className={`px-2 py-0.5 rounded-full font-medium ${
+                                                                rom.status === 'Finalizado' ? 'bg-green-100 text-green-700' :
+                                                                rom.status === 'Em Trânsito' ? 'bg-blue-100 text-blue-700' :
+                                                                rom.status === 'Cancelado' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                                                            }`}>{rom.status}</span>
+                                                        </div>
+                                                    </div>
+                                                    {/* Tabela de pedidos */}
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full text-xs">
+                                                            <thead className="bg-slate-50">
+                                                                <tr>
+                                                                    <th className="px-4 py-2 text-left font-caption font-semibold text-slate-400 uppercase tracking-wide">Nº Pedido</th>
+                                                                    <th className="px-4 py-2 text-left font-caption font-semibold text-slate-400 uppercase tracking-wide hidden sm:table-cell">Cidade</th>
+                                                                    <th className="px-4 py-2 text-left font-caption font-semibold text-slate-400 uppercase tracking-wide hidden md:table-cell">Categoria</th>
+                                                                    <th className="px-4 py-2 text-left font-caption font-semibold text-slate-400 uppercase tracking-wide hidden tab:table-cell">% Frete</th>
+                                                                    <th className="px-4 py-2 text-right font-caption font-semibold text-slate-400 uppercase tracking-wide">Valor Pedido</th>
+                                                                    <th className="px-4 py-2 text-right font-caption font-semibold text-slate-400 uppercase tracking-wide">Frete</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {peds.map((p, i) => {
+                                                                    const pct = Number(p.percentual_frete || 0.05);
+                                                                    const frete = Number(p.valor_pedido || 0) * pct;
+                                                                    return (
+                                                                        <tr key={p.id || i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                                                                            <td className="px-4 py-2.5 font-data font-semibold" style={{ color: empConfig.color }}>
+                                                                                {p.numero_pedido || '—'}
+                                                                            </td>
+                                                                            <td className="px-4 py-2.5 text-slate-600 hidden sm:table-cell">{p.cidade_destino || rom.destino || '—'}</td>
+                                                                            <td className="px-4 py-2.5 text-slate-500 hidden md:table-cell">{p.categoria_frete || '—'}</td>
+                                                                            <td className="px-4 py-2.5 text-slate-500 hidden tab:table-cell">{(pct * 100).toFixed(1)}%</td>
+                                                                            <td className="px-4 py-2.5 text-right font-data font-medium text-slate-700">{fmtBRL(p.valor_pedido)}</td>
+                                                                            <td className="px-4 py-2.5 text-right font-data font-semibold text-green-700">{fmtBRL(frete)}</td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                            <tfoot>
+                                                                <tr className="border-t border-slate-200" style={{ backgroundColor: empConfig.bg + '40' }}>
+                                                                    <td colSpan={4} className="px-4 py-2 text-xs font-semibold font-caption text-slate-500">
+                                                                        {peds.length} pedido(s) neste romaneio
+                                                                    </td>
+                                                                    <td className="px-4 py-2 text-right font-data font-bold text-sm" style={{ color: empConfig.color }}>
+                                                                        {fmtBRL(valorRom)}
+                                                                    </td>
+                                                                    <td className="px-4 py-2 text-right font-data font-bold text-sm text-green-700">
+                                                                        {fmtBRL(freteRom)}
+                                                                    </td>
+                                                                </tr>
+                                                            </tfoot>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+
+                                        {/* Totalizador final */}
+                                        <div className="rounded-xl border-2 p-4 flex flex-wrap gap-6 items-center justify-between"
+                                            style={{ borderColor: empConfig.color, backgroundColor: empConfig.bg + '40' }}>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: empConfig.color }}>
+                                                    <Icon name="Building2" size={20} color="white" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold" style={{ color: empConfig.color }}>{empresaFiltro}</p>
+                                                    <p className="text-xs text-slate-500 font-caption">{mesLabel} · {totalPedidos} pedidos · {romaneiosComPedidos.length} romaneios</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-6 text-right">
+                                                <div>
+                                                    <p className="text-xs text-slate-400 font-caption">Valor Total Carga</p>
+                                                    <p className="text-lg font-bold font-data" style={{ color: empConfig.color }}>{fmtBRL(valorCarga)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-slate-400 font-caption">Frete Total</p>
+                                                    <p className="text-lg font-bold font-data text-green-700">{fmtBRL(freteTotal)}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-slate-400 font-caption">Margem Estimada</p>
+                                                    <p className="text-lg font-bold font-data" style={{ color: margemTotal >= 0 ? '#059669' : '#DC2626' }}>{fmtBRL(margemTotal)}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
+
                 </div>
             </main>
             {toast && <Toast message={toast.message} type={toast.type} />}
