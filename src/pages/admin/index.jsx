@@ -293,7 +293,9 @@ export default function AdminPanel() {
                                     </table>
                                 </div>
                             )}
-                        </div>
+                        </div> 
+
+                        
                     )}
 
                     {/* ── ABA ALERTAS ──────────────────────────────────────── */}
