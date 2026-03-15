@@ -46,8 +46,8 @@ export default function NavigationBar() {
         const isCarretaUser = role === 'carreteiro' || (role === 'motorista' && tipoVeiculo === 'carreta');
         // Carreteiros nao veem /motorista
         if (item.path === '/motorista' && isCarretaUser) return false;
-        // /carreteiro aparece para carreteiros e admins
-        if (item.path === '/carreteiro') return isCarretaUser || role === 'admin';
+        // /carreteiro aparece SOMENTE para carreteiros
+        if (item.path === '/carreteiro') return isCarretaUser;
         return item.roles.includes(role);
     });
 

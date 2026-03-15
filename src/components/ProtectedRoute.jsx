@@ -78,7 +78,7 @@ export function CarreteiroRoute({ children }) {
     if (!ready) return <Spinner />;
     if (!user) return <Navigate to="/login" replace />;
     const isCarreta = profile?.role === 'carreteiro' || (profile?.role === 'motorista' && profile?.tipo_veiculo === 'carreta');
-    if (profile?.role !== 'admin' && !isCarreta) return <Navigate to="/" replace />;
+    if (!isCarreta) return <Navigate to="/" replace />;
     return children;
 }
 
