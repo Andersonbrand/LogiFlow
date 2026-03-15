@@ -956,24 +956,170 @@ function TabEmpresas({ isAdmin }) {
     );
 }
 
+// ─── TAB: Bonificações (visão admin) ─────────────────────────────────────────
+function TabBonificacoes({ isAdmin }) {
+    const { toast, showToast } = useToast();
+    const [viagens, setViagens] = useState([]);
+    const [motoristas, setMotoristas] = useState([]);
+    const [filtroMotorista, setFiltroMotorista] = useState('');
+    const [filtroMes, setFiltroMes] = useState('');
+    const [loading, setLoading] = useState(true);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const f = { status: 'Entrega finalizada' };
+            if (filtroMotorista) f.motoristaId = filtroMotorista;
+            if (filtroMes) { f.dataInicio = filtroMes + '-01'; f.dataFim = filtroMes + '-31'; }
+            const [v, m] = await Promise.all([fetchViagens(f), fetchTodosMotoristas()]);
+            setViagens(v); setMotoristas(m);
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    }, [filtroMotorista, filtroMes]); // eslint-disable-line
+    useEffect(() => { load(); }, [load]);
+
+    const viagensComBonus = useMemo(() =>
+        viagens.map(v => ({ ...v, bonus: calcularBonusCarreteiro(v.destino) }))
+    , [viagens]);
+
+    const totais = useMemo(() => {
+        const porMotorista = {};
+        viagensComBonus.forEach(v => {
+            const id = v.motorista_id || 'sem_motorista';
+            const nome = v.motorista?.name || 'Sem motorista';
+            if (!porMotorista[id]) porMotorista[id] = { nome, viagens: 0, bonus: 0 };
+            porMotorista[id].viagens++;
+            porMotorista[id].bonus += v.bonus;
+        });
+        return {
+            totalBonus: viagensComBonus.reduce((s, v) => s + v.bonus, 0),
+            totalViagens: viagensComBonus.length,
+            porMotorista: Object.values(porMotorista).sort((a, b) => b.bonus - a.bonus),
+        };
+    }, [viagensComBonus]);
+
+    const exportar = () => {
+        const rows = viagensComBonus.map(v => ({
+            'Motorista': v.motorista?.name || '', 'Nº Viagem': v.numero,
+            'Destino': v.destino || '', 'Data': FMT_DATE(v.data_saida),
+            'Placa': v.veiculo?.placa || '', 'Toneladas': v.toneladas || '',
+            'Bônus (R$)': v.bonus,
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = [18,12,20,12,10,10,12].map(w => ({ wch: w }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Bonificações');
+        XLSX.writeFile(wb, `bonificacoes_carretas_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
+        showToast('Exportado!', 'success');
+    };
+
+    return (
+        <div>
+            <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
+                <div className="flex flex-wrap gap-2">
+                    <select value={filtroMotorista} onChange={e => setFiltroMotorista(e.target.value)}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                        <option value="">Todos motoristas</option>
+                        {motoristas.filter(m => m.tipo_veiculo === 'carreta' || m.role === 'carreteiro').map(m =>
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                        )}
+                    </select>
+                    <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                </div>
+                <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
+                    <Icon name="FileDown" size={14} /> Exportar Excel
+                </button>
+            </div>
+
+            {/* KPIs */}
+            <div className="grid grid-cols-2 gap-4 mb-5">
+                <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                    <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Viagens Finalizadas</p>
+                    <p className="text-2xl font-bold font-data text-blue-600">{totais.totalViagens}</p>
+                </div>
+                <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                    <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Total Bônus</p>
+                    <p className="text-2xl font-bold font-data text-purple-600">{BRL(totais.totalBonus)}</p>
+                </div>
+            </div>
+
+            {/* Resumo por motorista */}
+            {totais.porMotorista.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
+                    {totais.porMotorista.map(m => (
+                        <div key={m.nome} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold"
+                                    style={{ backgroundColor: 'var(--color-primary)' }}>
+                                    {m.nome[0]?.toUpperCase()}
+                                </div>
+                                <span className="text-xs font-medium" style={{ color: 'var(--color-muted-foreground)' }}>{m.viagens} viagem{m.viagens !== 1 ? 's' : ''}</span>
+                            </div>
+                            <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{m.nome}</p>
+                            <p className="text-lg font-bold font-data text-purple-600">{BRL(m.bonus)}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Tabela detalhada */}
+            {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
+                <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                    <table className="w-full text-sm">
+                        <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                            <tr>{['Motorista','Nº Viagem','Destino','Data','Placa','Bônus'].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                        </thead>
+                        <tbody>
+                            {viagensComBonus.length === 0
+                                ? <tr><td colSpan={6} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem finalizada no período</td></tr>
+                                : viagensComBonus.map((v, i) => (
+                                    <tr key={v.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                        <td className="px-4 py-3 font-medium">{v.motorista?.name || '—'}</td>
+                                        <td className="px-4 py-3 font-data text-blue-700">{v.numero}</td>
+                                        <td className="px-4 py-3">{v.destino || '—'}</td>
+                                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{FMT_DATE(v.data_saida)}</td>
+                                        <td className="px-4 py-3 font-data">{v.veiculo?.placa || '—'}</td>
+                                        <td className="px-4 py-3 font-data font-semibold text-purple-600">{BRL(v.bonus)}</td>
+                                    </tr>
+                                ))
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            )}
+            <Toast toast={toast} />
+        </div>
+    );
+}
+
 // ─── TAB: Configurações ──────────────────────────────────────────────────────
 function TabConfiguracoes({ isAdmin }) {
     const { toast, showToast } = useToast();
-    const [config, setConfig] = useState({ preco_diesel: '', preco_arla: '' });
+    const [config, setConfig]   = useState({ preco_diesel: '', preco_arla: '' });
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const [saving, setSaving]   = useState(false);
+    const [motoristas, setMotoristas] = useState([]);
+    const [veiculos, setVeiculos]     = useState([]);
+    const [vinculo, setVinculo]       = useState({ motorista_id: '', veiculo_id: '' });
+    const [exporting, setExporting]   = useState(false);
 
     useEffect(() => {
         (async () => {
             try {
-                const c = await fetchConfigAbastecimento();
+                const [c, m, v] = await Promise.all([
+                    fetchConfigAbastecimento(),
+                    fetchTodosMotoristas(),
+                    fetchCarretasVeiculos(),
+                ]);
                 setConfig({ preco_diesel: c.preco_diesel || '', preco_arla: c.preco_arla || '' });
+                setMotoristas(m); setVeiculos(v);
             } catch { /* usa defaults */ }
             finally { setLoading(false); }
         })();
     }, []);
 
-    const handleSave = async () => {
+    const handleSaveConfig = async () => {
         if (!isAdmin) return;
         setSaving(true);
         try {
@@ -986,69 +1132,147 @@ function TabConfiguracoes({ isAdmin }) {
         finally { setSaving(false); }
     };
 
+    const exportarRelatorio = async () => {
+        if (!vinculo.motorista_id) { showToast('Selecione um motorista para exportar', 'error'); return; }
+        setExporting(true);
+        try {
+            const filtros = { motoristaId: vinculo.motorista_id };
+            if (vinculo.veiculo_id) filtros.veiculoId = vinculo.veiculo_id;
+            const [vgns, absts, carrgs] = await Promise.all([
+                fetchViagens(filtros),
+                fetchAbastecimentos(filtros),
+                fetchCarregamentos(filtros),
+            ]);
+            const mot = motoristas.find(m => m.id === vinculo.motorista_id);
+            const vei = veiculos.find(v => v.id === vinculo.veiculo_id);
+            const wb = XLSX.utils.book_new();
+
+            // Aba Viagens + Bonificações
+            const rowsVgns = vgns.map(v => ({
+                'Nº Viagem': v.numero, 'Status': v.status,
+                'Destino': v.destino || '', 'Data': FMT_DATE(v.data_saida),
+                'Placa': v.veiculo?.placa || '', 'Toneladas': v.toneladas || '',
+                'Bônus (R$)': calcularBonusCarreteiro(v.destino),
+            }));
+            const totalBonus = rowsVgns.reduce((s, r) => s + r['Bônus (R$)'], 0);
+            rowsVgns.push({ 'Nº Viagem': 'TOTAL', 'Bônus (R$)': totalBonus });
+            const ws1 = XLSX.utils.json_to_sheet(rowsVgns);
+            XLSX.utils.book_append_sheet(wb, ws1, 'Viagens e Bônus');
+
+            // Aba Abastecimentos
+            const rowsAbst = absts.map(a => ({
+                'Data': FMT_DATE(a.data_abastecimento), 'Placa': a.veiculo?.placa || '',
+                'Posto': a.posto || '', 'Diesel (L)': a.litros_diesel || 0,
+                'R$ Diesel': a.valor_diesel || 0, 'Arla (L)': a.litros_arla || 0,
+                'R$ Arla': a.valor_arla || 0, 'Total (R$)': a.valor_total || 0,
+            }));
+            const totalComb = rowsAbst.reduce((s, r) => s + r['Total (R$)'], 0);
+            rowsAbst.push({ 'Data': 'TOTAL', 'Total (R$)': totalComb });
+            const ws2 = XLSX.utils.json_to_sheet(rowsAbst);
+            XLSX.utils.book_append_sheet(wb, ws2, 'Abastecimentos');
+
+            // Aba Carregamentos / Fretes
+            const rowsCarr = carrgs.map(c => ({
+                'Data': FMT_DATE(c.data_carregamento), 'Pedido': c.numero_pedido || '',
+                'NF': c.numero_nota_fiscal || '', 'Empresa': c.empresa?.nome || '',
+                'Destino': c.destino || '', 'Qtd': c.quantidade || 0,
+                'Unidade': c.unidade_quantidade || '', 'Frete (R$)': c.valor_frete_calculado || 0,
+            }));
+            const totalFrete = rowsCarr.reduce((s, r) => s + r['Frete (R$)'], 0);
+            rowsCarr.push({ 'Data': 'TOTAL', 'Frete (R$)': totalFrete });
+            const ws3 = XLSX.utils.json_to_sheet(rowsCarr);
+            XLSX.utils.book_append_sheet(wb, ws3, 'Carregamentos');
+
+            const nomeArq = `relatorio_${mot?.name || 'motorista'}${vei ? '_' + vei.placa : ''}_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`;
+            XLSX.writeFile(wb, nomeArq);
+            showToast('Relatório exportado!', 'success');
+        } catch (e) { showToast('Erro ao exportar: ' + e.message, 'error'); }
+        finally { setExporting(false); }
+    };
+
     if (loading) return <div className="flex justify-center py-16"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div>;
 
     return (
-        <div className="max-w-lg">
-            <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                <div className="flex items-center gap-3 mb-5">
+        <div className="flex flex-col gap-5 max-w-2xl">
+
+            {/* Preços de combustível */}
+            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="flex items-center gap-3 mb-4">
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#FEF3C7' }}>
-                        <Icon name="Settings" size={18} color="#B45309" />
+                        <Icon name="Fuel" size={18} color="#B45309" />
                     </div>
                     <div>
                         <h3 className="font-heading font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Preços de Combustível</h3>
-                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Valores usados no cálculo automático dos abastecimentos</p>
+                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Usados no cálculo automático dos abastecimentos</p>
                     </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4 mb-5">
+                <div className="grid grid-cols-2 gap-4 mb-4">
                     <Field label="Preço do Diesel (R$/L)" required>
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium" style={{ color: 'var(--color-muted-foreground)' }}>R$</span>
-                            <input
-                                type="number" step="0.001" min="0"
-                                value={config.preco_diesel}
+                            <input type="number" step="0.001" min="0" value={config.preco_diesel}
                                 onChange={e => setConfig(c => ({ ...c, preco_diesel: e.target.value }))}
-                                disabled={!isAdmin}
-                                className={inputCls + " pl-9"}
-                                style={inputStyle}
-                                placeholder="6,80"
-                            />
+                                disabled={!isAdmin} className={inputCls + " pl-9"} style={inputStyle} placeholder="6,80" />
                         </div>
                     </Field>
                     <Field label="Preço do Arla (R$/L)" required>
                         <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium" style={{ color: 'var(--color-muted-foreground)' }}>R$</span>
-                            <input
-                                type="number" step="0.001" min="0"
-                                value={config.preco_arla}
+                            <input type="number" step="0.001" min="0" value={config.preco_arla}
                                 onChange={e => setConfig(c => ({ ...c, preco_arla: e.target.value }))}
-                                disabled={!isAdmin}
-                                className={inputCls + " pl-9"}
-                                style={inputStyle}
-                                placeholder="3,20"
-                            />
+                                disabled={!isAdmin} className={inputCls + " pl-9"} style={inputStyle} placeholder="3,20" />
                         </div>
                     </Field>
                 </div>
-
-                <div className="p-3 rounded-xl mb-5 text-xs" style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
-                    <p className="font-semibold text-green-700 mb-1">Como funciona:</p>
+                <div className="p-3 rounded-xl mb-4 text-xs" style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
                     <p className="text-green-600">
-                        Quando o motorista registrar um abastecimento, o valor total será calculado automaticamente:<br />
-                        <strong>(Litros diesel × R$ {Number(config.preco_diesel || 0).toFixed(3)})</strong> + <strong>(Litros Arla × R$ {Number(config.preco_arla || 0).toFixed(3)})</strong>
+                        Cálculo: <strong>(Diesel L × R$ {Number(config.preco_diesel || 0).toFixed(3)})</strong> + <strong>(Arla L × R$ {Number(config.preco_arla || 0).toFixed(3)})</strong>
                     </p>
                 </div>
-
-                {isAdmin && (
-                    <Button onClick={handleSave} iconName={saving ? 'Loader' : 'Save'} size="sm" disabled={saving}>
-                        {saving ? 'Salvando...' : 'Salvar configurações'}
-                    </Button>
-                )}
-                {!isAdmin && (
-                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Apenas administradores podem alterar esses valores.</p>
-                )}
+                {isAdmin
+                    ? <Button onClick={handleSaveConfig} iconName={saving ? 'Loader' : 'Save'} size="sm" disabled={saving}>{saving ? 'Salvando...' : 'Salvar preços'}</Button>
+                    : <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Apenas administradores podem alterar.</p>
+                }
             </div>
+
+            {/* Exportar relatório por motorista / placa */}
+            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EDE9FE' }}>
+                        <Icon name="FileDown" size={18} color="#7C3AED" />
+                    </div>
+                    <div>
+                        <h3 className="font-heading font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Relatório Completo por Motorista</h3>
+                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Exporta viagens, bonificações, combustível e fretes em Excel</p>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <Field label="Motorista" required>
+                        <select value={vinculo.motorista_id} onChange={e => setVinculo(v => ({ ...v, motorista_id: e.target.value }))}
+                            className={inputCls} style={inputStyle}>
+                            <option value="">Selecione o motorista...</option>
+                            {motoristas.filter(m => m.tipo_veiculo === 'carreta' || m.role === 'carreteiro').map(m =>
+                                <option key={m.id} value={m.id}>{m.name}</option>
+                            )}
+                        </select>
+                    </Field>
+                    <Field label="Filtrar por placa (opcional)">
+                        <select value={vinculo.veiculo_id} onChange={e => setVinculo(v => ({ ...v, veiculo_id: e.target.value }))}
+                            className={inputCls} style={inputStyle}>
+                            <option value="">Todas as placas</option>
+                            {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                        </select>
+                    </Field>
+                </div>
+                <div className="p-3 rounded-xl mb-4 text-xs" style={{ backgroundColor: '#F5F3FF', border: '1px solid #C4B5FD' }}>
+                    <p className="text-purple-700 font-medium mb-1">O relatório Excel conterá 3 abas:</p>
+                    <p className="text-purple-600">📋 Viagens e Bônus &nbsp;|&nbsp; ⛽ Abastecimentos &nbsp;|&nbsp; 📦 Carregamentos/Fretes</p>
+                </div>
+                <Button onClick={exportarRelatorio} iconName={exporting ? 'Loader' : 'Download'} disabled={exporting || !vinculo.motorista_id}>
+                    {exporting ? 'Gerando...' : 'Exportar Relatório Excel'}
+                </Button>
+            </div>
+
             <Toast toast={toast} />
         </div>
     );
@@ -1061,6 +1285,7 @@ const TABS = [
     { id: 'abastecimentos',label: 'Abastecimentos', icon: 'Fuel' },
     { id: 'checklist',     label: 'Checklist',      icon: 'ClipboardCheck' },
     { id: 'carregamentos', label: 'Carregamentos',  icon: 'Package' },
+    { id: 'bonificacoes',  label: 'Bonificações',   icon: 'Award' },
     { id: 'empresas',      label: 'Empresas',       icon: 'Building2' },
     { id: 'configuracoes', label: 'Configurações',  icon: 'Settings' },
 ];
@@ -1078,21 +1303,13 @@ export default function CarretasPage() {
                     <BreadcrumbTrail className="mb-4" />
 
                     {/* Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                        <div className="flex items-center gap-3">
-                            <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white shadow-md"
-                                style={{ background: 'linear-gradient(135deg, #1D4ED8, #7C3AED)' }}>
-                                <Icon name="Truck" size={22} color="#fff" />
-                            </div>
-                            <div>
-                                <h1 className="font-heading font-bold text-2xl" style={{ color: 'var(--color-text-primary)' }}>
-                                    Transporte — Carretas
-                                </h1>
-                                <p className="text-sm font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
-                                    Controle de viagens, frota e fretes de cimento
-                                </p>
-                            </div>
-                        </div>
+                    <div className="mb-6">
+                        <h1 className="font-heading font-bold text-2xl" style={{ color: 'var(--color-text-primary)' }}>
+                            Transporte — Carretas
+                        </h1>
+                        <p className="text-sm font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
+                            Controle de viagens, frota e fretes de cimento
+                        </p>
                     </div>
 
                     {/* Tabs */}
@@ -1112,6 +1329,7 @@ export default function CarretasPage() {
                     {tab === 'abastecimentos' && <TabAbastecimentos  isAdmin={admin} profile={profile} />}
                     {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}
                     {tab === 'carregamentos'  && <TabCarregamentos   isAdmin={admin} />}
+                    {tab === 'bonificacoes'   && <TabBonificacoes   isAdmin={admin} />}
                     {tab === 'empresas'       && <TabEmpresas       isAdmin={admin} />}
                     {tab === 'configuracoes'  && <TabConfiguracoes  isAdmin={admin} />}
                 </div>

@@ -185,7 +185,7 @@ export default function CarreteiroDashboard() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-xl mx-auto px-4 tab:px-6 lg:px-8 py-6">
+                <div className="max-w-screen-xl mx-auto px-3 sm:px-4 tab:px-6 lg:px-8 py-4 sm:py-6">
                     <BreadcrumbTrail className="mb-4" />
 
                     {/* Header */}
@@ -208,21 +208,21 @@ export default function CarreteiroDashboard() {
                             <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
                                 {PERIOD_OPTIONS.map(p => (
                                     <button key={p.days} onClick={() => setPeriod(p.days)}
-                                        className="px-3 py-2 text-xs font-caption font-medium transition-colors"
+                                        className="px-2 sm:px-3 py-2 text-xs font-caption font-medium transition-colors"
                                         style={period === p.days ? { backgroundColor: 'var(--color-primary)', color: '#fff' } : { backgroundColor: 'white', color: 'var(--color-muted-foreground)' }}>
                                         {p.label}
                                     </button>
                                 ))}
                             </div>
-                            <button onClick={exportar} className="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-colors hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                            <button onClick={exportar} className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg border text-xs font-medium transition-colors hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
                                 <Icon name="FileDown" size={14} color="currentColor" />
-                                Exportar
+                                <span className="hidden sm:inline">Exportar</span>
                             </button>
                         </div>
                     </div>
 
                     {/* KPIs */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
                         {[
                             { l: 'Total de Viagens',  v: totais.viagens,     i: 'Navigation', c: '#1D4ED8', bg: '#EFF6FF' },
                             { l: 'Finalizadas',       v: totais.finalizadas, i: 'CheckCircle2', c: '#059669', bg: '#D1FAE5' },
@@ -242,7 +242,7 @@ export default function CarreteiroDashboard() {
                     </div>
 
                     {/* Ações rápidas */}
-                    <div className="grid grid-cols-2 gap-3 mb-6">
+                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 mb-6">
                         <button onClick={() => { setFormAbast({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' }); setModalAbast(true); }}
                             className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5"
                             style={{ borderColor: 'var(--color-border)' }}>
@@ -250,8 +250,8 @@ export default function CarreteiroDashboard() {
                                 <Icon name="Fuel" size={20} color="#059669" />
                             </div>
                             <div className="text-left">
-                                <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Registrar Abastecimento</p>
-                                <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Diesel + Arla</p>
+                                <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Abastecimento</p>
+                                <p className="text-xs hidden sm:block" style={{ color: 'var(--color-muted-foreground)' }}>Diesel + Arla</p>
                             </div>
                         </button>
                         <button onClick={() => { setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '' }); setModalCheck(true); }}
@@ -268,11 +268,12 @@ export default function CarreteiroDashboard() {
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex border-b mb-5 overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                    {/* Tabs — scroll horizontal no mobile */}
+                    <div className="flex border-b mb-5 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0" style={{ borderColor: 'var(--color-border)' }}>
                         {TABS.map(t => (
                             <button key={t.id} onClick={() => setTab(t.id)}
-                                className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium font-caption border-b-2 whitespace-nowrap transition-colors ${tab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                                <Icon name={t.icon} size={15} color="currentColor" />
+                                className={`flex items-center gap-1.5 px-3 sm:px-4 py-3 text-xs sm:text-sm font-medium font-caption border-b-2 whitespace-nowrap transition-colors flex-shrink-0 ${tab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                                <Icon name={t.icon} size={14} color="currentColor" />
                                 {t.label}
                             </button>
                         ))}
@@ -286,43 +287,35 @@ export default function CarreteiroDashboard() {
                         <>
                             {/* Tab Viagens */}
                             {tab === 'viagens' && (
-                                <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                                    <table className="w-full text-sm">
-                                        <thead className="text-xs font-caption border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                            <tr>
-                                                <th className="px-4 py-3 text-left font-medium">Nº Viagem</th>
-                                                <th className="px-4 py-3 text-left font-medium">Status</th>
-                                                <th className="px-4 py-3 text-left font-medium">Destino</th>
-                                                <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Data</th>
-                                                <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Placa</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {viagensComBonus.length === 0 ? (
-                                                <tr><td colSpan={5} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</td></tr>
-                                            ) : viagensComBonus.map((v, i) => {
-                                                const sc = STATUS_COLORS[v.status] || STATUS_COLORS['Agendado'];
-                                                return (
-                                                    <tr key={v.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                                        <td className="px-4 py-3 font-medium text-blue-700 font-data">{v.numero}</td>
-                                                        <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{v.status}</span></td>
-                                                        <td className="px-4 py-3">{v.destino || '—'}</td>
-                                                        <td className="px-4 py-3 text-xs hidden md:table-cell" style={{ color: 'var(--color-muted-foreground)' }}>{FMT_DATE(v.data_saida)}</td>
-                                                        <td className="px-4 py-3 font-data text-xs hidden md:table-cell">{v.veiculo?.placa || '—'}</td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
+                                <div className="flex flex-col gap-2">
+                                    {viagensComBonus.length === 0
+                                        ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</div>
+                                        : viagensComBonus.map(v => {
+                                            const sc = STATUS_COLORS[v.status] || STATUS_COLORS['Agendado'];
+                                            return (
+                                                <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <span className="font-bold text-blue-700 font-data">{v.numero}</span>
+                                                        <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{v.status}</span>
+                                                    </div>
+                                                    <p className="font-medium text-sm mb-1" style={{ color: 'var(--color-text-primary)' }}>{v.destino || '—'}</p>
+                                                    <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                        <span>{FMT_DATE(v.data_saida)}</span>
+                                                        {v.veiculo?.placa && <span className="font-data">{v.veiculo.placa}</span>}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    }
                                 </div>
                             )}
 
                             {/* Tab Bonificações */}
                             {tab === 'bonificacoes' && (
                                 <div className="flex flex-col gap-4">
-                                    <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                        <h3 className="font-heading font-semibold text-sm mb-4" style={{ color: 'var(--color-text-primary)' }}>Resumo do Período</h3>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                                    <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                        <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: 'var(--color-text-primary)' }}>Resumo do Período</h3>
+                                        <div className="grid grid-cols-2 gap-3 mb-4">
                                             <div>
                                                 <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Total Bônus</p>
                                                 <p className="text-2xl font-bold font-data text-purple-600">{BRL(totais.totalBonus)}</p>
@@ -350,32 +343,20 @@ export default function CarreteiroDashboard() {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                                        <div className="px-5 py-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                                            <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Detalhamento por Viagem</h3>
-                                        </div>
-                                        <table className="w-full text-sm">
-                                            <thead className="text-xs font-caption border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                                <tr>
-                                                    <th className="px-4 py-2 text-left font-medium">Nº Viagem</th>
-                                                    <th className="px-4 py-2 text-left font-medium">Destino</th>
-                                                    <th className="px-4 py-2 text-left font-medium hidden sm:table-cell">Data</th>
-                                                    <th className="px-4 py-2 text-right font-medium">Bônus</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {viagensComBonus.filter(v => v.status === 'Entrega finalizada').length === 0 ? (
-                                                    <tr><td colSpan={4} className="text-center py-8 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem finalizada no período</td></tr>
-                                                ) : viagensComBonus.filter(v => v.status === 'Entrega finalizada').map((v, i) => (
-                                                    <tr key={v.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                                        <td className="px-4 py-2.5 font-data text-xs font-medium text-blue-700">{v.numero}</td>
-                                                        <td className="px-4 py-2.5 text-xs">{v.destino || '—'}</td>
-                                                        <td className="px-4 py-2.5 text-xs hidden sm:table-cell" style={{ color: 'var(--color-muted-foreground)' }}>{FMT_DATE(v.data_saida)}</td>
-                                                        <td className="px-4 py-2.5 text-right font-data font-semibold text-purple-600">{BRL(v.bonus)}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                    <div className="flex flex-col gap-2">
+                                        <p className="text-sm font-semibold px-1" style={{ color: 'var(--color-text-secondary)' }}>Detalhamento por Viagem</p>
+                                        {viagensComBonus.filter(v => v.status === 'Entrega finalizada').length === 0
+                                            ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem finalizada</div>
+                                            : viagensComBonus.filter(v => v.status === 'Entrega finalizada').map(v => (
+                                                <div key={v.id} className="bg-white rounded-xl border p-3 flex items-center justify-between shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                    <div>
+                                                        <span className="font-data font-bold text-blue-700 text-sm">{v.numero}</span>
+                                                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{v.destino || '—'} · {FMT_DATE(v.data_saida)}</p>
+                                                    </div>
+                                                    <span className="font-data font-bold text-purple-600">{BRL(v.bonus)}</span>
+                                                </div>
+                                            ))
+                                        }
                                     </div>
                                 </div>
                             )}
@@ -383,40 +364,34 @@ export default function CarreteiroDashboard() {
                             {/* Tab Abastecimentos */}
                             {tab === 'abastecimentos' && (
                                 <div>
-                                    <div className="grid grid-cols-2 gap-4 mb-5">
-                                        <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                            <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Diesel Total</p>
-                                            <p className="text-xl font-bold font-data text-blue-600">{totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L</p>
+                                    <div className="grid grid-cols-2 gap-3 mb-4">
+                                        <div className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                            <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Diesel Total</p>
+                                            <p className="text-lg font-bold font-data text-blue-600">{totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L</p>
                                         </div>
-                                        <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                            <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Gasto Total</p>
-                                            <p className="text-xl font-bold font-data text-purple-600">{BRL(totais.gastoTotal)}</p>
+                                        <div className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                            <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Gasto Total</p>
+                                            <p className="text-lg font-bold font-data text-purple-600">{BRL(totais.gastoTotal)}</p>
                                         </div>
                                     </div>
-                                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                                        <table className="w-full text-sm">
-                                            <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left font-medium">Data</th>
-                                                    <th className="px-4 py-3 text-left font-medium">Placa</th>
-                                                    <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Posto</th>
-                                                    <th className="px-4 py-3 text-right font-medium">Diesel (L)</th>
-                                                    <th className="px-4 py-3 text-right font-medium">Total R$</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {abast.length === 0 ? <tr><td colSpan={5} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento no período</td></tr>
-                                                : abast.map((a, i) => (
-                                                    <tr key={a.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                                        <td className="px-4 py-3">{FMT_DATE(a.data_abastecimento)}</td>
-                                                        <td className="px-4 py-3 font-data">{a.veiculo?.placa || '—'}</td>
-                                                        <td className="px-4 py-3 text-xs hidden md:table-cell">{a.posto || '—'}</td>
-                                                        <td className="px-4 py-3 text-right font-data">{Number(a.litros_diesel || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
-                                                        <td className="px-4 py-3 text-right font-data font-semibold text-purple-600">{BRL(a.valor_total)}</td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                    <div className="flex flex-col gap-2">
+                                        {abast.length === 0
+                                            ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento no período</div>
+                                            : abast.map(a => (
+                                                <div key={a.id} className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{FMT_DATE(a.data_abastecimento)}</span>
+                                                        <span className="font-data font-bold text-purple-600">{BRL(a.valor_total)}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                        <span className="font-data">{a.veiculo?.placa || '—'}</span>
+                                                        {a.posto && <span>{a.posto}</span>}
+                                                        <span className="text-blue-600">{Number(a.litros_diesel || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L diesel</span>
+                                                        {Number(a.litros_arla) > 0 && <span className="text-emerald-600">{Number(a.litros_arla).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L arla</span>}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        }
                                     </div>
                                 </div>
                             )}
