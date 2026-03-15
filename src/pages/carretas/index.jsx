@@ -1477,31 +1477,43 @@ function TabOrdensServico({ isAdmin, profile }) {
                     </div>
                 </ModalOverlay>
             )}
-            {/* Viewer de PDF in-app */}
+            {/* Viewer de PDF in-app — header fixo sempre visível */}
             {viewPdf && (
-                <div className="fixed inset-0 z-50 flex flex-col" style={{ backgroundColor: '#1a1a1a' }}>
-                    <div className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: '#111827' }}>
-                        <div className="flex items-center gap-3">
-                            <button onClick={() => setViewPdf(null)}
-                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-white"
-                                style={{ backgroundColor: '#374151' }}>
-                                <Icon name="ArrowLeft" size={16} color="white" />
-                                Voltar
-                            </button>
-                            <span className="text-white text-sm font-medium">Ordem de Serviço — PDF</span>
-                        </div>
-                        <button onClick={() => setViewPdf(null)} className="p-1.5 rounded hover:bg-gray-700 text-gray-400">
-                            <Icon name="X" size={20} color="currentColor" />
+                <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{
+                        position: 'relative', zIndex: 10000, flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 16px', backgroundColor: '#111827',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                    }}>
+                        <button
+                            onClick={() => setViewPdf(null)}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 8,
+                                padding: '8px 16px', borderRadius: 8,
+                                backgroundColor: '#2563EB', color: 'white',
+                                border: 'none', cursor: 'pointer',
+                                fontSize: 14, fontWeight: 600,
+                            }}>
+                            ← Voltar às Ordens de Serviço
+                        </button>
+                        <span style={{ color: '#9CA3AF', fontSize: 13 }}>Ordem de Serviço — PDF</span>
+                        <button
+                            onClick={() => setViewPdf(null)}
+                            style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                width: 32, height: 32, borderRadius: 6,
+                                backgroundColor: '#374151', color: 'white',
+                                border: 'none', cursor: 'pointer', fontSize: 18,
+                            }}>
+                            ✕
                         </button>
                     </div>
-                    <div className="flex-1 overflow-auto flex items-start justify-center p-4">
-                        <object data={viewPdf} type="application/pdf" className="w-full rounded-lg" style={{ minHeight: '80vh', maxWidth: 900 }}>
-                            <div className="flex flex-col items-center justify-center h-64 text-white gap-3">
-                                <Icon name="FileText" size={48} color="#9CA3AF" />
-                                <p className="text-gray-300 text-sm text-center">Não foi possível exibir o PDF.</p>
-                            </div>
-                        </object>
-                    </div>
+                    <iframe
+                        src={viewPdf}
+                        title="Ordem de Serviço"
+                        style={{ flex: 1, border: 'none', width: '100%', backgroundColor: '#1a1a1a' }}
+                    />
                 </div>
             )}
             <Toast toast={toast} />
