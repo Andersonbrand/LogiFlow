@@ -21,6 +21,7 @@ const ROLE_CONFIG = {
     operador:          { label: 'Operador',             color: '#1D4ED8', bg: '#DBEAFE' },
     motorista:         { label: 'Motorista',            color: '#065F46', bg: '#D1FAE5' },
     motorista_carreta: { label: 'Motorista (Carreta)',  color: '#B45309', bg: '#FEF3C7' },
+    mecanico:          { label: 'Mecânico',             color: '#059669', bg: '#D1FAE5' },
 };
 
 // Determina a chave de exibicao do usuario (trata role legado 'carreteiro')
@@ -28,6 +29,7 @@ function getRoleKey(u) {
     if (!u) return 'operador';
     if (u.role === 'carreteiro') return 'motorista_carreta';
     if (u.role === 'motorista' && u.tipo_veiculo === 'carreta') return 'motorista_carreta';
+    if (u.role === 'mecanico') return 'mecanico';
     return ROLE_CONFIG[u.role] ? u.role : 'operador';
 }
 
@@ -235,6 +237,7 @@ export default function AdminPanel() {
                                                         <option value="operador">Operador</option>
                                                         <option value="motorista">Motorista (Caminhão)</option>
                                                         <option value="motorista_carreta">Motorista (Carreta)</option>
+                                                        <option value="mecanico">Mecânico</option>
                                                     </select>
                                                 </td>
                                             </tr>

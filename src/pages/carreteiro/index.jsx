@@ -10,7 +10,8 @@ import {
     fetchViagens, fetchCarretasVeiculos,
     fetchAbastecimentos, createAbastecimento,
     fetchChecklists, createChecklist,
-    fetchCarregamentos, fetchConfigAbastecimento,
+    fetchRegistrosViagem, createRegistroViagem,
+    fetchConfigAbastecimento,
     calcularBonusCarreteiro, BONUS_BAIXO, BONUS_ALTO, CIDADES_BONUS_BAIXO,
     CHECKLIST_ITENS,
 } from 'utils/carretasService';
@@ -87,6 +88,9 @@ export default function CarreteiroDashboard() {
     const [veiculos, setVeiculos] = useState([]);
     const [loading, setLoading]   = useState(true);
     const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
+    const [registros, setRegistros] = useState([]);
+    const [modalRegistro, setModalRegistro] = useState(false);
+    const [formRegistro, setFormRegistro] = useState({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' });
     const [modalAbast, setModalAbast]   = useState(false);
     const [modalCheck, setModalCheck]   = useState(false);
     const [formAbast, setFormAbast]     = useState({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' });
@@ -108,6 +112,11 @@ export default function CarreteiroDashboard() {
             ]);
             setViagens(v); setAbast(a); setChecklists(c); setVeiculos(ve);
             setConfigAbast(cfg || { preco_diesel: 0, preco_arla: 0 });
+            // Carrega registros de viagem do motorista
+            try {
+                const regs = await fetchRegistrosViagem(user.id);
+                setRegistros(regs || []);
+            } catch { setRegistros([]); }
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [user?.id, period]); // eslint-disable-line
@@ -121,6 +130,7 @@ export default function CarreteiroDashboard() {
             bonus: v.status === 'Entrega finalizada' ? calcularBonusCarreteiro(v.destino) : 0,
         }))
     , [viagens]);
+
 
     const totais = useMemo(() => ({
         viagens: viagens.length,
@@ -177,6 +187,7 @@ export default function CarreteiroDashboard() {
     const TABS = [
         { id: 'viagens',       label: 'Minhas Viagens',    icon: 'Navigation' },
         { id: 'bonificacoes',  label: 'Bonificações',      icon: 'DollarSign' },
+        { id: 'registros',     label: 'Registrar Viagem',  icon: 'FilePlus' },
         { id: 'abastecimentos',label: 'Abastecimentos',    icon: 'Fuel' },
         { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck' },
     ];
@@ -310,9 +321,10 @@ export default function CarreteiroDashboard() {
                                 </div>
                             )}
 
-                            {/* Tab Bonificações */}
+                                                    {/* Tab Bonificações */}
                             {tab === 'bonificacoes' && (
                                 <div className="flex flex-col gap-4">
+                                    {/* Resumo */}
                                     <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                         <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: 'var(--color-text-primary)' }}>Resumo do Período</h3>
                                         <div className="grid grid-cols-2 gap-3 mb-4">
@@ -324,34 +336,21 @@ export default function CarreteiroDashboard() {
                                                 <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Viagens Finalizadas</p>
                                                 <p className="text-2xl font-bold font-data" style={{ color: 'var(--color-text-primary)' }}>{totais.finalizadas}</p>
                                             </div>
-                                            <div>
-                                                <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Total Viagens</p>
-                                                <p className="text-2xl font-bold font-data" style={{ color: 'var(--color-text-primary)' }}>{totais.viagens}</p>
-                                            </div>
                                         </div>
-                                        <div className="p-3 rounded-xl text-xs" style={{ backgroundColor: '#F8FAFC' }}>
-                                            <p className="font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>Tabela de bônus por descarga:</p>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div className="p-2 rounded-lg bg-amber-50 border border-amber-200">
-                                                    <p className="font-semibold text-amber-700">{BRL(BONUS_BAIXO)} por viagem</p>
-                                                    <p className="text-amber-600 mt-0.5">Urandi, Pindaí, Candiba, Pilões, Guanambi (estoque)</p>
-                                                </div>
-                                                <div className="p-2 rounded-lg bg-green-50 border border-green-200">
-                                                    <p className="font-semibold text-green-700">{BRL(BONUS_ALTO)} por viagem</p>
-                                                    <p className="text-green-600 mt-0.5">Demais cidades da rota</p>
-                                                </div>
-                                            </div>
-                                        </div>
+
                                     </div>
+                                    {/* Detalhamento por viagem */}
                                     <div className="flex flex-col gap-2">
-                                        <p className="text-sm font-semibold px-1" style={{ color: 'var(--color-text-secondary)' }}>Detalhamento por Viagem</p>
+                                        <p className="text-sm font-semibold px-1" style={{ color: 'var(--color-text-secondary)' }}>Detalhamento por viagem finalizada</p>
                                         {viagensComBonus.filter(v => v.status === 'Entrega finalizada').length === 0
-                                            ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem finalizada</div>
+                                            ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem finalizada no período</div>
                                             : viagensComBonus.filter(v => v.status === 'Entrega finalizada').map(v => (
                                                 <div key={v.id} className="bg-white rounded-xl border p-3 flex items-center justify-between shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                     <div>
                                                         <span className="font-data font-bold text-blue-700 text-sm">{v.numero}</span>
-                                                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{v.destino || '—'} · {FMT_DATE(v.data_saida)}</p>
+                                                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                            {v.destino || '—'} · {v.data_saida ? new Date(v.data_saida + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                                                        </p>
                                                     </div>
                                                     <span className="font-data font-bold text-purple-600">{BRL(v.bonus)}</span>
                                                 </div>
@@ -360,8 +359,40 @@ export default function CarreteiroDashboard() {
                                     </div>
                                 </div>
                             )}
-
-                            {/* Tab Abastecimentos */}
+                        {/* Tab Registrar Viagem */}
+                            {tab === 'registros' && (
+                                <div>
+                                    <div className="flex justify-end mb-4">
+                                        <Button onClick={() => { setFormRegistro({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' }); setModalRegistro(true); }} iconName="Plus" size="sm">
+                                            Nova Entrada
+                                        </Button>
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                        {registros.length === 0
+                                            ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem registrada</div>
+                                            : registros.map(r => (
+                                                <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <div>
+                                                            <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
+                                                            <p className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{r.veiculo?.placa || '—'}</p>
+                                                        </div>
+                                                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                                                            {r.data_carregamento ? new Date(r.data_carregamento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                        {r.numero_nota_fiscal && <span>NF: <strong>{r.numero_nota_fiscal}</strong></span>}
+                                                        {r.data_descarga && <span>Descarga: <strong>{new Date(r.data_descarga + 'T00:00:00').toLocaleDateString('pt-BR')}</strong></span>}
+                                                    </div>
+                                                    {r.observacoes && <p className="text-xs mt-2 text-gray-500">{r.observacoes}</p>}
+                                                </div>
+                                            ))
+                                        }
+                                    </div>
+                                </div>
+                            )}
+                        {/* Tab Abastecimentos */}
                             {tab === 'abastecimentos' && (
                                 <div>
                                     <div className="grid grid-cols-2 gap-3 mb-4">
@@ -521,6 +552,81 @@ export default function CarreteiroDashboard() {
                         <Button onClick={handleCheck} size="sm" iconName="Send">Enviar</Button>
                     </div>
                 </ModalOverlay>
+            )}
+
+            {/* Modal Registrar Viagem */}
+            {modalRegistro && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                    onClick={e => e.target === e.currentTarget && setModalRegistro(false)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
+                                    <Icon name="FilePlus" size={18} color="#1D4ED8" />
+                                </div>
+                                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>Registrar Viagem</h2>
+                            </div>
+                            <button onClick={() => setModalRegistro(false)} className="p-1.5 rounded-lg hover:bg-gray-100">
+                                <Icon name="X" size={18} color="var(--color-muted-foreground)" />
+                            </button>
+                        </div>
+                        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de carregamento <span className="text-red-500">*</span></label>
+                                <input type="date" value={formRegistro.data_carregamento}
+                                    onChange={e => setFormRegistro(f => ({ ...f, data_carregamento: e.target.value }))}
+                                    className={inputCls} style={inputStyle} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Nº da Nota Fiscal</label>
+                                <input value={formRegistro.numero_nota_fiscal}
+                                    onChange={e => setFormRegistro(f => ({ ...f, numero_nota_fiscal: e.target.value }))}
+                                    className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Placa do veículo <span className="text-red-500">*</span></label>
+                                <select value={formRegistro.veiculo_id}
+                                    onChange={e => setFormRegistro(f => ({ ...f, veiculo_id: e.target.value }))}
+                                    className={inputCls} style={inputStyle}>
+                                    <option value="">Selecione...</option>
+                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Destino da carga <span className="text-red-500">*</span></label>
+                                <input value={formRegistro.destino}
+                                    onChange={e => setFormRegistro(f => ({ ...f, destino: e.target.value }))}
+                                    className={inputCls} style={inputStyle} placeholder="Estoque ou cidade" />
+                            </div>
+                            <div className="sm:col-span-2">
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de descarga</label>
+                                <input type="date" value={formRegistro.data_descarga}
+                                    onChange={e => setFormRegistro(f => ({ ...f, data_descarga: e.target.value }))}
+                                    className={inputCls} style={inputStyle} />
+                            </div>
+                            <div className="sm:col-span-2">
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Observações</label>
+                                <textarea value={formRegistro.observacoes}
+                                    onChange={e => setFormRegistro(f => ({ ...f, observacoes: e.target.value }))}
+                                    className={inputCls} style={inputStyle} rows={2} />
+                            </div>
+                        </div>
+                        <div className="flex gap-3 p-5 pt-0 justify-end">
+                            <button onClick={() => setModalRegistro(false)}
+                                className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50"
+                                style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <Button onClick={async () => {
+                                if (!formRegistro.data_carregamento || !formRegistro.destino) { showToast('Data e destino são obrigatórios', 'error'); return; }
+                                try {
+                                    await createRegistroViagem({ ...formRegistro, motorista_id: user.id });
+                                    showToast('Viagem registrada!', 'success');
+                                    setModalRegistro(false); load();
+                                } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+                            }} size="sm" iconName="Check">Salvar</Button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             <Toast toast={toast} />

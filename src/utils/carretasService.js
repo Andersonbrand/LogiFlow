@@ -402,3 +402,150 @@ export async function fetchTodosMotoristas() {
     if (error) throw error;
     return data || [];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REGISTROS DE VIAGEM (preenchido pelo carreteiro)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchRegistrosViagem(motoristaId) {
+    const q = supabase
+        .from('carretas_registros_viagem')
+        .select('*, veiculo:veiculo_id(id, placa, modelo)')
+        .order('data_carregamento', { ascending: false });
+    if (motoristaId) q.eq('motorista_id', motoristaId);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createRegistroViagem(registro) {
+    const { data, error } = await supabase
+        .from('carretas_registros_viagem')
+        .insert(registro)
+        .select('*, veiculo:veiculo_id(id, placa, modelo)')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function fetchAllRegistrosViagem(filters = {}) {
+    let q = supabase
+        .from('carretas_registros_viagem')
+        .select('*, motorista:motorista_id(id, name), veiculo:veiculo_id(id, placa, modelo)')
+        .order('data_carregamento', { ascending: false });
+    if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
+    if (filters.dataInicio)  q = q.gte('data_carregamento', filters.dataInicio);
+    if (filters.dataFim)     q = q.lte('data_carregamento', filters.dataFim);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICAÇÕES DO CARRETEIRO (checklist aprovado/reprovado)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function createNotificacaoCarreteiro(userId, tipo, titulo, mensagem) {
+    const { error } = await supabase
+        .from('notifications')
+        .insert({ user_id: userId, tipo, mensagem: titulo + '||' + mensagem, lida: false });
+    if (error) throw error;
+}
+
+export async function aprovarChecklistComNotificacao(id, adminId, motoristaId) {
+    const { data, error } = await supabase
+        .from('carretas_checklists')
+        .update({ aprovado: true, aprovado_por: adminId, aprovado_em: new Date().toISOString() })
+        .eq('id', id).select().single();
+    if (error) throw error;
+    // Envia notificação ao motorista
+    if (motoristaId) {
+        await createNotificacaoCarreteiro(motoristaId, 'checklist_aprovado',
+            '✅ Checklist Aprovado',
+            'Seu checklist semanal foi aprovado pelo administrador.');
+    }
+    return data;
+}
+
+export async function reprovarChecklistComNotificacao(id, adminId, motoristaId, motivo) {
+    const { data, error } = await supabase
+        .from('carretas_checklists')
+        .update({ aprovado: false, manutencao_registrada: true, obs_manutencao: motivo })
+        .eq('id', id).select().single();
+    if (error) throw error;
+    if (motoristaId) {
+        await createNotificacaoCarreteiro(motoristaId, 'checklist_reprovado',
+            '⚠️ Manutenção Necessária',
+            motivo || 'O administrador registrou necessidade de manutenção no seu veículo.');
+    }
+    return data;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORDENS DE SERVIÇO (mecânico)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchOrdensServico(filters = {}) {
+    let q = supabase
+        .from('carretas_ordens_servico')
+        .select('*, veiculo:veiculo_id(id, placa, modelo), mecanico:mecanico_id(id, name)')
+        .order('created_at', { ascending: false });
+    if (filters.mecanicoId) q = q.eq('mecanico_id', filters.mecanicoId);
+    if (filters.status)     q = q.eq('status', filters.status);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createOrdemServico(ordem) {
+    const { data, error } = await supabase
+        .from('carretas_ordens_servico')
+        .insert({ ...ordem, status: 'Pendente' })
+        .select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updateOrdemServico(id, updates) {
+    const { data, error } = await supabase
+        .from('carretas_ordens_servico')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function finalizarOrdemServico(id, mecanicoId, observacoes) {
+    const { data, error } = await supabase
+        .from('carretas_ordens_servico')
+        .update({
+            status: 'Finalizada',
+            finalizada_por: mecanicoId,
+            finalizada_em: new Date().toISOString(),
+            obs_finalizacao: observacoes,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function reportarProblemaOS(id, problema) {
+    const { data, error } = await supabase
+        .from('carretas_ordens_servico')
+        .update({
+            status: 'Problema Reportado',
+            problema_encontrado: problema,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function fetchMecanicos() {
+    const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, name, role')
+        .eq('role', 'mecanico')
+        .order('name');
+    if (error) throw error;
+    return data || [];
+}

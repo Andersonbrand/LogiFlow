@@ -2,7 +2,7 @@ import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route } from "react-router-dom";
 import ScrollToTop    from "components/ScrollToTop";
 import ErrorBoundary  from "components/ErrorBoundary";
-import ProtectedRoute, { AdminRoute, StaffRoute, MotoristaRoute, CarreteiroRoute } from "components/ProtectedRoute";
+import ProtectedRoute, { AdminRoute, StaffRoute, MotoristaRoute, CarreteiroRoute, MecanicoRoute } from "components/ProtectedRoute";
 import { AuthProvider } from "utils/AuthContext";
 
 import NotFound              from "pages/NotFound";
@@ -19,6 +19,7 @@ import MotoristaDashboard    from "pages/motorista";
 import ResetPassword         from "pages/reset-password";
 import CarretasPage          from "pages/carretas";
 import CarreteiroDashboard   from "pages/carreteiro";
+import MecanicoPage          from "pages/mecanico";
 
 const Routes = () => (
     <BrowserRouter>
@@ -50,6 +51,9 @@ const Routes = () => (
 
                     {/* Rota do carreteiro */}
                     <Route path="/carreteiro"               element={<CarreteiroRoute><CarreteiroDashboard /></CarreteiroRoute>} />
+
+                    {/* Rota do mecânico */}
+                    <Route path="/mecanico"                 element={<MecanicoRoute><MecanicoPage /></MecanicoRoute>} />
 
                     <Route path="*" element={<NotFound />} />
                 </RouterRoutes>

@@ -20,6 +20,8 @@ const NAV_ITEMS = [
     { id: 'motorista',    name: 'Minhas Viagens', path: '/motorista',             icon: 'Truck',           roles: ['motorista'] },
     // Carreteiro
     { id: 'carreteiro',   name: 'Minhas Viagens', path: '/carreteiro',            icon: 'Truck',           roles: ['carreteiro'] },
+    // Mecânico
+    { id: 'mecanico',     name: 'Ordens de Serviço', path: '/mecanico',           icon: 'Wrench',          roles: ['mecanico'] },
 ];
 
 export default function NavigationBar() {
@@ -48,6 +50,8 @@ export default function NavigationBar() {
         if (item.path === '/motorista' && isCarretaUser) return false;
         // /carreteiro aparece SOMENTE para carreteiros
         if (item.path === '/carreteiro') return isCarretaUser;
+        // /mecanico aparece SOMENTE para mecânicos
+        if (item.path === '/mecanico') return role === 'mecanico';
         return item.roles.includes(role);
     });
 

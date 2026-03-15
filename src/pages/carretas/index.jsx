@@ -17,6 +17,9 @@ import {
     fetchCarreteiros, fetchTodosMotoristas,
     fetchConfigAbastecimento, saveConfigAbastecimento,
     CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
+    aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
+    fetchOrdensServico, createOrdemServico, updateOrdemServico,
+    fetchMecanicos,
     CIDADES_BONUS_BAIXO, BONUS_BAIXO, BONUS_ALTO,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
@@ -561,14 +564,20 @@ function TabChecklist({ isAdmin, profile }) {
             showToast('Checklist enviado!', 'success'); setModal(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
-    const handleAprovar = async (id) => {
-        try { await aprovarChecklist(id, profile.id); showToast('Aprovado!', 'success'); load(); }
-        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    const handleAprovar = async (c) => {
+        try {
+            await aprovarChecklistComNotificacao(c.id, profile.id, c.motorista_id);
+            showToast('Aprovado! Motorista notificado.', 'success'); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleManutencao = async () => {
         if (!obsManut.trim()) { showToast('Descreva a manutenção', 'error'); return; }
-        try { await registrarManutencaoChecklist(modalManut, obsManut); showToast('Manutenção registrada!', 'success'); setModalManut(null); setObsManut(''); load(); }
-        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        const checklist = checklists.find(c => c.id === modalManut);
+        try {
+            await reprovarChecklistComNotificacao(modalManut, profile.id, checklist?.motorista_id, obsManut);
+            showToast('Manutenção registrada! Motorista notificado.', 'success');
+            setModalManut(null); setObsManut(''); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
     return (
@@ -636,7 +645,7 @@ function TabChecklist({ isAdmin, profile }) {
                                 )}
                                 {isAdmin && !c.aprovado && (
                                     <div className="flex gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
-                                        <button onClick={() => handleAprovar(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"><Icon name="CheckCircle2" size={13} />Aprovar</button>
+                                        <button onClick={() => handleAprovar(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"><Icon name="CheckCircle2" size={13} />Aprovar</button>
                                         <button onClick={() => { setModalManut(c.id); setObsManut(''); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-orange-300 text-orange-700 hover:bg-orange-50 transition-colors"><Icon name="Wrench" size={13} />Registrar Manutenção</button>
                                     </div>
                                 )}
@@ -1278,6 +1287,196 @@ function TabConfiguracoes({ isAdmin }) {
     );
 }
 
+// ─── TAB: Ordens de Serviço ───────────────────────────────────────────────────
+function TabOrdensServico({ isAdmin, profile }) {
+    const { toast, showToast } = useToast();
+    const [ordens, setOrdens]     = useState([]);
+    const [veiculos, setVeiculos] = useState([]);
+    const [mecanicos, setMecanicos] = useState([]);
+    const [loading, setLoading]   = useState(true);
+    const [filtroStatus, setFiltroStatus] = useState('');
+    const [modal, setModal]       = useState(false);
+    const [pdfFile, setPdfFile]   = useState(null);
+    const [uploading, setUploading] = useState(false);
+    const [form, setForm] = useState({
+        veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '',
+    });
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [o, v, m] = await Promise.all([
+                fetchOrdensServico(filtroStatus ? { status: filtroStatus } : {}),
+                fetchCarretasVeiculos(),
+                fetchMecanicos(),
+            ]);
+            setOrdens(o); setVeiculos(v); setMecanicos(m);
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    }, [filtroStatus]); // eslint-disable-line
+    useEffect(() => { load(); }, [load]);
+
+    const handlePdfChange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.type !== 'application/pdf') { showToast('Somente arquivos PDF são aceitos', 'error'); return; }
+        if (file.size > 5 * 1024 * 1024) { showToast('PDF deve ter menos de 5MB', 'error'); return; }
+        setPdfFile(file);
+        // Convert to base64 data URL for storage
+        const reader = new FileReader();
+        reader.onload = (ev) => setForm(f => ({ ...f, pdf_url: ev.target.result }));
+        reader.readAsDataURL(file);
+    };
+
+    const handleCreate = async () => {
+        if (!form.veiculo_id || !form.descricao) { showToast('Veículo e descrição são obrigatórios', 'error'); return; }
+        setUploading(true);
+        try {
+            await createOrdemServico(form);
+            showToast('Ordem de serviço criada!', 'success');
+            setModal(false); setPdfFile(null);
+            setForm({ veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '' });
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setUploading(false); }
+    };
+
+    const STATUS_OS = ['Pendente', 'Em Andamento', 'Problema Reportado', 'Finalizada'];
+    const STATUS_COLORS_OS = {
+        'Pendente':           { bg: '#FEF9C3', text: '#B45309' },
+        'Em Andamento':       { bg: '#DBEAFE', text: '#1D4ED8' },
+        'Finalizada':         { bg: '#D1FAE5', text: '#065F46' },
+        'Problema Reportado': { bg: '#FEE2E2', text: '#B91C1C' },
+    };
+
+    return (
+        <div>
+            <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
+                <div className="flex flex-wrap gap-2">
+                    <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                        <option value="">Todos os status</option>
+                        {STATUS_OS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+                {isAdmin && <Button onClick={() => { setForm({ veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '' }); setPdfFile(null); setModal(true); }} iconName="Plus" size="sm">Nova OS</Button>}
+            </div>
+
+            {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
+                <div className="flex flex-col gap-3">
+                    {ordens.length === 0 && <div className="bg-white rounded-xl border p-10 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma ordem de serviço</div>}
+                    {ordens.map(o => {
+                        const sc = STATUS_COLORS_OS[o.status] || STATUS_COLORS_OS['Pendente'];
+                        return (
+                            <div key={o.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                <div className="flex items-start justify-between mb-3">
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-bold font-data text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                                                OS #{o.id?.slice(0, 8).toUpperCase()}
+                                            </span>
+                                            <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{o.status}</span>
+                                            {o.prioridade === 'Urgente' && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white">URGENTE</span>}
+                                        </div>
+                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            {o.veiculo?.placa || '—'} {o.veiculo?.modelo ? `— ${o.veiculo.modelo}` : ''} · Mecânico: {o.mecanico?.name || '—'}
+                                        </p>
+                                    </div>
+                                    {o.pdf_url && (
+                                        <a href={o.pdf_url} target="_blank" rel="noreferrer"
+                                            className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                                            <Icon name="FileText" size={13} color="#1D4ED8" />PDF
+                                        </a>
+                                    )}
+                                </div>
+                                <div className="p-3 rounded-lg text-sm mb-2" style={{ backgroundColor: '#F8FAFC' }}>
+                                    <p style={{ color: 'var(--color-text-primary)' }}>{o.descricao}</p>
+                                </div>
+                                {o.problema_encontrado && (
+                                    <div className="p-3 rounded-lg text-xs mb-2" style={{ backgroundColor: '#FEF2F2', border: '1px solid #FECACA' }}>
+                                        <p className="font-medium text-red-600 mb-1">⚠️ Problema reportado pelo mecânico:</p>
+                                        <p className="text-red-700">{o.problema_encontrado}</p>
+                                        {isAdmin && o.status === 'Problema Reportado' && (
+                                            <div className="flex gap-2 mt-2">
+                                                <button onClick={async () => { await updateOrdemServico(o.id, { status: 'Em Andamento', problema_encontrado: o.problema_encontrado }); showToast('Retomado!', 'success'); load(); }}
+                                                    className="px-2 py-1 rounded text-xs font-medium bg-blue-600 text-white">Autorizar continuação</button>
+                                                <button onClick={async () => { await updateOrdemServico(o.id, { status: 'Pendente' }); showToast('Devolvida para pendente!', 'success'); load(); }}
+                                                    className="px-2 py-1 rounded text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">Devolver para fila</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {o.obs_finalizacao && (
+                                    <div className="p-3 rounded-lg text-xs" style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+                                        <p className="font-medium text-green-600 mb-1">✅ Finalizada pelo mecânico:</p>
+                                        <p className="text-green-700">{o.obs_finalizacao}</p>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {modal && (
+                <ModalOverlay onClose={() => setModal(false)}>
+                    <ModalHeader title="Nova Ordem de Serviço" icon="Wrench" onClose={() => setModal(false)} />
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Field label="Veículo" required>
+                            <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <option value="">Selecione...</option>
+                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Mecânico responsável">
+                            <select value={form.mecanico_id} onChange={e => setForm(f => ({ ...f, mecanico_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <option value="">Selecione...</option>
+                                {mecanicos.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Prioridade">
+                            <select value={form.prioridade} onChange={e => setForm(f => ({ ...f, prioridade: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <option value="Normal">Normal</option>
+                                <option value="Urgente">Urgente</option>
+                            </select>
+                        </Field>
+                        <div className="sm:col-span-2">
+                            <Field label="Descrição do serviço" required>
+                                <textarea value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
+                                    className={inputCls} style={inputStyle} rows={4}
+                                    placeholder="Descreva o serviço a ser realizado..." />
+                            </Field>
+                        </div>
+                        <div className="sm:col-span-2">
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                                Ordem de serviço em PDF (opcional)
+                            </label>
+                            <label className="flex items-center gap-3 px-4 py-3 rounded-lg border-2 border-dashed cursor-pointer hover:bg-gray-50 transition-colors"
+                                style={{ borderColor: pdfFile ? '#059669' : 'var(--color-border)' }}>
+                                <Icon name="Upload" size={18} color={pdfFile ? '#059669' : 'var(--color-muted-foreground)'} />
+                                <div>
+                                    <p className="text-sm font-medium" style={{ color: pdfFile ? '#059669' : 'var(--color-text-primary)' }}>
+                                        {pdfFile ? pdfFile.name : 'Clique para anexar PDF'}
+                                    </p>
+                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>PDF, máximo 5MB</p>
+                                </div>
+                                <input type="file" accept=".pdf" onChange={handlePdfChange} className="hidden" />
+                            </label>
+                        </div>
+                    </div>
+                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                        <button onClick={() => setModal(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <Button onClick={handleCreate} iconName={uploading ? 'Loader' : 'Send'} size="sm" disabled={uploading}>
+                            {uploading ? 'Enviando...' : 'Criar OS'}
+                        </Button>
+                    </div>
+                </ModalOverlay>
+            )}
+            <Toast toast={toast} />
+        </div>
+    );
+}
+
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
 const TABS = [
     { id: 'viagens',       label: 'Viagens',       icon: 'Navigation' },
@@ -1286,6 +1485,7 @@ const TABS = [
     { id: 'checklist',     label: 'Checklist',      icon: 'ClipboardCheck' },
     { id: 'carregamentos', label: 'Carregamentos',  icon: 'Package' },
     { id: 'bonificacoes',  label: 'Bonificações',   icon: 'Award' },
+    { id: 'ordens',        label: 'Ordens de Serviço', icon: 'Wrench' },
     { id: 'empresas',      label: 'Empresas',       icon: 'Building2' },
     { id: 'configuracoes', label: 'Configurações',  icon: 'Settings' },
 ];
@@ -1330,6 +1530,7 @@ export default function CarretasPage() {
                     {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}
                     {tab === 'carregamentos'  && <TabCarregamentos   isAdmin={admin} />}
                     {tab === 'bonificacoes'   && <TabBonificacoes   isAdmin={admin} />}
+                    {tab === 'ordens'          && <TabOrdensServico  isAdmin={admin} profile={profile} />}
                     {tab === 'empresas'       && <TabEmpresas       isAdmin={admin} />}
                     {tab === 'configuracoes'  && <TabConfiguracoes  isAdmin={admin} />}
                 </div>

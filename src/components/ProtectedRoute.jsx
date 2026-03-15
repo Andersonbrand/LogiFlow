@@ -59,7 +59,11 @@ export function StaffRoute({ children }) {
     if (!ready) return <Spinner />;
     if (!user) return <Navigate to="/login" replace />;
     const isCarretaUser = profile?.role === 'carreteiro' || (profile?.role === 'motorista' && profile?.tipo_veiculo === 'carreta');
-    if (!['admin', 'operador'].includes(profile?.role)) return <Navigate to={isCarretaUser ? '/carreteiro' : '/motorista'} replace />;
+    if (!['admin', 'operador'].includes(profile?.role)) {
+        if (isCarretaUser) return <Navigate to="/carreteiro" replace />;
+        if (profile?.role === 'mecanico') return <Navigate to="/mecanico" replace />;
+        return <Navigate to="/motorista" replace />;
+    }
     return children;
 }
 
@@ -79,6 +83,14 @@ export function CarreteiroRoute({ children }) {
     if (!user) return <Navigate to="/login" replace />;
     const isCarreta = profile?.role === 'carreteiro' || (profile?.role === 'motorista' && profile?.tipo_veiculo === 'carreta');
     if (!isCarreta) return <Navigate to="/" replace />;
+    return children;
+}
+
+export function MecanicoRoute({ children }) {
+    const { user, profile, ready } = useAuthReady();
+    if (!ready) return <Spinner />;
+    if (!user) return <Navigate to="/login" replace />;
+    if (!['admin', 'mecanico'].includes(profile?.role)) return <Navigate to="/" replace />;
     return children;
 }
 
