@@ -15,6 +15,7 @@ import {
     fetchCarregamentos, createCarregamento, updateCarregamento, deleteCarregamento,
     fetchEmpresas, createEmpresa, deleteEmpresa,
     fetchCarreteiros, fetchTodosMotoristas,
+    fetchConfigAbastecimento, saveConfigAbastecimento,
     CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
     CIDADES_BONUS_BAIXO, BONUS_BAIXO, BONUS_ALTO,
 } from 'utils/carretasService';
@@ -101,7 +102,7 @@ function TabViagens({ isAdmin, profile }) {
     const [filterStatus, setFilterStatus] = useState('');
     const [form, setForm] = useState({
         status: 'Agendado', motorista_id: '', veiculo_id: '',
-        data_saida: '', destino: '', responsavel_cadastro: '', observacoes: '',
+        data_saida: '', destino: '', toneladas: '', responsavel_cadastro: '', observacoes: '',
     });
 
     const load = useCallback(async () => {
@@ -110,7 +111,7 @@ function TabViagens({ isAdmin, profile }) {
             const [v, ve, m] = await Promise.all([
                 fetchViagens(filterStatus ? { status: filterStatus } : {}),
                 fetchCarretasVeiculos(),
-                fetchCarreteiros(),
+                fetchTodosMotoristas(),
             ]);
             setViagens(v); setVeiculos(ve); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -120,11 +121,11 @@ function TabViagens({ isAdmin, profile }) {
     useEffect(() => { load(); }, [load]);
 
     const openCreate = () => {
-        setForm({ status: 'Agendado', motorista_id: '', veiculo_id: '', data_saida: '', destino: '', responsavel_cadastro: '', observacoes: '' });
+        setForm({ status: 'Agendado', motorista_id: '', veiculo_id: '', data_saida: '', destino: '', toneladas: '', responsavel_cadastro: '', observacoes: '' });
         setModal({ mode: 'create' });
     };
     const openEdit = (v) => {
-        setForm({ status: v.status, motorista_id: v.motorista_id || '', veiculo_id: v.veiculo_id || '', data_saida: v.data_saida || '', destino: v.destino || '', responsavel_cadastro: v.responsavel_cadastro || '', observacoes: v.observacoes || '' });
+        setForm({ status: v.status, motorista_id: v.motorista_id || '', veiculo_id: v.veiculo_id || '', data_saida: v.data_saida || '', destino: v.destino || '', toneladas: v.toneladas || '', responsavel_cadastro: v.responsavel_cadastro || '', observacoes: v.observacoes || '' });
         setModal({ mode: 'edit', data: v });
     };
     const handleSubmit = async () => {
@@ -177,7 +178,7 @@ function TabViagens({ isAdmin, profile }) {
                     <table className="w-full text-sm">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                             <tr>
-                                {['Nº Viagem','Status','Motorista','Placa','Data Saída','Destino','Responsável',''].map(h => (
+                                {['Nº Viagem','Status','Motorista','Placa','Data Saída','Destino','Ton.','Responsável',''].map(h => (
                                     <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
                                 ))}
                             </tr>
@@ -239,6 +240,9 @@ function TabViagens({ isAdmin, profile }) {
                         </Field>
                         <Field label="Destino" required>
                             <input value={form.destino} onChange={e => setForm(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Cidade de destino" />
+                        </Field>
+                        <Field label="Toneladas transportadas">
+                            <input type="number" step="0.001" value={form.toneladas} onChange={e => setForm(f => ({ ...f, toneladas: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 28.5" />
                         </Field>
                         <Field label="Observações">
                             <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={3} placeholder="Observações gerais..." />
@@ -375,7 +379,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
             if (filtro.motoristaId) f.motoristaId = filtro.motoristaId;
             if (filtro.veiculoId)   f.veiculoId   = filtro.veiculoId;
             if (filtro.mes)         { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-31'; }
-            const [a, v, m] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchCarreteiros()]);
+            const [a, v, m] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchTodosMotoristas()]);
             setAbast(a); setVeiculos(v); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -542,7 +546,7 @@ function TabChecklist({ isAdmin, profile }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [c, v, m] = await Promise.all([fetchChecklists(filtro === 'pendentes' ? { pendente: true } : {}), fetchCarretasVeiculos(), fetchCarreteiros()]);
+            const [c, v, m] = await Promise.all([fetchChecklists(filtro === 'pendentes' ? { pendente: true } : {}), fetchCarretasVeiculos(), fetchTodosMotoristas()]);
             setChecklists(c); setVeiculos(v); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -703,7 +707,7 @@ function TabCarregamentos({ isAdmin }) {
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(null);
     const [filtro, setFiltro] = useState({ empresaId: '', mes: '' });
-    const [form, setForm] = useState({ motorista_id: '', veiculo_id: '', empresa_id: '', data_carregamento: new Date().toISOString().split('T')[0], numero_pedido: '', destino: '', quantidade: '', unidade_quantidade: 'saca', empresa_origem: '', tipo_calculo_frete: 'por_saca', valor_base_frete: '', observacoes: '' });
+    const [form, setForm] = useState({ motorista_id: '', veiculo_id: '', empresa_id: '', data_carregamento: new Date().toISOString().split('T')[0], numero_pedido: '', numero_nota_fiscal: '', destino: '', quantidade: '', unidade_quantidade: 'saco', empresa_origem: '', tipo_calculo_frete: 'por_saco', valor_base_frete: '', observacoes: '' });
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -711,7 +715,7 @@ function TabCarregamentos({ isAdmin }) {
             const f = {};
             if (filtro.empresaId) f.empresaId = filtro.empresaId;
             if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-31'; }
-            const [c, v, m, e] = await Promise.all([fetchCarregamentos(f), fetchCarretasVeiculos(), fetchCarreteiros(), fetchEmpresas()]);
+            const [c, v, m, e] = await Promise.all([fetchCarregamentos(f), fetchCarretasVeiculos(), fetchTodosMotoristas(), fetchEmpresas()]);
             setCarregamentos(c); setVeiculos(v); setMotoristas(m); setEmpresas(e);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -723,13 +727,16 @@ function TabCarregamentos({ isAdmin }) {
         freteTotal: carregamentos.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0),
     }), [carregamentos]);
 
-    const previewFrete = useMemo(() => calcularFrete(form.tipo_calculo_frete, form.quantidade, form.valor_base_frete), [form.tipo_calculo_frete, form.quantidade, form.valor_base_frete]);
+    // Para frete por km, precisamos do consumo do veículo selecionado
+    const veiculoSelecionado = useMemo(() => veiculos.find(v => v.id === form.veiculo_id), [veiculos, form.veiculo_id]);
+    const previewFrete = useMemo(() => calcularFrete(form.tipo_calculo_frete, form.quantidade, form.valor_base_frete, veiculoSelecionado?.media_consumo), [form.tipo_calculo_frete, form.quantidade, form.valor_base_frete, veiculoSelecionado]);
 
     const handleSubmit = async () => {
         if (!form.destino || !form.data_carregamento) { showToast('Destino e data são obrigatórios', 'error'); return; }
+        const payload = { ...form, _consumoVeiculo: veiculoSelecionado?.media_consumo };
         try {
-            if (modal.mode === 'create') await createCarregamento(form);
-            else await updateCarregamento(modal.data.id, form);
+            if (modal.mode === 'create') await createCarregamento(payload);
+            else await updateCarregamento(modal.data.id, payload);
             showToast('Carregamento salvo!', 'success'); setModal(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -752,7 +759,7 @@ function TabCarregamentos({ isAdmin }) {
     };
 
     const openCreate = () => {
-        setForm({ motorista_id: '', veiculo_id: '', empresa_id: '', data_carregamento: new Date().toISOString().split('T')[0], numero_pedido: '', destino: '', quantidade: '', unidade_quantidade: 'saca', empresa_origem: '', tipo_calculo_frete: 'por_saca', valor_base_frete: '', observacoes: '' });
+        setForm({ motorista_id: '', veiculo_id: '', empresa_id: '', data_carregamento: new Date().toISOString().split('T')[0], numero_pedido: '', numero_nota_fiscal: '', destino: '', quantidade: '', unidade_quantidade: 'saco', empresa_origem: '', tipo_calculo_frete: 'por_saco', valor_base_frete: '', observacoes: '' });
         setModal({ mode: 'create' });
     };
 
@@ -798,6 +805,10 @@ function TabCarregamentos({ isAdmin }) {
                             : carregamentos.map((c, i) => (
                                 <tr key={c.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-4 py-3">{FMT_DATE(c.data_carregamento)}</td>
+                                    <td className="px-4 py-3 text-xs">
+                                        {c.numero_pedido ? <span className="font-data">{c.numero_pedido}</span> : '—'}
+                                        {c.numero_nota_fiscal && <span className="block text-gray-400">NF: {c.numero_nota_fiscal}</span>}
+                                    </td>
                                     <td className="px-4 py-3">{c.motorista?.name || '—'}</td>
                                     <td className="px-4 py-3 font-data">{c.veiculo?.placa || '—'}</td>
                                     <td className="px-4 py-3 text-xs">{c.empresa?.nome || '—'}</td>
@@ -826,10 +837,11 @@ function TabCarregamentos({ isAdmin }) {
                         <Field label="Empresa de origem"><input value={form.empresa_origem} onChange={e => setForm(f => ({ ...f, empresa_origem: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: Votorantim" /></Field>
                         <Field label="Data" required><input type="date" value={form.data_carregamento} onChange={e => setForm(f => ({ ...f, data_carregamento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                         <Field label="Nº do pedido"><input value={form.numero_pedido} onChange={e => setForm(f => ({ ...f, numero_pedido: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                        <Field label="Nº da nota fiscal"><input value={form.numero_nota_fiscal || ''} onChange={e => setForm(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                         <Field label="Destino" required><input value={form.destino} onChange={e => setForm(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Cidade de destino" /></Field>
                         <div className="grid grid-cols-2 gap-2">
                             <Field label="Quantidade"><input type="number" step="0.01" value={form.quantidade} onChange={e => setForm(f => ({ ...f, quantidade: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
-                            <Field label="Unidade"><select value={form.unidade_quantidade} onChange={e => setForm(f => ({ ...f, unidade_quantidade: e.target.value }))} className={inputCls} style={inputStyle}><option value="saca">Saca</option><option value="tonelada">Tonelada</option><option value="carga">Carga</option></select></Field>
+                            <Field label="Unidade"><select value={form.unidade_quantidade} onChange={e => setForm(f => ({ ...f, unidade_quantidade: e.target.value }))} className={inputCls} style={inputStyle}><option value="saco">Saco</option><option value="tonelada">Tonelada</option><option value="carga">Carga</option></select></Field>
                         </div>
                         <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#C4B5FD', backgroundColor: '#FAF5FF' }}>
                             <p className="text-xs font-semibold text-purple-700 mb-3">💰 Cálculo de Frete</p>
@@ -839,10 +851,20 @@ function TabCarregamentos({ isAdmin }) {
                                         {TIPOS_CALCULO_FRETE.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                                     </select>
                                 </Field>
-                                <Field label={form.tipo_calculo_frete === 'percentual' ? 'Percentual (%)' : 'Valor base (R$)'}>
+                                <Field label={
+                                    form.tipo_calculo_frete === 'percentual' ? 'Percentual (%)' :
+                                    form.tipo_calculo_frete === 'por_km' ? 'Preço diesel (R$/L)' : 'Valor base (R$)'
+                                }>
                                     <input type="number" step="0.01" value={form.valor_base_frete} onChange={e => setForm(f => ({ ...f, valor_base_frete: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
                                 </Field>
                             </div>
+                            {form.tipo_calculo_frete === 'por_km' && (
+                                <p className="text-xs text-purple-600 mt-2">
+                                    {veiculoSelecionado?.media_consumo
+                                        ? `Consumo do veículo: ${veiculoSelecionado.media_consumo} km/L — informe a distância em km no campo Quantidade`
+                                        : '⚠️ Veículo sem consumo cadastrado. Cadastre o consumo em Veículos para usar este cálculo.'}
+                                </p>
+                            )}
                             {previewFrete > 0 && (
                                 <div className="mt-3 p-2 rounded-lg bg-purple-600 text-white text-sm font-semibold flex items-center justify-between">
                                     <span>Frete calculado:</span>
@@ -934,6 +956,104 @@ function TabEmpresas({ isAdmin }) {
     );
 }
 
+// ─── TAB: Configurações ──────────────────────────────────────────────────────
+function TabConfiguracoes({ isAdmin }) {
+    const { toast, showToast } = useToast();
+    const [config, setConfig] = useState({ preco_diesel: '', preco_arla: '' });
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const c = await fetchConfigAbastecimento();
+                setConfig({ preco_diesel: c.preco_diesel || '', preco_arla: c.preco_arla || '' });
+            } catch { /* usa defaults */ }
+            finally { setLoading(false); }
+        })();
+    }, []);
+
+    const handleSave = async () => {
+        if (!isAdmin) return;
+        setSaving(true);
+        try {
+            await saveConfigAbastecimento({
+                preco_diesel: Number(config.preco_diesel) || 0,
+                preco_arla:   Number(config.preco_arla)   || 0,
+            });
+            showToast('Configurações salvas!', 'success');
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSaving(false); }
+    };
+
+    if (loading) return <div className="flex justify-center py-16"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div>;
+
+    return (
+        <div className="max-w-lg">
+            <div className="bg-white rounded-xl border p-6 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="flex items-center gap-3 mb-5">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#FEF3C7' }}>
+                        <Icon name="Settings" size={18} color="#B45309" />
+                    </div>
+                    <div>
+                        <h3 className="font-heading font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Preços de Combustível</h3>
+                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Valores usados no cálculo automático dos abastecimentos</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-5">
+                    <Field label="Preço do Diesel (R$/L)" required>
+                        <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium" style={{ color: 'var(--color-muted-foreground)' }}>R$</span>
+                            <input
+                                type="number" step="0.001" min="0"
+                                value={config.preco_diesel}
+                                onChange={e => setConfig(c => ({ ...c, preco_diesel: e.target.value }))}
+                                disabled={!isAdmin}
+                                className={inputCls + " pl-9"}
+                                style={inputStyle}
+                                placeholder="6,80"
+                            />
+                        </div>
+                    </Field>
+                    <Field label="Preço do Arla (R$/L)" required>
+                        <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium" style={{ color: 'var(--color-muted-foreground)' }}>R$</span>
+                            <input
+                                type="number" step="0.001" min="0"
+                                value={config.preco_arla}
+                                onChange={e => setConfig(c => ({ ...c, preco_arla: e.target.value }))}
+                                disabled={!isAdmin}
+                                className={inputCls + " pl-9"}
+                                style={inputStyle}
+                                placeholder="3,20"
+                            />
+                        </div>
+                    </Field>
+                </div>
+
+                <div className="p-3 rounded-xl mb-5 text-xs" style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+                    <p className="font-semibold text-green-700 mb-1">Como funciona:</p>
+                    <p className="text-green-600">
+                        Quando o motorista registrar um abastecimento, o valor total será calculado automaticamente:<br />
+                        <strong>(Litros diesel × R$ {Number(config.preco_diesel || 0).toFixed(3)})</strong> + <strong>(Litros Arla × R$ {Number(config.preco_arla || 0).toFixed(3)})</strong>
+                    </p>
+                </div>
+
+                {isAdmin && (
+                    <Button onClick={handleSave} iconName={saving ? 'Loader' : 'Save'} size="sm" disabled={saving}>
+                        {saving ? 'Salvando...' : 'Salvar configurações'}
+                    </Button>
+                )}
+                {!isAdmin && (
+                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Apenas administradores podem alterar esses valores.</p>
+                )}
+            </div>
+            <Toast toast={toast} />
+        </div>
+    );
+}
+
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
 const TABS = [
     { id: 'viagens',       label: 'Viagens',       icon: 'Navigation' },
@@ -942,6 +1062,7 @@ const TABS = [
     { id: 'checklist',     label: 'Checklist',      icon: 'ClipboardCheck' },
     { id: 'carregamentos', label: 'Carregamentos',  icon: 'Package' },
     { id: 'empresas',      label: 'Empresas',       icon: 'Building2' },
+    { id: 'configuracoes', label: 'Configurações',  icon: 'Settings' },
 ];
 
 export default function CarretasPage() {
@@ -992,6 +1113,7 @@ export default function CarretasPage() {
                     {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}
                     {tab === 'carregamentos'  && <TabCarregamentos   isAdmin={admin} />}
                     {tab === 'empresas'       && <TabEmpresas       isAdmin={admin} />}
+                    {tab === 'configuracoes'  && <TabConfiguracoes  isAdmin={admin} />}
                 </div>
             </main>
         </div>

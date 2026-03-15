@@ -61,9 +61,11 @@ export async function fetchViagens(filters = {}) {
 
 export async function createViagem(viagem) {
     const numero = await gerarNumeroViagem();
+    const payload = sanitizeUuids ? { ...viagem } : { ...viagem };
+    ['motorista_id','veiculo_id'].forEach(f => { if (payload[f] === '') payload[f] = null; });
     const { data, error } = await supabase
         .from('carretas_viagens')
-        .insert({ ...viagem, numero, status: viagem.status || 'Agendado' })
+        .insert({ ...payload, numero, status: payload.status || 'Agendado' })
         .select(`*, motorista:motorista_id(id, name), veiculo:veiculo_id(id, placa, modelo)`)
         .single();
     if (error) throw error;
@@ -232,19 +234,27 @@ export async function registrarManutencaoChecklist(id, observacao) {
 // CARREGAMENTOS / FRETES
 // ─────────────────────────────────────────────────────────────────────────────
 export const TIPOS_CALCULO_FRETE = [
-    { value: 'percentual',  label: 'Percentual (%)' },
-    { value: 'por_saca',    label: 'Por saca' },
-    { value: 'por_tonelada',label: 'Por tonelada' },
-    { value: 'por_carga',   label: 'Por carga (fixo)' },
+    { value: 'por_saco',       label: 'Por saco' },
+    { value: 'por_tonelada',   label: 'Por tonelada' },
+    { value: 'por_carga',      label: 'Por carga (fixo)' },
+    { value: 'percentual',     label: 'Percentual (%)' },
+    { value: 'por_km',         label: 'Por KM (consumo do veículo)' },
 ];
 
-export function calcularFrete(tipoCalculo, quantidade, valorBase) {
+// calcularFrete: para por_km, valorBase = preço do diesel (R$/L) e
+// quantidade = distanciaKm; consumoVeiculo = km/L cadastrado no veículo
+export function calcularFrete(tipoCalculo, quantidade, valorBase, consumoVeiculo) {
     if (!tipoCalculo || !valorBase) return 0;
     switch (tipoCalculo) {
         case 'percentual':   return (Number(quantidade) * Number(valorBase)) / 100;
-        case 'por_saca':     return Number(quantidade) * Number(valorBase);
+        case 'por_saco':     return Number(quantidade) * Number(valorBase);
         case 'por_tonelada': return Number(quantidade) * Number(valorBase);
         case 'por_carga':    return Number(valorBase);
+        case 'por_km': {
+            // (distância / consumo) * preço diesel = custo combustível da viagem
+            const consumo = Number(consumoVeiculo) || 1;
+            return (Number(quantidade) / consumo) * Number(valorBase);
+        }
         default: return 0;
     }
 }
@@ -270,15 +280,26 @@ export async function fetchCarregamentos(filters = {}) {
     return data || [];
 }
 
+function sanitizeUuids(obj) {
+    // Converte strings vazias em campos UUID para null (evita erro do Postgres)
+    const uuidFields = ['motorista_id', 'veiculo_id', 'empresa_id'];
+    const out = { ...obj };
+    uuidFields.forEach(f => { if (out[f] === '' || out[f] === undefined) out[f] = null; });
+    return out;
+}
+
 export async function createCarregamento(carregamento) {
+    const payload = sanitizeUuids(carregamento);
     const valorFrete = calcularFrete(
-        carregamento.tipo_calculo_frete,
-        carregamento.quantidade,
-        carregamento.valor_base_frete
+        payload.tipo_calculo_frete,
+        payload.quantidade,
+        payload.valor_base_frete,
+        payload._consumoVeiculo
     );
+    delete payload._consumoVeiculo;
     const { data, error } = await supabase
         .from('carretas_carregamentos')
-        .insert({ ...carregamento, valor_frete_calculado: valorFrete })
+        .insert({ ...payload, valor_frete_calculado: valorFrete })
         .select()
         .single();
     if (error) throw error;
@@ -286,14 +307,17 @@ export async function createCarregamento(carregamento) {
 }
 
 export async function updateCarregamento(id, updates) {
+    const payload = sanitizeUuids(updates);
     const valorFrete = calcularFrete(
-        updates.tipo_calculo_frete,
-        updates.quantidade,
-        updates.valor_base_frete
+        payload.tipo_calculo_frete,
+        payload.quantidade,
+        payload.valor_base_frete,
+        payload._consumoVeiculo
     );
+    delete payload._consumoVeiculo;
     const { data, error } = await supabase
         .from('carretas_carregamentos')
-        .update({ ...updates, valor_frete_calculado: valorFrete, updated_at: new Date().toISOString() })
+        .update({ ...payload, valor_frete_calculado: valorFrete, updated_at: new Date().toISOString() })
         .eq('id', id)
         .select()
         .single();
@@ -334,9 +358,31 @@ export async function deleteEmpresa(id) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CONFIGURAÇÃO DE PREÇOS DE ABASTECIMENTO (definido pelo admin)
+// ─────────────────────────────────────────────────────────────────────────────
+export const CONFIG_ABAST_KEY = 'carretas_config_abastecimento';
+
+export async function fetchConfigAbastecimento() {
+    const { data } = await supabase
+        .from('carretas_config')
+        .select('*')
+        .eq('chave', CONFIG_ABAST_KEY)
+        .single();
+    return data ? JSON.parse(data.valor) : { preco_diesel: 0, preco_arla: 0 };
+}
+
+export async function saveConfigAbastecimento(config) {
+    const { error } = await supabase
+        .from('carretas_config')
+        .upsert({ chave: CONFIG_ABAST_KEY, valor: JSON.stringify(config) }, { onConflict: 'chave' });
+    if (error) throw error;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MOTORISTAS CARRETEIROS (filtro por tipo)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function fetchCarreteiros() {
+    // Motoristas com tipo_veiculo = 'carreta' (role = 'motorista')
     const { data, error } = await supabase
         .from('user_profiles')
         .select('id, name, role, tipo_veiculo')

@@ -20,7 +20,7 @@ const ROLE_CONFIG = {
     admin:      { label: 'Admin',      color: '#7C3AED', bg: '#EDE9FE' },
     operador:   { label: 'Operador',   color: '#1D4ED8', bg: '#DBEAFE' },
     motorista:  { label: 'Motorista',  color: '#065F46', bg: '#D1FAE5' },
-    carreteiro: { label: 'Carreteiro', color: '#B45309', bg: '#FEF3C7' },
+    motorista_carreta: { label: 'Motorista (Carreta)', color: '#B45309', bg: '#FEF3C7' },
 };
 
 export default function AdminPanel() {
@@ -79,11 +79,13 @@ export default function AdminPanel() {
     const handleRoleChange = async (userId, role) => {
         try {
             // Se tornando carreteiro, seta tipo_veiculo=carreta; se motorista, seta caminhao
-            const extra = role === 'carreteiro' ? { tipo_veiculo: 'carreta' }
-                        : role === 'motorista'  ? { tipo_veiculo: 'caminhao' }
+            // motorista_carreta é apenas UI — o role real é 'motorista' com tipo_veiculo='carreta'
+            const realRole = role === 'motorista_carreta' ? 'motorista' : role;
+            const extra = role === 'motorista_carreta' ? { tipo_veiculo: 'carreta' }
+                        : role === 'motorista'           ? { tipo_veiculo: 'caminhao' }
                         : {};
-            await updateUserProfile(userId, { role, ...extra });
-            setUsers(prev => prev.map(u => u.id === userId ? { ...u, role, ...extra } : u));
+            await updateUserProfile(userId, { role: realRole, ...extra });
+            setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: realRole, ...extra } : u));
             showToast('Permissão atualizada!', 'success');
         } catch (err) {
             showToast('Erro: ' + err.message, 'error');
@@ -208,21 +210,23 @@ export default function AdminPanel() {
                                                 </td>
                                                 <td className="px-4 py-3 text-slate-500 text-xs hidden sm:table-cell">{u.email || '—'}</td>
                                                 <td className="px-4 py-3">
-                                                    {u.role && ROLE_CONFIG[u.role] ? (
-                                                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
-                                                            style={{ color: ROLE_CONFIG[u.role].color, backgroundColor: ROLE_CONFIG[u.role].bg }}>
-                                                            {ROLE_CONFIG[u.role].label}
-                                                        </span>
-                                                    ) : <span className="text-slate-400 text-xs">{u.role}</span>}
+                                                    {(() => {
+                                                        const key = (u.role === 'motorista' && u.tipo_veiculo === 'carreta') ? 'motorista_carreta' : u.role;
+                                                        const cfg = ROLE_CONFIG[key];
+                                                        return cfg
+                                                            ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ color: cfg.color, backgroundColor: cfg.bg }}>{cfg.label}</span>
+                                                            : <span className="text-slate-400 text-xs">{u.role}</span>;
+                                                    })()}
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <select value={u.role || 'operador'}
+                                                    <select
+                                                        value={(u.role === 'motorista' && u.tipo_veiculo === 'carreta') ? 'motorista_carreta' : (u.role || 'operador')}
                                                         onChange={e => handleRoleChange(u.id, e.target.value)}
                                                         className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700">
                                                         <option value="admin">Admin</option>
                                                         <option value="operador">Operador</option>
                                                         <option value="motorista">Motorista (Caminhão)</option>
-                                                        <option value="carreteiro">Carreteiro (Carreta)</option>
+                                                        <option value="motorista_carreta">Motorista (Carreta)</option>
                                                     </select>
                                                 </td>
                                             </tr>

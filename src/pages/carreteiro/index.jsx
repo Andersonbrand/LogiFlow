@@ -10,7 +10,7 @@ import {
     fetchViagens, fetchCarretasVeiculos,
     fetchAbastecimentos, createAbastecimento,
     fetchChecklists, createChecklist,
-    fetchCarregamentos,
+    fetchCarregamentos, fetchConfigAbastecimento,
     calcularBonusCarreteiro, BONUS_BAIXO, BONUS_ALTO, CIDADES_BONUS_BAIXO,
     CHECKLIST_ITENS,
 } from 'utils/carretasService';
@@ -86,6 +86,7 @@ export default function CarreteiroDashboard() {
     const [checklists, setChecklists] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [loading, setLoading]   = useState(true);
+    const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
     const [modalAbast, setModalAbast]   = useState(false);
     const [modalCheck, setModalCheck]   = useState(false);
     const [formAbast, setFormAbast]     = useState({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' });
@@ -98,13 +99,15 @@ export default function CarreteiroDashboard() {
             const cut = new Date();
             cut.setDate(cut.getDate() - period);
             const dateStr = cut.toISOString().split('T')[0];
-            const [v, a, c, ve] = await Promise.all([
+            const [v, a, c, ve, cfg] = await Promise.all([
                 fetchViagens({ motoristaId: user.id, dataInicio: dateStr }),
                 fetchAbastecimentos({ motoristaId: user.id, dataInicio: dateStr }),
                 fetchChecklists({ motoristaId: user.id }),
                 fetchCarretasVeiculos(),
+                fetchConfigAbastecimento(),
             ]);
             setViagens(v); setAbast(a); setChecklists(c); setVeiculos(ve);
+            setConfigAbast(cfg || { preco_diesel: 0, preco_arla: 0 });
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [user?.id, period]); // eslint-disable-line
@@ -130,8 +133,17 @@ export default function CarreteiroDashboard() {
 
     const handleAbast = async () => {
         if (!formAbast.veiculo_id || !formAbast.data_abastecimento) { showToast('Veículo e data são obrigatórios', 'error'); return; }
+        // Calcula valores automaticamente com base nos preços configurados pelo admin
+        const valorDiesel = Number(formAbast.litros_diesel || 0) * Number(configAbast.preco_diesel || 0);
+        const valorArla   = Number(formAbast.litros_arla   || 0) * Number(configAbast.preco_arla   || 0);
+        const payload = {
+            ...formAbast,
+            motorista_id: user.id,
+            valor_diesel: valorDiesel.toFixed(2),
+            valor_arla:   valorArla.toFixed(2),
+        };
         try {
-            await createAbastecimento({ ...formAbast, motorista_id: user.id });
+            await createAbastecimento(payload);
             showToast('Abastecimento registrado!', 'success');
             setModalAbast(false);
             load();
@@ -460,18 +472,40 @@ export default function CarreteiroDashboard() {
                         <Field label="Horário"><input type="time" value={formAbast.horario} onChange={e => setFormAbast(f => ({ ...f, horario: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                         <Field label="Posto"><input value={formAbast.posto} onChange={e => setFormAbast(f => ({ ...f, posto: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Nome do posto" /></Field>
                         <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
-                            <p className="text-xs font-semibold text-blue-700 mb-2">🛢️ Diesel</p>
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs font-semibold text-blue-700">🛢️ Diesel</p>
+                                <span className="text-xs text-blue-600">R$ {Number(configAbast.preco_diesel || 0).toFixed(3)}/L</span>
+                            </div>
                             <div className="grid grid-cols-2 gap-3">
-                                <Field label="Litros"><input type="number" step="0.01" value={formAbast.litros_diesel} onChange={e => setFormAbast(f => ({ ...f, litros_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
-                                <Field label="Valor R$"><input type="number" step="0.01" value={formAbast.valor_diesel} onChange={e => setFormAbast(f => ({ ...f, valor_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
+                                <Field label="Litros abastecidos">
+                                    <input type="number" step="0.01" value={formAbast.litros_diesel} onChange={e => setFormAbast(f => ({ ...f, litros_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                </Field>
+                                <Field label="Valor calculado (R$)">
+                                    <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0F9FF', color: '#1D4ED8' }}>
+                                        {(Number(formAbast.litros_diesel || 0) * Number(configAbast.preco_diesel || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </div>
+                                </Field>
                             </div>
                         </div>
                         <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
-                            <p className="text-xs font-semibold text-emerald-700 mb-2">💧 ARLA 32</p>
-                            <div className="grid grid-cols-2 gap-3">
-                                <Field label="Litros"><input type="number" step="0.01" value={formAbast.litros_arla} onChange={e => setFormAbast(f => ({ ...f, litros_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
-                                <Field label="Valor R$"><input type="number" step="0.01" value={formAbast.valor_arla} onChange={e => setFormAbast(f => ({ ...f, valor_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs font-semibold text-emerald-700">💧 ARLA 32</p>
+                                <span className="text-xs text-emerald-600">R$ {Number(configAbast.preco_arla || 0).toFixed(3)}/L</span>
                             </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <Field label="Litros abastecidos">
+                                    <input type="number" step="0.01" value={formAbast.litros_arla} onChange={e => setFormAbast(f => ({ ...f, litros_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                </Field>
+                                <Field label="Valor calculado (R$)">
+                                    <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0FDF4', color: '#059669' }}>
+                                        {(Number(formAbast.litros_arla || 0) * Number(configAbast.preco_arla || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </div>
+                                </Field>
+                            </div>
+                        </div>
+                        <div className="sm:col-span-2 p-2 rounded-lg text-sm font-bold flex items-center justify-between" style={{ backgroundColor: '#7C3AED', color: 'white' }}>
+                            <span>Total do abastecimento:</span>
+                            <span>{((Number(formAbast.litros_diesel || 0) * Number(configAbast.preco_diesel || 0)) + (Number(formAbast.litros_arla || 0) * Number(configAbast.preco_arla || 0))).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                         </div>
                     </div>
                     <div className="flex gap-3 p-5 pt-0 justify-end">
