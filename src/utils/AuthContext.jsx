@@ -107,7 +107,8 @@ export function AuthProvider({ children }) {
 
     const isAdmin     = () => profile?.role === 'admin';
     const isOperador  = () => profile?.role === 'operador';
-    const isMotorista = () => profile?.role === 'motorista';
+    const isMotorista  = () => profile?.role === 'motorista';
+    const isCarreteiro = () => profile?.role === 'carreteiro';
     const hasRole     = (...roles) => roles.includes(profile?.role);
 
     const can = {
@@ -122,14 +123,14 @@ export function AuthProvider({ children }) {
         gerenciarVeiculos: () => isAdmin(),
         gerenciarMateriais:() => isAdmin(),
         verFinanceiro:     () => isAdmin(),
-        verBonificacoes:   () => isAdmin() || isMotorista(),
+        verBonificacoes:   () => isAdmin() || isMotorista() || isCarreteiro(),
     };
 
     return (
         <AuthContext.Provider value={{
             user, profile, loading,
             signIn, signUp, signOut, sendPasswordReset,
-            isAdmin, isOperador, isMotorista, hasRole, can,
+            isAdmin, isOperador, isMotorista, isCarreteiro, hasRole, can,
         }}>
             {children}
         </AuthContext.Provider>

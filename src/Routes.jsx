@@ -2,21 +2,23 @@ import React from "react";
 import { BrowserRouter, Routes as RouterRoutes, Route } from "react-router-dom";
 import ScrollToTop    from "components/ScrollToTop";
 import ErrorBoundary  from "components/ErrorBoundary";
-import ProtectedRoute, { AdminRoute, StaffRoute, MotoristaRoute } from "components/ProtectedRoute";
+import ProtectedRoute, { AdminRoute, StaffRoute, MotoristaRoute, CarreteiroRoute } from "components/ProtectedRoute";
 import { AuthProvider } from "utils/AuthContext";
 
-import NotFound           from "pages/NotFound";
-import Login              from "pages/login";
-import MainDashboard      from "pages/main-dashboard";
-import MaterialCatalog    from "pages/material-catalog";
-import VehicleFleet       from "pages/vehicle-fleet-management";
-import Romaneios          from "pages/romaneios";
-import Relatorios         from "pages/relatorios";
-import AdminPanel         from "pages/admin";
-import Financeiro         from "pages/financeiro";
-import Consolidacao       from "pages/consolidacao";
-import MotoristaDashboard from "pages/motorista";
-import ResetPassword      from "pages/reset-password";
+import NotFound              from "pages/NotFound";
+import Login                 from "pages/login";
+import MainDashboard         from "pages/main-dashboard";
+import MaterialCatalog       from "pages/material-catalog";
+import VehicleFleet          from "pages/vehicle-fleet-management";
+import Romaneios             from "pages/romaneios";
+import Relatorios            from "pages/relatorios";
+import AdminPanel            from "pages/admin";
+import Financeiro            from "pages/financeiro";
+import Consolidacao          from "pages/consolidacao";
+import MotoristaDashboard    from "pages/motorista";
+import ResetPassword         from "pages/reset-password";
+import CarretasPage          from "pages/carretas";
+import CarreteiroDashboard   from "pages/carreteiro";
 
 const Routes = () => (
     <BrowserRouter>
@@ -40,8 +42,14 @@ const Routes = () => (
                     <Route path="/financeiro"               element={<AdminRoute><Financeiro /></AdminRoute>} />
                     <Route path="/admin"                    element={<AdminRoute><AdminPanel /></AdminRoute>} />
 
-                    {/* Rota do motorista */}
+                    {/* Rota do motorista (caminhão) */}
                     <Route path="/motorista"                element={<MotoristaRoute><MotoristaDashboard /></MotoristaRoute>} />
+
+                    {/* Módulo Transporte - Carretas (admin/operador) */}
+                    <Route path="/carretas"                 element={<StaffRoute><CarretasPage /></StaffRoute>} />
+
+                    {/* Rota do carreteiro */}
+                    <Route path="/carreteiro"               element={<CarreteiroRoute><CarreteiroDashboard /></CarreteiroRoute>} />
 
                     <Route path="*" element={<NotFound />} />
                 </RouterRoutes>

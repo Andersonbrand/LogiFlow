@@ -17,9 +17,10 @@ import { useNavigate } from 'react-router-dom';
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const ROLE_CONFIG = {
-    admin:     { label: 'Admin',     color: '#7C3AED', bg: '#EDE9FE' },
-    operador:  { label: 'Operador',  color: '#1D4ED8', bg: '#DBEAFE' },
-    motorista: { label: 'Motorista', color: '#065F46', bg: '#D1FAE5' },
+    admin:      { label: 'Admin',      color: '#7C3AED', bg: '#EDE9FE' },
+    operador:   { label: 'Operador',   color: '#1D4ED8', bg: '#DBEAFE' },
+    motorista:  { label: 'Motorista',  color: '#065F46', bg: '#D1FAE5' },
+    carreteiro: { label: 'Carreteiro', color: '#B45309', bg: '#FEF3C7' },
 };
 
 export default function AdminPanel() {
@@ -77,8 +78,12 @@ export default function AdminPanel() {
 
     const handleRoleChange = async (userId, role) => {
         try {
-            await updateUserProfile(userId, { role });
-            setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
+            // Se tornando carreteiro, seta tipo_veiculo=carreta; se motorista, seta caminhao
+            const extra = role === 'carreteiro' ? { tipo_veiculo: 'carreta' }
+                        : role === 'motorista'  ? { tipo_veiculo: 'caminhao' }
+                        : {};
+            await updateUserProfile(userId, { role, ...extra });
+            setUsers(prev => prev.map(u => u.id === userId ? { ...u, role, ...extra } : u));
             showToast('Permissão atualizada!', 'success');
         } catch (err) {
             showToast('Erro: ' + err.message, 'error');
@@ -216,7 +221,8 @@ export default function AdminPanel() {
                                                         className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700">
                                                         <option value="admin">Admin</option>
                                                         <option value="operador">Operador</option>
-                                                        <option value="motorista">Motorista</option>
+                                                        <option value="motorista">Motorista (Caminhão)</option>
+                                                        <option value="carreteiro">Carreteiro (Carreta)</option>
                                                     </select>
                                                 </td>
                                             </tr>

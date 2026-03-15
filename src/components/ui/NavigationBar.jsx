@@ -14,8 +14,12 @@ const NAV_ITEMS = [
     { id: 'consolidacao', name: 'Consolidação',path: '/consolidacao',             icon: 'GitMerge',        roles: ['admin','operador'] },
     { id: 'relatorios',   name: 'Relatórios',  path: '/relatorios',               icon: 'BarChart3',       roles: ['admin','operador'] },
     { id: 'admin',        name: 'Admin',       path: '/admin',                    icon: 'Shield',          roles: ['admin'] },
-    // Motorista
+    // Carretas (admin/operador)
+    { id: 'carretas',     name: 'Carretas',    path: '/carretas',              icon: 'Truck',           roles: ['admin','operador'] },
+    // Motorista caminhão
     { id: 'motorista',    name: 'Minhas Viagens', path: '/motorista',             icon: 'Truck',           roles: ['motorista'] },
+    // Carreteiro
+    { id: 'carreteiro',   name: 'Minhas Viagens', path: '/carreteiro',            icon: 'Truck',           roles: ['carreteiro'] },
 ];
 
 export default function NavigationBar() {
