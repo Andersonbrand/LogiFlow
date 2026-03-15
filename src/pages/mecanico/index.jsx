@@ -309,16 +309,43 @@ export default function MecanicoPage() {
                 </ModalOverlay>
             )}
 
-            {/* Viewer de PDF */}
+            {/* Viewer de PDF — in-app, sem sair da aplicação */}
             {pdfUrl && (
-                <div className="fixed inset-0 z-50 flex flex-col" style={{ backgroundColor: 'rgba(0,0,0,0.9)' }}>
-                    <div className="flex items-center justify-between p-3 bg-gray-900">
-                        <span className="text-white text-sm font-medium">Ordem de Serviço</span>
-                        <button onClick={() => setPdfUrl(null)} className="text-white p-1.5 rounded hover:bg-gray-700">
-                            <Icon name="X" size={20} color="white" />
+                <div className="fixed inset-0 z-50 flex flex-col" style={{ backgroundColor: '#1a1a1a' }}>
+                    <div className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: '#111827' }}>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={() => setPdfUrl(null)}
+                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-white transition-colors"
+                                style={{ backgroundColor: '#374151' }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#4B5563'}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#374151'}>
+                                <Icon name="ArrowLeft" size={16} color="white" />
+                                Voltar
+                            </button>
+                            <span className="text-white text-sm font-medium">Ordem de Serviço</span>
+                        </div>
+                        <button onClick={() => setPdfUrl(null)} className="p-1.5 rounded hover:bg-gray-700 text-gray-400 hover:text-white transition-colors">
+                            <Icon name="X" size={20} color="currentColor" />
                         </button>
                     </div>
-                    <iframe src={pdfUrl} className="flex-1 w-full border-0" title="OS PDF" />
+                    <div className="flex-1 overflow-auto flex items-start justify-center p-4">
+                        <object
+                            data={pdfUrl}
+                            type="application/pdf"
+                            className="w-full rounded-lg"
+                            style={{ minHeight: '80vh', maxWidth: 900 }}>
+                            <div className="flex flex-col items-center justify-center h-64 text-white gap-4">
+                                <Icon name="FileText" size={48} color="#9CA3AF" />
+                                <p className="text-gray-300 text-sm text-center">Não foi possível exibir o PDF diretamente.<br/>Clique abaixo para abrir.</p>
+                                <a href={pdfUrl} target="_blank" rel="noreferrer"
+                                    className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+                                    style={{ backgroundColor: '#3B82F6' }}>
+                                    Abrir PDF
+                                </a>
+                            </div>
+                        </object>
+                    </div>
                 </div>
             )}
 

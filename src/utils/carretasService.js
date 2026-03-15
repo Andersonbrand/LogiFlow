@@ -404,6 +404,14 @@ export async function fetchTodosMotoristas() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// HELPER: último dia do mês (evita erro com fevereiro, abril, etc)
+function ultimoDiaMes(anoMes) {
+    // anoMes = "2026-02"
+    const [ano, mes] = anoMes.split('-').map(Number);
+    return new Date(ano, mes, 0).getDate(); // dia 0 do mês seguinte = último dia do mês atual
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // REGISTROS DE VIAGEM (preenchido pelo carreteiro)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function fetchRegistrosViagem(motoristaId) {
@@ -444,10 +452,26 @@ export async function fetchAllRegistrosViagem(filters = {}) {
 // NOTIFICAÇÕES DO CARRETEIRO (checklist aprovado/reprovado)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function createNotificacaoCarreteiro(userId, tipo, titulo, mensagem) {
+    // Usa tabela própria com RLS permissiva (admin pode inserir para qualquer user)
     const { error } = await supabase
-        .from('notifications')
-        .insert({ user_id: userId, tipo, mensagem: titulo + '||' + mensagem, lida: false });
+        .from('carretas_notificacoes')
+        .insert({ user_id: userId, tipo, titulo, mensagem, lida: false });
     if (error) throw error;
+}
+
+export async function fetchNotificacoesCarreteiro(userId) {
+    const { data, error } = await supabase
+        .from('carretas_notificacoes')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+    if (error) return [];
+    return data || [];
+}
+
+export async function marcarNotificacaoLida(id) {
+    await supabase.from('carretas_notificacoes').update({ lida: true }).eq('id', id);
 }
 
 export async function aprovarChecklistComNotificacao(id, adminId, motoristaId) {

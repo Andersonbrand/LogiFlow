@@ -12,6 +12,7 @@ import {
     fetchChecklists, createChecklist,
     fetchRegistrosViagem, createRegistroViagem,
     fetchConfigAbastecimento,
+    fetchNotificacoesCarreteiro, marcarNotificacaoLida,
     calcularBonusCarreteiro, BONUS_BAIXO, BONUS_ALTO, CIDADES_BONUS_BAIXO,
     CHECKLIST_ITENS,
 } from 'utils/carretasService';
@@ -89,6 +90,7 @@ export default function CarreteiroDashboard() {
     const [loading, setLoading]   = useState(true);
     const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
     const [registros, setRegistros] = useState([]);
+    const [notificacoes, setNotificacoes] = useState([]);
     const [modalRegistro, setModalRegistro] = useState(false);
     const [formRegistro, setFormRegistro] = useState({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' });
     const [modalAbast, setModalAbast]   = useState(false);
@@ -117,6 +119,11 @@ export default function CarreteiroDashboard() {
                 const regs = await fetchRegistrosViagem(user.id);
                 setRegistros(regs || []);
             } catch { setRegistros([]); }
+            // Carrega notificações do carreteiro
+            try {
+                const notifs = await fetchNotificacoesCarreteiro(user.id);
+                setNotificacoes(notifs || []);
+            } catch { setNotificacoes([]); }
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [user?.id, period]); // eslint-disable-line
@@ -172,6 +179,7 @@ export default function CarreteiroDashboard() {
     };
 
     const exportar = () => {
+        if (!viagensComBonus.length) { showToast('Nenhum dado para exportar no período selecionado.', 'error'); return; }
         const rows = viagensComBonus.map(v => ({
             'Nº Viagem': v.numero, 'Status': v.status, 'Destino': v.destino || '',
             'Data Saída': FMT_DATE(v.data_saida), 'Placa': v.veiculo?.placa || '',
@@ -251,6 +259,28 @@ export default function CarreteiroDashboard() {
                             </div>
                         ))}
                     </div>
+
+                    {/* Notificações pendentes */}
+                    {notificacoes.filter(n => !n.lida).length > 0 && (
+                        <div className="flex flex-col gap-2 mb-4">
+                            {notificacoes.filter(n => !n.lida).map(n => (
+                                <div key={n.id} className="flex items-start gap-3 p-3 rounded-xl border shadow-sm"
+                                    style={{ backgroundColor: n.tipo === 'checklist_aprovado' ? '#F0FDF4' : '#FEF2F2', borderColor: n.tipo === 'checklist_aprovado' ? '#BBF7D0' : '#FECACA' }}>
+                                    <div className="flex-shrink-0 mt-0.5">
+                                        <Icon name={n.tipo === 'checklist_aprovado' ? 'CheckCircle2' : 'AlertTriangle'} size={18} color={n.tipo === 'checklist_aprovado' ? '#059669' : '#DC2626'} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-semibold text-sm" style={{ color: n.tipo === 'checklist_aprovado' ? '#065F46' : '#991B1B' }}>{n.titulo}</p>
+                                        <p className="text-xs mt-0.5" style={{ color: n.tipo === 'checklist_aprovado' ? '#059669' : '#DC2626' }}>{n.mensagem}</p>
+                                    </div>
+                                    <button onClick={async () => { await marcarNotificacaoLida(n.id); setNotificacoes(prev => prev.map(x => x.id === n.id ? { ...x, lida: true } : x)); }}
+                                        className="flex-shrink-0 p-1 rounded hover:bg-black/10 transition-colors">
+                                        <Icon name="X" size={14} color={n.tipo === 'checklist_aprovado' ? '#059669' : '#DC2626'} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Ações rápidas */}
                     <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 mb-6">

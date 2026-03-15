@@ -146,6 +146,7 @@ function TabViagens({ isAdmin, profile }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const exportar = () => {
+        if (!viagens.length) { showToast('Nenhum dado encontrado para exportar no período selecionado.', 'error'); return; }
         const rows = viagens.map(v => ({
             'Número': v.numero, 'Status': v.status,
             'Motorista': v.motorista?.name || '', 'Placa': v.veiculo?.placa || '',
@@ -381,7 +382,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
             const f = {};
             if (filtro.motoristaId) f.motoristaId = filtro.motoristaId;
             if (filtro.veiculoId)   f.veiculoId   = filtro.veiculoId;
-            if (filtro.mes)         { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-31'; }
+            if (filtro.mes)         { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
             const [a, v, m] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchTodosMotoristas()]);
             setAbast(a); setVeiculos(v); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -406,6 +407,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const exportar = () => {
+        if (!abast.length) { showToast('Nenhum abastecimento encontrado para exportar no período selecionado.', 'error'); return; }
         const rows = abast.map(a => ({
             'Data': FMT_DATE(a.data_abastecimento), 'Motorista': a.motorista?.name || '', 'Placa': a.veiculo?.placa || '',
             'Posto': a.posto || '', 'L. Diesel': a.litros_diesel, 'R$ Diesel': a.valor_diesel,
@@ -723,7 +725,7 @@ function TabCarregamentos({ isAdmin }) {
         try {
             const f = {};
             if (filtro.empresaId) f.empresaId = filtro.empresaId;
-            if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-31'; }
+            if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
             const [c, v, m, e] = await Promise.all([fetchCarregamentos(f), fetchCarretasVeiculos(), fetchTodosMotoristas(), fetchEmpresas()]);
             setCarregamentos(c); setVeiculos(v); setMotoristas(m); setEmpresas(e);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -755,6 +757,7 @@ function TabCarregamentos({ isAdmin }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const exportar = () => {
+        if (!carregamentos.length) { showToast('Nenhum carregamento encontrado para exportar no período selecionado.', 'error'); return; }
         const rows = carregamentos.map(c => ({
             'Data': FMT_DATE(c.data_carregamento), 'Pedido': c.numero_pedido || '', 'Motorista': c.motorista?.name || '',
             'Placa': c.veiculo?.placa || '', 'Empresa': c.empresa?.nome || '', 'Destino': c.destino || '',
@@ -979,7 +982,7 @@ function TabBonificacoes({ isAdmin }) {
         try {
             const f = { status: 'Entrega finalizada' };
             if (filtroMotorista) f.motoristaId = filtroMotorista;
-            if (filtroMes) { f.dataInicio = filtroMes + '-01'; f.dataFim = filtroMes + '-31'; }
+            if (filtroMes) { f.dataInicio = filtroMes + '-01'; f.dataFim = filtroMes + '-' + String(new Date(Number(filtroMes.split('-')[0]), Number(filtroMes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
             const [v, m] = await Promise.all([fetchViagens(f), fetchTodosMotoristas()]);
             setViagens(v); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -1008,6 +1011,7 @@ function TabBonificacoes({ isAdmin }) {
     }, [viagensComBonus]);
 
     const exportar = () => {
+        if (!viagensComBonus.length) { showToast('Nenhuma viagem encontrada para exportar no período selecionado.', 'error'); return; }
         const rows = viagensComBonus.map(v => ({
             'Motorista': v.motorista?.name || '', 'Nº Viagem': v.numero,
             'Destino': v.destino || '', 'Data': FMT_DATE(v.data_saida),
@@ -1298,6 +1302,7 @@ function TabOrdensServico({ isAdmin, profile }) {
     const [modal, setModal]       = useState(false);
     const [pdfFile, setPdfFile]   = useState(null);
     const [uploading, setUploading] = useState(false);
+    const [viewPdf, setViewPdf]   = useState(null);
     const [form, setForm] = useState({
         veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '',
     });
@@ -1383,10 +1388,10 @@ function TabOrdensServico({ isAdmin, profile }) {
                                         </p>
                                     </div>
                                     {o.pdf_url && (
-                                        <a href={o.pdf_url} target="_blank" rel="noreferrer"
+                                        <button onClick={() => setViewPdf(o.pdf_url)}
                                             className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                                            <Icon name="FileText" size={13} color="#1D4ED8" />PDF
-                                        </a>
+                                            <Icon name="FileText" size={13} color="#1D4ED8" />Ver PDF
+                                        </button>
                                     )}
                                 </div>
                                 <div className="p-3 rounded-lg text-sm mb-2" style={{ backgroundColor: '#F8FAFC' }}>
@@ -1471,6 +1476,33 @@ function TabOrdensServico({ isAdmin, profile }) {
                         </Button>
                     </div>
                 </ModalOverlay>
+            )}
+            {/* Viewer de PDF in-app */}
+            {viewPdf && (
+                <div className="fixed inset-0 z-50 flex flex-col" style={{ backgroundColor: '#1a1a1a' }}>
+                    <div className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: '#111827' }}>
+                        <div className="flex items-center gap-3">
+                            <button onClick={() => setViewPdf(null)}
+                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-white"
+                                style={{ backgroundColor: '#374151' }}>
+                                <Icon name="ArrowLeft" size={16} color="white" />
+                                Voltar
+                            </button>
+                            <span className="text-white text-sm font-medium">Ordem de Serviço — PDF</span>
+                        </div>
+                        <button onClick={() => setViewPdf(null)} className="p-1.5 rounded hover:bg-gray-700 text-gray-400">
+                            <Icon name="X" size={20} color="currentColor" />
+                        </button>
+                    </div>
+                    <div className="flex-1 overflow-auto flex items-start justify-center p-4">
+                        <object data={viewPdf} type="application/pdf" className="w-full rounded-lg" style={{ minHeight: '80vh', maxWidth: 900 }}>
+                            <div className="flex flex-col items-center justify-center h-64 text-white gap-3">
+                                <Icon name="FileText" size={48} color="#9CA3AF" />
+                                <p className="text-gray-300 text-sm text-center">Não foi possível exibir o PDF.</p>
+                            </div>
+                        </object>
+                    </div>
+                </div>
             )}
             <Toast toast={toast} />
         </div>
