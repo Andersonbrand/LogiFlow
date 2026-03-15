@@ -108,7 +108,7 @@ export default function MotoristaDashboard() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-xl mx-auto px-4 tab:px-6 lg:px-8 py-6">
+                <div className="max-w-screen-xl mx-auto px-3 sm:px-4 tab:px-6 lg:px-8 py-4 sm:py-6">
                     <BreadcrumbTrail className="mb-4" />
 
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -148,7 +148,7 @@ export default function MotoristaDashboard() {
                     </div>
 
                     {/* KPIs */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
                         {[
                             { l: 'Total de Viagens', v: totais.viagens, i: 'Truck', c: '#1D4ED8', bg: '#DBEAFE' },
                             { l: 'Finalizadas', v: totais.finalizadas, i: 'CheckCircle2', c: '#059669', bg: '#D1FAE5' },
@@ -168,10 +168,10 @@ export default function MotoristaDashboard() {
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex border-b mb-5" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="flex border-b mb-5 overflow-x-auto scrollbar-none" style={{ borderColor: 'var(--color-border)' }}>
                         {[['viagens','Minhas Viagens','Truck'], ['bonificacoes','Bonificações','DollarSign']].map(([key, label, icon]) => (
                             <button key={key} onClick={() => setTab(key)}
-                                className={`flex items-center gap-1.5 px-5 py-3 text-sm font-medium font-caption border-b-2 transition-colors ${tab === key ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                                className={`flex items-center gap-1.5 px-4 py-3 text-xs sm:text-sm font-medium font-caption border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${tab === key ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                                 <Icon name={icon} size={15} color="currentColor" />
                                 {label}
                             </button>
@@ -183,53 +183,39 @@ export default function MotoristaDashboard() {
                             <div className="animate-spin h-8 w-8 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                         </div>
                     ) : tab === 'viagens' ? (
-                        <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                            <table className="w-full text-sm">
-                                <thead className="text-xs font-caption border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                    <tr>
-                                        <th className="px-4 py-3 text-left font-medium">Romaneio</th>
-                                        <th className="px-4 py-3 text-left font-medium">Destino</th>
-                                        <th className="px-4 py-3 text-left font-medium">Status</th>
-                                        <th className="px-4 py-3 text-left font-medium">Aprovado</th>
-                                        <th className="px-4 py-3 text-left font-medium hidden md:table-cell">Data</th>
-                                        <th className="px-4 py-3 text-right font-medium">Peso (kg)</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filtered.length === 0 ? (
-                                        <tr><td colSpan={6} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                                            Nenhuma viagem no período selecionado
-                                        </td></tr>
-                                    ) : filtered.map((r, idx) => {
-                                        const sc = STATUS_CFG[r.status] || STATUS_CFG['Finalizado'];
-                                        return (
-                                            <tr key={r.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                                <td className="px-4 py-3 font-data font-medium text-blue-700">{r.numero}</td>
-                                                <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{r.destino || '—'}</td>
-                                                <td className="px-4 py-3">
-                                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{r.status}</span>
-                                                </td>
-                                                <td className="px-4 py-3">
-                                                    {r.aprovado
-                                                        ? <span className="flex items-center gap-1 text-xs text-green-600 font-medium"><Icon name="CheckCircle2" size={13} color="#059669" />Aprovado</span>
-                                                        : <span className="flex items-center gap-1 text-xs text-amber-600"><Icon name="Clock" size={13} color="#D97706" />Pendente</span>
-                                                    }
-                                                </td>
-                                                <td className="px-4 py-3 text-xs hidden md:table-cell" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                    {r.saida ? new Date(r.saida).toLocaleDateString('pt-BR') : '—'}
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-data text-xs">{Number(r.peso_total||0).toLocaleString('pt-BR')} kg</td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                        <div className="flex flex-col gap-2">
+                            {filtered.length === 0 ? (
+                                <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                    Nenhuma viagem no período selecionado
+                                </div>
+                            ) : filtered.map((r) => {
+                                const sc = STATUS_CFG[r.status] || STATUS_CFG['Finalizado'];
+                                return (
+                                    <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                        <div className="flex items-start justify-between mb-2">
+                                            <span className="font-data font-bold text-blue-700">{r.numero}</span>
+                                            <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{r.status}</span>
+                                        </div>
+                                        <p className="text-sm mb-2" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
+                                        <div className="flex items-center justify-between text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            <div className="flex items-center gap-3">
+                                                {r.saida && <span>{new Date(r.saida).toLocaleDateString('pt-BR')}</span>}
+                                                <span className="font-data">{Number(r.peso_total||0).toLocaleString('pt-BR')} kg</span>
+                                            </div>
+                                            {r.aprovado
+                                                ? <span className="flex items-center gap-1 text-green-600 font-medium"><Icon name="CheckCircle2" size={12} color="#059669" />Aprovado</span>
+                                                : <span className="flex items-center gap-1 text-amber-600"><Icon name="Clock" size={12} color="#D97706" />Pendente</span>
+                                            }
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     ) : (
                         <div className="flex flex-col gap-4">
                             <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                 <h3 className="font-heading font-semibold text-sm mb-4" style={{ color: 'var(--color-text-primary)' }}>Resumo do Período</h3>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                <div className="grid grid-cols-2 gap-3 sm:gap-4">
                                     <div>
                                         <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Total Bônus</p>
                                         <p className="text-2xl font-bold font-data text-purple-600">{BRL(totais.totalBonus)}</p>

@@ -87,7 +87,7 @@ export default function NavigationBar() {
 
                     <div className="flex-1" />
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-3">
                         {user && <NotificationBell />}
                         {user && (
                             <div className="hidden tab:flex items-center gap-2 mr-2">
