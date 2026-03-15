@@ -39,9 +39,17 @@ export default function NavigationBar() {
 
     const isActive = (path) => location?.pathname === path || location?.pathname?.startsWith(path + '/');
 
-    const visibleItems = NAV_ITEMS.filter(item =>
-        !item.roles || item.roles.includes(profile?.role)
-    );
+    const visibleItems = NAV_ITEMS.filter(item => {
+        if (!item.roles) return true;
+        const role = profile?.role;
+        const tipoVeiculo = profile?.tipo_veiculo;
+        const isCarretaUser = role === 'carreteiro' || (role === 'motorista' && tipoVeiculo === 'carreta');
+        // Carreteiros nao veem /motorista
+        if (item.path === '/motorista' && isCarretaUser) return false;
+        // /carreteiro aparece para carreteiros e admins
+        if (item.path === '/carreteiro') return isCarretaUser || role === 'admin';
+        return item.roles.includes(role);
+    });
 
     const handleLogout = async () => {
         try { await signOut(); navigate('/login'); } catch {}

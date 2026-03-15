@@ -58,7 +58,8 @@ export function StaffRoute({ children }) {
     const { user, profile, ready } = useAuthReady();
     if (!ready) return <Spinner />;
     if (!user) return <Navigate to="/login" replace />;
-    if (!['admin', 'operador'].includes(profile?.role)) return <Navigate to={profile?.role === 'carreteiro' ? '/carreteiro' : '/motorista'} replace />;
+    const isCarretaUser = profile?.role === 'carreteiro' || (profile?.role === 'motorista' && profile?.tipo_veiculo === 'carreta');
+    if (!['admin', 'operador'].includes(profile?.role)) return <Navigate to={isCarretaUser ? '/carreteiro' : '/motorista'} replace />;
     return children;
 }
 
@@ -66,7 +67,9 @@ export function MotoristaRoute({ children }) {
     const { user, profile, ready } = useAuthReady();
     if (!ready) return <Spinner />;
     if (!user) return <Navigate to="/login" replace />;
-    if (!['admin', 'motorista'].includes(profile?.role)) return <Navigate to={profile?.role === 'carreteiro' ? '/carreteiro' : '/'} replace />;
+    const isCarretaM = profile?.role === 'carreteiro' || (profile?.role === 'motorista' && profile?.tipo_veiculo === 'carreta');
+    if (isCarretaM) return <Navigate to="/carreteiro" replace />;
+    if (!['admin', 'motorista'].includes(profile?.role)) return <Navigate to="/" replace />;
     return children;
 }
 
@@ -74,7 +77,8 @@ export function CarreteiroRoute({ children }) {
     const { user, profile, ready } = useAuthReady();
     if (!ready) return <Spinner />;
     if (!user) return <Navigate to="/login" replace />;
-    if (!['admin', 'carreteiro'].includes(profile?.role)) return <Navigate to="/" replace />;
+    const isCarreta = profile?.role === 'carreteiro' || (profile?.role === 'motorista' && profile?.tipo_veiculo === 'carreta');
+    if (profile?.role !== 'admin' && !isCarreta) return <Navigate to="/" replace />;
     return children;
 }
 

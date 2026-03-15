@@ -108,7 +108,10 @@ export function AuthProvider({ children }) {
     const isAdmin     = () => profile?.role === 'admin';
     const isOperador  = () => profile?.role === 'operador';
     const isMotorista  = () => profile?.role === 'motorista';
-    const isCarreteiro = () => profile?.role === 'carreteiro';
+    // Trata role legado 'carreteiro' e novo padrao 'motorista' + tipo_veiculo='carreta'
+    const isCarreteiro = () =>
+        profile?.role === 'carreteiro' ||
+        (profile?.role === 'motorista' && profile?.tipo_veiculo === 'carreta');
     const hasRole     = (...roles) => roles.includes(profile?.role);
 
     const can = {

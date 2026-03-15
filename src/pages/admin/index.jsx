@@ -17,11 +17,19 @@ import { useNavigate } from 'react-router-dom';
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const ROLE_CONFIG = {
-    admin:      { label: 'Admin',      color: '#7C3AED', bg: '#EDE9FE' },
-    operador:   { label: 'Operador',   color: '#1D4ED8', bg: '#DBEAFE' },
-    motorista:  { label: 'Motorista',  color: '#065F46', bg: '#D1FAE5' },
-    motorista_carreta: { label: 'Motorista (Carreta)', color: '#B45309', bg: '#FEF3C7' },
+    admin:             { label: 'Admin',               color: '#7C3AED', bg: '#EDE9FE' },
+    operador:          { label: 'Operador',             color: '#1D4ED8', bg: '#DBEAFE' },
+    motorista:         { label: 'Motorista',            color: '#065F46', bg: '#D1FAE5' },
+    motorista_carreta: { label: 'Motorista (Carreta)',  color: '#B45309', bg: '#FEF3C7' },
 };
+
+// Determina a chave de exibicao do usuario (trata role legado 'carreteiro')
+function getRoleKey(u) {
+    if (!u) return 'operador';
+    if (u.role === 'carreteiro') return 'motorista_carreta';
+    if (u.role === 'motorista' && u.tipo_veiculo === 'carreta') return 'motorista_carreta';
+    return ROLE_CONFIG[u.role] ? u.role : 'operador';
+}
 
 export default function AdminPanel() {
     const { profile, isAdmin } = useAuth();
@@ -211,7 +219,7 @@ export default function AdminPanel() {
                                                 <td className="px-4 py-3 text-slate-500 text-xs hidden sm:table-cell">{u.email || '—'}</td>
                                                 <td className="px-4 py-3">
                                                     {(() => {
-                                                        const key = (u.role === 'motorista' && u.tipo_veiculo === 'carreta') ? 'motorista_carreta' : u.role;
+                                                        const key = getRoleKey(u);
                                                         const cfg = ROLE_CONFIG[key];
                                                         return cfg
                                                             ? <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ color: cfg.color, backgroundColor: cfg.bg }}>{cfg.label}</span>
@@ -220,7 +228,7 @@ export default function AdminPanel() {
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <select
-                                                        value={(u.role === 'motorista' && u.tipo_veiculo === 'carreta') ? 'motorista_carreta' : (u.role || 'operador')}
+                                                        value={getRoleKey(u)}
                                                         onChange={e => handleRoleChange(u.id, e.target.value)}
                                                         className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700">
                                                         <option value="admin">Admin</option>
