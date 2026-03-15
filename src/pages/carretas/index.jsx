@@ -2407,68 +2407,158 @@ function TabOrdensServico({ isAdmin, profile }) {
 
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
 const TABS = [
-    { id: 'viagens',       label: 'Viagens',       icon: 'Navigation' },
-    { id: 'veiculos',      label: 'Veículos',       icon: 'Truck' },
-    { id: 'abastecimentos',label: 'Abastecimentos', icon: 'Fuel' },
-    { id: 'checklist',     label: 'Checklist',      icon: 'ClipboardCheck' },
-    { id: 'carregamentos', label: 'Carregamentos',  icon: 'Package' },
-    { id: 'bonificacoes',  label: 'Bonificações',   icon: 'Award' },
-    { id: 'despesas',      label: 'Despesas',       icon: 'Receipt' },
-    { id: 'diarias',       label: 'Diárias',        icon: 'CalendarDays' },
-    { id: 'financeiro',    label: 'Financeiro',     icon: 'BarChart3' },
-    { id: 'ordens',        label: 'Ordens de Serviço', icon: 'Wrench' },
-    { id: 'empresas',      label: 'Empresas',       icon: 'Building2' },
-    { id: 'configuracoes', label: 'Configurações',  icon: 'Settings' },
+    { id: 'viagens',       label: 'Viagens',          icon: 'Navigation',    group: 'Operação' },
+    { id: 'veiculos',      label: 'Veículos',          icon: 'Truck',         group: 'Operação' },
+    { id: 'abastecimentos',label: 'Abastecimentos',    icon: 'Fuel',          group: 'Operação' },
+    { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck',group: 'Operação' },
+    { id: 'carregamentos', label: 'Carregamentos',     icon: 'Package',       group: 'Operação' },
+    { id: 'bonificacoes',  label: 'Bonificações',      icon: 'Award',         group: 'Financeiro' },
+    { id: 'despesas',      label: 'Despesas',          icon: 'Receipt',       group: 'Financeiro' },
+    { id: 'diarias',       label: 'Diárias',           icon: 'CalendarDays',  group: 'Financeiro' },
+    { id: 'financeiro',    label: 'Rel. Financeiro',   icon: 'BarChart3',     group: 'Financeiro' },
+    { id: 'ordens',        label: 'Ordens de Serviço', icon: 'Wrench',        group: 'Gestão' },
+    { id: 'empresas',      label: 'Empresas',          icon: 'Building2',     group: 'Gestão' },
+    { id: 'configuracoes', label: 'Configurações',     icon: 'Settings',      group: 'Gestão' },
 ];
+
+const GRUPOS = ['Operação', 'Financeiro', 'Gestão'];
 
 export default function CarretasPage() {
     const { profile, isAdmin } = useAuth();
-    const [tab, setTab] = useState('viagens');
+    const [tab, setTab]           = useState('viagens');
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const admin = isAdmin();
+    const tabAtual = TABS.find(t => t.id === tab);
+
+    const SidebarItem = ({ t }) => {
+        const ativo = tab === t.id;
+        return (
+            <button
+                onClick={() => { setTab(t.id); setDrawerOpen(false); }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left"
+                style={{
+                    backgroundColor: ativo ? 'var(--color-primary)' : 'transparent',
+                    color: ativo ? '#fff' : 'var(--color-muted-foreground)',
+                }}>
+                <Icon name={t.icon} size={16} color={ativo ? '#fff' : 'currentColor'} />
+                <span>{t.label}</span>
+            </button>
+        );
+    };
+
+    const SidebarContent = () => (
+        <nav className="flex flex-col gap-1 p-3">
+            {/* Logo/título no topo da sidebar */}
+            <div className="px-3 py-3 mb-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                <p className="font-heading font-bold text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                    Transporte — Carretas
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
+                    Controle de viagens e fretes
+                </p>
+            </div>
+            {GRUPOS.map(grupo => (
+                <div key={grupo} className="mb-2">
+                    <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wider"
+                        style={{ color: 'var(--color-muted-foreground)', fontSize: 10 }}>
+                        {grupo}
+                    </p>
+                    {TABS.filter(t => t.group === grupo).map(t => (
+                        <SidebarItem key={t.id} t={t} />
+                    ))}
+                </div>
+            ))}
+        </nav>
+    );
 
     return (
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-xl mx-auto px-4 tab:px-6 lg:px-8 py-6">
-                    <BreadcrumbTrail className="mb-4" />
+                <div className="max-w-screen-2xl mx-auto">
+                    <div className="flex">
 
-                    {/* Header */}
-                    <div className="mb-6">
-                        <h1 className="font-heading font-bold text-2xl" style={{ color: 'var(--color-text-primary)' }}>
-                            Transporte — Carretas
-                        </h1>
-                        <p className="text-sm font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
-                            Controle de viagens, frota e fretes de cimento
-                        </p>
+                        {/* ── Sidebar desktop (lg+) ──────────────────────── */}
+                        <aside className="hidden lg:flex flex-col flex-shrink-0 sticky top-[60px] h-[calc(100vh-60px)] overflow-y-auto border-r"
+                            style={{ width: 220, borderColor: 'var(--color-border)', backgroundColor: 'var(--color-card)' }}>
+                            <SidebarContent />
+                        </aside>
+
+                        {/* ── Conteúdo principal ─────────────────────────── */}
+                        <div className="flex-1 min-w-0 px-4 sm:px-6 py-6">
+                            <BreadcrumbTrail className="mb-4" />
+
+                            {/* Header com botão hamburger no mobile/tablet */}
+                            <div className="flex items-center justify-between mb-6 gap-3">
+                                <div>
+                                    <h1 className="font-heading font-bold text-xl sm:text-2xl" style={{ color: 'var(--color-text-primary)' }}>
+                                        {tabAtual?.label || 'Transporte — Carretas'}
+                                    </h1>
+                                    <p className="text-xs sm:text-sm font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
+                                        Controle de viagens, frota e fretes de cimento
+                                    </p>
+                                </div>
+                                {/* Botão menu — apenas em telas < lg */}
+                                <button
+                                    onClick={() => setDrawerOpen(true)}
+                                    className="lg:hidden flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium flex-shrink-0 transition-colors hover:bg-gray-50"
+                                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                                    <Icon name="Menu" size={18} color="currentColor" />
+                                    <span className="hidden sm:inline">{tabAtual?.label}</span>
+                                </button>
+                            </div>
+
+                            {/* Conteúdo da aba */}
+                            {tab === 'viagens'        && <TabViagens        isAdmin={admin} profile={profile} />}
+                            {tab === 'veiculos'       && <TabVeiculos       isAdmin={admin} />}
+                            {tab === 'abastecimentos' && <TabAbastecimentos  isAdmin={admin} profile={profile} />}
+                            {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}
+                            {tab === 'carregamentos'  && <TabCarregamentos   isAdmin={admin} />}
+                            {tab === 'bonificacoes'   && <TabBonificacoes   isAdmin={admin} />}
+                            {tab === 'despesas'       && <TabDespesasExtras  isAdmin={admin} profile={profile} />}
+                            {tab === 'diarias'         && <TabDiarias         isAdmin={admin} profile={profile} />}
+                            {tab === 'financeiro'     && <TabRelatorioFinanceiro isAdmin={admin} />}
+                            {tab === 'ordens'          && <TabOrdensServico  isAdmin={admin} profile={profile} />}
+                            {tab === 'empresas'       && <TabEmpresas       isAdmin={admin} />}
+                            {tab === 'configuracoes'  && <TabConfiguracoes  isAdmin={admin} />}
+                        </div>
                     </div>
-
-                    {/* Tabs */}
-                    <div className="flex border-b mb-6 overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-                        {TABS.map(t => (
-                            <button key={t.id} onClick={() => setTab(t.id)}
-                                className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium font-caption border-b-2 whitespace-nowrap transition-colors ${tab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                                <Icon name={t.icon} size={15} color="currentColor" />
-                                {t.label}
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Conteúdo */}
-                    {tab === 'viagens'        && <TabViagens        isAdmin={admin} profile={profile} />}
-                    {tab === 'veiculos'       && <TabVeiculos       isAdmin={admin} />}
-                    {tab === 'abastecimentos' && <TabAbastecimentos  isAdmin={admin} profile={profile} />}
-                    {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}
-                    {tab === 'carregamentos'  && <TabCarregamentos   isAdmin={admin} />}
-                    {tab === 'bonificacoes'   && <TabBonificacoes   isAdmin={admin} />}
-                    {tab === 'despesas'       && <TabDespesasExtras  isAdmin={admin} profile={profile} />}
-                    {tab === 'diarias'         && <TabDiarias         isAdmin={admin} profile={profile} />}
-                    {tab === 'financeiro'     && <TabRelatorioFinanceiro isAdmin={admin} />}
-                    {tab === 'ordens'          && <TabOrdensServico  isAdmin={admin} profile={profile} />}
-                    {tab === 'empresas'       && <TabEmpresas       isAdmin={admin} />}
-                    {tab === 'configuracoes'  && <TabConfiguracoes  isAdmin={admin} />}
                 </div>
             </main>
+
+            {/* ── Drawer mobile/tablet (< lg) ──────────────────────────── */}
+            {drawerOpen && (
+                <>
+                    {/* Overlay */}
+                    <div
+                        className="fixed inset-0 z-40 lg:hidden"
+                        style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+                        onClick={() => setDrawerOpen(false)}
+                    />
+                    {/* Painel deslizante da esquerda */}
+                    <div className="fixed top-0 left-0 bottom-0 z-50 lg:hidden flex flex-col overflow-y-auto shadow-2xl"
+                        style={{ width: 260, backgroundColor: 'var(--color-card)' }}>
+                        {/* Header do drawer */}
+                        <div className="flex items-center justify-between px-4 py-4 border-b flex-shrink-0"
+                            style={{ borderColor: 'var(--color-border)', paddingTop: 'max(env(safe-area-inset-top), 16px)' }}>
+                            <div>
+                                <p className="font-heading font-bold text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                                    Transporte — Carretas
+                                </p>
+                                <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Navegação</p>
+                            </div>
+                            <button
+                                onClick={() => setDrawerOpen(false)}
+                                className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                                <Icon name="X" size={20} color="var(--color-muted-foreground)" />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                            <SidebarContent />
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 }

@@ -88,6 +88,7 @@ export default function CarreteiroDashboard() {
     const [checklists, setChecklists] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [loading, setLoading]   = useState(true);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
     const [registros, setRegistros] = useState([]);
     const [notificacoes, setNotificacoes] = useState([]);
@@ -193,403 +194,519 @@ export default function CarreteiroDashboard() {
     };
 
     const TABS = [
-        { id: 'viagens',       label: 'Minhas Viagens',    icon: 'Navigation' },
-        { id: 'bonificacoes',  label: 'Bonificações',      icon: 'DollarSign' },
-        { id: 'registros',     label: 'Registrar Viagem',  icon: 'FilePlus' },
-        { id: 'abastecimentos',label: 'Abastecimentos',    icon: 'Fuel' },
-        { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck' },
+        { id: 'viagens',       label: 'Minhas Viagens',   icon: 'Navigation' },
+        { id: 'bonificacoes',  label: 'Bonificações',     icon: 'DollarSign' },
+        { id: 'registros',     label: 'Registrar Viagem', icon: 'FilePlus' },
+        { id: 'abastecimentos',label: 'Abastecimentos',   icon: 'Fuel' },
+        { id: 'checklist',     label: 'Checklist',        icon: 'ClipboardCheck' },
     ];
+
+    const tabAtual = TABS.find(t => t.id === tab);
 
     return (
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-xl mx-auto px-3 sm:px-4 tab:px-6 lg:px-8 py-4 sm:py-6">
-                    <BreadcrumbTrail className="mb-4" />
+                <div className="max-w-screen-xl mx-auto">
+                    <div className="flex">
 
-                    {/* Header */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                        <div className="flex items-center gap-3">
-                            <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-md"
-                                style={{ background: 'linear-gradient(135deg, #1D4ED8, #7C3AED)' }}>
-                                {(profile?.name || 'C')[0].toUpperCase()}
-                            </div>
-                            <div>
-                                <h1 className="font-heading font-bold text-2xl" style={{ color: 'var(--color-text-primary)' }}>
-                                    Olá, {profile?.name || 'Carreteiro'}
-                                </h1>
-                                <p className="text-sm font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
-                                    Suas viagens e registros
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex gap-2 items-center flex-wrap">
-                            <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                                {PERIOD_OPTIONS.map(p => (
-                                    <button key={p.days} onClick={() => setPeriod(p.days)}
-                                        className="px-2 sm:px-3 py-2 text-xs font-caption font-medium transition-colors"
-                                        style={period === p.days ? { backgroundColor: 'var(--color-primary)', color: '#fff' } : { backgroundColor: 'white', color: 'var(--color-muted-foreground)' }}>
-                                        {p.label}
+                        {/* ── Sidebar desktop (lg+) ──────────────────────── */}
+                        <aside className="hidden lg:flex flex-col flex-shrink-0 sticky top-[60px] h-[calc(100vh-60px)] overflow-y-auto border-r"
+                            style={{ width: 210, borderColor: 'var(--color-border)', backgroundColor: 'var(--color-card)' }}>
+                            <nav className="flex flex-col gap-1 p-3">
+                                {/* Perfil */}
+                                <div className="px-3 py-3 mb-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-base flex-shrink-0"
+                                            style={{ background: 'linear-gradient(135deg, #1D4ED8, #7C3AED)' }}>
+                                            {(profile?.name || 'C')[0].toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="font-semibold text-sm truncate" style={{ color: 'var(--color-text-primary)' }}>{profile?.name || 'Carreteiro'}</p>
+                                            <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Motorista</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                {TABS.map(t => {
+                                    const ativo = tab === t.id;
+                                    return (
+                                        <button key={t.id} onClick={() => setTab(t.id)}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left"
+                                            style={{
+                                                backgroundColor: ativo ? 'var(--color-primary)' : 'transparent',
+                                                color: ativo ? '#fff' : 'var(--color-muted-foreground)',
+                                            }}>
+                                            <Icon name={t.icon} size={16} color={ativo ? '#fff' : 'currentColor'} />
+                                            <span>{t.label}</span>
+                                        </button>
+                                    );
+                                })}
+                                {/* Período no sidebar */}
+                                <div className="mt-4 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                    <p className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted-foreground)', fontSize: 10 }}>Período</p>
+                                    <div className="flex flex-col gap-1 px-3">
+                                        {PERIOD_OPTIONS.map(p => (
+                                            <button key={p.days} onClick={() => setPeriod(p.days)}
+                                                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-left"
+                                                style={period === p.days
+                                                    ? { backgroundColor: 'var(--color-primary)', color: '#fff' }
+                                                    : { color: 'var(--color-muted-foreground)', backgroundColor: 'transparent' }}>
+                                                {p.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </nav>
+                        </aside>
+
+                        {/* ── Conteúdo principal ─────────────────────────── */}
+                        <div className="flex-1 min-w-0 px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
+                            <BreadcrumbTrail className="mb-4" />
+
+                            {/* Header mobile */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-base lg:hidden"
+                                        style={{ background: 'linear-gradient(135deg, #1D4ED8, #7C3AED)' }}>
+                                        {(profile?.name || 'C')[0].toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <h1 className="font-heading font-bold text-lg sm:text-xl" style={{ color: 'var(--color-text-primary)' }}>
+                                            Olá, {profile?.name || 'Carreteiro'}
+                                        </h1>
+                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            {tabAtual?.label}
+                                        </p>
+                                    </div>
+                                </div>
+                                {/* Controles direita — mobile: hamburger + período; desktop: exportar */}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {/* Período — apenas mobile/tablet (no desktop fica na sidebar) */}
+                                    <div className="lg:hidden flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                                        {PERIOD_OPTIONS.map(p => (
+                                            <button key={p.days} onClick={() => setPeriod(p.days)}
+                                                className="px-2 sm:px-3 py-2 text-xs font-medium transition-colors"
+                                                style={period === p.days ? { backgroundColor: 'var(--color-primary)', color: '#fff' } : { backgroundColor: 'white', color: 'var(--color-muted-foreground)' }}>
+                                                {p.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button onClick={exportar}
+                                        className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                                        <Icon name="FileDown" size={14} color="currentColor" />
+                                        <span className="hidden sm:inline">Exportar</span>
                                     </button>
+                                    {/* Botão hamburger — apenas mobile/tablet */}
+                                    <button onClick={() => setDrawerOpen(true)}
+                                        className="lg:hidden flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                                        <Icon name="Menu" size={16} color="currentColor" />
+                                        <span className="hidden sm:inline">{tabAtual?.label}</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Notificações pendentes */}
+                            {notificacoes.filter(n => !n.lida).length > 0 && (
+                                <div className="flex flex-col gap-2 mb-4">
+                                    {notificacoes.filter(n => !n.lida).map(n => (
+                                        <div key={n.id} className="flex items-start gap-3 p-3 rounded-xl border shadow-sm"
+                                            style={{ backgroundColor: n.tipo === 'checklist_aprovado' ? '#F0FDF4' : '#FEF2F2', borderColor: n.tipo === 'checklist_aprovado' ? '#BBF7D0' : '#FECACA' }}>
+                                            <div className="flex-shrink-0 mt-0.5">
+                                                <Icon name={n.tipo === 'checklist_aprovado' ? 'CheckCircle2' : 'AlertTriangle'} size={18} color={n.tipo === 'checklist_aprovado' ? '#059669' : '#DC2626'} />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-semibold text-sm" style={{ color: n.tipo === 'checklist_aprovado' ? '#065F46' : '#991B1B' }}>{n.titulo}</p>
+                                                <p className="text-xs mt-0.5" style={{ color: n.tipo === 'checklist_aprovado' ? '#059669' : '#DC2626' }}>{n.mensagem}</p>
+                                            </div>
+                                            <button onClick={async () => { await marcarNotificacaoLida(n.id); setNotificacoes(prev => prev.map(x => x.id === n.id ? { ...x, lida: true } : x)); }}
+                                                className="flex-shrink-0 p-1 rounded hover:bg-black/10 transition-colors">
+                                                <Icon name="X" size={14} color={n.tipo === 'checklist_aprovado' ? '#059669' : '#DC2626'} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* KPIs */}
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-5">
+                                {[
+                                    { l: 'Total de Viagens',  v: totais.viagens,     i: 'Navigation', c: '#1D4ED8', bg: '#EFF6FF' },
+                                    { l: 'Finalizadas',       v: totais.finalizadas, i: 'CheckCircle2', c: '#059669', bg: '#D1FAE5' },
+                                    { l: 'Em Trânsito',       v: totais.emTransito,  i: 'Truck', c: '#D97706', bg: '#FEF9C3' },
+                                    { l: 'Bônus no Período',  v: BRL(totais.totalBonus), i: 'DollarSign', c: '#7C3AED', bg: '#EDE9FE' },
+                                ].map(k => (
+                                    <div key={k.l} className="bg-white rounded-xl border p-3 sm:p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>{k.l}</span>
+                                            <div className="rounded-lg flex items-center justify-center" style={{ width: 28, height: 28, backgroundColor: k.bg }}>
+                                                <Icon name={k.i} size={14} color={k.c} />
+                                            </div>
+                                        </div>
+                                        <p className="text-lg sm:text-xl font-bold font-data" style={{ color: k.c }}>{k.v}</p>
+                                    </div>
                                 ))}
                             </div>
-                            <button onClick={exportar} className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg border text-xs font-medium transition-colors hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
-                                <Icon name="FileDown" size={14} color="currentColor" />
-                                <span className="hidden sm:inline">Exportar</span>
-                            </button>
-                        </div>
-                    </div>
 
-                    {/* KPIs */}
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
-                        {[
-                            { l: 'Total de Viagens',  v: totais.viagens,     i: 'Navigation', c: '#1D4ED8', bg: '#EFF6FF' },
-                            { l: 'Finalizadas',       v: totais.finalizadas, i: 'CheckCircle2', c: '#059669', bg: '#D1FAE5' },
-                            { l: 'Em Trânsito',       v: totais.emTransito,  i: 'Truck', c: '#D97706', bg: '#FEF9C3' },
-                            { l: 'Bônus no Período',  v: BRL(totais.totalBonus), i: 'DollarSign', c: '#7C3AED', bg: '#EDE9FE' },
-                        ].map(k => (
-                            <div key={k.l} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>{k.l}</span>
-                                    <div className="rounded-lg flex items-center justify-center" style={{ width: 32, height: 32, backgroundColor: k.bg }}>
-                                        <Icon name={k.i} size={15} color={k.c} />
+                            {/* Ações rápidas */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+                                <button onClick={() => { setFormAbast({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' }); setModalAbast(true); }}
+                                    className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all"
+                                    style={{ borderColor: 'var(--color-border)' }}>
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#D1FAE5' }}>
+                                        <Icon name="Fuel" size={20} color="#059669" />
                                     </div>
+                                    <div className="text-left">
+                                        <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Abastecimento</p>
+                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Diesel + Arla</p>
+                                    </div>
+                                </button>
+                                <button onClick={() => { setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '' }); setModalCheck(true); }}
+                                    className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all"
+                                    style={{ borderColor: 'var(--color-border)' }}>
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#EFF6FF' }}>
+                                        <Icon name="ClipboardCheck" size={20} color="#1D4ED8" />
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Checklist Semanal</p>
+                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Verificação do veículo</p>
+                                    </div>
+                                </button>
+                            </div>
+
+                            {/* Conteúdo das abas */}
+                            {loading ? (
+                                <div className="flex justify-center py-16">
+                                    <div className="animate-spin h-8 w-8 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                                 </div>
-                                <p className="text-xl font-bold font-data" style={{ color: k.c }}>{k.v}</p>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Notificações pendentes */}
-                    {notificacoes.filter(n => !n.lida).length > 0 && (
-                        <div className="flex flex-col gap-2 mb-4">
-                            {notificacoes.filter(n => !n.lida).map(n => (
-                                <div key={n.id} className="flex items-start gap-3 p-3 rounded-xl border shadow-sm"
-                                    style={{ backgroundColor: n.tipo === 'checklist_aprovado' ? '#F0FDF4' : '#FEF2F2', borderColor: n.tipo === 'checklist_aprovado' ? '#BBF7D0' : '#FECACA' }}>
-                                    <div className="flex-shrink-0 mt-0.5">
-                                        <Icon name={n.tipo === 'checklist_aprovado' ? 'CheckCircle2' : 'AlertTriangle'} size={18} color={n.tipo === 'checklist_aprovado' ? '#059669' : '#DC2626'} />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="font-semibold text-sm" style={{ color: n.tipo === 'checklist_aprovado' ? '#065F46' : '#991B1B' }}>{n.titulo}</p>
-                                        <p className="text-xs mt-0.5" style={{ color: n.tipo === 'checklist_aprovado' ? '#059669' : '#DC2626' }}>{n.mensagem}</p>
-                                    </div>
-                                    <button onClick={async () => { await marcarNotificacaoLida(n.id); setNotificacoes(prev => prev.map(x => x.id === n.id ? { ...x, lida: true } : x)); }}
-                                        className="flex-shrink-0 p-1 rounded hover:bg-black/10 transition-colors">
-                                        <Icon name="X" size={14} color={n.tipo === 'checklist_aprovado' ? '#059669' : '#DC2626'} />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Ações rápidas */}
-                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 mb-6">
-                        <button onClick={() => { setFormAbast({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' }); setModalAbast(true); }}
-                            className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5"
-                            style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#D1FAE5' }}>
-                                <Icon name="Fuel" size={20} color="#059669" />
-                            </div>
-                            <div className="text-left">
-                                <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Abastecimento</p>
-                                <p className="text-xs hidden sm:block" style={{ color: 'var(--color-muted-foreground)' }}>Diesel + Arla</p>
-                            </div>
-                        </button>
-                        <button onClick={() => { setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '' }); setModalCheck(true); }}
-                            className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5"
-                            style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                                <Icon name="ClipboardCheck" size={20} color="#1D4ED8" />
-                            </div>
-                            <div className="text-left">
-                                <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Checklist Semanal</p>
-                                <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Verificação do veículo</p>
-                            </div>
-                        </button>
-                    </div>
-
-                    {/* Tabs */}
-                    {/* Tabs — scroll horizontal no mobile */}
-                    <div className="flex border-b mb-5 overflow-x-auto scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0" style={{ borderColor: 'var(--color-border)' }}>
-                        {TABS.map(t => (
-                            <button key={t.id} onClick={() => setTab(t.id)}
-                                className={`flex items-center gap-1.5 px-3 sm:px-4 py-3 text-xs sm:text-sm font-medium font-caption border-b-2 whitespace-nowrap transition-colors flex-shrink-0 ${tab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-                                <Icon name={t.icon} size={14} color="currentColor" />
-                                {t.label}
-                            </button>
-                        ))}
-                    </div>
-
-                    {loading ? (
-                        <div className="flex justify-center py-20">
-                            <div className="animate-spin h-8 w-8 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
-                        </div>
-                    ) : (
-                        <>
-                            {/* Tab Viagens */}
-                            {tab === 'viagens' && (
-                                <div className="flex flex-col gap-2">
-                                    {viagensComBonus.length === 0
-                                        ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</div>
-                                        : viagensComBonus.map(v => {
-                                            const sc = STATUS_COLORS[v.status] || STATUS_COLORS['Agendado'];
-                                            return (
-                                                <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                    <div className="flex items-start justify-between mb-2">
-                                                        <span className="font-bold text-blue-700 font-data">{v.numero}</span>
-                                                        <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{v.status}</span>
-                                                    </div>
-                                                    <p className="font-medium text-sm mb-1" style={{ color: 'var(--color-text-primary)' }}>{v.destino || '—'}</p>
-                                                    <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                        <span>{FMT_DATE(v.data_saida)}</span>
-                                                        {v.veiculo?.placa && <span className="font-data">{v.veiculo.placa}</span>}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })
-                                    }
-                                </div>
-                            )}
-
-                                                    {/* Tab Bonificações */}
-                            {tab === 'bonificacoes' && (
-                                <div className="flex flex-col gap-4">
-                                    {/* Resumo */}
-                                    <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                        <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: 'var(--color-text-primary)' }}>Resumo do Período</h3>
-                                        <div className="grid grid-cols-2 gap-3 mb-4">
-                                            <div>
-                                                <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Total Bônus</p>
-                                                <p className="text-2xl font-bold font-data text-purple-600">{BRL(totais.totalBonus)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Viagens Finalizadas</p>
-                                                <p className="text-2xl font-bold font-data" style={{ color: 'var(--color-text-primary)' }}>{totais.finalizadas}</p>
-                                            </div>
-                                        </div>
-
-                                    </div>
-                                    {/* Detalhamento por viagem */}
-                                    <div className="flex flex-col gap-2">
-                                        <p className="text-sm font-semibold px-1" style={{ color: 'var(--color-text-secondary)' }}>Detalhamento por viagem finalizada</p>
-                                        {viagensComBonus.filter(v => v.status === 'Entrega finalizada').length === 0
-                                            ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem finalizada no período</div>
-                                            : viagensComBonus.filter(v => v.status === 'Entrega finalizada').map(v => (
-                                                <div key={v.id} className="bg-white rounded-xl border p-3 flex items-center justify-between shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                    <div>
-                                                        <span className="font-data font-bold text-blue-700 text-sm">{v.numero}</span>
-                                                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                            {v.destino || '—'} · {v.data_saida ? new Date(v.data_saida + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
-                                                        </p>
-                                                    </div>
-                                                    <span className="font-data font-bold text-purple-600">{BRL(v.bonus)}</span>
-                                                </div>
-                                            ))
-                                        }
-                                    </div>
-                                </div>
-                            )}
-                        {/* Tab Registrar Viagem */}
-                            {tab === 'registros' && (
-                                <div>
-                                    <div className="flex justify-end mb-4">
-                                        <Button onClick={() => { setFormRegistro({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' }); setModalRegistro(true); }} iconName="Plus" size="sm">
-                                            Nova Entrada
-                                        </Button>
-                                    </div>
-                                    <div className="flex flex-col gap-2">
-                                        {registros.length === 0
-                                            ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem registrada</div>
-                                            : registros.map(r => (
-                                                <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                    <div className="flex items-start justify-between mb-2">
-                                                        <div>
-                                                            <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
-                                                            <p className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{r.veiculo?.placa || '—'}</p>
+                            ) : (
+                                <>
+                                    {tab === 'viagens' && (
+                                        <div className="flex flex-col gap-2">
+                                            {viagensComBonus.length === 0
+                                                ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</div>
+                                                : viagensComBonus.map(v => {
+                                                    const sc = STATUS_COLORS[v.status] || STATUS_COLORS['Agendado'];
+                                                    return (
+                                                        <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                            <div className="flex items-start justify-between mb-2">
+                                                                <span className="font-data font-bold text-blue-700">{v.numero}</span>
+                                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{v.status}</span>
+                                                            </div>
+                                                            <p className="text-sm mb-2" style={{ color: 'var(--color-text-primary)' }}>{v.destino || '—'}</p>
+                                                            <div className="flex items-center justify-between text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                <div className="flex items-center gap-3">
+                                                                    {v.data_saida && <span>{new Date(v.data_saida + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
+                                                                    {v.veiculo?.placa && <span className="font-data">{v.veiculo.placa}</span>}
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
-                                                            {r.data_carregamento ? new Date(r.data_carregamento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex flex-wrap gap-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                        {r.numero_nota_fiscal && <span>NF: <strong>{r.numero_nota_fiscal}</strong></span>}
-                                                        {r.data_descarga && <span>Descarga: <strong>{new Date(r.data_descarga + 'T00:00:00').toLocaleDateString('pt-BR')}</strong></span>}
-                                                    </div>
-                                                    {r.observacoes && <p className="text-xs mt-2 text-gray-500">{r.observacoes}</p>}
-                                                </div>
-                                            ))
-                                        }
-                                    </div>
-                                </div>
-                            )}
-                        {/* Tab Abastecimentos */}
-                            {tab === 'abastecimentos' && (
-                                <div>
-                                    <div className="grid grid-cols-2 gap-3 mb-4">
-                                        <div className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                            <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Diesel Total</p>
-                                            <p className="text-lg font-bold font-data text-blue-600">{totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L</p>
+                                                    );
+                                                })
+                                            }
                                         </div>
-                                        <div className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                            <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Gasto Total</p>
-                                            <p className="text-lg font-bold font-data text-purple-600">{BRL(totais.gastoTotal)}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col gap-2">
-                                        {abast.length === 0
-                                            ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento no período</div>
-                                            : abast.map(a => (
-                                                <div key={a.id} className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                    <div className="flex items-center justify-between mb-1">
-                                                        <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{FMT_DATE(a.data_abastecimento)}</span>
-                                                        <span className="font-data font-bold text-purple-600">{BRL(a.valor_total)}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                        <span className="font-data">{a.veiculo?.placa || '—'}</span>
-                                                        {a.posto && <span>{a.posto}</span>}
-                                                        <span className="text-blue-600">{Number(a.litros_diesel || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L diesel</span>
-                                                        {Number(a.litros_arla) > 0 && <span className="text-emerald-600">{Number(a.litros_arla).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L arla</span>}
-                                                    </div>
-                                                </div>
-                                            ))
-                                        }
-                                    </div>
-                                </div>
-                            )}
+                                    )}
 
-                            {/* Tab Checklist */}
-                            {tab === 'checklist' && (
-                                <div className="flex flex-col gap-4">
-                                    {checklists.length === 0 && <div className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum checklist enviado ainda</div>}
-                                    {checklists.map(c => {
-                                        const itens = c.itens || {};
-                                        const ok = Object.values(itens).filter(Boolean).length;
-                                        return (
-                                            <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                <div className="flex items-center justify-between mb-2">
+                                    {tab === 'bonificacoes' && (
+                                        <div className="flex flex-col gap-4">
+                                            <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: 'var(--color-text-primary)' }}>Resumo do Período</h3>
+                                                <div className="grid grid-cols-2 gap-3">
                                                     <div>
-                                                        <p className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.veiculo?.placa || '—'}</p>
-                                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Semana de {c.semana_ref ? new Date(c.semana_ref + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</p>
+                                                        <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Total Bônus</p>
+                                                        <p className="text-2xl font-bold font-data text-purple-600">{BRL(totais.totalBonus)}</p>
                                                     </div>
-                                                    {c.aprovado
-                                                        ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"><Icon name="CheckCircle2" size={11} />Aprovado</span>
-                                                        : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Icon name="Clock" size={11} />Pendente</span>
-                                                    }
-                                                </div>
-                                                <div className="flex items-center justify-between text-xs mb-1">
-                                                    <span style={{ color: 'var(--color-muted-foreground)' }}>Itens OK</span>
-                                                    <span className="font-medium">{ok}/{CHECKLIST_ITENS.length}</span>
-                                                </div>
-                                                <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                                                    <div className="h-full rounded-full" style={{ width: `${(ok / CHECKLIST_ITENS.length) * 100}%`, backgroundColor: ok === CHECKLIST_ITENS.length ? '#059669' : '#D97706' }} />
+                                                    <div>
+                                                        <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Viagens Finalizadas</p>
+                                                        <p className="text-2xl font-bold font-data" style={{ color: 'var(--color-text-primary)' }}>{totais.finalizadas}</p>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        );
-                                    })}
-                                </div>
+                                            <div className="flex flex-col gap-2">
+                                                <p className="text-sm font-semibold px-1" style={{ color: 'var(--color-text-secondary)' }}>Detalhamento por viagem finalizada</p>
+                                                {viagensComBonus.filter(v => v.status === 'Entrega finalizada').length === 0
+                                                    ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem finalizada no período</div>
+                                                    : viagensComBonus.filter(v => v.status === 'Entrega finalizada').map(v => (
+                                                        <div key={v.id} className="bg-white rounded-xl border p-3 flex items-center justify-between shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                            <div>
+                                                                <span className="font-data font-bold text-blue-700 text-sm">{v.numero}</span>
+                                                                <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                    {v.destino || '—'} · {v.data_saida ? new Date(v.data_saida + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                                                                </p>
+                                                            </div>
+                                                            <span className="font-data font-bold text-purple-600">{BRL(v.bonus)}</span>
+                                                        </div>
+                                                    ))
+                                                }
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {tab === 'registros' && (
+                                        <div>
+                                            <div className="flex justify-end mb-4">
+                                                <Button onClick={() => { setFormRegistro({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' }); setModalRegistro(true); }} iconName="Plus" size="sm">
+                                                    Nova Entrada
+                                                </Button>
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                {registros.length === 0
+                                                    ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem registrada</div>
+                                                    : registros.map(r => (
+                                                        <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                            <div className="flex items-start justify-between mb-2">
+                                                                <div>
+                                                                    <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
+                                                                    <p className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{r.veiculo?.placa || '—'}</p>
+                                                                </div>
+                                                                <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
+                                                                    {r.data_carregamento ? new Date(r.data_carregamento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                {r.numero_nota_fiscal && <span>NF: <strong>{r.numero_nota_fiscal}</strong></span>}
+                                                                {r.data_descarga && <span>Descarga: <strong>{new Date(r.data_descarga + 'T00:00:00').toLocaleDateString('pt-BR')}</strong></span>}
+                                                            </div>
+                                                            {r.observacoes && <p className="text-xs mt-2 text-gray-500">{r.observacoes}</p>}
+                                                        </div>
+                                                    ))
+                                                }
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {tab === 'abastecimentos' && (
+                                        <div>
+                                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <div className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                    <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Diesel Total</p>
+                                                    <p className="text-lg font-bold font-data text-blue-600">{totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L</p>
+                                                </div>
+                                                <div className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                    <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Gasto Total</p>
+                                                    <p className="text-lg font-bold font-data text-purple-600">{BRL(totais.gastoTotal)}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                {abast.length === 0
+                                                    ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento no período</div>
+                                                    : abast.map(a => (
+                                                        <div key={a.id} className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                            <div className="flex items-center justify-between mb-1">
+                                                                <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{FMT_DATE(a.data_abastecimento)}</span>
+                                                                <span className="font-data font-bold text-purple-600">{BRL(a.valor_total)}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                <span className="font-data">{a.veiculo?.placa || '—'}</span>
+                                                                {a.posto && <span>{a.posto}</span>}
+                                                                <span className="text-blue-600">{Number(a.litros_diesel || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L diesel</span>
+                                                                {Number(a.litros_arla) > 0 && <span className="text-emerald-600">{Number(a.litros_arla).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L arla</span>}
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                }
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {tab === 'checklist' && (
+                                        <div className="flex flex-col gap-4">
+                                            {checklists.length === 0 && <div className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum checklist enviado ainda</div>}
+                                            {checklists.map(c => {
+                                                const itens = c.itens || {};
+                                                const ok = Object.values(itens).filter(Boolean).length;
+                                                return (
+                                                    <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                        <div className="flex items-center justify-between mb-2">
+                                                            <div>
+                                                                <p className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.veiculo?.placa || '—'}</p>
+                                                                <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Semana de {c.semana_ref ? new Date(c.semana_ref + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</p>
+                                                            </div>
+                                                            {c.aprovado
+                                                                ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"><Icon name="CheckCircle2" size={11} />Aprovado</span>
+                                                                : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Icon name="Clock" size={11} />Pendente</span>
+                                                            }
+                                                        </div>
+                                                        <div className="flex items-center justify-between text-xs mb-1">
+                                                            <span style={{ color: 'var(--color-muted-foreground)' }}>Itens OK</span>
+                                                            <span className="font-medium">{ok}/{CHECKLIST_ITENS.length}</span>
+                                                        </div>
+                                                        <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+                                                            <div className="h-full rounded-full" style={{ width: `${(ok / CHECKLIST_ITENS.length) * 100}%`, backgroundColor: ok === CHECKLIST_ITENS.length ? '#059669' : '#D97706' }} />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </>
                             )}
-                        </>
-                    )}
+                        </div>
+                    </div>
                 </div>
             </main>
 
-            {/* Modal Abastecimento */}
+            {/* ── Drawer mobile/tablet (< lg) ──────────────────────────── */}
+            {drawerOpen && (
+                <>
+                    <div className="fixed inset-0 z-40 lg:hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={() => setDrawerOpen(false)} />
+                    <div className="fixed top-0 left-0 bottom-0 z-50 lg:hidden flex flex-col overflow-y-auto shadow-2xl"
+                        style={{ width: 240, backgroundColor: 'var(--color-card)' }}>
+                        <div className="flex items-center justify-between px-4 py-4 border-b flex-shrink-0"
+                            style={{ borderColor: 'var(--color-border)', paddingTop: 'max(env(safe-area-inset-top), 16px)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0"
+                                    style={{ background: 'linear-gradient(135deg, #1D4ED8, #7C3AED)' }}>
+                                    {(profile?.name || 'C')[0].toUpperCase()}
+                                </div>
+                                <div className="min-w-0">
+                                    <p className="font-semibold text-sm truncate" style={{ color: 'var(--color-text-primary)' }}>{profile?.name || 'Carreteiro'}</p>
+                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Motorista</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setDrawerOpen(false)} className="p-2 rounded-lg hover:bg-gray-100 flex-shrink-0">
+                                <Icon name="X" size={20} color="var(--color-muted-foreground)" />
+                            </button>
+                        </div>
+                        <nav className="flex flex-col gap-1 p-3 flex-1">
+                            {TABS.map(t => {
+                                const ativo = tab === t.id;
+                                return (
+                                    <button key={t.id} onClick={() => { setTab(t.id); setDrawerOpen(false); }}
+                                        className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all text-left"
+                                        style={{
+                                            backgroundColor: ativo ? 'var(--color-primary)' : 'transparent',
+                                            color: ativo ? '#fff' : 'var(--color-muted-foreground)',
+                                        }}>
+                                        <Icon name={t.icon} size={18} color={ativo ? '#fff' : 'currentColor'} />
+                                        <span>{t.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </nav>
+                    </div>
+                </>
+            )}
+
+            {/* Modais */}
             {modalAbast && (
-                <ModalOverlay onClose={() => setModalAbast(false)}>
-                    <ModalHeader title="Registrar Abastecimento" icon="Fuel" onClose={() => setModalAbast(false)} />
-                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Field label="Veículo" required>
-                            <select value={formAbast.veiculo_id} onChange={e => setFormAbast(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                <option value="">Selecione...</option>
-                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                            </select>
-                        </Field>
-                        <Field label="Data" required><input type="date" value={formAbast.data_abastecimento} onChange={e => setFormAbast(f => ({ ...f, data_abastecimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
-                        <Field label="Horário"><input type="time" value={formAbast.horario} onChange={e => setFormAbast(f => ({ ...f, horario: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
-                        <Field label="Posto"><input value={formAbast.posto} onChange={e => setFormAbast(f => ({ ...f, posto: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Nome do posto" /></Field>
-                        <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
-                            <div className="flex items-center justify-between mb-2">
-                                <p className="text-xs font-semibold text-blue-700">🛢️ Diesel</p>
-                                <span className="text-xs text-blue-600">R$ {Number(configAbast.preco_diesel || 0).toFixed(3)}/L</span>
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                    onClick={e => e.target === e.currentTarget && setModalAbast(false)}>
+                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+                        <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
+                        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
+                                    <Icon name="Fuel" size={18} color="#1D4ED8" />
+                                </div>
+                                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>Registrar Abastecimento</h2>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <Field label="Litros abastecidos">
-                                    <input type="number" step="0.01" value={formAbast.litros_diesel} onChange={e => setFormAbast(f => ({ ...f, litros_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
-                                </Field>
-                                <Field label="Valor calculado (R$)">
-                                    <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0F9FF', color: '#1D4ED8' }}>
-                                        {(Number(formAbast.litros_diesel || 0) * Number(configAbast.preco_diesel || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                    </div>
-                                </Field>
+                            <button onClick={() => setModalAbast(false)} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
+                        </div>
+                        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <Field label="Veículo" required>
+                                <select value={formAbast.veiculo_id} onChange={e => setFormAbast(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <option value="">Selecione...</option>
+                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                </select>
+                            </Field>
+                            <Field label="Data" required><input type="date" value={formAbast.data_abastecimento} onChange={e => setFormAbast(f => ({ ...f, data_abastecimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                            <Field label="Horário"><input type="time" value={formAbast.horario} onChange={e => setFormAbast(f => ({ ...f, horario: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                            <Field label="Posto"><input value={formAbast.posto} onChange={e => setFormAbast(f => ({ ...f, posto: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Nome do posto" /></Field>
+                            <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-xs font-semibold text-blue-700">🛢️ Diesel</p>
+                                    <span className="text-xs text-blue-600">R$ {Number(configAbast.preco_diesel || 0).toFixed(3)}/L</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Litros"><input type="number" step="0.01" value={formAbast.litros_diesel} onChange={e => setFormAbast(f => ({ ...f, litros_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
+                                    <Field label="Valor calculado">
+                                        <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0F9FF', color: '#1D4ED8' }}>
+                                            {(Number(formAbast.litros_diesel || 0) * Number(configAbast.preco_diesel || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </div>
+                                    </Field>
+                                </div>
+                            </div>
+                            <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-xs font-semibold text-emerald-700">💧 ARLA 32</p>
+                                    <span className="text-xs text-emerald-600">R$ {Number(configAbast.preco_arla || 0).toFixed(3)}/L</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Litros"><input type="number" step="0.01" value={formAbast.litros_arla} onChange={e => setFormAbast(f => ({ ...f, litros_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
+                                    <Field label="Valor calculado">
+                                        <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0FDF4', color: '#059669' }}>
+                                            {(Number(formAbast.litros_arla || 0) * Number(configAbast.preco_arla || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </div>
+                                    </Field>
+                                </div>
+                            </div>
+                            <div className="sm:col-span-2 p-2 rounded-lg text-sm font-bold flex items-center justify-between" style={{ backgroundColor: '#7C3AED', color: 'white' }}>
+                                <span>Total do abastecimento:</span>
+                                <span>{((Number(formAbast.litros_diesel || 0) * Number(configAbast.preco_diesel || 0)) + (Number(formAbast.litros_arla || 0) * Number(configAbast.preco_arla || 0))).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                             </div>
                         </div>
-                        <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
-                            <div className="flex items-center justify-between mb-2">
-                                <p className="text-xs font-semibold text-emerald-700">💧 ARLA 32</p>
-                                <span className="text-xs text-emerald-600">R$ {Number(configAbast.preco_arla || 0).toFixed(3)}/L</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <Field label="Litros abastecidos">
-                                    <input type="number" step="0.01" value={formAbast.litros_arla} onChange={e => setFormAbast(f => ({ ...f, litros_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
-                                </Field>
-                                <Field label="Valor calculado (R$)">
-                                    <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0FDF4', color: '#059669' }}>
-                                        {(Number(formAbast.litros_arla || 0) * Number(configAbast.preco_arla || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                                    </div>
-                                </Field>
-                            </div>
-                        </div>
-                        <div className="sm:col-span-2 p-2 rounded-lg text-sm font-bold flex items-center justify-between" style={{ backgroundColor: '#7C3AED', color: 'white' }}>
-                            <span>Total do abastecimento:</span>
-                            <span>{((Number(formAbast.litros_diesel || 0) * Number(configAbast.preco_diesel || 0)) + (Number(formAbast.litros_arla || 0) * Number(configAbast.preco_arla || 0))).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 pt-0 sm:justify-end">
+                            <button onClick={() => setModalAbast(false)} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <Button onClick={handleAbast} size="sm" iconName="Check">Registrar</Button>
                         </div>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
-                        <button onClick={() => setModalAbast(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button onClick={handleAbast} size="sm" iconName="Check">Registrar</Button>
-                    </div>
-                </ModalOverlay>
+                </div>
             )}
 
-            {/* Modal Checklist */}
             {modalCheck && (
-                <ModalOverlay onClose={() => setModalCheck(false)}>
-                    <ModalHeader title="Checklist Semanal" icon="ClipboardCheck" onClose={() => setModalCheck(false)} />
-                    <div className="p-5 space-y-4">
-                        <Field label="Veículo" required>
-                            <select value={formCheck.veiculo_id} onChange={e => setFormCheck(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                <option value="">Selecione...</option>
-                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                            </select>
-                        </Field>
-                        <div>
-                            <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>Itens verificados</p>
-                            <div className="grid grid-cols-1 gap-2">
-                                {CHECKLIST_ITENS.map(item => (
-                                    <label key={item.id} className="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
-                                        <input type="checkbox" checked={!!formCheck.itens[item.id]} onChange={e => setFormCheck(f => ({ ...f, itens: { ...f.itens, [item.id]: e.target.checked } }))} className="accent-blue-600 w-4 h-4" />
-                                        <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{item.label}</span>
-                                    </label>
-                                ))}
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                    onClick={e => e.target === e.currentTarget && setModalCheck(false)}>
+                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+                        <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
+                        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
+                                    <Icon name="ClipboardCheck" size={18} color="#1D4ED8" />
+                                </div>
+                                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>Checklist Semanal</h2>
                             </div>
+                            <button onClick={() => setModalCheck(false)} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
                         </div>
-                        <Field label="Problemas identificados"><textarea value={formCheck.problemas} onChange={e => setFormCheck(f => ({ ...f, problemas: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Descreva problemas..." /></Field>
-                        <Field label="Necessidades"><textarea value={formCheck.necessidades} onChange={e => setFormCheck(f => ({ ...f, necessidades: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Pneus, cintas, peças..." /></Field>
-                        <Field label="Observações livres"><textarea value={formCheck.observacoes_livres} onChange={e => setFormCheck(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
+                        <div className="p-5 space-y-4">
+                            <Field label="Veículo" required>
+                                <select value={formCheck.veiculo_id} onChange={e => setFormCheck(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <option value="">Selecione...</option>
+                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                </select>
+                            </Field>
+                            <div>
+                                <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>Itens verificados</p>
+                                <div className="grid grid-cols-1 gap-2">
+                                    {CHECKLIST_ITENS.map(item => (
+                                        <label key={item.id} className="flex items-center gap-2 cursor-pointer p-2.5 rounded-lg border hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>
+                                            <input type="checkbox" checked={!!formCheck.itens[item.id]} onChange={e => setFormCheck(f => ({ ...f, itens: { ...f.itens, [item.id]: e.target.checked } }))} className="accent-blue-600 w-4 h-4" />
+                                            <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{item.label}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                            <Field label="Problemas identificados"><textarea value={formCheck.problemas} onChange={e => setFormCheck(f => ({ ...f, problemas: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Descreva problemas..." /></Field>
+                            <Field label="Necessidades"><textarea value={formCheck.necessidades} onChange={e => setFormCheck(f => ({ ...f, necessidades: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Pneus, cintas, peças..." /></Field>
+                            <Field label="Observações livres"><textarea value={formCheck.observacoes_livres} onChange={e => setFormCheck(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
+                        </div>
+                        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 pt-0 sm:justify-end">
+                            <button onClick={() => setModalCheck(false)} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <Button onClick={handleCheck} size="sm" iconName="Send">Enviar</Button>
+                        </div>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
-                        <button onClick={() => setModalCheck(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button onClick={handleCheck} size="sm" iconName="Send">Enviar</Button>
-                    </div>
-                </ModalOverlay>
+                </div>
             )}
 
-            {/* Modal Registrar Viagem */}
             {modalRegistro && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
                     style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                     onClick={e => e.target === e.currentTarget && setModalRegistro(false)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+                        <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
                         <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
@@ -597,55 +714,39 @@ export default function CarreteiroDashboard() {
                                 </div>
                                 <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>Registrar Viagem</h2>
                             </div>
-                            <button onClick={() => setModalRegistro(false)} className="p-1.5 rounded-lg hover:bg-gray-100">
-                                <Icon name="X" size={18} color="var(--color-muted-foreground)" />
-                            </button>
+                            <button onClick={() => setModalRegistro(false)} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
                         </div>
                         <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de carregamento <span className="text-red-500">*</span></label>
-                                <input type="date" value={formRegistro.data_carregamento}
-                                    onChange={e => setFormRegistro(f => ({ ...f, data_carregamento: e.target.value }))}
-                                    className={inputCls} style={inputStyle} />
+                                <input type="date" value={formRegistro.data_carregamento} onChange={e => setFormRegistro(f => ({ ...f, data_carregamento: e.target.value }))} className={inputCls} style={inputStyle} />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Nº da Nota Fiscal</label>
-                                <input value={formRegistro.numero_nota_fiscal}
-                                    onChange={e => setFormRegistro(f => ({ ...f, numero_nota_fiscal: e.target.value }))}
-                                    className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
+                                <input value={formRegistro.numero_nota_fiscal} onChange={e => setFormRegistro(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Placa do veículo <span className="text-red-500">*</span></label>
-                                <select value={formRegistro.veiculo_id}
-                                    onChange={e => setFormRegistro(f => ({ ...f, veiculo_id: e.target.value }))}
-                                    className={inputCls} style={inputStyle}>
+                                <select value={formRegistro.veiculo_id} onChange={e => setFormRegistro(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </select>
                             </div>
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Destino da carga <span className="text-red-500">*</span></label>
-                                <input value={formRegistro.destino}
-                                    onChange={e => setFormRegistro(f => ({ ...f, destino: e.target.value }))}
-                                    className={inputCls} style={inputStyle} placeholder="Estoque ou cidade" />
+                                <input value={formRegistro.destino} onChange={e => setFormRegistro(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Estoque ou cidade" />
                             </div>
                             <div className="sm:col-span-2">
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de descarga</label>
-                                <input type="date" value={formRegistro.data_descarga}
-                                    onChange={e => setFormRegistro(f => ({ ...f, data_descarga: e.target.value }))}
-                                    className={inputCls} style={inputStyle} />
+                                <input type="date" value={formRegistro.data_descarga} onChange={e => setFormRegistro(f => ({ ...f, data_descarga: e.target.value }))} className={inputCls} style={inputStyle} />
                             </div>
                             <div className="sm:col-span-2">
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Observações</label>
-                                <textarea value={formRegistro.observacoes}
-                                    onChange={e => setFormRegistro(f => ({ ...f, observacoes: e.target.value }))}
-                                    className={inputCls} style={inputStyle} rows={2} />
+                                <textarea value={formRegistro.observacoes} onChange={e => setFormRegistro(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
                             </div>
                         </div>
-                        <div className="flex gap-3 p-5 pt-0 justify-end">
-                            <button onClick={() => setModalRegistro(false)}
-                                className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50"
-                                style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 pt-0 sm:justify-end">
+                            <button onClick={() => setModalRegistro(false)} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <Button onClick={async () => {
                                 if (!formRegistro.data_carregamento || !formRegistro.destino) { showToast('Data e destino são obrigatórios', 'error'); return; }
                                 try {
