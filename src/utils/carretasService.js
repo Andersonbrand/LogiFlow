@@ -573,3 +573,92 @@ export async function fetchMecanicos() {
     if (error) throw error;
     return data || [];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DESPESAS EXTRAS (por veículo)
+// ─────────────────────────────────────────────────────────────────────────────
+export const CATEGORIAS_DESPESA = [
+    'Pneus', 'Peças', 'Acessórios', 'Oficina / Mão de obra',
+    'Depreciação', 'Seguro', 'IPVA / Licenciamento', 'Lavagem', 'Outros',
+];
+
+export async function fetchDespesasExtras(filters = {}) {
+    let q = supabase
+        .from('carretas_despesas_extras')
+        .select('*, veiculo:veiculo_id(id, placa, modelo)')
+        .order('data_despesa', { ascending: false });
+    if (filters.veiculoId)  q = q.eq('veiculo_id', filters.veiculoId);
+    if (filters.categoria)  q = q.eq('categoria', filters.categoria);
+    if (filters.dataInicio) q = q.gte('data_despesa', filters.dataInicio);
+    if (filters.dataFim)    q = q.lte('data_despesa', filters.dataFim);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createDespesaExtra(despesa) {
+    const { data, error } = await supabase
+        .from('carretas_despesas_extras')
+        .insert(despesa)
+        .select('*, veiculo:veiculo_id(id, placa, modelo)')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updateDespesaExtra(id, updates) {
+    const { data, error } = await supabase
+        .from('carretas_despesas_extras')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deleteDespesaExtra(id) {
+    const { error } = await supabase.from('carretas_despesas_extras').delete().eq('id', id);
+    if (error) throw error;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DIÁRIAS DE MOTORISTAS
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchDiarias(filters = {}) {
+    let q = supabase
+        .from('carretas_diarias')
+        .select('*, motorista:motorista_id(id, name), viagem:viagem_id(id, numero, destino)')
+        .order('data_inicio', { ascending: false });
+    if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
+    if (filters.dataInicio)  q = q.gte('data_inicio', filters.dataInicio);
+    if (filters.dataFim)     q = q.lte('data_inicio', filters.dataFim);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createDiaria(diaria) {
+    // Calcula valor total: quantidade_dias × valor_dia
+    const valorTotal = Number(diaria.quantidade_dias || 1) * Number(diaria.valor_dia || 0);
+    const { data, error } = await supabase
+        .from('carretas_diarias')
+        .insert({ ...diaria, valor_total: valorTotal })
+        .select('*, motorista:motorista_id(id, name)')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updateDiaria(id, updates) {
+    const valorTotal = Number(updates.quantidade_dias || 1) * Number(updates.valor_dia || 0);
+    const { data, error } = await supabase
+        .from('carretas_diarias')
+        .update({ ...updates, valor_total: valorTotal, updated_at: new Date().toISOString() })
+        .eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deleteDiaria(id) {
+    const { error } = await supabase.from('carretas_diarias').delete().eq('id', id);
+    if (error) throw error;
+}

@@ -20,6 +20,9 @@ import {
     aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
     fetchOrdensServico, createOrdemServico, updateOrdemServico,
     fetchMecanicos,
+    fetchDespesasExtras, createDespesaExtra, updateDespesaExtra, deleteDespesaExtra,
+    fetchDiarias, createDiaria, updateDiaria, deleteDiaria,
+    CATEGORIAS_DESPESA,
     CIDADES_BONUS_BAIXO, BONUS_BAIXO, BONUS_ALTO,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
@@ -1106,6 +1109,887 @@ function TabBonificacoes({ isAdmin }) {
     );
 }
 
+// ─── TAB: Despesas Extras (por veículo) ──────────────────────────────────────
+function TabDespesasExtras({ isAdmin }) {
+    const { toast, showToast } = useToast();
+    const [despesas, setDespesas]   = useState([]);
+    const [veiculos, setVeiculos]   = useState([]);
+    const [loading, setLoading]     = useState(true);
+    const [modal, setModal]         = useState(null);
+    const [filtro, setFiltro]       = useState({ veiculoId: '', categoria: '', mes: '' });
+    const [form, setForm] = useState({
+        veiculo_id: '', categoria: 'Pneus', descricao: '', valor: '',
+        data_despesa: new Date().toISOString().split('T')[0], nota_fiscal: '', observacoes: '',
+    });
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const f = {};
+            if (filtro.veiculoId) f.veiculoId  = filtro.veiculoId;
+            if (filtro.categoria) f.categoria  = filtro.categoria;
+            if (filtro.mes) {
+                f.dataInicio = filtro.mes + '-01';
+                f.dataFim    = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0');
+            }
+            const [d, v] = await Promise.all([fetchDespesasExtras(f), fetchCarretasVeiculos()]);
+            setDespesas(d); setVeiculos(v);
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    }, [filtro]); // eslint-disable-line
+    useEffect(() => { load(); }, [load]);
+
+    const totalPeriodo = useMemo(() => despesas.reduce((s, d) => s + Number(d.valor || 0), 0), [despesas]);
+
+    const totalPorCategoria = useMemo(() => {
+        const acc = {};
+        despesas.forEach(d => { acc[d.categoria] = (acc[d.categoria] || 0) + Number(d.valor || 0); });
+        return Object.entries(acc).sort((a, b) => b[1] - a[1]);
+    }, [despesas]);
+
+    const handleSubmit = async () => {
+        if (!form.categoria || !form.valor || !form.data_despesa) { showToast('Categoria, valor e data são obrigatórios', 'error'); return; }
+        try {
+            if (modal.mode === 'create') await createDespesaExtra(form);
+            else await updateDespesaExtra(modal.data.id, form);
+            showToast('Despesa salva!', 'success'); setModal(null); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Excluir despesa?')) return;
+        try { await deleteDespesaExtra(id); showToast('Excluída!', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const exportar = () => {
+        if (!despesas.length) { showToast('Nenhuma despesa no período selecionado.', 'error'); return; }
+        const rows = despesas.map(d => ({
+            'Data': FMT_DATE(d.data_despesa), 'Placa': d.veiculo?.placa || '—',
+            'Categoria': d.categoria, 'Descrição': d.descricao || '',
+            'NF': d.nota_fiscal || '', 'Valor (R$)': d.valor,
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = [{ wch: 12 },{ wch: 12 },{ wch: 22 },{ wch: 30 },{ wch: 14 },{ wch: 14 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Despesas Extras');
+        XLSX.writeFile(wb, `despesas_extras_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
+        showToast('Exportado!', 'success');
+    };
+
+    const openCreate = () => {
+        setForm({ veiculo_id: '', categoria: 'Pneus', descricao: '', valor: '', data_despesa: new Date().toISOString().split('T')[0], nota_fiscal: '', observacoes: '' });
+        setModal({ mode: 'create' });
+    };
+    const openEdit = (d) => {
+        setForm({ veiculo_id: d.veiculo_id || '', categoria: d.categoria, descricao: d.descricao || '', valor: d.valor, data_despesa: d.data_despesa, nota_fiscal: d.nota_fiscal || '', observacoes: d.observacoes || '' });
+        setModal({ mode: 'edit', data: d });
+    };
+
+    return (
+        <div>
+            <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
+                <div className="flex flex-wrap gap-2">
+                    <select value={filtro.veiculoId} onChange={e => setFiltro(f => ({ ...f, veiculoId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                        <option value="">Todos veículos</option>
+                        {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                    </select>
+                    <select value={filtro.categoria} onChange={e => setFiltro(f => ({ ...f, categoria: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                        <option value="">Todas categorias</option>
+                        {CATEGORIAS_DESPESA.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
+                        <Icon name="FileDown" size={14} /> Exportar
+                    </button>
+                    <Button onClick={openCreate} iconName="Plus" size="sm">Nova Despesa</Button>
+                </div>
+            </div>
+
+            {/* KPIs */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                <div className="bg-white rounded-xl border p-4 shadow-sm sm:col-span-2" style={{ borderColor: 'var(--color-border)' }}>
+                    <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Total no Período</p>
+                    <p className="text-2xl font-bold font-data text-red-600">{BRL(totalPeriodo)}</p>
+                </div>
+                {totalPorCategoria.slice(0, 2).map(([cat, val]) => (
+                    <div key={cat} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                        <p className="text-xs mb-1 truncate" style={{ color: 'var(--color-muted-foreground)' }}>{cat}</p>
+                        <p className="text-lg font-bold font-data text-orange-600">{BRL(val)}</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* Breakdown por categoria */}
+            {totalPorCategoria.length > 0 && (
+                <div className="bg-white rounded-xl border p-4 shadow-sm mb-5" style={{ borderColor: 'var(--color-border)' }}>
+                    <p className="text-xs font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>Distribuição por categoria</p>
+                    <div className="space-y-2">
+                        {totalPorCategoria.map(([cat, val]) => {
+                            const pct = totalPeriodo > 0 ? (val / totalPeriodo) * 100 : 0;
+                            return (
+                                <div key={cat}>
+                                    <div className="flex justify-between text-xs mb-1">
+                                        <span style={{ color: 'var(--color-text-primary)' }}>{cat}</span>
+                                        <span className="font-data font-medium">{BRL(val)} <span style={{ color: 'var(--color-muted-foreground)' }}>({pct.toFixed(1)}%)</span></span>
+                                    </div>
+                                    <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: '#F97316' }} />
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Tabela */}
+            {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
+                <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                    <table className="w-full text-sm">
+                        <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                            <tr>{['Data','Placa','Categoria','Descrição','NF','Valor',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                        </thead>
+                        <tbody>
+                            {despesas.length === 0 ? <tr><td colSpan={7} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma despesa registrada</td></tr>
+                            : despesas.map((d, i) => (
+                                <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                    <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(d.data_despesa)}</td>
+                                    <td className="px-4 py-3 font-data">{d.veiculo?.placa || '—'}</td>
+                                    <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700 font-medium">{d.categoria}</span></td>
+                                    <td className="px-4 py-3 text-xs max-w-[180px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
+                                    <td className="px-4 py-3 text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.nota_fiscal || '—'}</td>
+                                    <td className="px-4 py-3 font-data font-semibold text-red-600">{BRL(d.valor)}</td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex gap-1">
+                                            {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
+                                            {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {modal && (
+                <ModalOverlay onClose={() => setModal(null)}>
+                    <ModalHeader title={modal.mode === 'create' ? 'Nova Despesa Extra' : 'Editar Despesa'} icon="Receipt" onClose={() => setModal(null)} />
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Field label="Categoria" required>
+                            <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle}>
+                                {CATEGORIAS_DESPESA.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Veículo">
+                            <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <option value="">Sem veículo específico</option>
+                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Data" required>
+                            <input type="date" value={form.data_despesa} onChange={e => setForm(f => ({ ...f, data_despesa: e.target.value }))} className={inputCls} style={inputStyle} />
+                        </Field>
+                        <Field label="Valor (R$)" required>
+                            <input type="number" step="0.01" min="0" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                        </Field>
+                        <Field label="Descrição">
+                            <input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 4 pneus traseiros Bridgestone" />
+                        </Field>
+                        <Field label="Nº Nota Fiscal">
+                            <input value={form.nota_fiscal} onChange={e => setForm(f => ({ ...f, nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 12345" />
+                        </Field>
+                        <div className="sm:col-span-2">
+                            <Field label="Observações">
+                                <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
+                            </Field>
+                        </div>
+                    </div>
+                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                        <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
+                    </div>
+                </ModalOverlay>
+            )}
+            <Toast toast={toast} />
+        </div>
+    );
+}
+
+// ─── TAB: Diárias de Motoristas ───────────────────────────────────────────────
+function TabDiarias({ isAdmin }) {
+    const { toast, showToast } = useToast();
+    const [diarias, setDiarias]     = useState([]);
+    const [motoristas, setMotoristas] = useState([]);
+    const [viagens, setViagens]     = useState([]);
+    const [loading, setLoading]     = useState(true);
+    const [modal, setModal]         = useState(null);
+    const [filtro, setFiltro]       = useState({ motoristaId: '', mes: '' });
+    const [form, setForm] = useState({
+        motorista_id: '', viagem_id: '', data_inicio: new Date().toISOString().split('T')[0],
+        quantidade_dias: '1', valor_dia: '', descricao: '',
+    });
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const f = {};
+            if (filtro.motoristaId) f.motoristaId = filtro.motoristaId;
+            if (filtro.mes) {
+                f.dataInicio = filtro.mes + '-01';
+                f.dataFim    = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0');
+            }
+            const [d, m, v] = await Promise.all([fetchDiarias(f), fetchTodosMotoristas(), fetchViagens({})]);
+            setDiarias(d);
+            setMotoristas(m.filter(x => x.tipo_veiculo === 'carreta' || x.role === 'carreteiro'));
+            setViagens(v);
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    }, [filtro]); // eslint-disable-line
+    useEffect(() => { load(); }, [load]);
+
+    const totais = useMemo(() => ({
+        total: diarias.reduce((s, d) => s + Number(d.valor_total || 0), 0),
+        porMotorista: Object.values(diarias.reduce((acc, d) => {
+            const id = d.motorista_id || 'sem';
+            const nome = d.motorista?.name || '—';
+            if (!acc[id]) acc[id] = { nome, valor: 0, dias: 0 };
+            acc[id].valor += Number(d.valor_total || 0);
+            acc[id].dias  += Number(d.quantidade_dias || 0);
+            return acc;
+        }, {})).sort((a, b) => b.valor - a.valor),
+    }), [diarias]);
+
+    const previewTotal = useMemo(() =>
+        Number(form.quantidade_dias || 0) * Number(form.valor_dia || 0)
+    , [form.quantidade_dias, form.valor_dia]);
+
+    const handleSubmit = async () => {
+        if (!form.motorista_id || !form.valor_dia || !form.data_inicio) { showToast('Motorista, valor/dia e data são obrigatórios', 'error'); return; }
+        try {
+            if (modal.mode === 'create') await createDiaria(form);
+            else await updateDiaria(modal.data.id, form);
+            showToast('Diária salva!', 'success'); setModal(null); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Excluir diária?')) return;
+        try { await deleteDiaria(id); showToast('Excluída!', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const exportar = () => {
+        if (!diarias.length) { showToast('Nenhuma diária no período.', 'error'); return; }
+        const rows = diarias.map(d => ({
+            'Data': FMT_DATE(d.data_inicio), 'Motorista': d.motorista?.name || '',
+            'Viagem': d.viagem?.numero || '', 'Destino': d.viagem?.destino || '',
+            'Dias': d.quantidade_dias, 'Valor/Dia (R$)': d.valor_dia, 'Total (R$)': d.valor_total,
+            'Descrição': d.descricao || '',
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = [12,20,12,20,8,16,14,25].map(w => ({ wch: w }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Diárias');
+        XLSX.writeFile(wb, `diarias_motoristas_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
+        showToast('Exportado!', 'success');
+    };
+
+    const openCreate = () => {
+        setForm({ motorista_id: '', viagem_id: '', data_inicio: new Date().toISOString().split('T')[0], quantidade_dias: '1', valor_dia: '', descricao: '' });
+        setModal({ mode: 'create' });
+    };
+    const openEdit = (d) => {
+        setForm({ motorista_id: d.motorista_id || '', viagem_id: d.viagem_id || '', data_inicio: d.data_inicio, quantidade_dias: d.quantidade_dias, valor_dia: d.valor_dia, descricao: d.descricao || '' });
+        setModal({ mode: 'edit', data: d });
+    };
+
+    return (
+        <div>
+            <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
+                <div className="flex flex-wrap gap-2">
+                    <select value={filtro.motoristaId} onChange={e => setFiltro(f => ({ ...f, motoristaId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                        <option value="">Todos motoristas</option>
+                        {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
+                        <Icon name="FileDown" size={14} /> Exportar
+                    </button>
+                    <Button onClick={openCreate} iconName="Plus" size="sm">Nova Diária</Button>
+                </div>
+            </div>
+
+            {/* KPIs */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                    <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Total Diárias</p>
+                    <p className="text-2xl font-bold font-data text-indigo-600">{BRL(totais.total)}</p>
+                </div>
+                {totais.porMotorista.slice(0, 2).map(m => (
+                    <div key={m.nome} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                        <p className="text-xs mb-1 truncate font-medium" style={{ color: 'var(--color-muted-foreground)' }}>{m.nome}</p>
+                        <p className="text-lg font-bold font-data text-indigo-600">{BRL(m.valor)}</p>
+                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{m.dias} dia{m.dias !== 1 ? 's' : ''}</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* Tabela */}
+            {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
+                <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                    <table className="w-full text-sm">
+                        <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                            <tr>{['Data','Motorista','Viagem','Dias','Valor/Dia','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                        </thead>
+                        <tbody>
+                            {diarias.length === 0 ? <tr><td colSpan={7} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma diária registrada</td></tr>
+                            : diarias.map((d, i) => (
+                                <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                    <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(d.data_inicio)}</td>
+                                    <td className="px-4 py-3 font-medium">{d.motorista?.name || '—'}</td>
+                                    <td className="px-4 py-3 text-xs">
+                                        {d.viagem ? <span className="font-data text-blue-700">{d.viagem.numero}</span> : <span style={{ color: 'var(--color-muted-foreground)' }}>—</span>}
+                                        {d.viagem?.destino && <span className="block text-gray-400">{d.viagem.destino}</span>}
+                                    </td>
+                                    <td className="px-4 py-3 font-data text-center">{d.quantidade_dias}</td>
+                                    <td className="px-4 py-3 font-data">{BRL(d.valor_dia)}</td>
+                                    <td className="px-4 py-3 font-data font-semibold text-indigo-600">{BRL(d.valor_total)}</td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex gap-1">
+                                            {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
+                                            {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            {modal && (
+                <ModalOverlay onClose={() => setModal(null)}>
+                    <ModalHeader title={modal.mode === 'create' ? 'Nova Diária' : 'Editar Diária'} icon="CalendarDays" onClose={() => setModal(null)} />
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Field label="Motorista" required>
+                            <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <option value="">Selecione...</option>
+                                {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Vincular à viagem (opcional)">
+                            <select value={form.viagem_id} onChange={e => setForm(f => ({ ...f, viagem_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <option value="">Sem vínculo</option>
+                                {viagens.filter(v => !form.motorista_id || v.motorista_id === form.motorista_id).map(v =>
+                                    <option key={v.id} value={v.id}>{v.numero} — {v.destino || 'Sem destino'}</option>
+                                )}
+                            </select>
+                        </Field>
+                        <Field label="Data de início" required>
+                            <input type="date" value={form.data_inicio} onChange={e => setForm(f => ({ ...f, data_inicio: e.target.value }))} className={inputCls} style={inputStyle} />
+                        </Field>
+                        <Field label="Quantidade de dias" required>
+                            <input type="number" step="0.5" min="0.5" value={form.quantidade_dias} onChange={e => setForm(f => ({ ...f, quantidade_dias: e.target.value }))} className={inputCls} style={inputStyle} placeholder="1" />
+                        </Field>
+                        <Field label="Valor por dia (R$)" required>
+                            <input type="number" step="0.01" min="0" value={form.valor_dia} onChange={e => setForm(f => ({ ...f, valor_dia: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                        </Field>
+                        <div className="flex items-end pb-0.5">
+                            {previewTotal > 0 && (
+                                <div className="w-full p-3 rounded-lg text-center" style={{ backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE' }}>
+                                    <p className="text-xs text-indigo-600 font-medium mb-0.5">Total calculado</p>
+                                    <p className="text-xl font-bold font-data text-indigo-700">{BRL(previewTotal)}</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="sm:col-span-2">
+                            <Field label="Descrição / motivo">
+                                <input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: Viagem a Bom Jesus da Lapa — 2 diárias" />
+                            </Field>
+                        </div>
+                    </div>
+                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                        <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
+                    </div>
+                </ModalOverlay>
+            )}
+            <Toast toast={toast} />
+        </div>
+    );
+}
+
+// ─── TAB: Relatório Financeiro ───────────────────────────────────────────────
+function TabRelatorioFinanceiro({ isAdmin }) {
+    const { toast, showToast } = useToast();
+
+    const hoje = new Date();
+    const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
+
+    const [periodoInicio, setPeriodoInicio] = useState(mesAtual);
+    const [periodoFim,    setPeriodoFim]    = useState(mesAtual);
+    const [empresa,       setEmpresa]       = useState('');
+    const [empresas,      setEmpresas]      = useState([]);
+    const [motoristas,    setMotoristas]    = useState([]);
+    const [dados,         setDados]         = useState(null);
+    const [loading,       setLoading]       = useState(false);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const [e, m] = await Promise.all([fetchEmpresas(), fetchTodosMotoristas()]);
+                setEmpresas(e); setMotoristas(m.filter(m => m.tipo_veiculo === 'carreta' || m.role === 'carreteiro'));
+            } catch { /* silencioso */ }
+        })();
+    }, []);
+
+    const calcularRelatorio = useCallback(async () => {
+        if (!periodoInicio || !periodoFim) { showToast('Selecione o período', 'error'); return; }
+        if (periodoInicio > periodoFim) { showToast('A data inicial não pode ser maior que a final', 'error'); return; }
+
+        setLoading(true);
+        try {
+            // Converte mês em datas
+            const dataInicio = periodoInicio + '-01';
+            const anoFim = Number(periodoFim.split('-')[0]);
+            const mesFim = Number(periodoFim.split('-')[1]);
+            const dataFim = periodoFim + '-' + String(new Date(anoFim, mesFim, 0).getDate()).padStart(2,'0');
+
+            const filtros = { dataInicio, dataFim };
+            if (empresa) filtros.empresaId = empresa;
+
+            const [carregamentos, abastecimentos, viagens, despesasExtras, diariasLancadas] = await Promise.all([
+                fetchCarregamentos(filtros),
+                fetchAbastecimentos({ dataInicio, dataFim }),
+                fetchViagens({ dataInicio, dataFim }),
+                fetchDespesasExtras({ dataInicio, dataFim }),
+                fetchDiarias({ dataInicio, dataFim }),
+            ]);
+
+            // ── Receitas (fretes) ──────────────────────────────────────────
+            const receitaTotal     = carregamentos.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);
+            const receitaPorEmpresa = {};
+            carregamentos.forEach(c => {
+                const nome = c.empresa?.nome || 'Sem empresa';
+                receitaPorEmpresa[nome] = (receitaPorEmpresa[nome] || 0) + Number(c.valor_frete_calculado || 0);
+            });
+
+            // ── Despesas combustível ───────────────────────────────────────
+            const despesaCombustivel = abastecimentos.reduce((s, a) => s + Number(a.valor_total || 0), 0);
+            const litrosDiesel       = abastecimentos.reduce((s, a) => s + Number(a.litros_diesel || 0), 0);
+            const litrosArla         = abastecimentos.reduce((s, a) => s + Number(a.litros_arla   || 0), 0);
+
+            // ── Despesas extras por veículo ──────────────────────────────────
+            const totalDespesasExtras = despesasExtras.reduce((s, d) => s + Number(d.valor || 0), 0);
+            const despesasPorCategoria = {};
+            despesasExtras.forEach(d => {
+                despesasPorCategoria[d.categoria] = (despesasPorCategoria[d.categoria] || 0) + Number(d.valor || 0);
+            });
+
+            // ── Diárias lançadas ─────────────────────────────────────────────
+            const totalDiariasLancadas = diariasLancadas.reduce((s, d) => s + Number(d.valor_total || 0), 0);
+
+            // ── Bônus por motorista ────────────────────────────────────────
+            const bonusPorMotorista = {};
+            const viagensFinalizadas = viagens.filter(v => v.status === 'Entrega finalizada');
+            viagensFinalizadas.forEach(v => {
+                const id   = v.motorista_id || 'sem_id';
+                const nome = v.motorista?.name || 'Sem motorista';
+                if (!bonusPorMotorista[id]) bonusPorMotorista[id] = { nome, viagens: 0, bonus: 0 };
+                bonusPorMotorista[id].viagens++;
+                bonusPorMotorista[id].bonus += calcularBonusCarreteiro(v.destino);
+            });
+            const bonusTotal = Object.values(bonusPorMotorista).reduce((s, m) => s + m.bonus, 0);
+
+            // ── Margens ───────────────────────────────────────────────────
+            const despesaTotal  = despesaCombustivel + bonusTotal;
+            const margemBruta   = receitaTotal - despesaCombustivel;          // receita − combustível
+            const margemLiquida = receitaTotal - despesaTotal;                // receita − combustível − bônus
+            const margemPct     = receitaTotal > 0 ? (margemLiquida / receitaTotal) * 100 : 0;
+
+            // ── Por motorista (frete + bônus) ─────────────────────────────
+            const fretePorMotorista = {};
+            carregamentos.forEach(c => {
+                const id   = c.motorista_id || 'sem_id';
+                const nome = c.motorista?.name || 'Sem motorista';
+                if (!fretePorMotorista[id]) fretePorMotorista[id] = { nome, carregamentos: 0, frete: 0 };
+                fretePorMotorista[id].carregamentos++;
+                fretePorMotorista[id].frete += Number(c.valor_frete_calculado || 0);
+            });
+
+            // Consolida motoristas
+            const todosIds = new Set([
+                ...Object.keys(bonusPorMotorista),
+                ...Object.keys(fretePorMotorista),
+            ]);
+            const consolidadoMotoristas = Array.from(todosIds).map(id => ({
+                nome:          bonusPorMotorista[id]?.nome  || fretePorMotorista[id]?.nome || '—',
+                viagens:       bonusPorMotorista[id]?.viagens || 0,
+                bonus:         bonusPorMotorista[id]?.bonus   || 0,
+                carregamentos: fretePorMotorista[id]?.carregamentos || 0,
+                frete:         fretePorMotorista[id]?.frete   || 0,
+            })).sort((a, b) => b.frete - a.frete);
+
+            setDados({
+                periodo: `${periodoInicio === periodoFim ? periodoInicio : `${periodoInicio} a ${periodoFim}`}`,
+                receitaTotal, receitaPorEmpresa,
+                despesaCombustivel, litrosDiesel, litrosArla,
+                bonusTotal, despesaTotal,
+                margemBruta, margemLiquida, margemPct,
+                consolidadoMotoristas,
+                totalCarregamentos: carregamentos.length,
+                totalViagens: viagens.length,
+                viagensFinalizadas: viagensFinalizadas.length,
+                totalDespesasExtras, despesasPorCategoria,
+                totalDiariasLancadas,
+            });
+        } catch (e) { showToast('Erro ao calcular: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    }, [periodoInicio, periodoFim, empresa]); // eslint-disable-line
+
+    const exportarExcel = () => {
+        if (!dados) { showToast('Gere o relatório antes de exportar', 'error'); return; }
+
+        const wb = XLSX.utils.book_new();
+
+        // Aba 1 — Resumo Financeiro
+        const resumo = [
+            ['RELATÓRIO FINANCEIRO — TRANSPORTE CARRETAS', '', ''],
+            ['Período:', dados.periodo, ''],
+            ['', '', ''],
+            ['RECEITAS', '', ''],
+            ['Receita Total de Fretes', dados.receitaTotal, ''],
+            ...Object.entries(dados.receitaPorEmpresa).map(([nome, val]) => [`  → ${nome}`, val, '']),
+            ['', '', ''],
+            ['DESPESAS', '', ''],
+            ['Combustível (Diesel + Arla)', dados.despesaCombustivel, ''],
+            [`  → Diesel: ${dados.litrosDiesel.toFixed(1)} L`, '', ''],
+            [`  → Arla: ${dados.litrosArla.toFixed(1)} L`, '', ''],
+            ['Bônus Motoristas', dados.bonusTotal, ''],
+            ['Diárias de Motoristas', dados.totalDiariasLancadas, ''],
+            ['Despesas Extras (veículos)', dados.totalDespesasExtras, ''],
+            ...Object.entries(dados.despesasPorCategoria).map(([cat, val]) => [`  → ${cat}`, val, '']),
+            ['Total Despesas', dados.despesaTotal, ''],
+            ['', '', ''],
+            ['MARGENS', '', ''],
+            ['Margem Bruta (Receita − Combustível)', dados.margemBruta, ''],
+            ['Margem Líquida (Receita − Todas Despesas)', dados.margemLiquida, ''],
+            ['Margem Líquida %', `${dados.margemPct.toFixed(2)}%`, ''],
+            ['', '', ''],
+            ['OPERACIONAL', '', ''],
+            ['Total de Viagens', dados.totalViagens, ''],
+            ['Viagens Finalizadas', dados.viagensFinalizadas, ''],
+            ['Carregamentos', dados.totalCarregamentos, ''],
+        ];
+        const ws1 = XLSX.utils.aoa_to_sheet(resumo);
+        ws1['!cols'] = [{ wch: 45 }, { wch: 18 }, { wch: 10 }];
+        XLSX.utils.book_append_sheet(wb, ws1, 'Resumo Financeiro');
+
+        // Aba 2 — Motoristas
+        const rowsM = [
+            ['Motorista', 'Carregamentos', 'Receita Frete (R$)', 'Viagens Finalizadas', 'Bônus (R$)', 'Total Motorista (R$)'],
+            ...dados.consolidadoMotoristas.map(m => [
+                m.nome, m.carregamentos, m.frete, m.viagens, m.bonus, m.frete + m.bonus,
+            ]),
+            ['TOTAL', dados.consolidadoMotoristas.reduce((s,m)=>s+m.carregamentos,0),
+                dados.receitaTotal,
+                dados.viagensFinalizadas,
+                dados.bonusTotal,
+                dados.receitaTotal + dados.bonusTotal],
+        ];
+        const ws2 = XLSX.utils.aoa_to_sheet(rowsM);
+        ws2['!cols'] = [{ wch: 22 },{ wch: 15 },{ wch: 20 },{ wch: 20 },{ wch: 14 },{ wch: 20 }];
+        XLSX.utils.book_append_sheet(wb, ws2, 'Por Motorista');
+
+        const nome = `relatorio_financeiro_carretas_${dados.periodo.replace(/\s/g,'_')}.xlsx`;
+        XLSX.writeFile(wb, nome);
+        showToast('Relatório exportado com sucesso!', 'success');
+    };
+
+    const fmtPct = v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+
+    return (
+        <div>
+            {/* ── Filtros ─────────────────────────────────────────────── */}
+            <div className="bg-white rounded-xl border p-4 shadow-sm mb-5" style={{ borderColor: 'var(--color-border)' }}>
+                <h3 className="font-heading font-semibold text-sm mb-4" style={{ color: 'var(--color-text-primary)' }}>
+                    Parâmetros do Relatório
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                    <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                            Mês inicial <span className="text-red-500">*</span>
+                        </label>
+                        <input type="month" value={periodoInicio} onChange={e => setPeriodoInicio(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                            Mês final <span className="text-red-500">*</span>
+                        </label>
+                        <input type="month" value={periodoFim} onChange={e => setPeriodoFim(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }} />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                            Filtrar por empresa (opcional)
+                        </label>
+                        <select value={empresa} onChange={e => setEmpresa(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                            <option value="">Todas as empresas</option>
+                            {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                        </select>
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                    <Button onClick={calcularRelatorio} iconName={loading ? 'Loader' : 'BarChart3'} disabled={loading}>
+                        {loading ? 'Calculando...' : 'Gerar Relatório'}
+                    </Button>
+                    {dados && (
+                        <button onClick={exportarExcel}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50 transition-colors"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                            <Icon name="FileDown" size={16} />
+                            Exportar Excel
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* ── Resultado ──────────────────────────────────────────────── */}
+            {!dados && !loading && (
+                <div className="bg-white rounded-xl border p-10 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                    <Icon name="BarChart3" size={40} color="var(--color-muted-foreground)" />
+                    <p className="text-sm mt-3 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
+                        Selecione o período e clique em "Gerar Relatório"
+                    </p>
+                </div>
+            )}
+
+            {loading && (
+                <div className="flex justify-center py-16">
+                    <div className="animate-spin h-8 w-8 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
+                </div>
+            )}
+
+            {dados && !loading && (
+                <div className="flex flex-col gap-5">
+
+                    {/* Cabeçalho do período */}
+                    <div className="flex items-center gap-2 px-1">
+                        <Icon name="Calendar" size={16} color="var(--color-muted-foreground)" />
+                        <span className="text-sm font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
+                            Período: <strong style={{ color: 'var(--color-text-primary)' }}>{dados.periodo}</strong>
+                        </span>
+                    </div>
+
+                    {/* ── Cards de margem ─────────────────────────────────── */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {[
+                            { l: 'Receita Total',     v: BRL(dados.receitaTotal),     c: '#065F46', bg: '#D1FAE5', i: 'TrendingUp',  sub: `${dados.totalCarregamentos} carregamentos` },
+                            { l: 'Desp. Combustível', v: BRL(dados.despesaCombustivel), c: '#B45309', bg: '#FEF9C3', i: 'Fuel',        sub: `${dados.litrosDiesel.toFixed(0)}L diesel` },
+                            { l: 'Bônus Motoristas',  v: BRL(dados.bonusTotal),       c: '#7C3AED', bg: '#EDE9FE', i: 'Award',       sub: `${dados.viagensFinalizadas} viagens finalizadas` },
+                            { l: 'Despesas Extras',   v: BRL(dados.totalDespesasExtras), c: '#EA580C', bg: '#FEF3C7', i: 'Receipt',    sub: `${Object.keys(dados.despesasPorCategoria).length} categoria(s)` },
+                            { l: 'Diárias',           v: BRL(dados.totalDiariasLancadas), c: '#4F46E5', bg: '#EEF2FF', i: 'CalendarDays', sub: 'motoristas' },
+                            { l: 'Margem Líquida',    v: BRL(dados.margemLiquida),    c: dados.margemLiquida >= 0 ? '#1D4ED8' : '#DC2626', bg: dados.margemLiquida >= 0 ? '#DBEAFE' : '#FEE2E2', i: dados.margemLiquida >= 0 ? 'TrendingUp' : 'TrendingDown', sub: fmtPct(dados.margemPct) },
+                        ].map(k => (
+                            <div key={k.l} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <div className="rounded-lg flex items-center justify-center" style={{ width: 30, height: 30, backgroundColor: k.bg }}>
+                                        <Icon name={k.i} size={15} color={k.c} />
+                                    </div>
+                                    <span className="text-xs font-medium" style={{ color: 'var(--color-muted-foreground)' }}>{k.l}</span>
+                                </div>
+                                <p className="text-xl font-bold font-data" style={{ color: k.c }}>{k.v}</p>
+                                <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>{k.sub}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* ── DRE Simplificado ────────────────────────────────── */}
+                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
+                            <Icon name="FileText" size={16} color="var(--color-muted-foreground)" />
+                            <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                                Demonstrativo de Resultado (DRE)
+                            </h3>
+                        </div>
+                        <div className="p-5 space-y-1">
+
+                            {/* Receitas */}
+                            <div className="flex justify-between py-2 border-b" style={{ borderColor: '#F1F5F9' }}>
+                                <span className="text-xs font-semibold uppercase tracking-wide text-green-700">Receitas</span>
+                            </div>
+                            <div className="flex justify-between py-1.5 pl-3">
+                                <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Receita de Fretes</span>
+                                <span className="font-data font-semibold text-green-700">{BRL(dados.receitaTotal)}</span>
+                            </div>
+                            {Object.entries(dados.receitaPorEmpresa).map(([nome, val]) => (
+                                <div key={nome} className="flex justify-between py-1 pl-6">
+                                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ {nome}</span>
+                                    <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(val)}</span>
+                                </div>
+                            ))}
+
+                            {/* Despesas */}
+                            <div className="flex justify-between py-2 border-b mt-2" style={{ borderColor: '#F1F5F9' }}>
+                                <span className="text-xs font-semibold uppercase tracking-wide text-amber-700">Despesas</span>
+                            </div>
+                            <div className="flex justify-between py-1.5 pl-3">
+                                <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Combustível</span>
+                                <span className="font-data font-semibold text-amber-700">({BRL(dados.despesaCombustivel)})</span>
+                            </div>
+                            <div className="flex justify-between py-1 pl-6">
+                                <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ Diesel: {dados.litrosDiesel.toFixed(1)} L</span>
+                            </div>
+                            {dados.litrosArla > 0 && (
+                                <div className="flex justify-between py-1 pl-6">
+                                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ Arla: {dados.litrosArla.toFixed(1)} L</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between py-1.5 pl-3">
+                                <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Bônus Motoristas</span>
+                                <span className="font-data font-semibold text-purple-600">({BRL(dados.bonusTotal)})</span>
+                            </div>
+                            {dados.totalDiariasLancadas > 0 && (
+                                <div className="flex justify-between py-1.5 pl-3">
+                                    <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Diárias de Motoristas</span>
+                                    <span className="font-data font-semibold text-indigo-600">({BRL(dados.totalDiariasLancadas)})</span>
+                                </div>
+                            )}
+                            {dados.totalDespesasExtras > 0 && (
+                                <div className="flex justify-between py-1.5 pl-3">
+                                    <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Despesas Extras (veículos)</span>
+                                    <span className="font-data font-semibold text-orange-600">({BRL(dados.totalDespesasExtras)})</span>
+                                </div>
+                            )}
+                            {dados.totalDespesasExtras > 0 && Object.entries(dados.despesasPorCategoria).map(([cat, val]) => (
+                                <div key={cat} className="flex justify-between py-0.5 pl-6">
+                                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ {cat}</span>
+                                    <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(val)}</span>
+                                </div>
+                            ))}
+
+                            {/* Separador margem bruta */}
+                            <div className="flex justify-between py-2.5 px-3 rounded-lg mt-2" style={{ backgroundColor: '#F0FDF4' }}>
+                                <span className="text-sm font-semibold text-green-800">Margem Bruta (−Combustível)</span>
+                                <span className="font-data font-bold text-green-700">{BRL(dados.margemBruta)}</span>
+                            </div>
+
+                            {/* Margem líquida */}
+                            <div className="flex justify-between py-2.5 px-3 rounded-lg" style={{
+                                backgroundColor: dados.margemLiquida >= 0 ? '#EFF6FF' : '#FEF2F2',
+                                border: `1px solid ${dados.margemLiquida >= 0 ? '#BFDBFE' : '#FECACA'}`,
+                            }}>
+                                <div>
+                                    <span className="text-sm font-bold" style={{ color: dados.margemLiquida >= 0 ? '#1D4ED8' : '#DC2626' }}>
+                                        Margem Líquida
+                                    </span>
+                                    <span className="ml-2 text-xs px-1.5 py-0.5 rounded-full font-medium"
+                                        style={{ backgroundColor: dados.margemLiquida >= 0 ? '#DBEAFE' : '#FEE2E2', color: dados.margemLiquida >= 0 ? '#1D4ED8' : '#DC2626' }}>
+                                        {fmtPct(dados.margemPct)}
+                                    </span>
+                                </div>
+                                <span className="font-data font-bold" style={{ color: dados.margemLiquida >= 0 ? '#1D4ED8' : '#DC2626' }}>
+                                    {BRL(dados.margemLiquida)}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Receita por empresa ─────────────────────────────── */}
+                    {Object.keys(dados.receitaPorEmpresa).length > 0 && (
+                        <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
+                                <Icon name="Building2" size={16} color="var(--color-muted-foreground)" />
+                                <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Receita por Empresa</h3>
+                            </div>
+                            <div className="p-5 space-y-3">
+                                {Object.entries(dados.receitaPorEmpresa)
+                                    .sort((a, b) => b[1] - a[1])
+                                    .map(([nome, val]) => {
+                                        const pct = dados.receitaTotal > 0 ? (val / dados.receitaTotal) * 100 : 0;
+                                        return (
+                                            <div key={nome}>
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{nome}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{pct.toFixed(1)}%</span>
+                                                        <span className="font-data font-semibold text-green-700">{BRL(val)}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: '#059669' }} />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Bônus e fretes por motorista ────────────────────── */}
+                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
+                            <Icon name="Users" size={16} color="var(--color-muted-foreground)" />
+                            <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Resumo por Motorista</h3>
+                        </div>
+                        {dados.consolidadoMotoristas.length === 0 ? (
+                            <div className="p-8 text-center text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+                                Nenhum dado de motoristas no período
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                        <tr>
+                                            {['Motorista', 'Carregamentos', 'Frete Gerado', 'Viagens Finalizadas', 'Bônus', 'Total'].map(h => (
+                                                <th key={h} className="px-4 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {dados.consolidadoMotoristas.map((m, i) => (
+                                            <tr key={m.nome} className="border-t hover:bg-gray-50"
+                                                style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                                <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{m.nome}</td>
+                                                <td className="px-4 py-3 text-center font-data">{m.carregamentos}</td>
+                                                <td className="px-4 py-3 font-data font-semibold text-green-700">{BRL(m.frete)}</td>
+                                                <td className="px-4 py-3 text-center font-data">{m.viagens}</td>
+                                                <td className="px-4 py-3 font-data font-semibold text-purple-600">{BRL(m.bonus)}</td>
+                                                <td className="px-4 py-3 font-data font-bold text-blue-700">{BRL(m.frete + m.bonus)}</td>
+                                            </tr>
+                                        ))}
+                                        {/* Linha de totais */}
+                                        <tr className="border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0F9FF' }}>
+                                            <td className="px-4 py-3 font-bold text-sm" style={{ color: 'var(--color-text-primary)' }}>TOTAL</td>
+                                            <td className="px-4 py-3 text-center font-data font-bold">{dados.totalCarregamentos}</td>
+                                            <td className="px-4 py-3 font-data font-bold text-green-700">{BRL(dados.receitaTotal)}</td>
+                                            <td className="px-4 py-3 text-center font-data font-bold">{dados.viagensFinalizadas}</td>
+                                            <td className="px-4 py-3 font-data font-bold text-purple-600">{BRL(dados.bonusTotal)}</td>
+                                            <td className="px-4 py-3 font-data font-bold text-blue-700">{BRL(dados.receitaTotal + dados.bonusTotal)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+            <Toast toast={toast} />
+        </div>
+    );
+}
+
 // ─── TAB: Configurações ──────────────────────────────────────────────────────
 function TabConfiguracoes({ isAdmin }) {
     const { toast, showToast } = useToast();
@@ -1529,6 +2413,9 @@ const TABS = [
     { id: 'checklist',     label: 'Checklist',      icon: 'ClipboardCheck' },
     { id: 'carregamentos', label: 'Carregamentos',  icon: 'Package' },
     { id: 'bonificacoes',  label: 'Bonificações',   icon: 'Award' },
+    { id: 'despesas',      label: 'Despesas',       icon: 'Receipt' },
+    { id: 'diarias',       label: 'Diárias',        icon: 'CalendarDays' },
+    { id: 'financeiro',    label: 'Financeiro',     icon: 'BarChart3' },
     { id: 'ordens',        label: 'Ordens de Serviço', icon: 'Wrench' },
     { id: 'empresas',      label: 'Empresas',       icon: 'Building2' },
     { id: 'configuracoes', label: 'Configurações',  icon: 'Settings' },
@@ -1574,6 +2461,9 @@ export default function CarretasPage() {
                     {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}
                     {tab === 'carregamentos'  && <TabCarregamentos   isAdmin={admin} />}
                     {tab === 'bonificacoes'   && <TabBonificacoes   isAdmin={admin} />}
+                    {tab === 'despesas'       && <TabDespesasExtras  isAdmin={admin} profile={profile} />}
+                    {tab === 'diarias'         && <TabDiarias         isAdmin={admin} profile={profile} />}
+                    {tab === 'financeiro'     && <TabRelatorioFinanceiro isAdmin={admin} />}
                     {tab === 'ordens'          && <TabOrdensServico  isAdmin={admin} profile={profile} />}
                     {tab === 'empresas'       && <TabEmpresas       isAdmin={admin} />}
                     {tab === 'configuracoes'  && <TabConfiguracoes  isAdmin={admin} />}
