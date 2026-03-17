@@ -127,6 +127,44 @@ export async function deleteCarretaVeiculo(id) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POSTOS DE COMBUSTÍVEL
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchPostos() {
+    const { data, error } = await supabase
+        .from('carretas_postos')
+        .select('*')
+        .order('nome', { ascending: true });
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createPosto(posto) {
+    const { data, error } = await supabase
+        .from('carretas_postos')
+        .insert(posto)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updatePosto(id, updates) {
+    const { data, error } = await supabase
+        .from('carretas_postos')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deletePosto(id) {
+    const { error } = await supabase.from('carretas_postos').delete().eq('id', id);
+    if (error) throw error;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ABASTECIMENTOS
 // ─────────────────────────────────────────────────────────────────────────────
 export async function fetchAbastecimentos(filters = {}) {

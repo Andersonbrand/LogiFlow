@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -24,6 +24,7 @@ import {
     fetchDiarias, createDiaria, updateDiaria, deleteDiaria,
     CATEGORIAS_DESPESA,
     CIDADES_BONUS_BAIXO, BONUS_BAIXO, BONUS_ALTO,
+    fetchPostos, createPosto, updatePosto, deletePosto,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
 
@@ -114,15 +115,20 @@ function TabViagens({ isAdmin, profile }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
+            // Se não for admin, filtra apenas as viagens deste motorista
+            const filtros = {};
+            if (filterStatus) filtros.status = filterStatus;
+            if (!isAdmin && profile?.id) filtros.motoristaId = profile.id;
+
             const [v, ve, m] = await Promise.all([
-                fetchViagens(filterStatus ? { status: filterStatus } : {}),
+                fetchViagens(filtros),
                 fetchCarretasVeiculos(),
-                fetchTodosMotoristas(),
+                isAdmin ? fetchTodosMotoristas() : Promise.resolve([]),
             ]);
             setViagens(v); setVeiculos(ve); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filterStatus]); // eslint-disable-line
+    }, [filterStatus, isAdmin, profile?.id]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
 
@@ -173,39 +179,60 @@ function TabViagens({ isAdmin, profile }) {
                     </select>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
-                        <Icon name="FileDown" size={14} /> Exportar
+                    <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar em tempo real">
+                        <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
-                    <Button onClick={openCreate} iconName="Plus" size="sm">Nova Viagem</Button>
+                    {isAdmin && (
+                        <>
+                            <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
+                                <Icon name="FileDown" size={14} /> Exportar
+                            </button>
+                            <Button onClick={openCreate} iconName="Plus" size="sm">Nova Viagem</Button>
+                        </>
+                    )}
                 </div>
             </div>
 
-            {loading ? <div className="flex justify-center py-16"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
-                <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                    <table className="w-full text-sm">
+            {/* Cabeçalho informativo para o motorista */}
+            {!isAdmin && (
+                <div className="flex items-center gap-2 mb-4 p-3 rounded-xl" style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+                    <Icon name="Info" size={15} color="#1D4ED8" />
+                    <p className="text-xs text-blue-700">Exibindo suas viagens lançadas pela administração. Entre em contato com o admin para atualizações.</p>
+                </div>
+            )}
+
+            {loading ? (
+                <div className="flex justify-center py-16">
+                    <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
+                </div>
+            ) : isAdmin ? (
+                /* ── Visão admin: tabela completa ── */
+                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                    <table className="w-full text-sm min-w-[700px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                             <tr>
                                 {['Nº Viagem','Status','Motorista','Placa','Data Saída','Destino','Ton.','Responsável',''].map(h => (
-                                    <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>
+                                    <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody>
                             {viagens.length === 0 ? (
-                                <tr><td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem cadastrada</td></tr>
+                                <tr><td colSpan={9} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem cadastrada</td></tr>
                             ) : viagens.map((v, i) => (
                                 <tr key={v.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                    <td className="px-4 py-3 font-medium text-blue-700 font-data">{v.numero}</td>
-                                    <td className="px-4 py-3"><StatusBadge status={v.status} /></td>
-                                    <td className="px-4 py-3">{v.motorista?.name || '—'}</td>
-                                    <td className="px-4 py-3 font-data">{v.veiculo?.placa || '—'}</td>
-                                    <td className="px-4 py-3">{FMT_DATE(v.data_saida)}</td>
-                                    <td className="px-4 py-3">{v.destino || '—'}</td>
-                                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{v.responsavel_cadastro || '—'}</td>
-                                    <td className="px-4 py-3">
+                                    <td className="px-3 py-3 font-medium text-blue-700 font-data whitespace-nowrap">{v.numero}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap"><StatusBadge status={v.status} /></td>
+                                    <td className="px-3 py-3 whitespace-nowrap">{v.motorista?.name || '—'}</td>
+                                    <td className="px-3 py-3 font-data whitespace-nowrap">{v.veiculo?.placa || '—'}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(v.data_saida)}</td>
+                                    <td className="px-3 py-3 max-w-[140px] truncate">{v.destino || '—'}</td>
+                                    <td className="px-3 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-muted-foreground)' }}>{v.toneladas || '—'}</td>
+                                    <td className="px-3 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-muted-foreground)' }}>{v.responsavel_cadastro || '—'}</td>
+                                    <td className="px-3 py-3">
                                         <div className="flex items-center gap-1">
                                             <button onClick={() => openEdit(v)} className="p-1.5 rounded hover:bg-blue-50 transition-colors"><Icon name="Pencil" size={14} color="#1D4ED8" /></button>
-                                            {isAdmin && <button onClick={() => handleDelete(v.id)} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={14} color="#DC2626" /></button>}
+                                            <button onClick={() => handleDelete(v.id)} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={14} color="#DC2626" /></button>
                                         </div>
                                     </td>
                                 </tr>
@@ -213,9 +240,54 @@ function TabViagens({ isAdmin, profile }) {
                         </tbody>
                     </table>
                 </div>
+            ) : (
+                /* ── Visão motorista: cards com suas próprias viagens ── */
+                <div className="flex flex-col gap-3">
+                    {viagens.length === 0 ? (
+                        <div className="bg-white rounded-xl border p-10 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                            <Icon name="Truck" size={36} color="var(--color-muted-foreground)" />
+                            <p className="text-sm mt-3 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem encontrada para você</p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>As viagens lançadas pelo admin aparecerão aqui</p>
+                        </div>
+                    ) : viagens.map(v => (
+                        <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="flex items-start justify-between mb-3 gap-2">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                        <span className="font-bold font-data text-blue-700">{v.numero}</span>
+                                        <StatusBadge status={v.status} />
+                                    </div>
+                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{v.destino || '—'}</p>
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{FMT_DATE(v.data_saida)}</p>
+                                    {v.veiculo?.placa && <p className="text-xs font-data font-medium mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>{v.veiculo.placa}</p>}
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                                {v.toneladas && (
+                                    <div className="flex items-center gap-1.5 p-2 rounded-lg" style={{ backgroundColor: '#F8FAFC' }}>
+                                        <Icon name="Weight" size={12} color="var(--color-muted-foreground)" />
+                                        <span style={{ color: 'var(--color-muted-foreground)' }}>{v.toneladas} ton</span>
+                                    </div>
+                                )}
+                                {v.responsavel_cadastro && (
+                                    <div className="flex items-center gap-1.5 p-2 rounded-lg" style={{ backgroundColor: '#F8FAFC' }}>
+                                        <Icon name="User" size={12} color="var(--color-muted-foreground)" />
+                                        <span style={{ color: 'var(--color-muted-foreground)' }}>Resp: {v.responsavel_cadastro}</span>
+                                    </div>
+                                )}
+                            </div>
+                            {v.observacoes && (
+                                <p className="text-xs mt-2 p-2 rounded-lg bg-amber-50 text-amber-700">{v.observacoes}</p>
+                            )}
+                        </div>
+                    ))}
+                </div>
             )}
 
-            {modal && (
+            {/* Modal novo/editar viagem — apenas admin */}
+            {modal && isAdmin && (
                 <ModalOverlay onClose={() => setModal(null)}>
                     <ModalHeader title={modal.mode === 'create' ? 'Nova Viagem' : 'Editar Viagem'} icon="Navigation" onClose={() => setModal(null)} />
                     <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -374,10 +446,14 @@ function TabAbastecimentos({ isAdmin, profile }) {
     const [abast, setAbast] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
+    const [postos, setPostos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(false);
+    const [modalPostos, setModalPostos] = useState(false);
+    const [editPosto, setEditPosto] = useState(null);
+    const [formPosto, setFormPosto] = useState({ nome: '', cidade: '', cnpj: '', preco_diesel: '', preco_arla: '' });
     const [filtro, setFiltro] = useState({ motoristaId: '', veiculoId: '', mes: '' });
-    const [form, setForm] = useState({ motorista_id: '', veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' });
+    const [form, setForm] = useState({ motorista_id: '', veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' });
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -386,8 +462,8 @@ function TabAbastecimentos({ isAdmin, profile }) {
             if (filtro.motoristaId) f.motoristaId = filtro.motoristaId;
             if (filtro.veiculoId)   f.veiculoId   = filtro.veiculoId;
             if (filtro.mes)         { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
-            const [a, v, m] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchTodosMotoristas()]);
-            setAbast(a); setVeiculos(v); setMotoristas(m);
+            const [a, v, m, p] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchTodosMotoristas(), fetchPostos().catch(() => [])]);
+            setAbast(a); setVeiculos(v); setMotoristas(m); setPostos(p);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtro]); // eslint-disable-line
@@ -396,12 +472,19 @@ function TabAbastecimentos({ isAdmin, profile }) {
     const totais = useMemo(() => ({
         litrosDiesel: abast.reduce((s, a) => s + Number(a.litros_diesel || 0), 0),
         litrosArla:   abast.reduce((s, a) => s + Number(a.litros_arla   || 0), 0),
+        valorDiesel:  abast.reduce((s, a) => s + Number(a.valor_diesel  || 0), 0),
+        valorArla:    abast.reduce((s, a) => s + Number(a.valor_arla    || 0), 0),
         valorTotal:   abast.reduce((s, a) => s + Number(a.valor_total   || 0), 0),
     }), [abast]);
 
     const handleSubmit = async () => {
         if (!form.veiculo_id || !form.motorista_id || !form.data_abastecimento) { showToast('Preencha veículo, motorista e data', 'error'); return; }
-        try { await createAbastecimento(form); showToast('Abastecimento registrado!', 'success'); setModal(false); load(); }
+        const payload = { ...form };
+        if (!payload.posto_id) delete payload.posto_id;
+        // nome do posto para exibição legacy
+        const posto = postos.find(p => p.id === form.posto_id);
+        if (posto) payload.posto = posto.nome;
+        try { await createAbastecimento(payload); showToast('Abastecimento registrado!', 'success'); setModal(false); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
@@ -409,22 +492,76 @@ function TabAbastecimentos({ isAdmin, profile }) {
         try { await deleteAbastecimento(id); showToast('Excluído!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
-    const exportar = () => {
-        if (!abast.length) { showToast('Nenhum abastecimento encontrado para exportar no período selecionado.', 'error'); return; }
-        const rows = abast.map(a => ({
-            'Data': FMT_DATE(a.data_abastecimento), 'Motorista': a.motorista?.name || '', 'Placa': a.veiculo?.placa || '',
-            'Posto': a.posto || '', 'L. Diesel': a.litros_diesel, 'R$ Diesel': a.valor_diesel,
-            'L. Arla': a.litros_arla || 0, 'R$ Arla': a.valor_arla || 0, 'Total R$': a.valor_total,
+
+    const handleSavePosto = async () => {
+        if (!formPosto.nome.trim()) { showToast('Nome do posto é obrigatório', 'error'); return; }
+        try {
+            if (editPosto) { await updatePosto(editPosto.id, formPosto); showToast('Posto atualizado!', 'success'); }
+            else { await createPosto(formPosto); showToast('Posto cadastrado!', 'success'); }
+            setEditPosto(null); setFormPosto({ nome: '', cidade: '', cnpj: '', preco_diesel: '', preco_arla: '' });
+            const p = await fetchPostos().catch(() => []); setPostos(p);
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    // Auto-preenche preços quando motorista seleciona o posto
+    const handlePostoChange = (postoId) => {
+        const posto = postos.find(p => p.id === postoId);
+        setForm(f => ({
+            ...f,
+            posto_id: postoId,
+            // Preenche valor automaticamente se o posto tiver preço cadastrado
+            valor_diesel: posto?.preco_diesel && f.litros_diesel
+                ? (Number(f.litros_diesel) * Number(posto.preco_diesel)).toFixed(2)
+                : f.valor_diesel,
+            valor_arla: posto?.preco_arla && f.litros_arla
+                ? (Number(f.litros_arla) * Number(posto.preco_arla)).toFixed(2)
+                : f.valor_arla,
         }));
+    };
+
+    // Recalcula valor ao mudar litros quando posto já está selecionado
+    const handleLitrosChange = (campo, valor) => {
+        const posto = postos.find(p => p.id === form.posto_id);
+        setForm(f => {
+            const novo = { ...f, [campo]: valor };
+            if (campo === 'litros_diesel' && posto?.preco_diesel) {
+                novo.valor_diesel = valor ? (Number(valor) * Number(posto.preco_diesel)).toFixed(2) : '';
+            }
+            if (campo === 'litros_arla' && posto?.preco_arla) {
+                novo.valor_arla = valor ? (Number(valor) * Number(posto.preco_arla)).toFixed(2) : '';
+            }
+            return novo;
+        });
+    };
+    const handleDeletePosto = async (id) => {
+        if (!confirm('Excluir este posto?')) return;
+        try { await deletePosto(id); showToast('Excluído!', 'success'); const p = await fetchPostos().catch(() => []); setPostos(p); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const exportar = () => {
+        if (!abast.length) { showToast('Nenhum abastecimento encontrado para exportar.', 'error'); return; }
+        const rows = abast.map(a => ({
+            'Data': FMT_DATE(a.data_abastecimento), 'Horário': a.horario || '', 'Motorista': a.motorista?.name || '', 'Placa': a.veiculo?.placa || '',
+            'Posto': a.posto || '', 'L. Diesel': Number(a.litros_diesel || 0), 'R$ Diesel': Number(a.valor_diesel || 0),
+            'L. Arla': Number(a.litros_arla || 0), 'R$ Arla': Number(a.valor_arla || 0), 'Total R$': Number(a.valor_total || 0),
+            'Observações': a.observacoes || '',
+        }));
+        // linha totais
+        rows.push({ 'Data': 'TOTAL', 'L. Diesel': totais.litrosDiesel, 'R$ Diesel': totais.valorDiesel, 'L. Arla': totais.litrosArla, 'R$ Arla': totais.valorArla, 'Total R$': totais.valorTotal });
         const ws = XLSX.utils.json_to_sheet(rows);
+        ws['!cols'] = [12,8,20,12,18,10,12,10,12,12,25].map(w => ({ wch: w }));
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Abastecimentos');
         XLSX.writeFile(wb, `abastecimentos_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`);
+        showToast('Exportado!', 'success');
     };
+
+    const postoNome = (a) => a.posto || (postos.find(p => p.id === a.posto_id)?.nome) || '—';
 
     return (
         <div>
-            <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
+            <div className="flex flex-wrap gap-2 items-center justify-between mb-5">
                 <div className="flex flex-wrap gap-2">
                     {isAdmin && (
                         <select value={filtro.motoristaId} onChange={e => setFiltro(f => ({ ...f, motoristaId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
@@ -438,18 +575,28 @@ function TabAbastecimentos({ isAdmin, profile }) {
                     </select>
                     <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                    {/* item 4: botão atualizar */}
+                    <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                        <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
+                    </button>
+                    {isAdmin && (
+                        <button onClick={() => setModalPostos(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
+                            <Icon name="MapPin" size={14} /> Postos
+                        </button>
+                    )}
                     <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}><Icon name="FileDown" size={14} /> Exportar</button>
-                    <Button onClick={() => { setForm({ motorista_id: profile?.id || '', veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' }); setModal(true); }} iconName="Plus" size="sm">Registrar</Button>
+                    <Button onClick={() => { setForm({ motorista_id: isAdmin ? '' : (profile?.id || ''), veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' }); setModal(true); }} iconName="Plus" size="sm">Registrar</Button>
                 </div>
             </div>
 
             {/* KPIs */}
-            <div className="grid grid-cols-3 gap-4 mb-5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
                 {[
-                    { l: 'Total Diesel (L)', v: totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#1D4ED8', bg: '#EFF6FF', i: 'Fuel' },
-                    { l: 'Total Arla (L)',   v: totais.litrosArla.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#059669', bg: '#D1FAE5', i: 'Droplets' },
-                    { l: 'Gasto Total',       v: BRL(totais.valorTotal), c: '#7C3AED', bg: '#EDE9FE', i: 'DollarSign' },
+                    { l: 'Diesel (L)', v: totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#1D4ED8', bg: '#EFF6FF', i: 'Fuel' },
+                    { l: 'Custo Diesel', v: BRL(totais.valorDiesel), c: '#1D4ED8', bg: '#EFF6FF', i: 'DollarSign' },
+                    { l: 'Arla (L)', v: totais.litrosArla.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#059669', bg: '#D1FAE5', i: 'Droplets' },
+                    { l: 'Gasto Total', v: BRL(totais.valorTotal), c: '#7C3AED', bg: '#EDE9FE', i: 'Receipt' },
                 ].map(k => (
                     <div key={k.l} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                         <div className="flex items-center gap-2 mb-1">
@@ -462,31 +609,46 @@ function TabAbastecimentos({ isAdmin, profile }) {
             </div>
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
-                <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                    <table className="w-full text-sm">
+                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                    <table className="w-full text-sm min-w-[700px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Data','Motorista','Placa','Posto','Diesel (L)','R$ Diesel','Arla (L)','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                            <tr>{['Data','Motorista','Placa','Posto','Diesel (L)','R$ Diesel','Arla (L)','R$ Arla','Total',''].map(h => <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {abast.length === 0 ? <tr><td colSpan={9} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento registrado</td></tr>
+                            {abast.length === 0 ? <tr><td colSpan={10} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento registrado</td></tr>
                             : abast.map((a, i) => (
                                 <tr key={a.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                    <td className="px-4 py-3">{FMT_DATE(a.data_abastecimento)}</td>
-                                    <td className="px-4 py-3">{a.motorista?.name || '—'}</td>
-                                    <td className="px-4 py-3 font-data">{a.veiculo?.placa || '—'}</td>
-                                    <td className="px-4 py-3 text-xs">{a.posto || '—'}</td>
-                                    <td className="px-4 py-3 font-data text-right">{Number(a.litros_diesel || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
-                                    <td className="px-4 py-3 font-data text-right">{BRL(a.valor_diesel)}</td>
-                                    <td className="px-4 py-3 font-data text-right text-emerald-600">{Number(a.litros_arla || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
-                                    <td className="px-4 py-3 font-data text-right font-semibold text-purple-600">{BRL(a.valor_total)}</td>
-                                    <td className="px-4 py-3">{isAdmin && <button onClick={() => handleDelete(a.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(a.data_abastecimento)}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap">{a.motorista?.name || '—'}</td>
+                                    <td className="px-3 py-3 font-data whitespace-nowrap">{a.veiculo?.placa || '—'}</td>
+                                    <td className="px-3 py-3 text-xs max-w-[120px] truncate">{postoNome(a)}</td>
+                                    <td className="px-3 py-3 font-data text-right text-blue-700">{Number(a.litros_diesel || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                                    <td className="px-3 py-3 font-data text-right">{BRL(a.valor_diesel)}</td>
+                                    <td className="px-3 py-3 font-data text-right text-emerald-600">{Number(a.litros_arla || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                                    <td className="px-3 py-3 font-data text-right text-emerald-700">{BRL(a.valor_arla)}</td>
+                                    <td className="px-3 py-3 font-data text-right font-semibold text-purple-600">{BRL(a.valor_total)}</td>
+                                    <td className="px-3 py-3">{isAdmin && <button onClick={() => handleDelete(a.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}</td>
                                 </tr>
                             ))}
                         </tbody>
+                        {abast.length > 0 && (
+                            <tfoot>
+                                <tr style={{ backgroundColor: '#F0F9FF', borderTop: '2px solid #BFDBFE' }}>
+                                    <td colSpan={4} className="px-3 py-2 text-xs font-bold text-blue-800">TOTAL</td>
+                                    <td className="px-3 py-2 font-data font-bold text-right text-blue-700">{totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                                    <td className="px-3 py-2 font-data font-bold text-right text-blue-700">{BRL(totais.valorDiesel)}</td>
+                                    <td className="px-3 py-2 font-data font-bold text-right text-emerald-700">{totais.litrosArla.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                                    <td className="px-3 py-2 font-data font-bold text-right text-emerald-700">{BRL(totais.valorArla)}</td>
+                                    <td className="px-3 py-2 font-data font-bold text-right text-purple-700">{BRL(totais.valorTotal)}</td>
+                                    <td />
+                                </tr>
+                            </tfoot>
+                        )}
                     </table>
                 </div>
             )}
 
+            {/* Modal registrar abastecimento */}
             {modal && (
                 <ModalOverlay onClose={() => setModal(false)}>
                     <ModalHeader title="Registrar Abastecimento" icon="Fuel" onClose={() => setModal(false)} />
@@ -507,20 +669,58 @@ function TabAbastecimentos({ isAdmin, profile }) {
                         </Field>
                         <Field label="Data" required><input type="date" value={form.data_abastecimento} onChange={e => setForm(f => ({ ...f, data_abastecimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                         <Field label="Horário"><input type="time" value={form.horario} onChange={e => setForm(f => ({ ...f, horario: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
-                        <Field label="Posto"><input value={form.posto} onChange={e => setForm(f => ({ ...f, posto: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Nome do posto" /></Field>
+                        <Field label="Posto" required>
+                            <select value={form.posto_id} onChange={e => handlePostoChange(e.target.value)} className={inputCls} style={inputStyle}>
+                                <option value="">Selecione o posto...</option>
+                                {postos.map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.nome}{p.cidade ? ` — ${p.cidade}` : ''}
+                                        {p.preco_diesel ? ` · D: R$${Number(p.preco_diesel).toFixed(3)}` : ''}
+                                        {p.preco_arla ? ` · A: R$${Number(p.preco_arla).toFixed(3)}` : ''}
+                                    </option>
+                                ))}
+                            </select>
+                            {postos.length === 0 && <p className="text-xs text-amber-600 mt-1">Nenhum posto cadastrado. Peça ao admin para cadastrar.</p>}
+                            {/* Exibe preços do posto selecionado */}
+                            {form.posto_id && postos.find(p => p.id === form.posto_id) && (() => {
+                                const p = postos.find(px => px.id === form.posto_id);
+                                return (p.preco_diesel || p.preco_arla) ? (
+                                    <div className="flex gap-3 mt-1.5 text-xs">
+                                        {p.preco_diesel && <span className="text-blue-600 font-medium">🛢️ Diesel: R$ {Number(p.preco_diesel).toFixed(3)}/L</span>}
+                                        {p.preco_arla && <span className="text-emerald-600 font-medium">💧 Arla: R$ {Number(p.preco_arla).toFixed(3)}/L</span>}
+                                    </div>
+                                ) : null;
+                            })()}
+                        </Field>
                         <div />
                         <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
                             <p className="text-xs font-semibold text-blue-700 mb-3">🛢️ Diesel</p>
                             <div className="grid grid-cols-2 gap-3">
-                                <Field label="Litros diesel"><input type="number" step="0.01" value={form.litros_diesel} onChange={e => setForm(f => ({ ...f, litros_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
-                                <Field label="Valor R$"><input type="number" step="0.01" value={form.valor_diesel} onChange={e => setForm(f => ({ ...f, valor_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
+                                <Field label="Litros diesel">
+                                    <input type="number" step="0.01" value={form.litros_diesel}
+                                        onChange={e => handleLitrosChange('litros_diesel', e.target.value)}
+                                        className={inputCls} style={inputStyle} placeholder="0,00" />
+                                </Field>
+                                <Field label="Valor R$">
+                                    <input type="number" step="0.01" value={form.valor_diesel}
+                                        onChange={e => setForm(f => ({ ...f, valor_diesel: e.target.value }))}
+                                        className={inputCls} style={inputStyle} placeholder="0,00" />
+                                </Field>
                             </div>
                         </div>
                         <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
                             <p className="text-xs font-semibold text-emerald-700 mb-3">💧 ARLA 32</p>
                             <div className="grid grid-cols-2 gap-3">
-                                <Field label="Litros arla"><input type="number" step="0.01" value={form.litros_arla} onChange={e => setForm(f => ({ ...f, litros_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
-                                <Field label="Valor R$"><input type="number" step="0.01" value={form.valor_arla} onChange={e => setForm(f => ({ ...f, valor_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
+                                <Field label="Litros arla">
+                                    <input type="number" step="0.01" value={form.litros_arla}
+                                        onChange={e => handleLitrosChange('litros_arla', e.target.value)}
+                                        className={inputCls} style={inputStyle} placeholder="0,00" />
+                                </Field>
+                                <Field label="Valor R$">
+                                    <input type="number" step="0.01" value={form.valor_arla}
+                                        onChange={e => setForm(f => ({ ...f, valor_arla: e.target.value }))}
+                                        className={inputCls} style={inputStyle} placeholder="0,00" />
+                                </Field>
                             </div>
                         </div>
                         <div className="sm:col-span-2">
@@ -530,6 +730,96 @@ function TabAbastecimentos({ isAdmin, profile }) {
                     <div className="flex gap-3 p-5 pt-0 justify-end">
                         <button onClick={() => setModal(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
+                    </div>
+                </ModalOverlay>
+            )}
+
+            {/* Modal gerenciar postos (admin) */}
+            {modalPostos && isAdmin && (
+                <ModalOverlay onClose={() => { setModalPostos(false); setEditPosto(null); setFormPosto({ nome: '', cidade: '', cnpj: '', preco_diesel: '', preco_arla: '' }); }}>
+                    <ModalHeader title="Gerenciar Postos de Combustível" icon="MapPin" onClose={() => { setModalPostos(false); setEditPosto(null); setFormPosto({ nome: '', cidade: '', cnpj: '', preco_diesel: '', preco_arla: '' }); }} />
+                    <div className="p-5">
+                        {/* Formulário add/edit */}
+                        <div className="p-4 rounded-xl border mb-4" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
+                            <p className="text-xs font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>
+                                {editPosto ? '✏️ Editar Posto' : '➕ Novo Posto'}
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <Field label="Nome do posto" required>
+                                    <input value={formPosto.nome} onChange={e => setFormPosto(f => ({ ...f, nome: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: Posto Shell Centro" />
+                                </Field>
+                                <Field label="Cidade">
+                                    <input value={formPosto.cidade} onChange={e => setFormPosto(f => ({ ...f, cidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: Guanambi" />
+                                </Field>
+                                <Field label="CNPJ (opcional)">
+                                    <input value={formPosto.cnpj} onChange={e => setFormPosto(f => ({ ...f, cnpj: e.target.value }))} className={inputCls} style={inputStyle} placeholder="00.000.000/0001-00" />
+                                </Field>
+                            </div>
+                            {/* Preços de combustível */}
+                            <div className="grid grid-cols-2 gap-3 mt-3 p-3 rounded-lg" style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+                                <div>
+                                    <label className="block text-xs font-semibold text-blue-700 mb-1.5">🛢️ Preço Diesel (R$/L)</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-blue-600">R$</span>
+                                        <input type="number" step="0.001" min="0" value={formPosto.preco_diesel}
+                                            onChange={e => setFormPosto(f => ({ ...f, preco_diesel: e.target.value }))}
+                                            className={inputCls + ' pl-8'} style={inputStyle} placeholder="6,800" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-emerald-700 mb-1.5">💧 Preço Arla (R$/L)</label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-emerald-600">R$</span>
+                                        <input type="number" step="0.001" min="0" value={formPosto.preco_arla}
+                                            onChange={e => setFormPosto(f => ({ ...f, preco_arla: e.target.value }))}
+                                            className={inputCls + ' pl-8'} style={inputStyle} placeholder="3,200" />
+                                    </div>
+                                </div>
+                                <p className="col-span-2 text-xs text-blue-600">Preços preenchidos automaticamente ao motorista selecionar este posto no abastecimento.</p>
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                                <Button onClick={handleSavePosto} size="sm" iconName={editPosto ? 'Save' : 'Plus'}>{editPosto ? 'Atualizar Posto' : 'Adicionar Posto'}</Button>
+                                {editPosto && (
+                                    <button onClick={() => { setEditPosto(null); setFormPosto({ nome: '', cidade: '', cnpj: '', preco_diesel: '', preco_arla: '' }); }}
+                                        className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>
+                                        Cancelar
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Lista de postos */}
+                        <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>Postos cadastrados ({postos.length})</p>
+                        <div className="space-y-2 max-h-72 overflow-y-auto">
+                            {postos.length === 0 && <p className="text-sm text-center py-6" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum posto cadastrado</p>}
+                            {postos.map(p => (
+                                <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border" style={{ borderColor: 'var(--color-border)' }}>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{p.nome}</p>
+                                        <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                                            {p.cidade && <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{p.cidade}</span>}
+                                            {p.preco_diesel && (
+                                                <span className="text-xs font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                                                    🛢️ R$ {Number(p.preco_diesel).toFixed(3)}/L
+                                                </span>
+                                            )}
+                                            {p.preco_arla && (
+                                                <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                                    💧 R$ {Number(p.preco_arla).toFixed(3)}/L
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-1 ml-2">
+                                        <button onClick={() => {
+                                            setEditPosto(p);
+                                            setFormPosto({ nome: p.nome, cidade: p.cidade || '', cnpj: p.cnpj || '', preco_diesel: p.preco_diesel || '', preco_arla: p.preco_arla || '' });
+                                        }} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
+                                        <button onClick={() => handleDeletePosto(p.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </ModalOverlay>
             )}
@@ -549,7 +839,10 @@ function TabChecklist({ isAdmin, profile }) {
     const [modalManut, setModalManut] = useState(null);
     const [obsManut, setObsManut] = useState('');
     const [filtro, setFiltro] = useState('pendentes');
-    const [form, setForm] = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '' });
+    const [form, setForm] = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
+    const [fotoPreview, setFotoPreview] = useState(null);
+    const [modalFoto, setModalFoto] = useState(null); // url para visualizar
+    const fotoRef = useRef(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -561,12 +854,25 @@ function TabChecklist({ isAdmin, profile }) {
     }, [filtro]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
+    // Converte foto para base64 para armazenar (ou pode ser URL do Storage)
+    const handleFotoChange = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) { showToast('Foto muito grande (máx 5MB)', 'error'); return; }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            setFotoPreview(ev.target.result);
+            setForm(f => ({ ...f, foto_url: ev.target.result }));
+        };
+        reader.readAsDataURL(file);
+    };
+
     const handleSubmit = async () => {
         if (!form.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
         try {
             await createChecklist({ ...form, motorista_id: profile.id, semana_ref: semana.toISOString().split('T')[0] });
-            showToast('Checklist enviado!', 'success'); setModal(null); load();
+            showToast('Checklist enviado!', 'success'); setModal(null); setFotoPreview(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleAprovar = async (c) => {
@@ -587,14 +893,20 @@ function TabChecklist({ isAdmin, profile }) {
 
     return (
         <div>
-            <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
-                <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                    {[['pendentes','Pendentes'], ['todos','Todos']].map(([v, l]) => (
-                        <button key={v} onClick={() => setFiltro(v)} className="px-4 py-2 text-xs font-medium transition-colors"
-                            style={filtro === v ? { backgroundColor: 'var(--color-primary)', color: '#fff' } : { backgroundColor: 'white', color: 'var(--color-muted-foreground)' }}>{l}</button>
-                    ))}
+            <div className="flex flex-wrap gap-2 items-center justify-between mb-5">
+                <div className="flex items-center gap-2">
+                    <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                        {[['pendentes','Pendentes'], ['todos','Todos']].map(([v, l]) => (
+                            <button key={v} onClick={() => setFiltro(v)} className="px-4 py-2 text-xs font-medium transition-colors"
+                                style={filtro === v ? { backgroundColor: 'var(--color-primary)', color: '#fff' } : { backgroundColor: 'white', color: 'var(--color-muted-foreground)' }}>{l}</button>
+                        ))}
+                    </div>
+                    {/* item 4: refresh */}
+                    <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                        <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
+                    </button>
                 </div>
-                <Button onClick={() => { setForm({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '' }); setModal(true); }} iconName="ClipboardCheck" size="sm">Novo Checklist</Button>
+                <Button onClick={() => { setForm({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' }); setFotoPreview(null); setModal(true); }} iconName="ClipboardCheck" size="sm">Novo Checklist</Button>
             </div>
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
@@ -605,10 +917,10 @@ function TabChecklist({ isAdmin, profile }) {
                         const ok = Object.values(itens).filter(Boolean).length;
                         const total = CHECKLIST_ITENS.length;
                         return (
-                            <div key={c.id} className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                <div className="flex items-start justify-between mb-3">
-                                    <div>
-                                        <div className="flex items-center gap-2 mb-1">
+                            <div key={c.id} className="bg-white rounded-xl border p-4 sm:p-5 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                <div className="flex items-start justify-between mb-3 gap-2">
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                                             <p className="font-bold" style={{ color: 'var(--color-text-primary)' }}>{c.motorista?.name || '—'}</p>
                                             <span className="text-xs font-data text-gray-400">— {c.veiculo?.placa || '—'}</span>
                                         </div>
@@ -616,12 +928,17 @@ function TabChecklist({ isAdmin, profile }) {
                                             Semana de {c.semana_ref ? new Date(c.semana_ref + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
                                         </p>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
                                         {c.aprovado
-                                            ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"><Icon name="CheckCircle2" size={11} />Aprovado</span>
-                                            : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Icon name="Clock" size={11} />Pendente</span>
+                                            ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 whitespace-nowrap"><Icon name="CheckCircle2" size={11} />Aprovado</span>
+                                            : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 whitespace-nowrap"><Icon name="Clock" size={11} />Pendente</span>
                                         }
-                                        {c.manutencao_registrada && <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700"><Icon name="Wrench" size={11} />Manutenção</span>}
+                                        {c.manutencao_registrada && <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 whitespace-nowrap"><Icon name="Wrench" size={11} />Manutenção</span>}
+                                        {c.foto_url && (
+                                            <button onClick={() => setModalFoto(c.foto_url)} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap">
+                                                <Icon name="Camera" size={11} />Foto
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="mb-3">
@@ -643,13 +960,18 @@ function TabChecklist({ isAdmin, profile }) {
                                 </div>
                                 {(c.problemas || c.necessidades || c.observacoes_livres) && (
                                     <div className="text-xs space-y-1 mb-3 p-3 rounded-lg bg-gray-50">
-                                        {c.problemas && <p><span className="font-medium text-gray-500">Problemas:</span> {c.problemas}</p>}
-                                        {c.necessidades && <p><span className="font-medium text-gray-500">Necessidades:</span> {c.necessidades}</p>}
+                                        {c.problemas && <p><span className="font-medium text-red-600">⚠ Problemas:</span> {c.problemas}</p>}
+                                        {c.necessidades && <p><span className="font-medium text-amber-600">🔧 Necessidades:</span> {c.necessidades}</p>}
                                         {c.observacoes_livres && <p><span className="font-medium text-gray-500">Obs:</span> {c.observacoes_livres}</p>}
                                     </div>
                                 )}
+                                {c.obs_manutencao && (
+                                    <div className="text-xs p-3 rounded-lg mb-3" style={{ backgroundColor: '#FFF7ED', border: '1px solid #FED7AA' }}>
+                                        <span className="font-medium text-orange-700">Manutenção registrada:</span> {c.obs_manutencao}
+                                    </div>
+                                )}
                                 {isAdmin && !c.aprovado && (
-                                    <div className="flex gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                    <div className="flex flex-wrap gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                         <button onClick={() => handleAprovar(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"><Icon name="CheckCircle2" size={13} />Aprovar</button>
                                         <button onClick={() => { setModalManut(c.id); setObsManut(''); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-orange-300 text-orange-700 hover:bg-orange-50 transition-colors"><Icon name="Wrench" size={13} />Registrar Manutenção</button>
                                     </div>
@@ -660,9 +982,10 @@ function TabChecklist({ isAdmin, profile }) {
                 </div>
             )}
 
+            {/* Modal novo checklist */}
             {modal && (
-                <ModalOverlay onClose={() => setModal(null)}>
-                    <ModalHeader title="Checklist Semanal" icon="ClipboardCheck" onClose={() => setModal(null)} />
+                <ModalOverlay onClose={() => { setModal(null); setFotoPreview(null); }}>
+                    <ModalHeader title="Checklist Semanal" icon="ClipboardCheck" onClose={() => { setModal(null); setFotoPreview(null); }} />
                     <div className="p-5 space-y-4">
                         <Field label="Veículo" required>
                             <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
@@ -682,16 +1005,40 @@ function TabChecklist({ isAdmin, profile }) {
                             </div>
                         </div>
                         <Field label="Problemas identificados"><textarea value={form.problemas} onChange={e => setForm(f => ({ ...f, problemas: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Descreva problemas encontrados..." /></Field>
-                        <Field label="Necessidades / peças"><textarea value={form.necessidades} onChange={e => setForm(f => ({ ...f, necessidades: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Pneus, cintas, etc..." /></Field>
+                        {/* item 3: foto de necessidades/problemas */}
+                        <Field label="Necessidades / peças">
+                            <textarea value={form.necessidades} onChange={e => setForm(f => ({ ...f, necessidades: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Pneus, cintas, etc..." />
+                        </Field>
+                        <div className="space-y-2">
+                            <label className="block text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                📷 Foto do problema/necessidade <span className="text-gray-400 font-normal">(opcional)</span>
+                            </label>
+                            <div className="flex items-center gap-3">
+                                <button type="button" onClick={() => fotoRef.current?.click()} className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
+                                    <Icon name="Camera" size={15} color="var(--color-muted-foreground)" />
+                                    {fotoPreview ? 'Trocar foto' : 'Tirar/Anexar foto'}
+                                </button>
+                                {fotoPreview && (
+                                    <button type="button" onClick={() => { setFotoPreview(null); setForm(f => ({ ...f, foto_url: '' })); }} className="text-xs text-red-500 hover:text-red-700">Remover</button>
+                                )}
+                                <input ref={fotoRef} type="file" accept="image/*" capture="environment" onChange={handleFotoChange} className="hidden" />
+                            </div>
+                            {fotoPreview && (
+                                <div className="relative inline-block mt-2">
+                                    <img src={fotoPreview} alt="Preview" className="rounded-lg border object-cover" style={{ maxHeight: 180, maxWidth: '100%', borderColor: 'var(--color-border)' }} />
+                                </div>
+                            )}
+                        </div>
                         <Field label="Observações livres"><textarea value={form.observacoes_livres} onChange={e => setForm(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                     </div>
                     <div className="flex gap-3 p-5 pt-0 justify-end">
-                        <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <button onClick={() => { setModal(null); setFotoPreview(null); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Send">Enviar Checklist</Button>
                     </div>
                 </ModalOverlay>
             )}
 
+            {/* Modal manutenção */}
             {modalManut && (
                 <ModalOverlay onClose={() => setModalManut(null)}>
                     <ModalHeader title="Registrar Manutenção" icon="Wrench" onClose={() => setModalManut(null)} />
@@ -705,6 +1052,18 @@ function TabChecklist({ isAdmin, profile }) {
                         <Button onClick={handleManutencao} size="sm" iconName="Wrench">Registrar</Button>
                     </div>
                 </ModalOverlay>
+            )}
+
+            {/* Modal visualizar foto */}
+            {modalFoto && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }} onClick={() => setModalFoto(null)}>
+                    <div className="relative max-w-2xl w-full">
+                        <button onClick={() => setModalFoto(null)} className="absolute -top-10 right-0 text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
+                            <Icon name="X" size={16} color="white" /> Fechar
+                        </button>
+                        <img src={modalFoto} alt="Foto do checklist" className="rounded-xl w-full object-contain max-h-[80vh]" />
+                    </div>
+                </div>
             )}
             <Toast toast={toast} />
         </div>
@@ -789,6 +1148,9 @@ function TabCarregamentos({ isAdmin }) {
                     <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
                 </div>
                 <div className="flex gap-2">
+                    <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                        <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
+                    </button>
                     <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}><Icon name="FileDown" size={14} /> Exportar</button>
                     <Button onClick={openCreate} iconName="Plus" size="sm">Novo Carregamento</Button>
                 </div>
@@ -810,8 +1172,8 @@ function TabCarregamentos({ isAdmin }) {
             </div>
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
-                <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                    <table className="w-full text-sm">
+                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                    <table className="w-full text-sm min-w-[640px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                             <tr>{['Data','Pedido/NF','Motorista','Placa','Empresa','Destino','Qtd','Frete',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
@@ -933,8 +1295,8 @@ function TabEmpresas({ isAdmin }) {
                 {isAdmin && <Button onClick={() => { setForm({ nome: '', cnpj: '', observacoes: '' }); setModal(true); }} iconName="Plus" size="sm">Nova Empresa</Button>}
             </div>
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
-                <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                    <table className="w-full text-sm">
+                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                    <table className="w-full text-sm min-w-[640px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                             <tr>{['Empresa','CNPJ','Observações',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
@@ -1043,9 +1405,14 @@ function TabBonificacoes({ isAdmin }) {
                     <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
                 </div>
-                <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
-                    <Icon name="FileDown" size={14} /> Exportar Excel
-                </button>
+                <div className="flex gap-2">
+                    <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                        <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
+                    </button>
+                    <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
+                        <Icon name="FileDown" size={14} /> Exportar Excel
+                    </button>
+                </div>
             </div>
 
             {/* KPIs */}
@@ -1081,8 +1448,8 @@ function TabBonificacoes({ isAdmin }) {
 
             {/* Tabela detalhada */}
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
-                <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                    <table className="w-full text-sm">
+                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                    <table className="w-full text-sm min-w-[640px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                             <tr>{['Motorista','Nº Viagem','Destino','Data','Placa','Bônus'].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
@@ -1117,10 +1484,27 @@ function TabDespesasExtras({ isAdmin }) {
     const [loading, setLoading]     = useState(true);
     const [modal, setModal]         = useState(null);
     const [filtro, setFiltro]       = useState({ veiculoId: '', categoria: '', mes: '' });
-    const [form, setForm] = useState({
+    const xmlRef = useRef(null);
+    const comprovanteRef = useRef(null);
+    const permutaRef = useRef(null);
+
+    const emptyForm = () => ({
         veiculo_id: '', categoria: 'Pneus', descricao: '', valor: '',
         data_despesa: new Date().toISOString().split('T')[0], nota_fiscal: '', observacoes: '',
+        // item 8: pagamento
+        forma_pagamento: 'a_vista',       // 'a_vista' | 'a_prazo'
+        tipo_pagamento: 'pix',            // a_vista: 'transferencia_m'|'pix'|'dinheiro'  a_prazo: 'boleto'|'permuta'|'cheque'
+        comprovante_url: '',              // a_vista: anexo comprovante
+        boletos: [],                      // [{vencimento, valor, pago}]
+        permuta_obs: '',
+        permuta_doc_url: '',
+        cheques: [],                      // [{numero, banco, valor, vencimento}]
+        // item 9: itens da NF
+        nf_itens: [],
     });
+    const [form, setForm] = useState(emptyForm());
+    const [novoBoleto, setNovoBoleto] = useState({ vencimento: '', valor: '' });
+    const [novoCheque, setNovoCheque] = useState({ numero: '', banco: '', valor: '', vencimento: '' });
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -1140,12 +1524,85 @@ function TabDespesasExtras({ isAdmin }) {
     useEffect(() => { load(); }, [load]);
 
     const totalPeriodo = useMemo(() => despesas.reduce((s, d) => s + Number(d.valor || 0), 0), [despesas]);
-
     const totalPorCategoria = useMemo(() => {
         const acc = {};
         despesas.forEach(d => { acc[d.categoria] = (acc[d.categoria] || 0) + Number(d.valor || 0); });
         return Object.entries(acc).sort((a, b) => b[1] - a[1]);
     }, [despesas]);
+
+    // Item 9: leitura de XML de NF
+    const handleXmlNF = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(ev.target.result, 'application/xml');
+                const itens = [];
+                // Tenta pegar dados básicos da NF
+                const nNF = xml.querySelector('nNF')?.textContent || '';
+                const dhEmi = xml.querySelector('dhEmi')?.textContent?.slice(0, 10) || '';
+                const vnf = xml.querySelector('vNF')?.textContent || '';
+                const emit = xml.querySelector('emit xNome')?.textContent || xml.querySelector('xNome')?.textContent || '';
+                // Itens do produto
+                const prods = xml.querySelectorAll('det prod');
+                prods.forEach((p) => {
+                    itens.push({
+                        codigo: p.querySelector('cProd')?.textContent || '',
+                        descricao: p.querySelector('xProd')?.textContent || '',
+                        quantidade: p.querySelector('qCom')?.textContent || '',
+                        unidade: p.querySelector('uCom')?.textContent || '',
+                        valor_unit: p.querySelector('vUnCom')?.textContent || '',
+                        valor_total: p.querySelector('vProd')?.textContent || '',
+                    });
+                });
+                setForm(f => ({
+                    ...f,
+                    nota_fiscal: nNF || f.nota_fiscal,
+                    valor: vnf || f.valor,
+                    data_despesa: dhEmi || f.data_despesa,
+                    descricao: emit ? `Compra — ${emit}` : f.descricao,
+                    nf_itens: itens,
+                }));
+                showToast(`NF importada: ${itens.length} item(s) encontrado(s)`, 'success');
+            } catch {
+                showToast('Erro ao ler XML. Verifique o arquivo.', 'error');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    };
+
+    const handleComprovanteChange = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => setForm(f => ({ ...f, comprovante_url: ev.target.result }));
+        reader.readAsDataURL(file);
+    };
+
+    const handlePermutaDocChange = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => setForm(f => ({ ...f, permuta_doc_url: ev.target.result }));
+        reader.readAsDataURL(file);
+    };
+
+    const adicionarBoleto = () => {
+        if (!novoBoleto.vencimento || !novoBoleto.valor) { showToast('Preencha vencimento e valor do boleto', 'error'); return; }
+        setForm(f => ({ ...f, boletos: [...(f.boletos || []), { ...novoBoleto, pago: false }] }));
+        setNovoBoleto({ vencimento: '', valor: '' });
+    };
+    const removerBoleto = (idx) => setForm(f => ({ ...f, boletos: f.boletos.filter((_, i) => i !== idx) }));
+
+    const adicionarCheque = () => {
+        if (!novoCheque.numero || !novoCheque.valor) { showToast('Preencha número e valor do cheque', 'error'); return; }
+        setForm(f => ({ ...f, cheques: [...(f.cheques || []), { ...novoCheque }] }));
+        setNovoCheque({ numero: '', banco: '', valor: '', vencimento: '' });
+    };
+    const removerCheque = (idx) => setForm(f => ({ ...f, cheques: f.cheques.filter((_, i) => i !== idx) }));
 
     const handleSubmit = async () => {
         if (!form.categoria || !form.valor || !form.data_despesa) { showToast('Categoria, valor e data são obrigatórios', 'error'); return; }
@@ -1167,28 +1624,45 @@ function TabDespesasExtras({ isAdmin }) {
         const rows = despesas.map(d => ({
             'Data': FMT_DATE(d.data_despesa), 'Placa': d.veiculo?.placa || '—',
             'Categoria': d.categoria, 'Descrição': d.descricao || '',
-            'NF': d.nota_fiscal || '', 'Valor (R$)': d.valor,
+            'NF': d.nota_fiscal || '', 'Forma Pgto': d.forma_pagamento === 'a_vista' ? 'À Vista' : 'A Prazo',
+            'Tipo Pgto': d.tipo_pagamento || '', 'Valor (R$)': Number(d.valor || 0),
+            'Observações': d.observacoes || '',
         }));
+        rows.push({ 'Data': 'TOTAL', 'Valor (R$)': totalPeriodo });
         const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [{ wch: 12 },{ wch: 12 },{ wch: 22 },{ wch: 30 },{ wch: 14 },{ wch: 14 }];
+        ws['!cols'] = [12,12,22,30,14,12,14,14,30].map(w => ({ wch: w }));
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Despesas Extras');
+        XLSX.utils.book_append_sheet(wb, ws, 'Despesas');
         XLSX.writeFile(wb, `despesas_extras_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
         showToast('Exportado!', 'success');
     };
 
-    const openCreate = () => {
-        setForm({ veiculo_id: '', categoria: 'Pneus', descricao: '', valor: '', data_despesa: new Date().toISOString().split('T')[0], nota_fiscal: '', observacoes: '' });
-        setModal({ mode: 'create' });
-    };
+    const openCreate = () => { setForm(emptyForm()); setModal({ mode: 'create' }); };
     const openEdit = (d) => {
-        setForm({ veiculo_id: d.veiculo_id || '', categoria: d.categoria, descricao: d.descricao || '', valor: d.valor, data_despesa: d.data_despesa, nota_fiscal: d.nota_fiscal || '', observacoes: d.observacoes || '' });
+        setForm({
+            veiculo_id: d.veiculo_id || '', categoria: d.categoria, descricao: d.descricao || '',
+            valor: d.valor, data_despesa: d.data_despesa, nota_fiscal: d.nota_fiscal || '', observacoes: d.observacoes || '',
+            forma_pagamento: d.forma_pagamento || 'a_vista', tipo_pagamento: d.tipo_pagamento || 'pix',
+            comprovante_url: d.comprovante_url || '', boletos: d.boletos || [],
+            permuta_obs: d.permuta_obs || '', permuta_doc_url: d.permuta_doc_url || '',
+            cheques: d.cheques || [], nf_itens: d.nf_itens || [],
+        });
         setModal({ mode: 'edit', data: d });
+    };
+
+    // Badge de pagamento
+    const pgBadge = (d) => {
+        if (d.forma_pagamento === 'a_prazo') {
+            const label = d.tipo_pagamento === 'boleto' ? 'Boleto' : d.tipo_pagamento === 'permuta' ? 'Permuta' : 'Cheque';
+            return <span className="px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-700 font-medium">{label}</span>;
+        }
+        const label = d.tipo_pagamento === 'pix' ? 'PIX' : d.tipo_pagamento === 'dinheiro' ? 'Dinheiro' : 'Transf.';
+        return <span className="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-700 font-medium">{label}</span>;
     };
 
     return (
         <div>
-            <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
+            <div className="flex flex-wrap gap-2 items-center justify-between mb-5">
                 <div className="flex flex-wrap gap-2">
                     <select value={filtro.veiculoId} onChange={e => setFiltro(f => ({ ...f, veiculoId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todos veículos</option>
@@ -1200,7 +1674,10 @@ function TabDespesasExtras({ isAdmin }) {
                     </select>
                     <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                    <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                        <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
+                    </button>
                     <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
                         <Icon name="FileDown" size={14} /> Exportar
                     </button>
@@ -1222,7 +1699,6 @@ function TabDespesasExtras({ isAdmin }) {
                 ))}
             </div>
 
-            {/* Breakdown por categoria */}
             {totalPorCategoria.length > 0 && (
                 <div className="bg-white rounded-xl border p-4 shadow-sm mb-5" style={{ borderColor: 'var(--color-border)' }}>
                     <p className="text-xs font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>Distribuição por categoria</p>
@@ -1245,24 +1721,24 @@ function TabDespesasExtras({ isAdmin }) {
                 </div>
             )}
 
-            {/* Tabela */}
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
-                <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                    <table className="w-full text-sm">
+                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                    <table className="w-full text-sm min-w-[640px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Data','Placa','Categoria','Descrição','NF','Valor',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                            <tr>{['Data','Placa','Categoria','Descrição','NF','Pagamento','Valor',''].map(h => <th key={h} className="px-3 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {despesas.length === 0 ? <tr><td colSpan={7} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma despesa registrada</td></tr>
+                            {despesas.length === 0 ? <tr><td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma despesa registrada</td></tr>
                             : despesas.map((d, i) => (
                                 <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                    <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(d.data_despesa)}</td>
-                                    <td className="px-4 py-3 font-data">{d.veiculo?.placa || '—'}</td>
-                                    <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700 font-medium">{d.categoria}</span></td>
-                                    <td className="px-4 py-3 text-xs max-w-[180px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
-                                    <td className="px-4 py-3 text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.nota_fiscal || '—'}</td>
-                                    <td className="px-4 py-3 font-data font-semibold text-red-600">{BRL(d.valor)}</td>
-                                    <td className="px-4 py-3">
+                                    <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(d.data_despesa)}</td>
+                                    <td className="px-3 py-3 font-data">{d.veiculo?.placa || '—'}</td>
+                                    <td className="px-3 py-3"><span className="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700 font-medium">{d.categoria}</span></td>
+                                    <td className="px-3 py-3 text-xs max-w-[150px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
+                                    <td className="px-3 py-3 text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.nota_fiscal || '—'}</td>
+                                    <td className="px-3 py-3">{pgBadge(d)}</td>
+                                    <td className="px-3 py-3 font-data font-semibold text-red-600">{BRL(d.valor)}</td>
+                                    <td className="px-3 py-3">
                                         <div className="flex gap-1">
                                             {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
                                             {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
@@ -1275,40 +1751,194 @@ function TabDespesasExtras({ isAdmin }) {
                 </div>
             )}
 
-            {modal && (
+            {modal && isAdmin && (
                 <ModalOverlay onClose={() => setModal(null)}>
-                    <ModalHeader title={modal.mode === 'create' ? 'Nova Despesa Extra' : 'Editar Despesa'} icon="Receipt" onClose={() => setModal(null)} />
-                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Field label="Categoria" required>
-                            <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle}>
-                                {CATEGORIAS_DESPESA.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </Field>
-                        <Field label="Veículo">
-                            <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                <option value="">Sem veículo específico</option>
-                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                            </select>
-                        </Field>
-                        <Field label="Data" required>
-                            <input type="date" value={form.data_despesa} onChange={e => setForm(f => ({ ...f, data_despesa: e.target.value }))} className={inputCls} style={inputStyle} />
-                        </Field>
-                        <Field label="Valor (R$)" required>
-                            <input type="number" step="0.01" min="0" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
-                        </Field>
-                        <Field label="Descrição">
-                            <input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 4 pneus traseiros Bridgestone" />
-                        </Field>
-                        <Field label="Nº Nota Fiscal">
-                            <input value={form.nota_fiscal} onChange={e => setForm(f => ({ ...f, nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 12345" />
-                        </Field>
-                        <div className="sm:col-span-2">
-                            <Field label="Observações">
-                                <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
+                    <ModalHeader title={modal.mode === 'create' ? 'Nova Despesa' : 'Editar Despesa'} icon="Receipt" onClose={() => setModal(null)} />
+                    <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+
+                        {/* item 9: importar XML NF */}
+                        <div className="p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs font-semibold text-blue-700">📄 Importar XML da Nota Fiscal</p>
+                                <button type="button" onClick={() => xmlRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
+                                    <Icon name="FileCode" size={12} /> Ler XML da NF
+                                </button>
+                                <input ref={xmlRef} type="file" accept=".xml" onChange={handleXmlNF} className="hidden" />
+                            </div>
+                            {form.nf_itens?.length > 0 && (
+                                <div className="mt-2 overflow-x-auto">
+                                    <p className="text-xs text-blue-600 font-medium mb-1">{form.nf_itens.length} item(s) da NF:</p>
+                                    <table className="w-full text-xs">
+                                        <thead><tr className="text-blue-800">{['Código','Descrição','Qtd','Un','V.Unit','V.Total'].map(h=><th key={h} className="text-left px-1 py-0.5 border-b border-blue-200">{h}</th>)}</tr></thead>
+                                        <tbody>
+                                            {form.nf_itens.map((it, idx) => (
+                                                <tr key={idx} className="border-b border-blue-100">
+                                                    <td className="px-1 py-1 font-data">{it.codigo}</td>
+                                                    <td className="px-1 py-1 max-w-[140px] truncate">{it.descricao}</td>
+                                                    <td className="px-1 py-1 text-right font-data">{it.quantidade}</td>
+                                                    <td className="px-1 py-1">{it.unidade}</td>
+                                                    <td className="px-1 py-1 text-right font-data">{BRL(it.valor_unit)}</td>
+                                                    <td className="px-1 py-1 text-right font-data text-blue-700">{BRL(it.valor_total)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* dados básicos */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <Field label="Categoria" required>
+                                <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    {CATEGORIAS_DESPESA.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </Field>
+                            <Field label="Veículo">
+                                <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <option value="">Sem veículo específico</option>
+                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                </select>
+                            </Field>
+                            <Field label="Data" required>
+                                <input type="date" value={form.data_despesa} onChange={e => setForm(f => ({ ...f, data_despesa: e.target.value }))} className={inputCls} style={inputStyle} />
+                            </Field>
+                            <Field label="Valor (R$)" required>
+                                <input type="number" step="0.01" min="0" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                            </Field>
+                            <Field label="Descrição">
+                                <input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 4 pneus traseiros Bridgestone" />
+                            </Field>
+                            <Field label="Nº Nota Fiscal">
+                                <input value={form.nota_fiscal} onChange={e => setForm(f => ({ ...f, nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 12345" />
                             </Field>
                         </div>
+
+                        {/* item 8: forma de pagamento */}
+                        <div className="space-y-3">
+                            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-secondary)' }}>Forma de Pagamento</p>
+                            <div className="flex gap-2">
+                                {[['a_vista','💳 À Vista'], ['a_prazo','📋 A Prazo']].map(([v, l]) => (
+                                    <button key={v} type="button" onClick={() => setForm(f => ({ ...f, forma_pagamento: v, tipo_pagamento: v === 'a_vista' ? 'pix' : 'boleto' }))}
+                                        className="flex-1 py-2 rounded-lg text-sm font-medium border transition-colors"
+                                        style={form.forma_pagamento === v ? { backgroundColor: 'var(--color-primary)', color: '#fff', borderColor: 'var(--color-primary)' } : { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                                        {l}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* À Vista */}
+                            {form.forma_pagamento === 'a_vista' && (
+                                <div className="space-y-3 p-3 rounded-xl border" style={{ borderColor: '#BBF7D0', backgroundColor: '#F0FDF4' }}>
+                                    <p className="text-xs font-semibold text-green-700">Tipo de pagamento</p>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {[['transferencia_m','Transferência M'], ['pix','PIX'], ['dinheiro','Dinheiro']].map(([v, l]) => (
+                                            <button key={v} type="button" onClick={() => setForm(f => ({ ...f, tipo_pagamento: v }))}
+                                                className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
+                                                style={form.tipo_pagamento === v ? { backgroundColor: '#059669', color: '#fff', borderColor: '#059669' } : { borderColor: '#BBF7D0', color: '#065F46', backgroundColor: 'white' }}>
+                                                {l}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-medium mb-2 text-green-700">Comprovante (opcional)</p>
+                                        <div className="flex items-center gap-2">
+                                            <button type="button" onClick={() => comprovanteRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-green-50 transition-colors" style={{ borderColor: '#BBF7D0' }}>
+                                                <Icon name="Paperclip" size={13} /> Anexar comprovante
+                                            </button>
+                                            {form.comprovante_url && <span className="text-xs text-green-700 flex items-center gap-1"><Icon name="CheckCircle2" size={12} /> Anexado</span>}
+                                            <input ref={comprovanteRef} type="file" accept="image/*,.pdf" onChange={handleComprovanteChange} className="hidden" />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* A Prazo */}
+                            {form.forma_pagamento === 'a_prazo' && (
+                                <div className="space-y-3 p-3 rounded-xl border" style={{ borderColor: '#FED7AA', backgroundColor: '#FFF7ED' }}>
+                                    <p className="text-xs font-semibold text-amber-700">Tipo de pagamento a prazo</p>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {[['boleto','Boleto'], ['permuta','Permuta'], ['cheque','Cheque']].map(([v, l]) => (
+                                            <button key={v} type="button" onClick={() => setForm(f => ({ ...f, tipo_pagamento: v }))}
+                                                className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
+                                                style={form.tipo_pagamento === v ? { backgroundColor: '#D97706', color: '#fff', borderColor: '#D97706' } : { borderColor: '#FED7AA', color: '#92400E', backgroundColor: 'white' }}>
+                                                {l}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Boleto */}
+                                    {form.tipo_pagamento === 'boleto' && (
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-medium text-amber-800">Boletos / Parcelas</p>
+                                            {(form.boletos || []).map((b, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border" style={{ borderColor: '#FED7AA' }}>
+                                                    <span className="text-xs text-amber-700 font-medium">Parcela {idx + 1}</span>
+                                                    <span className="text-xs font-data">{FMT_DATE(b.vencimento)}</span>
+                                                    <span className="text-xs font-data font-semibold text-amber-800">{BRL(b.valor)}</span>
+                                                    <span className={`text-xs px-1.5 py-0.5 rounded ${b.pago ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{b.pago ? 'Pago' : 'Pendente'}</span>
+                                                    <button type="button" onClick={() => removerBoleto(idx)} className="ml-auto p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
+                                                </div>
+                                            ))}
+                                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                                <Field label="Vencimento"><input type="date" value={novoBoleto.vencimento} onChange={e => setNovoBoleto(b => ({ ...b, vencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                                <Field label="Valor (R$)"><input type="number" step="0.01" value={novoBoleto.valor} onChange={e => setNovoBoleto(b => ({ ...b, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
+                                            </div>
+                                            <button type="button" onClick={adicionarBoleto} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-300 text-amber-700 hover:bg-amber-50">
+                                                <Icon name="Plus" size={12} /> Adicionar boleto
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Permuta */}
+                                    {form.tipo_pagamento === 'permuta' && (
+                                        <div className="space-y-2">
+                                            <Field label="Observações da permuta">
+                                                <textarea value={form.permuta_obs} onChange={e => setForm(f => ({ ...f, permuta_obs: e.target.value }))} className={inputCls} style={inputStyle} rows={3} placeholder="Descreva os termos da permuta..." />
+                                            </Field>
+                                            <div className="flex items-center gap-2">
+                                                <button type="button" onClick={() => permutaRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-amber-50 transition-colors" style={{ borderColor: '#FED7AA' }}>
+                                                    <Icon name="Paperclip" size={13} /> Anexar documento
+                                                </button>
+                                                {form.permuta_doc_url && <span className="text-xs text-amber-700 flex items-center gap-1"><Icon name="CheckCircle2" size={12} /> Anexado</span>}
+                                                <input ref={permutaRef} type="file" accept="image/*,.pdf" onChange={handlePermutaDocChange} className="hidden" />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Cheque */}
+                                    {form.tipo_pagamento === 'cheque' && (
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-medium text-amber-800">Cheques utilizados</p>
+                                            {(form.cheques || []).map((ch, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border text-xs" style={{ borderColor: '#FED7AA' }}>
+                                                    <span className="font-medium text-amber-800">#{ch.numero}</span>
+                                                    {ch.banco && <span className="text-amber-700">{ch.banco}</span>}
+                                                    <span className="font-data font-semibold">{BRL(ch.valor)}</span>
+                                                    {ch.vencimento && <span className="text-gray-500">{FMT_DATE(ch.vencimento)}</span>}
+                                                    <button type="button" onClick={() => removerCheque(idx)} className="ml-auto p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
+                                                </div>
+                                            ))}
+                                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                                <Field label="Nº Cheque"><input value={novoCheque.numero} onChange={e => setNovoCheque(c => ({ ...c, numero: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 000123" /></Field>
+                                                <Field label="Banco"><input value={novoCheque.banco} onChange={e => setNovoCheque(c => ({ ...c, banco: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: Bradesco" /></Field>
+                                                <Field label="Valor (R$)"><input type="number" step="0.01" value={novoCheque.valor} onChange={e => setNovoCheque(c => ({ ...c, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
+                                                <Field label="Vencimento"><input type="date" value={novoCheque.vencimento} onChange={e => setNovoCheque(c => ({ ...c, vencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                            </div>
+                                            <button type="button" onClick={adicionarCheque} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-300 text-amber-700 hover:bg-amber-50">
+                                                <Icon name="Plus" size={12} /> Adicionar cheque
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        <Field label="Observações">
+                            <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
+                        </Field>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 p-5 pt-0 justify-end border-t" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -1418,6 +2048,9 @@ function TabDiarias({ isAdmin }) {
                     <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
                 </div>
                 <div className="flex gap-2">
+                    <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                        <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
+                    </button>
                     <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
                         <Icon name="FileDown" size={14} /> Exportar
                     </button>
@@ -1442,8 +2075,8 @@ function TabDiarias({ isAdmin }) {
 
             {/* Tabela */}
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
-                <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                    <table className="w-full text-sm">
+                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                    <table className="w-full text-sm min-w-[640px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                             <tr>{['Data','Motorista','Viagem','Dias','Valor/Dia','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
@@ -1483,14 +2116,13 @@ function TabDiarias({ isAdmin }) {
                                 {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                             </select>
                         </Field>
-                        <Field label="Vincular à viagem (opcional)">
-                            <select value={form.viagem_id} onChange={e => setForm(f => ({ ...f, viagem_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                <option value="">Sem vínculo</option>
-                                {viagens.filter(v => !form.motorista_id || v.motorista_id === form.motorista_id).map(v =>
-                                    <option key={v.id} value={v.id}>{v.numero} — {v.destino || 'Sem destino'}</option>
-                                )}
-                            </select>
-                        </Field>
+                        {/* item 10: para carretas não é necessário vincular viagem */}
+                        <div className="flex items-end">
+                            <div className="w-full p-3 rounded-lg text-xs" style={{ backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE' }}>
+                                <p className="text-indigo-700 font-medium">ℹ️ Módulo Carretas</p>
+                                <p className="text-indigo-600 mt-0.5">Diárias deste módulo não precisam vínculo de viagem.</p>
+                            </div>
+                        </div>
                         <Field label="Data de início" required>
                             <input type="date" value={form.data_inicio} onChange={e => setForm(f => ({ ...f, data_inicio: e.target.value }))} className={inputCls} style={inputStyle} />
                         </Field>
@@ -1537,14 +2169,16 @@ function TabRelatorioFinanceiro({ isAdmin }) {
     const [empresa,       setEmpresa]       = useState('');
     const [empresas,      setEmpresas]      = useState([]);
     const [motoristas,    setMotoristas]    = useState([]);
+    const [veiculos,      setVeiculos]      = useState([]);
+    const [filtroPlaca,   setFiltroPlaca]   = useState(''); // item 7
     const [dados,         setDados]         = useState(null);
     const [loading,       setLoading]       = useState(false);
 
     useEffect(() => {
         (async () => {
             try {
-                const [e, m] = await Promise.all([fetchEmpresas(), fetchTodosMotoristas()]);
-                setEmpresas(e); setMotoristas(m.filter(m => m.tipo_veiculo === 'carreta' || m.role === 'carreteiro'));
+                const [e, m, v] = await Promise.all([fetchEmpresas(), fetchTodosMotoristas(), fetchCarretasVeiculos()]);
+                setEmpresas(e); setMotoristas(m.filter(m => m.tipo_veiculo === 'carreta' || m.role === 'carreteiro')); setVeiculos(v);
             } catch { /* silencioso */ }
         })();
     }, []);
@@ -1581,7 +2215,9 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             });
 
             // ── Despesas combustível ───────────────────────────────────────
-            const despesaCombustivel = abastecimentos.reduce((s, a) => s + Number(a.valor_total || 0), 0);
+            const valorDiesel        = abastecimentos.reduce((s, a) => s + Number(a.valor_diesel || 0), 0);
+            const valorArla          = abastecimentos.reduce((s, a) => s + Number(a.valor_arla   || 0), 0);
+            const despesaCombustivel = valorDiesel + valorArla;
             const litrosDiesel       = abastecimentos.reduce((s, a) => s + Number(a.litros_diesel || 0), 0);
             const litrosArla         = abastecimentos.reduce((s, a) => s + Number(a.litros_arla   || 0), 0);
 
@@ -1639,7 +2275,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             setDados({
                 periodo: `${periodoInicio === periodoFim ? periodoInicio : `${periodoInicio} a ${periodoFim}`}`,
                 receitaTotal, receitaPorEmpresa,
-                despesaCombustivel, litrosDiesel, litrosArla,
+                despesaCombustivel, litrosDiesel, litrosArla, valorDiesel, valorArla,
                 bonusTotal, despesaTotal,
                 margemBruta, margemLiquida, margemPct,
                 consolidadoMotoristas,
@@ -1648,6 +2284,12 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 viagensFinalizadas: viagensFinalizadas.length,
                 totalDespesasExtras, despesasPorCategoria,
                 totalDiariasLancadas,
+                // raw data for placa filter (item 7)
+                _carregamentos: carregamentos,
+                _abastecimentos: abastecimentos,
+                _viagens: viagens,
+                _despesasExtras: despesasExtras,
+                _diarias: diariasLancadas,
             });
         } catch (e) { showToast('Erro ao calcular: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -1658,7 +2300,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 
         const wb = XLSX.utils.book_new();
 
-        // Aba 1 — Resumo Financeiro
+        // Aba 1 — Resumo Financeiro (item 6: diesel e arla separados)
         const resumo = [
             ['RELATÓRIO FINANCEIRO — TRANSPORTE CARRETAS', '', ''],
             ['Período:', dados.periodo, ''],
@@ -1668,9 +2310,11 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             ...Object.entries(dados.receitaPorEmpresa).map(([nome, val]) => [`  → ${nome}`, val, '']),
             ['', '', ''],
             ['DESPESAS', '', ''],
-            ['Combustível (Diesel + Arla)', dados.despesaCombustivel, ''],
-            [`  → Diesel: ${dados.litrosDiesel.toFixed(1)} L`, '', ''],
-            [`  → Arla: ${dados.litrosArla.toFixed(1)} L`, '', ''],
+            ['Combustível — Diesel', dados.valorDiesel, ''],
+            [`  → Litros Diesel`, dados.litrosDiesel.toFixed(1) + ' L', ''],
+            ['Combustível — Arla 32', dados.valorArla, ''],
+            [`  → Litros Arla`, dados.litrosArla.toFixed(1) + ' L', ''],
+            ['Total Combustível', dados.despesaCombustivel, ''],
             ['Bônus Motoristas', dados.bonusTotal, ''],
             ['Diárias de Motoristas', dados.totalDiariasLancadas, ''],
             ['Despesas Extras (veículos)', dados.totalDespesasExtras, ''],
@@ -1691,25 +2335,144 @@ function TabRelatorioFinanceiro({ isAdmin }) {
         ws1['!cols'] = [{ wch: 45 }, { wch: 18 }, { wch: 10 }];
         XLSX.utils.book_append_sheet(wb, ws1, 'Resumo Financeiro');
 
-        // Aba 2 — Motoristas
+        // Aba 2 — Por Motorista
         const rowsM = [
             ['Motorista', 'Carregamentos', 'Receita Frete (R$)', 'Viagens Finalizadas', 'Bônus (R$)', 'Total Motorista (R$)'],
             ...dados.consolidadoMotoristas.map(m => [
                 m.nome, m.carregamentos, m.frete, m.viagens, m.bonus, m.frete + m.bonus,
             ]),
-            ['TOTAL', dados.consolidadoMotoristas.reduce((s,m)=>s+m.carregamentos,0),
-                dados.receitaTotal,
-                dados.viagensFinalizadas,
-                dados.bonusTotal,
-                dados.receitaTotal + dados.bonusTotal],
+            ['TOTAL', dados.totalCarregamentos, dados.receitaTotal, dados.viagensFinalizadas, dados.bonusTotal, dados.receitaTotal + dados.bonusTotal],
         ];
         const ws2 = XLSX.utils.aoa_to_sheet(rowsM);
         ws2['!cols'] = [{ wch: 22 },{ wch: 15 },{ wch: 20 },{ wch: 20 },{ wch: 14 },{ wch: 20 }];
         XLSX.utils.book_append_sheet(wb, ws2, 'Por Motorista');
 
+        // Aba 3 — Abastecimentos (diesel e arla separados)
+        const rowsAbst = [
+            ['Data', 'Motorista', 'Placa', 'Posto', 'Diesel (L)', 'R$ Diesel', 'Arla (L)', 'R$ Arla', 'Total R$'],
+            ...(dados._abastecimentos || []).map(a => [
+                FMT_DATE(a.data_abastecimento), a.motorista?.name || '', a.veiculo?.placa || '',
+                a.posto || '', Number(a.litros_diesel || 0), Number(a.valor_diesel || 0),
+                Number(a.litros_arla || 0), Number(a.valor_arla || 0), Number(a.valor_total || 0),
+            ]),
+            ['TOTAL', '', '', '', dados.litrosDiesel, dados.valorDiesel, dados.litrosArla, dados.valorArla, dados.despesaCombustivel],
+        ];
+        const ws3 = XLSX.utils.aoa_to_sheet(rowsAbst);
+        ws3['!cols'] = [12,20,12,18,10,14,10,14,14].map(w => ({ wch: w }));
+        XLSX.utils.book_append_sheet(wb, ws3, 'Abastecimentos');
+
         const nome = `relatorio_financeiro_carretas_${dados.periodo.replace(/\s/g,'_')}.xlsx`;
         XLSX.writeFile(wb, nome);
         showToast('Relatório exportado com sucesso!', 'success');
+    };
+
+    // item 7: relatório por placa com export completo
+    const dadosPorPlaca = useMemo(() => {
+        if (!dados || !filtroPlaca) return null;
+        const veic = veiculos.find(v => v.id === filtroPlaca);
+        const carrg = (dados._carregamentos || []).filter(c => c.veiculo_id === filtroPlaca);
+        const absts = (dados._abastecimentos || []).filter(a => a.veiculo_id === filtroPlaca);
+        const viags = (dados._viagens || []).filter(v => v.veiculo_id === filtroPlaca);
+        const desps = (dados._despesasExtras || []).filter(d => d.veiculo_id === filtroPlaca);
+        const diar  = (dados._diarias || []).filter(d => {
+            // diárias vinculadas ao veículo via viagem
+            const viagIds = viags.map(v => v.id);
+            return d.viagem_id && viagIds.includes(d.viagem_id);
+        });
+        const receita     = carrg.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);
+        const vDiesel     = absts.reduce((s, a) => s + Number(a.valor_diesel || 0), 0);
+        const vArla       = absts.reduce((s, a) => s + Number(a.valor_arla || 0), 0);
+        const combustivel = vDiesel + vArla;
+        const lDiesel     = absts.reduce((s, a) => s + Number(a.litros_diesel || 0), 0);
+        const lArla       = absts.reduce((s, a) => s + Number(a.litros_arla || 0), 0);
+        const bonus       = viags.filter(v => v.status === 'Entrega finalizada').reduce((s, v) => s + calcularBonusCarreteiro(v.destino), 0);
+        const despExtra   = desps.reduce((s, d) => s + Number(d.valor || 0), 0);
+        const diarias     = diar.reduce((s, d) => s + Number(d.valor_total || 0), 0);
+        const totalDesp   = combustivel + bonus + despExtra + diarias;
+        const margem      = receita - totalDesp;
+        return { veic, carrg, absts, viags, desps, diar, receita, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, totalDesp, margem };
+    }, [dados, filtroPlaca, veiculos]);
+
+    const exportarPorPlaca = () => {
+        if (!dadosPorPlaca) { showToast('Selecione uma placa e gere o relatório primeiro', 'error'); return; }
+        const { veic, carrg, absts, viags, desps, receita, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, totalDesp, margem } = dadosPorPlaca;
+        const wb = XLSX.utils.book_new();
+
+        // Aba Resumo
+        const resumo = [
+            [`RELATÓRIO POR VEÍCULO — ${veic?.placa || filtroPlaca}`, ''],
+            [`Modelo: ${veic?.modelo || ''}`, ''],
+            ['Período:', dados.periodo],
+            ['', ''],
+            ['RECEITAS', ''],
+            ['Receita de Fretes', receita],
+            ['', ''],
+            ['DESPESAS', ''],
+            ['Diesel', vDiesel], [`  → ${lDiesel.toFixed(1)} L`, ''],
+            ['Arla 32', vArla], [`  → ${lArla.toFixed(1)} L`, ''],
+            ['Total Combustível', combustivel],
+            ['Bônus Motoristas', bonus],
+            ['Diárias', diarias],
+            ['Despesas Extras', despExtra],
+            ['Total Despesas', totalDesp],
+            ['', ''],
+            ['MARGEM LÍQUIDA', margem],
+            ['Margem %', receita > 0 ? `${((margem / receita) * 100).toFixed(2)}%` : '0%'],
+        ];
+        const ws1 = XLSX.utils.aoa_to_sheet(resumo);
+        ws1['!cols'] = [{ wch: 40 }, { wch: 18 }];
+        XLSX.utils.book_append_sheet(wb, ws1, 'Resumo');
+
+        // Aba Viagens
+        if (viags.length) {
+            const rowsV = [
+                ['Nº Viagem', 'Status', 'Motorista', 'Data Saída', 'Destino', 'Toneladas', 'Bônus (R$)'],
+                ...viags.map(v => [v.numero, v.status, v.motorista?.name || '', FMT_DATE(v.data_saida), v.destino || '', v.toneladas || 0, calcularBonusCarreteiro(v.destino)]),
+                ['TOTAL', '', '', '', '', '', bonus],
+            ];
+            const wsV = XLSX.utils.aoa_to_sheet(rowsV);
+            wsV['!cols'] = [12,18,20,12,20,10,12].map(w => ({ wch: w }));
+            XLSX.utils.book_append_sheet(wb, wsV, 'Viagens');
+        }
+
+        // Aba Fretes
+        if (carrg.length) {
+            const rowsC = [
+                ['Data', 'Pedido', 'NF', 'Empresa', 'Destino', 'Motorista', 'Qtd', 'Unidade', 'Frete (R$)'],
+                ...carrg.map(c => [FMT_DATE(c.data_carregamento), c.numero_pedido || '', c.numero_nota_fiscal || '', c.empresa?.nome || '', c.destino || '', c.motorista?.name || '', c.quantidade || 0, c.unidade_quantidade || '', Number(c.valor_frete_calculado || 0)]),
+                ['TOTAL', '', '', '', '', '', '', '', receita],
+            ];
+            const wsC = XLSX.utils.aoa_to_sheet(rowsC);
+            wsC['!cols'] = [12,12,10,18,20,20,8,8,14].map(w => ({ wch: w }));
+            XLSX.utils.book_append_sheet(wb, wsC, 'Fretes');
+        }
+
+        // Aba Abastecimentos
+        if (absts.length) {
+            const rowsA = [
+                ['Data', 'Motorista', 'Posto', 'Diesel (L)', 'R$ Diesel', 'Arla (L)', 'R$ Arla', 'Total R$'],
+                ...absts.map(a => [FMT_DATE(a.data_abastecimento), a.motorista?.name || '', a.posto || '', Number(a.litros_diesel || 0), Number(a.valor_diesel || 0), Number(a.litros_arla || 0), Number(a.valor_arla || 0), Number(a.valor_total || 0)]),
+                ['TOTAL', '', '', lDiesel, vDiesel, lArla, vArla, combustivel],
+            ];
+            const wsA = XLSX.utils.aoa_to_sheet(rowsA);
+            wsA['!cols'] = [12,20,18,10,14,10,14,14].map(w => ({ wch: w }));
+            XLSX.utils.book_append_sheet(wb, wsA, 'Abastecimentos');
+        }
+
+        // Aba Despesas Extras
+        if (desps.length) {
+            const rowsD = [
+                ['Data', 'Categoria', 'Descrição', 'NF', 'Forma Pgto', 'Valor (R$)'],
+                ...desps.map(d => [FMT_DATE(d.data_despesa), d.categoria, d.descricao || '', d.nota_fiscal || '', d.forma_pagamento === 'a_prazo' ? `A Prazo (${d.tipo_pagamento || ''})` : `À Vista (${d.tipo_pagamento || ''})`, Number(d.valor || 0)]),
+                ['TOTAL', '', '', '', '', despExtra],
+            ];
+            const wsD = XLSX.utils.aoa_to_sheet(rowsD);
+            wsD['!cols'] = [12,22,30,12,18,14].map(w => ({ wch: w }));
+            XLSX.utils.book_append_sheet(wb, wsD, 'Despesas Extras');
+        }
+
+        XLSX.writeFile(wb, `relatorio_placa_${veic?.placa || filtroPlaca}_${dados.periodo.replace(/\s/g,'_')}.xlsx`);
+        showToast('Relatório por placa exportado!', 'success');
     };
 
     const fmtPct = v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
@@ -1816,7 +2579,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                     </div>
 
                     {/* ── DRE Simplificado ────────────────────────────────── */}
-                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                         <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
                             <Icon name="FileText" size={16} color="var(--color-muted-foreground)" />
                             <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
@@ -1845,15 +2608,18 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                                 <span className="text-xs font-semibold uppercase tracking-wide text-amber-700">Despesas</span>
                             </div>
                             <div className="flex justify-between py-1.5 pl-3">
-                                <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Combustível</span>
+                                <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Combustível (Total)</span>
                                 <span className="font-data font-semibold text-amber-700">({BRL(dados.despesaCombustivel)})</span>
                             </div>
+                            {/* item 6: diesel e arla separados com valores */}
                             <div className="flex justify-between py-1 pl-6">
-                                <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ Diesel: {dados.litrosDiesel.toFixed(1)} L</span>
+                                <span className="text-xs text-blue-700 font-medium">↳ 🛢️ Diesel: {dados.litrosDiesel.toFixed(1)} L</span>
+                                <span className="text-xs font-data text-blue-700 font-semibold">{BRL(dados.valorDiesel)}</span>
                             </div>
                             {dados.litrosArla > 0 && (
                                 <div className="flex justify-between py-1 pl-6">
-                                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ Arla: {dados.litrosArla.toFixed(1)} L</span>
+                                    <span className="text-xs text-emerald-700 font-medium">↳ 💧 Arla 32: {dados.litrosArla.toFixed(1)} L</span>
+                                    <span className="text-xs font-data text-emerald-700 font-semibold">{BRL(dados.valorArla)}</span>
                                 </div>
                             )}
                             <div className="flex justify-between py-1.5 pl-3">
@@ -1908,7 +2674,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 
                     {/* ── Receita por empresa ─────────────────────────────── */}
                     {Object.keys(dados.receitaPorEmpresa).length > 0 && (
-                        <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
                                 <Icon name="Building2" size={16} color="var(--color-muted-foreground)" />
                                 <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Receita por Empresa</h3>
@@ -1938,7 +2704,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                     )}
 
                     {/* ── Bônus e fretes por motorista ────────────────────── */}
-                    <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                         <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
                             <Icon name="Users" size={16} color="var(--color-muted-foreground)" />
                             <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Resumo por Motorista</h3>
@@ -1949,7 +2715,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                             </div>
                         ) : (
                             <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
+                                <table className="w-full text-sm min-w-[640px]">
                                     <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                                         <tr>
                                             {['Motorista', 'Carregamentos', 'Frete Gerado', 'Viagens Finalizadas', 'Bônus', 'Total'].map(h => (
@@ -1983,13 +2749,87 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                             </div>
                         )}
                     </div>
+                    {/* ── Resumo por Placa (item 7) ──────────────────────── */}
+                    <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
+                            <div className="flex items-center gap-2">
+                                <Icon name="Truck" size={16} color="var(--color-muted-foreground)" />
+                                <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Relatório por Placa</h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <select value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)} className="px-3 py-1.5 rounded-lg border text-xs" style={inputStyle}>
+                                    <option value="">Selecione a placa...</option>
+                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo || ''}</option>)}
+                                </select>
+                                {dadosPorPlaca && (
+                                    <button onClick={exportarPorPlaca} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
+                                        <Icon name="FileDown" size={13} /> Exportar Excel
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        {!filtroPlaca ? (
+                            <div className="p-8 text-center text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+                                Selecione uma placa para ver o relatório detalhado
+                            </div>
+                        ) : !dadosPorPlaca ? (
+                            <div className="p-8 text-center text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum dado encontrado para esta placa no período</div>
+                        ) : (
+                            <div className="p-5 space-y-4">
+                                {/* KPI cards */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                    {[
+                                        { l: 'Receita Fretes', v: BRL(dadosPorPlaca.receita), c: '#065F46', bg: '#D1FAE5', i: 'TrendingUp' },
+                                        { l: 'Total Combustível', v: BRL(dadosPorPlaca.combustivel), c: '#B45309', bg: '#FEF9C3', i: 'Fuel',
+                                          sub: `🛢️ ${BRL(dadosPorPlaca.vDiesel)} · 💧 ${BRL(dadosPorPlaca.vArla)}` },
+                                        { l: 'Total Despesas', v: BRL(dadosPorPlaca.totalDesp), c: '#DC2626', bg: '#FEE2E2', i: 'Receipt' },
+                                        { l: 'Margem Líquida', v: BRL(dadosPorPlaca.margem), c: dadosPorPlaca.margem >= 0 ? '#1D4ED8' : '#DC2626', bg: dadosPorPlaca.margem >= 0 ? '#DBEAFE' : '#FEE2E2', i: dadosPorPlaca.margem >= 0 ? 'TrendingUp' : 'TrendingDown' },
+                                    ].map(k => (
+                                        <div key={k.l} className="rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                            <div className="flex items-center gap-1.5 mb-1">
+                                                <div className="rounded-lg flex items-center justify-center" style={{ width: 24, height: 24, backgroundColor: k.bg }}>
+                                                    <Icon name={k.i} size={12} color={k.c} />
+                                                </div>
+                                                <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{k.l}</span>
+                                            </div>
+                                            <p className="text-base font-bold font-data" style={{ color: k.c }}>{k.v}</p>
+                                            {k.sub && <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{k.sub}</p>}
+                                        </div>
+                                    ))}
+                                </div>
+                                {/* DRE por placa */}
+                                <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                                    <div className="px-4 py-2 border-b text-xs font-semibold" style={{ backgroundColor: '#F8FAFC', borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                                        DRE — {dadosPorPlaca.veic?.placa} · {dadosPorPlaca.veic?.modelo || ''} · {dadosPorPlaca.viags.length} viagens · {dadosPorPlaca.carrg.length} fretes
+                                    </div>
+                                    <div className="p-4 space-y-1 text-sm">
+                                        <div className="flex justify-between py-1 font-semibold text-green-700">
+                                            <span>Receita de Fretes</span><span className="font-data">{BRL(dadosPorPlaca.receita)}</span>
+                                        </div>
+                                        <div className="flex justify-between py-1 text-amber-700">
+                                            <span>(-) Diesel {dadosPorPlaca.lDiesel.toFixed(1)}L</span><span className="font-data">({BRL(dadosPorPlaca.vDiesel)})</span>
+                                        </div>
+                                        <div className="flex justify-between py-1 text-emerald-700">
+                                            <span>(-) Arla 32 {dadosPorPlaca.lArla.toFixed(1)}L</span><span className="font-data">({BRL(dadosPorPlaca.vArla)})</span>
+                                        </div>
+                                        {dadosPorPlaca.bonus > 0 && <div className="flex justify-between py-1 text-purple-700"><span>(-) Bônus Motoristas</span><span className="font-data">({BRL(dadosPorPlaca.bonus)})</span></div>}
+                                        {dadosPorPlaca.diarias > 0 && <div className="flex justify-between py-1 text-indigo-700"><span>(-) Diárias</span><span className="font-data">({BRL(dadosPorPlaca.diarias)})</span></div>}
+                                        {dadosPorPlaca.despExtra > 0 && <div className="flex justify-between py-1 text-orange-700"><span>(-) Despesas Extras</span><span className="font-data">({BRL(dadosPorPlaca.despExtra)})</span></div>}
+                                        <div className="flex justify-between py-2 px-3 rounded-lg font-bold mt-2" style={{ backgroundColor: dadosPorPlaca.margem >= 0 ? '#EFF6FF' : '#FEF2F2', border: `1px solid ${dadosPorPlaca.margem >= 0 ? '#BFDBFE' : '#FECACA'}` }}>
+                                            <span style={{ color: dadosPorPlaca.margem >= 0 ? '#1D4ED8' : '#DC2626' }}>Margem Líquida</span>
+                                            <span className="font-data" style={{ color: dadosPorPlaca.margem >= 0 ? '#1D4ED8' : '#DC2626' }}>{BRL(dadosPorPlaca.margem)} ({dadosPorPlaca.receita > 0 ? ((dadosPorPlaca.margem / dadosPorPlaca.receita) * 100).toFixed(1) : 0}%)</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
             <Toast toast={toast} />
         </div>
     );
 }
-
 // ─── TAB: Configurações ──────────────────────────────────────────────────────
 function TabConfiguracoes({ isAdmin }) {
     const { toast, showToast } = useToast();
@@ -2030,59 +2870,134 @@ function TabConfiguracoes({ isAdmin }) {
     };
 
     const exportarRelatorio = async () => {
-        if (!vinculo.motorista_id) { showToast('Selecione um motorista para exportar', 'error'); return; }
+        if (!vinculo.motorista_id && !vinculo.veiculo_id) { showToast('Selecione ao menos motorista ou placa', 'error'); return; }
         setExporting(true);
         try {
-            const filtros = { motoristaId: vinculo.motorista_id };
-            if (vinculo.veiculo_id) filtros.veiculoId = vinculo.veiculo_id;
-            const [vgns, absts, carrgs] = await Promise.all([
+            const filtros = {};
+            if (vinculo.motorista_id) filtros.motoristaId = vinculo.motorista_id;
+            if (vinculo.veiculo_id)   filtros.veiculoId   = vinculo.veiculo_id;
+            const [vgns, absts, carrgs, desps, diar] = await Promise.all([
                 fetchViagens(filtros),
                 fetchAbastecimentos(filtros),
                 fetchCarregamentos(filtros),
+                fetchDespesasExtras(filtros),
+                fetchDiarias(filtros),
             ]);
             const mot = motoristas.find(m => m.id === vinculo.motorista_id);
             const vei = veiculos.find(v => v.id === vinculo.veiculo_id);
             const wb = XLSX.utils.book_new();
 
-            // Aba Viagens + Bonificações
+            // Aba 1 — Resumo
+            const totalBonus = vgns.filter(v => v.status === 'Entrega finalizada').reduce((s, v) => s + calcularBonusCarreteiro(v.destino), 0);
+            const totalFrete = carrgs.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);
+            const totalDiesel = absts.reduce((s, a) => s + Number(a.valor_diesel || 0), 0);
+            const totalArla = absts.reduce((s, a) => s + Number(a.valor_arla || 0), 0);
+            const totalComb = totalDiesel + totalArla;
+            const lDiesel = absts.reduce((s, a) => s + Number(a.litros_diesel || 0), 0);
+            const lArla = absts.reduce((s, a) => s + Number(a.litros_arla || 0), 0);
+            const totalDesp = desps.reduce((s, d) => s + Number(d.valor || 0), 0);
+            const totalDiar = diar.reduce((s, d) => s + Number(d.valor_total || 0), 0);
+            const resumo = [
+                [`RELATÓRIO COMPLETO${mot ? ' — ' + mot.name : ''}${vei ? ' — ' + vei.placa : ''}`, ''],
+                ['Gerado em:', new Date().toLocaleDateString('pt-BR')],
+                ['', ''],
+                ['RECEITAS', ''],
+                ['Receita Total Fretes', totalFrete],
+                ['', ''],
+                ['DESPESAS', ''],
+                ['Diesel', totalDiesel], [`  → ${lDiesel.toFixed(1)} L`, ''],
+                ['Arla 32', totalArla],  [`  → ${lArla.toFixed(1)} L`, ''],
+                ['Total Combustível', totalComb],
+                ['Bônus Motoristas', totalBonus],
+                ['Diárias', totalDiar],
+                ['Despesas Extras (veículos)', totalDesp],
+                ['Total Despesas', totalComb + totalBonus + totalDiar + totalDesp],
+                ['', ''],
+                ['MARGEM LÍQUIDA', totalFrete - (totalComb + totalBonus + totalDiar + totalDesp)],
+                ['', ''],
+                ['OPERACIONAL', ''],
+                ['Total de Viagens', vgns.length],
+                ['Viagens Finalizadas', vgns.filter(v => v.status === 'Entrega finalizada').length],
+                ['Total Carregamentos', carrgs.length],
+            ];
+            const ws0 = XLSX.utils.aoa_to_sheet(resumo);
+            ws0['!cols'] = [{ wch: 40 }, { wch: 18 }];
+            XLSX.utils.book_append_sheet(wb, ws0, 'Resumo');
+
+            // Aba 2 — Viagens + Bonificações (completa)
             const rowsVgns = vgns.map(v => ({
-                'Nº Viagem': v.numero, 'Status': v.status,
-                'Destino': v.destino || '', 'Data': FMT_DATE(v.data_saida),
-                'Placa': v.veiculo?.placa || '', 'Toneladas': v.toneladas || '',
+                'Nº Viagem': v.numero, 'Status': v.status, 'Motorista': v.motorista?.name || '',
+                'Placa': v.veiculo?.placa || '', 'Destino': v.destino || '',
+                'Data Saída': FMT_DATE(v.data_saida), 'Toneladas': v.toneladas || '',
+                'Responsável': v.responsavel_cadastro || '',
                 'Bônus (R$)': calcularBonusCarreteiro(v.destino),
+                'Observações': v.observacoes || '',
             }));
-            const totalBonus = rowsVgns.reduce((s, r) => s + r['Bônus (R$)'], 0);
-            rowsVgns.push({ 'Nº Viagem': 'TOTAL', 'Bônus (R$)': totalBonus });
+            totalBonus && rowsVgns.push({ 'Nº Viagem': 'TOTAL', 'Bônus (R$)': totalBonus });
             const ws1 = XLSX.utils.json_to_sheet(rowsVgns);
+            ws1['!cols'] = [12,16,20,10,20,12,10,14,12,25].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, ws1, 'Viagens e Bônus');
 
-            // Aba Abastecimentos
+            // Aba 3 — Abastecimentos (diesel e arla separados)
             const rowsAbst = absts.map(a => ({
-                'Data': FMT_DATE(a.data_abastecimento), 'Placa': a.veiculo?.placa || '',
-                'Posto': a.posto || '', 'Diesel (L)': a.litros_diesel || 0,
-                'R$ Diesel': a.valor_diesel || 0, 'Arla (L)': a.litros_arla || 0,
-                'R$ Arla': a.valor_arla || 0, 'Total (R$)': a.valor_total || 0,
+                'Data': FMT_DATE(a.data_abastecimento), 'Horário': a.horario || '',
+                'Motorista': a.motorista?.name || '', 'Placa': a.veiculo?.placa || '',
+                'Posto': a.posto || '',
+                'Diesel (L)': Number(a.litros_diesel || 0), 'R$ Diesel': Number(a.valor_diesel || 0),
+                'Arla (L)':   Number(a.litros_arla   || 0), 'R$ Arla':   Number(a.valor_arla   || 0),
+                'Total R$':   Number(a.valor_total   || 0),
+                'Observações': a.observacoes || '',
             }));
-            const totalComb = rowsAbst.reduce((s, r) => s + r['Total (R$)'], 0);
-            rowsAbst.push({ 'Data': 'TOTAL', 'Total (R$)': totalComb });
+            rowsAbst.push({ 'Data': 'TOTAL', 'Diesel (L)': lDiesel, 'R$ Diesel': totalDiesel, 'Arla (L)': lArla, 'R$ Arla': totalArla, 'Total R$': totalComb });
             const ws2 = XLSX.utils.json_to_sheet(rowsAbst);
+            ws2['!cols'] = [12,8,20,10,18,10,14,10,14,14,25].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, ws2, 'Abastecimentos');
 
-            // Aba Carregamentos / Fretes
+            // Aba 4 — Carregamentos / Fretes (completa)
             const rowsCarr = carrgs.map(c => ({
                 'Data': FMT_DATE(c.data_carregamento), 'Pedido': c.numero_pedido || '',
                 'NF': c.numero_nota_fiscal || '', 'Empresa': c.empresa?.nome || '',
-                'Destino': c.destino || '', 'Qtd': c.quantidade || 0,
-                'Unidade': c.unidade_quantidade || '', 'Frete (R$)': c.valor_frete_calculado || 0,
+                'Motorista': c.motorista?.name || '', 'Placa': c.veiculo?.placa || '',
+                'Destino': c.destino || '', 'Tipo Cálculo': c.tipo_calculo_frete || '',
+                'Quantidade': c.quantidade || 0, 'Unidade': c.unidade_quantidade || '',
+                'Valor Base': Number(c.valor_base_frete || 0), 'Frete (R$)': Number(c.valor_frete_calculado || 0),
             }));
-            const totalFrete = rowsCarr.reduce((s, r) => s + r['Frete (R$)'], 0);
             rowsCarr.push({ 'Data': 'TOTAL', 'Frete (R$)': totalFrete });
             const ws3 = XLSX.utils.json_to_sheet(rowsCarr);
+            ws3['!cols'] = [12,12,10,18,20,10,20,14,10,8,12,14].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, ws3, 'Carregamentos');
 
-            const nomeArq = `relatorio_${mot?.name || 'motorista'}${vei ? '_' + vei.placa : ''}_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`;
+            // Aba 5 — Despesas Extras (completa)
+            if (desps.length) {
+                const rowsD = desps.map(d => ({
+                    'Data': FMT_DATE(d.data_despesa), 'Placa': d.veiculo?.placa || '',
+                    'Categoria': d.categoria, 'Descrição': d.descricao || '',
+                    'NF': d.nota_fiscal || '', 'Forma Pgto': d.forma_pagamento === 'a_prazo' ? 'A Prazo' : 'À Vista',
+                    'Tipo Pgto': d.tipo_pagamento || '',
+                    'Valor (R$)': Number(d.valor || 0), 'Observações': d.observacoes || '',
+                }));
+                rowsD.push({ 'Data': 'TOTAL', 'Valor (R$)': totalDesp });
+                const ws4 = XLSX.utils.json_to_sheet(rowsD);
+                ws4['!cols'] = [12,10,22,30,12,12,14,14,25].map(w => ({ wch: w }));
+                XLSX.utils.book_append_sheet(wb, ws4, 'Despesas Extras');
+            }
+
+            // Aba 6 — Diárias
+            if (diar.length) {
+                const rowsDi = diar.map(d => ({
+                    'Data': FMT_DATE(d.data_inicio), 'Motorista': d.motorista?.name || '',
+                    'Dias': d.quantidade_dias, 'Valor/Dia (R$)': Number(d.valor_dia || 0),
+                    'Total (R$)': Number(d.valor_total || 0), 'Descrição': d.descricao || '',
+                }));
+                rowsDi.push({ 'Data': 'TOTAL', 'Total (R$)': totalDiar });
+                const ws5 = XLSX.utils.json_to_sheet(rowsDi);
+                ws5['!cols'] = [12,20,8,14,14,30].map(w => ({ wch: w }));
+                XLSX.utils.book_append_sheet(wb, ws5, 'Diárias');
+            }
+
+            const nomeArq = `relatorio_completo_${mot?.name || ''}${vei ? '_' + vei.placa : ''}_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`;
             XLSX.writeFile(wb, nomeArq);
-            showToast('Relatório exportado!', 'success');
+            showToast('Relatório exportado com sucesso!', 'success');
         } catch (e) { showToast('Erro ao exportar: ' + e.message, 'error'); }
         finally { setExporting(false); }
     };
@@ -2144,10 +3059,10 @@ function TabConfiguracoes({ isAdmin }) {
                     </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                    <Field label="Motorista" required>
+                    <Field label="Motorista (ou use só a placa)">
                         <select value={vinculo.motorista_id} onChange={e => setVinculo(v => ({ ...v, motorista_id: e.target.value }))}
                             className={inputCls} style={inputStyle}>
-                            <option value="">Selecione o motorista...</option>
+                            <option value="">Todos os motoristas</option>
                             {motoristas.filter(m => m.tipo_veiculo === 'carreta' || m.role === 'carreteiro').map(m =>
                                 <option key={m.id} value={m.id}>{m.name}</option>
                             )}
@@ -2162,11 +3077,11 @@ function TabConfiguracoes({ isAdmin }) {
                     </Field>
                 </div>
                 <div className="p-3 rounded-xl mb-4 text-xs" style={{ backgroundColor: '#F5F3FF', border: '1px solid #C4B5FD' }}>
-                    <p className="text-purple-700 font-medium mb-1">O relatório Excel conterá 3 abas:</p>
-                    <p className="text-purple-600">📋 Viagens e Bônus &nbsp;|&nbsp; ⛽ Abastecimentos &nbsp;|&nbsp; 📦 Carregamentos/Fretes</p>
+                    <p className="text-purple-700 font-medium mb-1">O relatório Excel conterá 6 abas completas:</p>
+                    <p className="text-purple-600">📊 Resumo &nbsp;|&nbsp; 📋 Viagens e Bônus &nbsp;|&nbsp; ⛽ Abastecimentos (Diesel+Arla) &nbsp;|&nbsp; 📦 Carregamentos &nbsp;|&nbsp; 🧾 Despesas Extras &nbsp;|&nbsp; 📅 Diárias</p>
                 </div>
-                <Button onClick={exportarRelatorio} iconName={exporting ? 'Loader' : 'Download'} disabled={exporting || !vinculo.motorista_id}>
-                    {exporting ? 'Gerando...' : 'Exportar Relatório Excel'}
+                <Button onClick={exportarRelatorio} iconName={exporting ? 'Loader' : 'Download'} disabled={exporting || (!vinculo.motorista_id && !vinculo.veiculo_id)}>
+                    {exporting ? 'Gerando...' : 'Exportar Relatório Completo Excel'}
                 </Button>
             </div>
 
@@ -2248,7 +3163,12 @@ function TabOrdensServico({ isAdmin, profile }) {
                         {STATUS_OS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                 </div>
-                {isAdmin && <Button onClick={() => { setForm({ veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '' }); setPdfFile(null); setModal(true); }} iconName="Plus" size="sm">Nova OS</Button>}
+                <div className="flex gap-2 items-center">
+                    <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                        <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
+                    </button>
+                    {isAdmin && <Button onClick={() => { setForm({ veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '' }); setPdfFile(null); setModal(true); }} iconName="Plus" size="sm">Nova OS</Button>}
+                </div>
             </div>
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
@@ -2406,12 +3326,413 @@ function TabOrdensServico({ isAdmin, profile }) {
 }
 
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
+// ─── TAB: Histórico de Rotas por Motorista ───────────────────────────────────
+function TabHistoricoViagens({ isAdmin }) {
+    const { toast, showToast } = useToast();
+    const [viagens, setViagens]     = useState([]);
+    const [motoristas, setMotoristas] = useState([]);
+    const [veiculos, setVeiculos]   = useState([]);
+    const [loading, setLoading]     = useState(true);
+    const [filtroMotorista, setFiltroMotorista] = useState('');
+    const [filtroVeiculo, setFiltroVeiculo]     = useState('');
+    const [filtroPeriodo, setFiltroPeriodo]     = useState('12'); // meses
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const mesesAtras = new Date();
+            mesesAtras.setMonth(mesesAtras.getMonth() - Number(filtroPeriodo));
+            const dataInicio = mesesAtras.toISOString().slice(0, 10);
+
+            const filtros = { dataInicio };
+            if (filtroMotorista) filtros.motoristaId = filtroMotorista;
+            if (filtroVeiculo)   filtros.veiculoId   = filtroVeiculo;
+
+            const [v, m, ve] = await Promise.all([
+                fetchViagens(filtros),
+                fetchTodosMotoristas(),
+                fetchCarretasVeiculos(),
+            ]);
+            setViagens(v); setMotoristas(m); setVeiculos(ve);
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    }, [filtroMotorista, filtroVeiculo, filtroPeriodo]); // eslint-disable-line
+
+    useEffect(() => { load(); }, [load]);
+
+    // ── Agregações ────────────────────────────────────────────────────────────
+    const { porMotorista, destinosGlobais, alertasRotas } = useMemo(() => {
+        const mapa = {}; // motoristaId → { nome, destinos: {cidade→{count,datas,status}} }
+
+        viagens.forEach(v => {
+            const mid  = v.motorista_id || '__sem__';
+            const nome = v.motorista?.name || 'Sem motorista';
+            const dest = (v.destino || '').trim();
+            if (!dest) return;
+
+            if (!mapa[mid]) mapa[mid] = { nome, destinos: {}, totalViagens: 0, placa: v.veiculo?.placa };
+            mapa[mid].totalViagens++;
+
+            const cidadeLow = dest.toLowerCase();
+            if (!mapa[mid].destinos[cidadeLow]) {
+                mapa[mid].destinos[cidadeLow] = { cidade: dest, count: 0, datas: [], status: [] };
+            }
+            mapa[mid].destinos[cidadeLow].count++;
+            if (v.data_saida) mapa[mid].destinos[cidadeLow].datas.push(v.data_saida);
+            mapa[mid].destinos[cidadeLow].status.push(v.status);
+        });
+
+        // Ordena destinos por frequência (desc)
+        const porMotorista = Object.values(mapa)
+            .sort((a, b) => b.totalViagens - a.totalViagens)
+            .map(m => ({
+                ...m,
+                destinos: Object.values(m.destinos).sort((a, b) => b.count - a.count),
+            }));
+
+        // Destinos globais (todas as viagens)
+        const globalMap = {};
+        viagens.forEach(v => {
+            const dest = (v.destino || '').trim().toLowerCase();
+            if (!dest) return;
+            globalMap[dest] = (globalMap[dest] || 0) + 1;
+        });
+        const destinosGlobais = Object.entries(globalMap)
+            .sort((a, b) => b[1] - a[1])
+            .map(([cidade, count]) => ({ cidade, count }));
+
+        // Alertas: motoristas com cidade repetida ≥ 3x nas últimas viagens
+        const alertasRotas = [];
+        porMotorista.forEach(m => {
+            m.destinos.forEach(d => {
+                if (d.count >= 3) {
+                    const ultimaData = d.datas.sort().reverse()[0];
+                    alertasRotas.push({ motorista: m.nome, cidade: d.cidade, count: d.count, ultimaData });
+                }
+            });
+        });
+
+        return { porMotorista, destinosGlobais, alertasRotas };
+    }, [viagens]);
+
+    // ── Filtro de motorista selecionado ───────────────────────────────────────
+    const dadosFiltrados = useMemo(() => {
+        if (!filtroMotorista) return porMotorista;
+        return porMotorista.filter(m => {
+            const mot = motoristas.find(x => x.id === filtroMotorista);
+            return m.nome === mot?.name;
+        });
+    }, [porMotorista, filtroMotorista, motoristas]);
+
+    // ── Exportar Excel ────────────────────────────────────────────────────────
+    const exportar = () => {
+        if (!viagens.length) { showToast('Nenhum dado para exportar', 'error'); return; }
+        const wb = XLSX.utils.book_new();
+
+        // Aba 1 — Destinos por motorista
+        const rowsM = [];
+        porMotorista.forEach(m => {
+            m.destinos.forEach((d, idx) => {
+                rowsM.push({
+                    'Motorista':       idx === 0 ? m.nome : '',
+                    'Total Viagens':   idx === 0 ? m.totalViagens : '',
+                    'Destino':         d.cidade,
+                    'Frequência':      d.count,
+                    '% do Total':      m.totalViagens > 0 ? `${((d.count / m.totalViagens) * 100).toFixed(1)}%` : '0%',
+                    'Última Viagem':   d.datas.sort().reverse()[0] ? FMT_DATE(d.datas.sort().reverse()[0]) : '—',
+                    'Alerta':          d.count >= 3 ? '⚠️ Rota frequente' : '',
+                });
+            });
+            rowsM.push({});
+        });
+        const ws1 = XLSX.utils.json_to_sheet(rowsM);
+        ws1['!cols'] = [22,14,22,12,12,14,20].map(w => ({ wch: w }));
+        XLSX.utils.book_append_sheet(wb, ws1, 'Por Motorista');
+
+        // Aba 2 — Destinos globais (ranking)
+        const rowsG = destinosGlobais.map((d, i) => ({
+            'Ranking': i + 1,
+            'Destino': d.cidade,
+            'Total de Viagens': d.count,
+        }));
+        const ws2 = XLSX.utils.json_to_sheet(rowsG);
+        ws2['!cols'] = [10, 25, 18].map(w => ({ wch: w }));
+        XLSX.utils.book_append_sheet(wb, ws2, 'Ranking Destinos');
+
+        // Aba 3 — Alertas
+        if (alertasRotas.length) {
+            const ws3 = XLSX.utils.json_to_sheet(alertasRotas.map(a => ({
+                'Motorista': a.motorista,
+                'Cidade repetida': a.cidade,
+                'Vezes':      a.count,
+                'Última viagem': FMT_DATE(a.ultimaData),
+            })));
+            ws3['!cols'] = [22, 22, 10, 14].map(w => ({ wch: w }));
+            XLSX.utils.book_append_sheet(wb, ws3, 'Alertas Rotas Frequentes');
+        }
+
+        // Aba 4 — Viagens detalhadas
+        const rowsV = viagens.map(v => ({
+            'Motorista':   v.motorista?.name || '',
+            'Placa':       v.veiculo?.placa || '',
+            'Nº Viagem':   v.numero || '',
+            'Status':      v.status || '',
+            'Data Saída':  FMT_DATE(v.data_saida),
+            'Destino':     v.destino || '',
+            'Toneladas':   v.toneladas || '',
+        }));
+        const ws4 = XLSX.utils.json_to_sheet(rowsV);
+        ws4['!cols'] = [20, 12, 12, 18, 12, 22, 10].map(w => ({ wch: w }));
+        XLSX.utils.book_append_sheet(wb, ws4, 'Viagens Detalhadas');
+
+        XLSX.writeFile(wb, `historico_rotas_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`);
+        showToast('Exportado com sucesso!', 'success');
+    };
+
+    // ── Cor do heatmap por frequência ─────────────────────────────────────────
+    const heatColor = (count, max) => {
+        if (max === 0) return { bg: '#F8FAFC', text: '#64748B' };
+        const ratio = count / max;
+        if (ratio >= 0.8) return { bg: '#FEE2E2', text: '#991B1B' };  // vermelho — muito frequente
+        if (ratio >= 0.5) return { bg: '#FEF9C3', text: '#B45309' };  // amarelo — frequente
+        if (ratio >= 0.25) return { bg: '#DCFCE7', text: '#166534' }; // verde — moderado
+        return { bg: '#F0F9FF', text: '#0369A1' };                     // azul — raro
+    };
+
+    return (
+        <div>
+            {/* ── Toolbar ── */}
+            <div className="flex flex-wrap gap-2 items-center justify-between mb-5">
+                <div className="flex flex-wrap gap-2">
+                    {isAdmin && (
+                        <select value={filtroMotorista} onChange={e => setFiltroMotorista(e.target.value)}
+                            className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                            <option value="">Todos os motoristas</option>
+                            {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                    )}
+                    <select value={filtroVeiculo} onChange={e => setFiltroVeiculo(e.target.value)}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                        <option value="">Todas as placas</option>
+                        {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                    </select>
+                    <select value={filtroPeriodo} onChange={e => setFiltroPeriodo(e.target.value)}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                        <option value="3">Últimos 3 meses</option>
+                        <option value="6">Últimos 6 meses</option>
+                        <option value="12">Último ano</option>
+                        <option value="24">Últimos 2 anos</option>
+                        <option value="60">Tudo</option>
+                    </select>
+                </div>
+                <div className="flex gap-2">
+                    <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                        <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
+                    </button>
+                    <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
+                        <Icon name="FileDown" size={14} /> Exportar
+                    </button>
+                </div>
+            </div>
+
+            {loading ? (
+                <div className="flex justify-center py-16">
+                    <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
+                </div>
+            ) : (
+                <div className="flex flex-col gap-5">
+
+                    {/* ── Alertas de rotas frequentes ── */}
+                    {alertasRotas.length > 0 && (
+                        <div className="rounded-xl border p-4" style={{ borderColor: '#FED7AA', backgroundColor: '#FFF7ED' }}>
+                            <div className="flex items-center gap-2 mb-3">
+                                <Icon name="AlertTriangle" size={16} color="#D97706" />
+                                <p className="text-sm font-semibold text-amber-800">
+                                    {alertasRotas.length} alerta{alertasRotas.length > 1 ? 's' : ''} de rota frequente
+                                </p>
+                                <span className="text-xs text-amber-600 ml-auto">Motoristas com ≥3 viagens ao mesmo destino</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {alertasRotas.slice(0, 6).map((a, i) => (
+                                    <div key={i} className="flex items-center gap-2 p-2.5 rounded-lg bg-white border border-orange-100">
+                                        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-orange-100 flex items-center justify-center">
+                                            <span className="text-xs font-bold text-orange-700">{a.count}×</span>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-semibold truncate text-amber-900">{a.motorista}</p>
+                                            <p className="text-xs text-orange-700 truncate">→ {a.cidade}</p>
+                                        </div>
+                                        {a.ultimaData && (
+                                            <p className="text-xs text-amber-500 ml-auto flex-shrink-0">{FMT_DATE(a.ultimaData)}</p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Ranking de destinos globais ── */}
+                    {destinosGlobais.length > 0 && (
+                        <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
+                                <Icon name="BarChart2" size={16} color="var(--color-muted-foreground)" />
+                                <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                                    Ranking de Destinos {filtroMotorista ? `— ${motoristas.find(m => m.id === filtroMotorista)?.name}` : '(todos os motoristas)'}
+                                </h3>
+                                <span className="ml-auto text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{destinosGlobais.length} destino{destinosGlobais.length > 1 ? 's' : ''}</span>
+                            </div>
+                            <div className="p-5">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {destinosGlobais.slice(0, 16).map((d, i) => {
+                                        const maxCount = destinosGlobais[0]?.count || 1;
+                                        const pct = (d.count / maxCount) * 100;
+                                        const cor = heatColor(d.count, maxCount);
+                                        return (
+                                            <div key={d.cidade} className="flex items-center gap-3">
+                                                <span className="w-5 text-xs font-data text-right flex-shrink-0" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                    {i + 1}
+                                                </span>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                        <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{d.cidade}</span>
+                                                        <span className="text-xs font-data font-semibold ml-2 flex-shrink-0 px-1.5 py-0.5 rounded-full"
+                                                            style={{ backgroundColor: cor.bg, color: cor.text }}>
+                                                            {d.count}×
+                                                        </span>
+                                                    </div>
+                                                    <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                                        <div className="h-full rounded-full transition-all"
+                                                            style={{ width: `${pct}%`, backgroundColor: cor.text }} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                {destinosGlobais.length > 16 && (
+                                    <p className="text-xs text-center mt-3" style={{ color: 'var(--color-muted-foreground)' }}>
+                                        +{destinosGlobais.length - 16} destinos · exporte para ver todos
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── Detalhamento por motorista ── */}
+                    {dadosFiltrados.length === 0 ? (
+                        <div className="bg-white rounded-xl border p-10 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                            <Icon name="MapPin" size={36} color="var(--color-muted-foreground)" />
+                            <p className="text-sm mt-3 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum histórico encontrado</p>
+                            <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>Ajuste os filtros ou o período</p>
+                        </div>
+                    ) : (
+                        <div className="flex flex-col gap-4">
+                            {dadosFiltrados.map(m => {
+                                const maxCount = m.destinos[0]?.count || 1;
+                                return (
+                                    <div key={m.nome} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                                        {/* Header do motorista */}
+                                        <div className="flex items-center justify-between px-5 py-3 border-b" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
+                                                    style={{ backgroundColor: 'var(--color-primary)' }}>
+                                                    {m.nome[0]?.toUpperCase() || '?'}
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{m.nome}</p>
+                                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                        {m.totalViagens} viagem{m.totalViagens !== 1 ? 's' : ''} · {m.destinos.length} destino{m.destinos.length !== 1 ? 's' : ''}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {/* Badge do destino mais frequente */}
+                                            {m.destinos[0] && (
+                                                <div className="text-right hidden sm:block">
+                                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Destino mais frequente</p>
+                                                    <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                                        {m.destinos[0].cidade}
+                                                        <span className="ml-1.5 text-xs font-data text-orange-600">({m.destinos[0].count}×)</span>
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Heatmap de destinos */}
+                                        <div className="p-5">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                {m.destinos.map(d => {
+                                                    const cor = heatColor(d.count, maxCount);
+                                                    const ultimaData = d.datas.length > 0
+                                                        ? d.datas.sort().reverse()[0]
+                                                        : null;
+                                                    const finalizadas = d.status.filter(s => s === 'Entrega finalizada').length;
+                                                    return (
+                                                        <div key={d.cidade}
+                                                            className="flex items-center gap-3 p-3 rounded-xl border"
+                                                            style={{ borderColor: cor.bg === '#F8FAFC' ? 'var(--color-border)' : cor.bg, backgroundColor: cor.bg }}>
+                                                            <div className="flex-shrink-0 text-center">
+                                                                <p className="text-lg font-bold font-data leading-none" style={{ color: cor.text }}>{d.count}</p>
+                                                                <p className="text-xs font-medium" style={{ color: cor.text }}>viag.</p>
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-sm font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>{d.cidade}</p>
+                                                                <div className="flex items-center gap-2 mt-0.5">
+                                                                    {ultimaData && (
+                                                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                            Última: {FMT_DATE(ultimaData)}
+                                                                        </p>
+                                                                    )}
+                                                                    {finalizadas > 0 && (
+                                                                        <span className="text-xs text-green-600">✓{finalizadas}</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            {d.count >= 3 && (
+                                                                <div className="flex-shrink-0" title="Rota frequente — considere redistribuir">
+                                                                    <Icon name="AlertTriangle" size={14} color="#D97706" />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        {/* Legenda do heatmap */}
+                                        <div className="flex items-center gap-3 px-5 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', backgroundColor: '#FAFAFA' }}>
+                                            <span style={{ color: 'var(--color-muted-foreground)' }}>Frequência:</span>
+                                            {[
+                                                { bg: '#F0F9FF', text: '#0369A1', label: 'Raro' },
+                                                { bg: '#DCFCE7', text: '#166534', label: 'Moderado' },
+                                                { bg: '#FEF9C3', text: '#B45309', label: 'Frequente' },
+                                                { bg: '#FEE2E2', text: '#991B1B', label: 'Muito frequente' },
+                                            ].map(c => (
+                                                <div key={c.label} className="flex items-center gap-1">
+                                                    <div className="w-3 h-3 rounded-sm border" style={{ backgroundColor: c.bg, borderColor: c.text + '40' }} />
+                                                    <span style={{ color: 'var(--color-muted-foreground)' }}>{c.label}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+            <Toast toast={toast} />
+        </div>
+    );
+}
+
+// ─── Constantes da página principal ─────────────────────────────────────────
 const TABS = [
     { id: 'viagens',       label: 'Viagens',          icon: 'Navigation',    group: 'Operação' },
     { id: 'veiculos',      label: 'Veículos',          icon: 'Truck',         group: 'Operação' },
     { id: 'abastecimentos',label: 'Abastecimentos',    icon: 'Fuel',          group: 'Operação' },
     { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck',group: 'Operação' },
     { id: 'carregamentos', label: 'Carregamentos',     icon: 'Package',       group: 'Operação' },
+    { id: 'historico',     label: 'Histórico Rotas',   icon: 'MapPin',        group: 'Operação' },
     { id: 'bonificacoes',  label: 'Bonificações',      icon: 'Award',         group: 'Financeiro' },
     { id: 'despesas',      label: 'Despesas',          icon: 'Receipt',       group: 'Financeiro' },
     { id: 'diarias',       label: 'Diárias',           icon: 'CalendarDays',  group: 'Financeiro' },
@@ -2514,6 +3835,7 @@ export default function CarretasPage() {
                             {tab === 'abastecimentos' && <TabAbastecimentos  isAdmin={admin} profile={profile} />}
                             {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}
                             {tab === 'carregamentos'  && <TabCarregamentos   isAdmin={admin} />}
+                            {tab === 'historico'      && <TabHistoricoViagens isAdmin={admin} />}
                             {tab === 'bonificacoes'   && <TabBonificacoes   isAdmin={admin} />}
                             {tab === 'despesas'       && <TabDespesasExtras  isAdmin={admin} profile={profile} />}
                             {tab === 'diarias'         && <TabDiarias         isAdmin={admin} profile={profile} />}

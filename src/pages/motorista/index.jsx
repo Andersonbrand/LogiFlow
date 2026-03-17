@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Icon from 'components/AppIcon';
@@ -10,6 +10,7 @@ import { calcularBonificacao } from 'utils/bonificacaoService';
 import * as XLSX from 'xlsx';
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
 const PERIOD_OPTIONS = [
     { label: '30 dias', days: 30 },
     { label: '90 dias', days: 90 },
@@ -22,45 +23,71 @@ const STATUS_CFG = {
     'Finalizado':  { bg: '#F3F4F6', text: '#374151' },
     'Cancelado':   { bg: '#FEE2E2', text: '#991B1B' },
 };
+const STATUS_VIAGEM_CFG = {
+    'Agendado':            { bg: '#EFF6FF', text: '#1D4ED8' },
+    'Em processamento':    { bg: '#FEF9C3', text: '#B45309' },
+    'Aguardando no pátio': { bg: '#FEE2E2', text: '#B91C1C' },
+    'Em trânsito':         { bg: '#D1FAE5', text: '#065F46' },
+    'Entrega finalizada':  { bg: '#F0FDF4', text: '#15803D' },
+    'Cancelado':           { bg: '#F3F4F6', text: '#6B7280' },
+};
 
 export default function MotoristaDashboard() {
     const { user, profile } = useAuth();
     const { toast, showToast } = useToast();
     const [romaneios, setRomaneios] = useState([]);
+    const [viagensAdmin, setViagensAdmin] = useState([]); // viagens lançadas pelo admin
     const [loading, setLoading] = useState(false);
+    const [loadingViagens, setLoadingViagens] = useState(false);
     const [period, setPeriod] = useState(30);
     const [tab, setTab] = useState('viagens');
 
-    useEffect(() => {
+    const loadData = useCallback(async () => {
         if (!user?.id || !profile?.name) return;
+        try {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('romaneios')
+                .select(`
+                    id, numero, motorista, motorista_id, placa, destino, status,
+                    aprovado, aprovado_em, peso_total, saida, created_at,
+                    romaneio_itens(id, quantidade, peso_total, material_id,
+                        materials(id, nome, unidade, peso, categoria_frete))
+                `)
+                .or(`motorista_id.eq.${user.id},motorista.ilike."${profile.name}"`)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            setRomaneios(data || []);
+        } catch (err) {
+            showToast('Erro ao carregar dados: ' + err.message, 'error');
+        } finally {
+            setLoading(false);
+        }
+    }, [user?.id, profile?.name]); // eslint-disable-line
 
-        let cancelled = false;
-        (async () => {
-            try {
-                setLoading(true);
-                // Busca por motorista_id OU por nome (legado) — escapa o nome com aspas para suportar espaços
-                const { data, error } = await supabase
-                    .from('romaneios')
-                    .select(`
-                        id, numero, motorista, motorista_id, placa, destino, status,
-                        aprovado, aprovado_em, peso_total, saida, created_at,
-                        romaneio_itens(id, quantidade, peso_total, material_id,
-                            materials(id, nome, unidade, peso, categoria_frete))
-                    `)
-                    .or(`motorista_id.eq.${user.id},motorista.ilike."${profile.name}"`)
-                    .order('created_at', { ascending: false });
+    // Carrega viagens lançadas pelo admin para este motorista
+    const loadViagensAdmin = useCallback(async () => {
+        if (!user?.id) return;
+        try {
+            setLoadingViagens(true);
+            const { data, error } = await supabase
+                .from('carretas_viagens')
+                .select('*, veiculo:veiculo_id(id, placa, modelo)')
+                .eq('motorista_id', user.id)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            setViagensAdmin(data || []);
+        } catch (err) {
+            // Silencioso — tabela pode não existir para caminhoneiro
+        } finally {
+            setLoadingViagens(false);
+        }
+    }, [user?.id]); // eslint-disable-line
 
-                if (error) throw error;
-                if (!cancelled) setRomaneios(data || []);
-            } catch (err) {
-                if (!cancelled) showToast('Erro ao carregar dados: ' + err.message, 'error');
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        })();
+    useEffect(() => { loadData(); }, [loadData]);
+    useEffect(() => { loadViagensAdmin(); }, [loadViagensAdmin]);
 
-        return () => { cancelled = true; };
-    }, [user?.id, profile?.name]);
+    const handleRefresh = () => { loadData(); loadViagensAdmin(); };
 
     const filtered = useMemo(() => {
         const cut = new Date();
@@ -138,6 +165,13 @@ export default function MotoristaDashboard() {
                                     </button>
                                 ))}
                             </div>
+                            <button onClick={handleRefresh}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium transition-colors hover:bg-gray-50"
+                                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
+                                title="Atualizar OS em tempo real">
+                                <Icon name="RefreshCw" size={14} color="currentColor" />
+                                Atualizar
+                            </button>
                             <button onClick={exportarExcel}
                                 className="flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-medium transition-colors hover:bg-gray-50"
                                 style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
@@ -150,8 +184,8 @@ export default function MotoristaDashboard() {
                     {/* KPIs */}
                     <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
                         {[
-                            { l: 'Total de Viagens', v: totais.viagens, i: 'Truck', c: '#1D4ED8', bg: '#DBEAFE' },
-                            { l: 'Finalizadas', v: totais.finalizadas, i: 'CheckCircle2', c: '#059669', bg: '#D1FAE5' },
+                            { l: 'Total de Romaneios', v: totais.viagens, i: 'Truck', c: '#1D4ED8', bg: '#DBEAFE' },
+                            { l: 'Finalizados', v: totais.finalizadas, i: 'CheckCircle2', c: '#059669', bg: '#D1FAE5' },
                             { l: 'Em Trânsito', v: totais.emTransito, i: 'Navigation', c: '#D97706', bg: '#FEF9C3' },
                             { l: 'Bônus no Período', v: BRL(totais.totalBonus), i: 'DollarSign', c: '#7C3AED', bg: '#EDE9FE' },
                         ].map(k => (
@@ -167,9 +201,13 @@ export default function MotoristaDashboard() {
                         ))}
                     </div>
 
-                    {/* Tabs */}
+                    {/* Tabs — inclui viagens do admin */}
                     <div className="flex border-b mb-5 overflow-x-auto scrollbar-none" style={{ borderColor: 'var(--color-border)' }}>
-                        {[['viagens','Minhas Viagens','Truck'], ['bonificacoes','Bonificações','DollarSign']].map(([key, label, icon]) => (
+                        {[
+                            ['viagens', 'Meus Romaneios', 'FileText'],
+                            ['viagens_admin', `Viagens (Admin)${viagensAdmin.length ? ` · ${viagensAdmin.length}` : ''}`, 'Truck'],
+                            ['bonificacoes', 'Bonificações', 'DollarSign'],
+                        ].map(([key, label, icon]) => (
                             <button key={key} onClick={() => setTab(key)}
                                 className={`flex items-center gap-1.5 px-4 py-3 text-xs sm:text-sm font-medium font-caption border-b-2 whitespace-nowrap flex-shrink-0 transition-colors ${tab === key ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                                 <Icon name={icon} size={15} color="currentColor" />
@@ -178,9 +216,67 @@ export default function MotoristaDashboard() {
                         ))}
                     </div>
 
-                    {loading ? (
+                    {/* Conteúdo das tabs */}
+                    {loading && tab !== 'viagens_admin' ? (
                         <div className="flex justify-center py-20">
                             <div className="animate-spin h-8 w-8 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
+                        </div>
+                    ) : tab === 'viagens_admin' ? (
+                        /* ── Viagens lançadas pelo admin ── */
+                        <div className="flex flex-col gap-3">
+                            <div className="flex items-center gap-2 mb-1 p-3 rounded-xl" style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+                                <Icon name="Info" size={15} color="#1D4ED8" />
+                                <p className="text-xs text-blue-700">Viagens lançadas pela administração com seu nome. Entre em contato com o admin para atualizações de status.</p>
+                            </div>
+                            {loadingViagens ? (
+                                <div className="flex justify-center py-12">
+                                    <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
+                                </div>
+                            ) : viagensAdmin.length === 0 ? (
+                                <div className="bg-white rounded-xl border p-10 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                                    <Icon name="Truck" size={36} color="var(--color-muted-foreground)" />
+                                    <p className="text-sm mt-3 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem cadastrada para você</p>
+                                    <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>As viagens lançadas pelo admin aparecerão aqui</p>
+                                </div>
+                            ) : viagensAdmin.map(v => {
+                                const sc = STATUS_VIAGEM_CFG[v.status] || STATUS_VIAGEM_CFG['Agendado'];
+                                return (
+                                    <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                        <div className="flex items-start justify-between mb-3 gap-2">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                                    <span className="font-bold font-data text-blue-700">{v.numero}</span>
+                                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{v.status}</span>
+                                                </div>
+                                                <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{v.destino || '—'}</p>
+                                            </div>
+                                            <div className="text-right flex-shrink-0">
+                                                <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{FMT(v.data_saida)}</p>
+                                                {v.veiculo?.placa && (
+                                                    <p className="text-xs font-data font-semibold mt-0.5 text-blue-700">{v.veiculo.placa}</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 text-xs">
+                                            {v.toneladas && (
+                                                <div className="flex items-center gap-1.5 p-2 rounded-lg" style={{ backgroundColor: '#F8FAFC' }}>
+                                                    <Icon name="Package" size={12} color="var(--color-muted-foreground)" />
+                                                    <span style={{ color: 'var(--color-muted-foreground)' }}>{v.toneladas} ton</span>
+                                                </div>
+                                            )}
+                                            {v.responsavel_cadastro && (
+                                                <div className="flex items-center gap-1.5 p-2 rounded-lg" style={{ backgroundColor: '#F8FAFC' }}>
+                                                    <Icon name="UserCheck" size={12} color="var(--color-muted-foreground)" />
+                                                    <span style={{ color: 'var(--color-muted-foreground)' }}>{v.responsavel_cadastro}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {v.observacoes && (
+                                            <p className="text-xs mt-2 p-2 rounded-lg bg-amber-50 text-amber-700 border border-amber-100">{v.observacoes}</p>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     ) : tab === 'viagens' ? (
                         <div className="flex flex-col gap-2">
