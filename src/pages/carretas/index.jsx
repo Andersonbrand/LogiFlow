@@ -1487,6 +1487,9 @@ function TabDespesasExtras({ isAdmin }) {
     const xmlRef = useRef(null);
     const comprovanteRef = useRef(null);
     const permutaRef = useRef(null);
+    const barcodeInputRef = useRef(null);
+    const [barcodeMode, setBarcodeMode] = useState(false);
+    const [barcodeBuffer, setBarcodeBuffer] = useState('');
 
     const emptyForm = () => ({
         veiculo_id: '', categoria: 'Pneus', descricao: '', valor: '',
@@ -1572,6 +1575,36 @@ function TabDespesasExtras({ isAdmin }) {
         };
         reader.readAsText(file);
         e.target.value = '';
+    };
+
+    // Item 2 (extra): Leitor de código de barras / laser (NF em papel)
+    // Leitores a laser digitam os caracteres muito rápido e encerram com Enter.
+    // Capturamos o buffer e preenchemos o campo da NF automaticamente.
+    const handleBarcodeInput = (e) => {
+        const val = e.target.value;
+        setBarcodeBuffer(val);
+    };
+    const handleBarcodeKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const codigo = barcodeBuffer.trim();
+            if (!codigo) return;
+            // Extrai número da NF do código de barras (geralmente posições 25–34 em barcode 44 dígitos NF-e)
+            let nfNumero = codigo;
+            if (codigo.length === 44) {
+                // Chave de acesso NF-e: posições 25-34 (0-indexed) = nNF
+                nfNumero = codigo.substring(25, 34).replace(/^0+/, '') || codigo;
+            } else if (codigo.length > 10) {
+                // Outros formatos: usa o código inteiro como número
+                nfNumero = codigo;
+            }
+            setForm(f => ({ ...f, nota_fiscal: nfNumero }));
+            setBarcodeBuffer('');
+            setBarcodeMode(false);
+            showToast(`Código lido: NF ${nfNumero}`, 'success');
+            // Foca no próximo campo
+            setTimeout(() => document.getElementById('despesa-valor')?.focus(), 100);
+        }
     };
 
     const handleComprovanteChange = (e) => {
@@ -1756,15 +1789,49 @@ function TabDespesasExtras({ isAdmin }) {
                     <ModalHeader title={modal.mode === 'create' ? 'Nova Despesa' : 'Editar Despesa'} icon="Receipt" onClose={() => setModal(null)} />
                     <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
 
-                        {/* item 9: importar XML NF */}
+                        {/* item 9: importar XML NF + leitura código de barras */}
                         <div className="p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
-                            <div className="flex items-center justify-between mb-2">
-                                <p className="text-xs font-semibold text-blue-700">📄 Importar XML da Nota Fiscal</p>
-                                <button type="button" onClick={() => xmlRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
+                            <p className="text-xs font-semibold text-blue-700 mb-2">📄 Nota Fiscal — Importar dados</p>
+                            <div className="flex flex-wrap gap-2 mb-2">
+                                {/* XML digital */}
+                                <button type="button" onClick={() => xmlRef.current?.click()}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
                                     <Icon name="FileCode" size={12} /> Ler XML da NF
                                 </button>
                                 <input ref={xmlRef} type="file" accept=".xml" onChange={handleXmlNF} className="hidden" />
+                                {/* Código de barras / laser */}
+                                <button type="button"
+                                    onClick={() => { setBarcodeMode(b => !b); setBarcodeBuffer(''); setTimeout(() => barcodeInputRef.current?.focus(), 50); }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
+                                    style={barcodeMode
+                                        ? { backgroundColor: '#1D4ED8', color: '#fff', borderColor: '#1D4ED8' }
+                                        : { borderColor: '#93C5FD', color: '#1D4ED8', backgroundColor: 'white' }}>
+                                    <Icon name="ScanLine" size={12} /> {barcodeMode ? 'Aguardando leitura...' : 'Ler código de barras'}
+                                </button>
                             </div>
+                            {/* Campo captura do leitor laser — aparece só no modo barcode */}
+                            {barcodeMode && (
+                                <div className="mt-2">
+                                    <p className="text-xs text-blue-600 mb-1.5">
+                                        🔫 Aponte o leitor para o código de barras da NF impressa. O campo será preenchido automaticamente.
+                                    </p>
+                                    <input
+                                        ref={barcodeInputRef}
+                                        type="text"
+                                        value={barcodeBuffer}
+                                        onChange={handleBarcodeInput}
+                                        onKeyDown={handleBarcodeKeyDown}
+                                        className={inputCls}
+                                        style={{ ...inputStyle, borderColor: '#3B82F6', boxShadow: '0 0 0 3px rgba(59,130,246,0.15)' }}
+                                        placeholder="Aguardando leitura do scanner... (ou digite e pressione Enter)"
+                                        autoFocus
+                                        autoComplete="off"
+                                    />
+                                    <p className="text-xs text-blue-500 mt-1">Pressione Esc para cancelar</p>
+                                    <button type="button" onClick={() => { setBarcodeMode(false); setBarcodeBuffer(''); }}
+                                        className="text-xs text-blue-600 underline mt-1">Cancelar</button>
+                                </div>
+                            )}
                             {form.nf_itens?.length > 0 && (
                                 <div className="mt-2 overflow-x-auto">
                                     <p className="text-xs text-blue-600 font-medium mb-1">{form.nf_itens.length} item(s) da NF:</p>
@@ -1804,7 +1871,7 @@ function TabDespesasExtras({ isAdmin }) {
                                 <input type="date" value={form.data_despesa} onChange={e => setForm(f => ({ ...f, data_despesa: e.target.value }))} className={inputCls} style={inputStyle} />
                             </Field>
                             <Field label="Valor (R$)" required>
-                                <input type="number" step="0.01" min="0" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                <input id="despesa-valor" type="number" step="0.01" min="0" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
                             </Field>
                             <Field label="Descrição">
                                 <input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 4 pneus traseiros Bridgestone" />
@@ -2703,53 +2770,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                         </div>
                     )}
 
-                    {/* ── Bônus e fretes por motorista ────────────────────── */}
-                    <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-                        <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
-                            <Icon name="Users" size={16} color="var(--color-muted-foreground)" />
-                            <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Resumo por Motorista</h3>
-                        </div>
-                        {dados.consolidadoMotoristas.length === 0 ? (
-                            <div className="p-8 text-center text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                                Nenhum dado de motoristas no período
-                            </div>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm min-w-[640px]">
-                                    <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                        <tr>
-                                            {['Motorista', 'Carregamentos', 'Frete Gerado', 'Viagens Finalizadas', 'Bônus', 'Total'].map(h => (
-                                                <th key={h} className="px-4 py-3 text-left font-medium whitespace-nowrap">{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {dados.consolidadoMotoristas.map((m, i) => (
-                                            <tr key={m.nome} className="border-t hover:bg-gray-50"
-                                                style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                                <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{m.nome}</td>
-                                                <td className="px-4 py-3 text-center font-data">{m.carregamentos}</td>
-                                                <td className="px-4 py-3 font-data font-semibold text-green-700">{BRL(m.frete)}</td>
-                                                <td className="px-4 py-3 text-center font-data">{m.viagens}</td>
-                                                <td className="px-4 py-3 font-data font-semibold text-purple-600">{BRL(m.bonus)}</td>
-                                                <td className="px-4 py-3 font-data font-bold text-blue-700">{BRL(m.frete + m.bonus)}</td>
-                                            </tr>
-                                        ))}
-                                        {/* Linha de totais */}
-                                        <tr className="border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0F9FF' }}>
-                                            <td className="px-4 py-3 font-bold text-sm" style={{ color: 'var(--color-text-primary)' }}>TOTAL</td>
-                                            <td className="px-4 py-3 text-center font-data font-bold">{dados.totalCarregamentos}</td>
-                                            <td className="px-4 py-3 font-data font-bold text-green-700">{BRL(dados.receitaTotal)}</td>
-                                            <td className="px-4 py-3 text-center font-data font-bold">{dados.viagensFinalizadas}</td>
-                                            <td className="px-4 py-3 font-data font-bold text-purple-600">{BRL(dados.bonusTotal)}</td>
-                                            <td className="px-4 py-3 font-data font-bold text-blue-700">{BRL(dados.receitaTotal + dados.bonusTotal)}</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
-                    </div>
-                    {/* ── Resumo por Placa (item 7) ──────────────────────── */}
+                    {/* ── Relatório por Placa ──────────────────────────── */}
                     <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                         <div className="px-5 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
                             <div className="flex items-center gap-2">
@@ -3106,6 +3127,17 @@ function TabOrdensServico({ isAdmin, profile }) {
         veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '',
     });
 
+    // Fix 4: Quando abre o PDF, empurra um estado no histórico para que o botão
+    // Voltar do navegador feche o viewer em vez de sair da página.
+    useEffect(() => {
+        if (viewPdf) {
+            window.history.pushState({ pdfOpen: true }, '');
+            const onPop = () => setViewPdf(null);
+            window.addEventListener('popstate', onPop);
+            return () => window.removeEventListener('popstate', onPop);
+        }
+    }, [viewPdf]);
+
     const load = useCallback(async () => {
         setLoading(true);
         try {
@@ -3284,32 +3316,23 @@ function TabOrdensServico({ isAdmin, profile }) {
             {/* Viewer de PDF in-app — header fixo sempre visível */}
             {viewPdf && (
                 <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
+                    {/* Barra superior discreta — apenas título e fechar */}
                     <div style={{
                         position: 'relative', zIndex: 10000, flexShrink: 0,
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '10px 16px', backgroundColor: '#111827',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.5)',
+                        padding: '8px 16px', backgroundColor: '#111827',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
                     }}>
-                        <button
-                            onClick={() => setViewPdf(null)}
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: 8,
-                                padding: '8px 16px', borderRadius: 8,
-                                backgroundColor: '#2563EB', color: 'white',
-                                border: 'none', cursor: 'pointer',
-                                fontSize: 14, fontWeight: 600,
-                            }}>
-                            ← Voltar às Ordens de Serviço
-                        </button>
                         <span style={{ color: '#9CA3AF', fontSize: 13 }}>Ordem de Serviço — PDF</span>
                         <button
-                            onClick={() => setViewPdf(null)}
+                            onClick={() => { setViewPdf(null); window.history.back(); }}
                             style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 width: 32, height: 32, borderRadius: 6,
-                                backgroundColor: '#374151', color: 'white',
-                                border: 'none', cursor: 'pointer', fontSize: 18,
-                            }}>
+                                backgroundColor: '#374151', color: '#D1D5DB',
+                                border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1,
+                            }}
+                            title="Fechar">
                             ✕
                         </button>
                     </div>
