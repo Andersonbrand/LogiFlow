@@ -75,31 +75,32 @@ export default function MecanicoPage() {
     const andamento = ordens.filter(o => o.status === 'Em Andamento').length;
     const problemas = ordens.filter(o => o.status === 'Problema Reportado').length;
 
-    // PDF viewer ocupa tela inteira — renderizado separado para garantir z-index e botão sempre visível
+    // PDF viewer: usa browser back para fechar (igual ao módulo de carretas)
+    useEffect(() => {
+        if (pdfUrl) {
+            window.history.pushState({ pdfOpen: true }, '');
+            const onPop = () => setPdfUrl(null);
+            window.addEventListener('popstate', onPop);
+            return () => window.removeEventListener('popstate', onPop);
+        }
+    }, [pdfUrl]);
+
     if (pdfUrl) {
         return (
             <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
                 <div style={{
                     position: 'relative', zIndex: 10000, flexShrink: 0,
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '10px 12px', backgroundColor: '#111827',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.6)', gap: 8,
+                    padding: '8px 16px', backgroundColor: '#111827',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
                 }}>
-                    <button onClick={() => setPdfUrl(null)} style={{
-                        display: 'flex', alignItems: 'center', gap: 6,
-                        padding: '8px 14px', borderRadius: 8,
-                        backgroundColor: '#2563EB', color: 'white',
-                        border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, flexShrink: 0,
-                    }}>← Voltar</button>
-                    <span style={{ color: '#D1D5DB', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, textAlign: 'center' }}>
-                        Ordem de Serviço — PDF
-                    </span>
+                    <span style={{ color: '#9CA3AF', fontSize: 13 }}>Ordem de Serviço — PDF</span>
                     <button onClick={() => setPdfUrl(null)} style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        width: 34, height: 34, borderRadius: 6,
-                        backgroundColor: '#374151', color: 'white',
-                        border: 'none', cursor: 'pointer', fontSize: 18, flexShrink: 0,
-                    }}>✕</button>
+                        width: 32, height: 32, borderRadius: 6,
+                        backgroundColor: '#374151', color: '#D1D5DB',
+                        border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1,
+                    }} title="Fechar">✕</button>
                 </div>
                 <iframe src={pdfUrl} title="OS" style={{ flex: 1, border: 'none', width: '100%', backgroundColor: '#1a1a1a', display: 'block' }} />
             </div>

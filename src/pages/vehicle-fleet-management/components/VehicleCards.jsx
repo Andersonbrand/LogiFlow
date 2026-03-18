@@ -2,7 +2,7 @@ import React from "react";
 import Icon from "components/AppIcon";
 import StatusBadge from "./StatusBadge";
 
-export default function VehicleCards({ vehicles, onEdit, onStatusChange, onViewHistory }) {
+export default function VehicleCards({ vehicles, onEdit, onStatusChange, onViewHistory, onViewData }) {
     if (vehicles?.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-16">
@@ -58,6 +58,14 @@ export default function VehicleCards({ vehicles, onEdit, onStatusChange, onViewH
                             Última utilização: {v?.ultimaUtilizacao}
                         </span>
                         <div className="flex items-center gap-1">
+                            <button
+                                title="Combustível · Checklist · Diárias"
+                                onClick={() => onViewData?.(v)}
+                                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                style={{ color: "#059669", backgroundColor: "#ECFDF5" }}
+                            >
+                                <Icon name="BarChart2" size={14} color="currentColor" strokeWidth={2} />
+                            </button>
                             <button
                                 title="Editar"
                                 onClick={() => onEdit(v)}
