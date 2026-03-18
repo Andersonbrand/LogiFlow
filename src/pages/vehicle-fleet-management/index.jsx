@@ -1,7 +1,6 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import NavigationBar from "components/ui/NavigationBar";
 import BreadcrumbTrail from "components/ui/BreadcrumbTrail";
-import QuickActionPanel from "components/ui/QuickActionPanel";
 import Icon from "components/AppIcon";
 import Button from "components/ui/Button";
 import Toast from "components/ui/Toast";
@@ -16,15 +15,13 @@ import HistoryModal from "./components/HistoryModal";
 import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate } from "utils/excelUtils";
 import { useAuth } from "utils/AuthContext";
 import AccessDeniedModal from "components/ui/AccessDeniedModal";
-import {
-  fetchVehicles, createVehicle, updateVehicle, deleteVehicle,
-} from "utils/vehicleService";
+import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle } from "utils/vehicleService";
 import { fetchRomaneios } from "utils/romaneioService";
 import {
-    fetchAbastecimentos, deleteAbastecimento,
+    fetchAbastecimentos,
     fetchChecklists, aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
     fetchDiarias, createDiaria, updateDiaria, deleteDiaria,
-    fetchTodosMotoristas, fetchCarretasVeiculos,
+    fetchMotoristasCaminhao,
     CHECKLIST_ITENS,
 } from "utils/carretasService";
 import * as XLSX from "xlsx";
@@ -46,72 +43,47 @@ function Field({ label, children, required }) {
     );
 }
 
-// ─── Painel de dados do veículo (abastecimentos, checklist, diárias) ──────────
-function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
+// ─── Painel de dados por motorista ────────────────────────────────────────────
+function PainelMotorista({ motorista, adminProfile, onClose }) {
     const { toast, showToast } = useToast();
-    const [tab, setTab]           = useState('abastecimentos');
-    const [loading, setLoading]   = useState(true);
-    const [motoristas, setMotoristas] = useState([]);
-    const [carretas, setCarretas] = useState([]);
-    const [mes, setMes]           = useState(() => new Date().toISOString().slice(0,7));
+    const [tab, setTab]         = useState('abastecimentos');
+    const [loading, setLoading] = useState(true);
+    const [mes, setMes]         = useState(() => new Date().toISOString().slice(0, 7));
 
-    // Abastecimentos
     const [abast, setAbast]       = useState([]);
-    // Checklists
     const [checklists, setChecklists] = useState([]);
-    const [modalManut, setModalManut] = useState(null);
-    const [obsManut, setObsManut] = useState('');
-    const [modalFoto, setModalFoto] = useState(null);
-    // Diárias
     const [diarias, setDiarias]   = useState([]);
+    const [modalManut, setModalManut] = useState(null);
+    const [obsManut, setObsManut]     = useState('');
+    const [modalFoto, setModalFoto]   = useState(null);
     const [modalDiaria, setModalDiaria] = useState(null);
     const [formDiaria, setFormDiaria] = useState({
-        motorista_id: '', data_inicio: new Date().toISOString().split('T')[0],
+        data_inicio: new Date().toISOString().split('T')[0],
         quantidade_dias: '1', valor_dia: '', descricao: '',
     });
 
-    // Carrega dados do veículo selecionado
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const f = {};
-            if (mes) {
-                const [ano, m] = mes.split('-').map(Number);
-                f.dataInicio = mes + '-01';
-                f.dataFim    = mes + '-' + String(new Date(ano, m, 0).getDate()).padStart(2,'0');
-            }
-
-            // Busca por veiculo_id na tabela de carretas (carretas_veiculos)
-            // E também tenta encontrar correspondência por placa
-            const [a, c, d, mots, cvs] = await Promise.all([
-                fetchAbastecimentos(f).then(rows =>
-                    rows.filter(r => r.veiculo?.placa === vehicle.placa || r.veiculo_id === vehicle.id)
-                ),
-                fetchChecklists({}).then(rows =>
-                    rows.filter(r => r.veiculo?.placa === vehicle.placa || r.veiculo_id === vehicle.id)
-                ),
-                fetchDiarias(f),
-                fetchTodosMotoristas(),
-                fetchCarretasVeiculos(),
+            const [ano, m] = mes.split('-').map(Number);
+            const f = {
+                motoristaId: motorista.id,
+                dataInicio: mes + '-01',
+                dataFim: mes + '-' + String(new Date(ano, m, 0).getDate()).padStart(2, '0'),
+            };
+            const [a, c, d] = await Promise.all([
+                fetchAbastecimentos(f),
+                fetchChecklists({ motoristaId: motorista.id }),
+                fetchDiarias({ motoristaId: motorista.id, dataInicio: f.dataInicio, dataFim: f.dataFim }),
             ]);
-
-            // Diárias: filtra por motoristas que usam este veículo
-            // (via abastecimentos ou checklists vinculados a esta placa)
-            const motoristaIds = new Set([
-                ...a.map(x => x.motorista_id),
-                ...c.map(x => x.motorista_id),
-            ]);
-            const diariasFiltradas = d.filter(x => motoristaIds.has(x.motorista_id));
-
-            setAbast(a); setChecklists(c); setDiarias(diariasFiltradas);
-            setMotoristas(mots); setCarretas(cvs);
+            setAbast(a); setChecklists(c); setDiarias(d);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [vehicle.placa, vehicle.id, mes]); // eslint-disable-line
+    }, [motorista.id, mes]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
 
-    // ── Totais abastecimentos
+    // Totais
     const totaisAbast = useMemo(() => ({
         litrosDiesel: abast.reduce((s, a) => s + Number(a.litros_diesel||0), 0),
         valorDiesel:  abast.reduce((s, a) => s + Number(a.valor_diesel||0), 0),
@@ -119,15 +91,10 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
         valorArla:    abast.reduce((s, a) => s + Number(a.valor_arla||0), 0),
         total:        abast.reduce((s, a) => s + Number(a.valor_total||0), 0),
     }), [abast]);
-
-    // ── Totais diárias
     const totalDiarias = useMemo(() => diarias.reduce((s, d) => s + Number(d.valor_total||0), 0), [diarias]);
+    const previewDiaria = useMemo(() => Number(formDiaria.quantidade_dias||0) * Number(formDiaria.valor_dia||0), [formDiaria]);
 
-    const previewDiaria = useMemo(() =>
-        Number(formDiaria.quantidade_dias||0) * Number(formDiaria.valor_dia||0)
-    , [formDiaria.quantidade_dias, formDiaria.valor_dia]);
-
-    // ── Handlers checklists
+    // Checklist handlers
     const handleAprovar = async (c) => {
         try {
             await aprovarChecklistComNotificacao(c.id, adminProfile?.id, c.motorista_id);
@@ -144,85 +111,73 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
-    // ── Handlers diárias
+    // Diárias handlers
     const handleSaveDiaria = async () => {
-        if (!formDiaria.motorista_id || !formDiaria.valor_dia || !formDiaria.data_inicio) {
-            showToast('Motorista, valor/dia e data são obrigatórios', 'error'); return;
+        if (!formDiaria.valor_dia || !formDiaria.data_inicio) {
+            showToast('Data e valor/dia são obrigatórios', 'error'); return;
         }
         try {
-            if (modalDiaria.mode === 'create') await createDiaria(formDiaria);
-            else await updateDiaria(modalDiaria.data.id, formDiaria);
+            const payload = { ...formDiaria, motorista_id: motorista.id };
+            if (modalDiaria.mode === 'create') await createDiaria(payload);
+            else await updateDiaria(modalDiaria.data.id, payload);
             showToast('Diária salva!', 'success'); setModalDiaria(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDeleteDiaria = async (id) => {
-        if (!confirm('Excluir esta diária?')) return;
+        if (!window.confirm('Excluir esta diária?')) return;
         try { await deleteDiaria(id); showToast('Excluída!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const openCreateDiaria = () => {
-        setFormDiaria({ motorista_id: '', data_inicio: new Date().toISOString().split('T')[0], quantidade_dias: '1', valor_dia: '', descricao: '' });
+        setFormDiaria({ data_inicio: new Date().toISOString().split('T')[0], quantidade_dias: '1', valor_dia: '', descricao: '' });
         setModalDiaria({ mode: 'create' });
     };
     const openEditDiaria = (d) => {
-        setFormDiaria({ motorista_id: d.motorista_id||'', data_inicio: d.data_inicio, quantidade_dias: d.quantidade_dias, valor_dia: d.valor_dia, descricao: d.descricao||'' });
+        setFormDiaria({ data_inicio: d.data_inicio, quantidade_dias: d.quantidade_dias, valor_dia: d.valor_dia, descricao: d.descricao || '' });
         setModalDiaria({ mode: 'edit', data: d });
     };
 
-    // ── Exportar Excel
+    // Exportar
     const exportar = () => {
         const wb = XLSX.utils.book_new();
-
-        // Aba abastecimentos
         if (abast.length) {
-            const rows = abast.map(a => ({
-                'Data': FMT(a.data_abastecimento), 'Motorista': a.motorista?.name||'',
-                'Posto': a.posto||'', 'Diesel (L)': Number(a.litros_diesel||0),
+            const ws = XLSX.utils.json_to_sheet(abast.map(a => ({
+                'Data': FMT(a.data_abastecimento), 'Placa': a.veiculo?.placa || '',
+                'Posto': a.posto || '', 'Diesel (L)': Number(a.litros_diesel||0),
                 'R$ Diesel': Number(a.valor_diesel||0), 'Arla (L)': Number(a.litros_arla||0),
-                'R$ Arla': Number(a.valor_arla||0), 'Total R$': Number(a.valor_total||0),
-            }));
-            rows.push({ 'Data':'TOTAL','Diesel (L)':totaisAbast.litrosDiesel,'R$ Diesel':totaisAbast.valorDiesel,'Arla (L)':totaisAbast.litrosArla,'R$ Arla':totaisAbast.valorArla,'Total R$':totaisAbast.total });
-            const ws = XLSX.utils.json_to_sheet(rows);
-            ws['!cols'] = [12,20,18,10,14,10,14,14].map(w=>({wch:w}));
+                'R$ Arla': Number(a.valor_arla||0), 'Total': Number(a.valor_total||0),
+            })));
+            ws['!cols'] = [12,12,18,10,12,10,12,12].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, ws, 'Abastecimentos');
         }
-
-        // Aba checklists
         if (checklists.length) {
-            const rows = checklists.map(c => ({
-                'Semana': FMT(c.semana_ref), 'Motorista': c.motorista?.name||'',
+            const ws = XLSX.utils.json_to_sheet(checklists.map(c => ({
+                'Semana': FMT(c.semana_ref), 'Placa': c.veiculo?.placa || '',
                 'Status': c.aprovado ? 'Aprovado' : 'Pendente',
-                'Itens OK': Object.values(c.itens||{}).filter(Boolean).length + '/' + CHECKLIST_ITENS.length,
-                'Problemas': c.problemas||'', 'Necessidades': c.necessidades||'',
-                'Obs Manutenção': c.obs_manutencao||'',
-            }));
-            const ws = XLSX.utils.json_to_sheet(rows);
-            ws['!cols'] = [12,20,12,10,30,30,30].map(w=>({wch:w}));
+                'Itens OK': `${Object.values(c.itens||{}).filter(Boolean).length}/${CHECKLIST_ITENS.length}`,
+                'Problemas': c.problemas || '', 'Necessidades': c.necessidades || '',
+            })));
+            ws['!cols'] = [12,12,12,10,30,30].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, ws, 'Checklists');
         }
-
-        // Aba diárias
         if (diarias.length) {
-            const rows = diarias.map(d => ({
-                'Data': FMT(d.data_inicio), 'Motorista': d.motorista?.name||'',
-                'Dias': d.quantidade_dias, 'Valor/Dia R$': Number(d.valor_dia||0),
-                'Total R$': Number(d.valor_total||0), 'Descrição': d.descricao||'',
-            }));
-            rows.push({ 'Data':'TOTAL','Total R$': totalDiarias });
-            const ws = XLSX.utils.json_to_sheet(rows);
-            ws['!cols'] = [12,20,8,14,14,30].map(w=>({wch:w}));
+            const ws = XLSX.utils.json_to_sheet(diarias.map(d => ({
+                'Data': FMT(d.data_inicio), 'Dias': d.quantidade_dias,
+                'Valor/Dia': Number(d.valor_dia||0), 'Total': Number(d.valor_total||0),
+                'Descrição': d.descricao || '',
+            })));
+            ws['!cols'] = [12,8,12,12,30].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, ws, 'Diárias');
         }
-
         if (!wb.SheetNames.length) { showToast('Nenhum dado para exportar', 'error'); return; }
-        XLSX.writeFile(wb, `veiculo_${vehicle.placa}_${mes}.xlsx`);
+        XLSX.writeFile(wb, `motorista_${motorista.name.replace(/\s+/g, '_')}_${mes}.xlsx`);
         showToast('Exportado!', 'success');
     };
 
-    const TABS_PANEL = [
-        { id: 'abastecimentos', label: 'Abastecimentos', icon: 'Fuel',          count: abast.length },
-        { id: 'checklist',      label: 'Checklist',       icon: 'ClipboardCheck',count: checklists.length },
-        { id: 'diarias',        label: 'Diárias',         icon: 'CalendarDays',  count: diarias.length },
+    const TABS_P = [
+        { id: 'abastecimentos', label: 'Abastecimentos', icon: 'Fuel',           count: abast.length },
+        { id: 'checklist',      label: 'Checklist',      icon: 'ClipboardCheck', count: checklists.length },
+        { id: 'diarias',        label: 'Diárias',        icon: 'CalendarDays',   count: diarias.length },
     ];
 
     return (
@@ -234,21 +189,16 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                 <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0"
                     style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-                            style={{ backgroundColor: '#EFF6FF' }}>
-                            <Icon name="Truck" size={24} color="#1D4ED8" />
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0"
+                            style={{ background: 'linear-gradient(135deg, #1D4ED8, #7C3AED)' }}>
+                            {motorista.name[0]?.toUpperCase()}
                         </div>
                         <div>
-                            <h2 className="font-heading font-bold text-xl" style={{ color: 'var(--color-text-primary)' }}>
-                                {vehicle.placa}
-                            </h2>
-                            <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                                {vehicle.tipo || ''}{vehicle.modelo ? ` · ${vehicle.modelo}` : ''}{vehicle.status ? ` · ${vehicle.status}` : ''}
-                            </p>
+                            <h2 className="font-heading font-bold text-xl" style={{ color: 'var(--color-text-primary)' }}>{motorista.name}</h2>
+                            <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Motorista · Caminhão</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        {/* Filtro de mês */}
                         <input type="month" value={mes} onChange={e => setMes(e.target.value)}
                             className="px-3 py-1.5 rounded-lg border text-sm" style={inputStyle} />
                         <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
@@ -265,7 +215,7 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
 
                 {/* Tabs */}
                 <div className="flex border-b flex-shrink-0 overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-                    {TABS_PANEL.map(t => (
+                    {TABS_P.map(t => (
                         <button key={t.id} onClick={() => setTab(t.id)}
                             className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${tab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                             <Icon name={t.icon} size={15} color="currentColor" />
@@ -280,7 +230,7 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                     ))}
                 </div>
 
-                {/* Conteúdo scrollável */}
+                {/* Conteúdo */}
                 <div className="flex-1 overflow-y-auto p-6">
                     {loading ? (
                         <div className="flex justify-center py-16">
@@ -288,15 +238,14 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                         </div>
                     ) : (
                         <>
-                            {/* ── ABA: Abastecimentos ── */}
+                            {/* ── Abastecimentos ── */}
                             {tab === 'abastecimentos' && (
                                 <div className="space-y-4">
-                                    {/* KPIs */}
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                         {[
-                                            { l: 'Diesel (L)', v: totaisAbast.litrosDiesel.toLocaleString('pt-BR',{maximumFractionDigits:1}), c: '#1D4ED8', bg: '#EFF6FF', i: 'Fuel' },
+                                            { l: 'Diesel (L)', v: totaisAbast.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#1D4ED8', bg: '#EFF6FF', i: 'Fuel' },
                                             { l: 'Custo Diesel', v: BRL(totaisAbast.valorDiesel), c: '#1D4ED8', bg: '#EFF6FF', i: 'DollarSign' },
-                                            { l: 'Arla 32 (L)', v: totaisAbast.litrosArla.toLocaleString('pt-BR',{maximumFractionDigits:1}), c: '#059669', bg: '#D1FAE5', i: 'Droplets' },
+                                            { l: 'Arla 32 (L)', v: totaisAbast.litrosArla.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#059669', bg: '#D1FAE5', i: 'Droplets' },
                                             { l: 'Total Gasto', v: BRL(totaisAbast.total), c: '#7C3AED', bg: '#EDE9FE', i: 'Receipt' },
                                         ].map(k => (
                                             <div key={k.l} className="bg-gray-50 rounded-xl border p-3" style={{ borderColor: 'var(--color-border)' }}>
@@ -310,30 +259,29 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                             </div>
                                         ))}
                                     </div>
-
                                     {abast.length === 0 ? (
                                         <div className="text-center py-12 rounded-xl border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                                             <Icon name="Fuel" size={32} color="var(--color-muted-foreground)" />
-                                            <p className="text-sm mt-2">Nenhum abastecimento registrado para este veículo no período</p>
+                                            <p className="text-sm mt-2">Nenhum abastecimento registrado no período</p>
                                             <p className="text-xs mt-1">Os lançamentos do motorista aparecerão aqui</p>
                                         </div>
                                     ) : (
                                         <div className="bg-white rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                                             <table className="w-full text-sm min-w-[600px]">
                                                 <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                                    <tr>{['Data','Motorista','Posto','Diesel (L)','R$ Diesel','Arla (L)','R$ Arla','Total'].map(h =>
+                                                    <tr>{['Data', 'Placa', 'Posto', 'Diesel (L)', 'R$ Diesel', 'Arla (L)', 'R$ Arla', 'Total'].map(h =>
                                                         <th key={h} className="px-3 py-2.5 text-left font-medium whitespace-nowrap">{h}</th>
                                                     )}</tr>
                                                 </thead>
                                                 <tbody>
                                                     {abast.map((a, i) => (
-                                                        <tr key={a.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i%2===0?'#fff':'#F8FAFC' }}>
+                                                        <tr key={a.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                             <td className="px-3 py-2.5 whitespace-nowrap">{FMT(a.data_abastecimento)}</td>
-                                                            <td className="px-3 py-2.5 font-medium">{a.motorista?.name||'—'}</td>
-                                                            <td className="px-3 py-2.5 text-xs max-w-[120px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{a.posto||'—'}</td>
-                                                            <td className="px-3 py-2.5 font-data text-right text-blue-700">{Number(a.litros_diesel||0).toLocaleString('pt-BR',{maximumFractionDigits:1})}</td>
+                                                            <td className="px-3 py-2.5 font-data font-medium text-blue-700">{a.veiculo?.placa || '—'}</td>
+                                                            <td className="px-3 py-2.5 text-xs max-w-[120px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{a.posto || '—'}</td>
+                                                            <td className="px-3 py-2.5 font-data text-right text-blue-700">{Number(a.litros_diesel||0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                                                             <td className="px-3 py-2.5 font-data text-right">{BRL(a.valor_diesel)}</td>
-                                                            <td className="px-3 py-2.5 font-data text-right text-emerald-600">{Number(a.litros_arla||0).toLocaleString('pt-BR',{maximumFractionDigits:1})}</td>
+                                                            <td className="px-3 py-2.5 font-data text-right text-emerald-600">{Number(a.litros_arla||0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                                                             <td className="px-3 py-2.5 font-data text-right text-emerald-700">{BRL(a.valor_arla)}</td>
                                                             <td className="px-3 py-2.5 font-data font-semibold text-right text-purple-600">{BRL(a.valor_total)}</td>
                                                         </tr>
@@ -342,9 +290,9 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                                 <tfoot>
                                                     <tr style={{ backgroundColor: '#F0F9FF', borderTop: '2px solid #BFDBFE' }}>
                                                         <td colSpan={3} className="px-3 py-2 text-xs font-bold text-blue-800">TOTAL</td>
-                                                        <td className="px-3 py-2 font-data font-bold text-right text-blue-700">{totaisAbast.litrosDiesel.toLocaleString('pt-BR',{maximumFractionDigits:1})}</td>
+                                                        <td className="px-3 py-2 font-data font-bold text-right text-blue-700">{totaisAbast.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                                                         <td className="px-3 py-2 font-data font-bold text-right text-blue-700">{BRL(totaisAbast.valorDiesel)}</td>
-                                                        <td className="px-3 py-2 font-data font-bold text-right text-emerald-700">{totaisAbast.litrosArla.toLocaleString('pt-BR',{maximumFractionDigits:1})}</td>
+                                                        <td className="px-3 py-2 font-data font-bold text-right text-emerald-700">{totaisAbast.litrosArla.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                                                         <td className="px-3 py-2 font-data font-bold text-right text-emerald-700">{BRL(totaisAbast.valorArla)}</td>
                                                         <td className="px-3 py-2 font-data font-bold text-right text-purple-700">{BRL(totaisAbast.total)}</td>
                                                     </tr>
@@ -355,13 +303,13 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                 </div>
                             )}
 
-                            {/* ── ABA: Checklist ── */}
+                            {/* ── Checklist ── */}
                             {tab === 'checklist' && (
                                 <div className="space-y-4">
                                     {checklists.length === 0 ? (
                                         <div className="text-center py-12 rounded-xl border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                                             <Icon name="ClipboardCheck" size={32} color="var(--color-muted-foreground)" />
-                                            <p className="text-sm mt-2">Nenhum checklist enviado para este veículo</p>
+                                            <p className="text-sm mt-2">Nenhum checklist enviado</p>
                                             <p className="text-xs mt-1">O motorista envia pelo app e aparece aqui para aprovação</p>
                                         </div>
                                     ) : checklists.map(c => {
@@ -372,12 +320,8 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                             <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                 <div className="flex items-start justify-between mb-3 gap-2">
                                                     <div>
-                                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                                            <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.motorista?.name||'—'}</p>
-                                                        </div>
-                                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                            Semana de {c.semana_ref ? FMT(c.semana_ref) : '—'}
-                                                        </p>
+                                                        <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.veiculo?.placa || 'Sem placa'}</p>
+                                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Semana de {c.semana_ref ? FMT(c.semana_ref) : '—'}</p>
                                                     </div>
                                                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
                                                         {c.aprovado
@@ -392,7 +336,6 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                                         )}
                                                     </div>
                                                 </div>
-                                                {/* Barra de progresso */}
                                                 <div className="mb-3">
                                                     <div className="flex justify-between text-xs mb-1">
                                                         <span style={{ color: 'var(--color-muted-foreground)' }}>Itens verificados</span>
@@ -402,7 +345,6 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                                         <div className="h-full rounded-full" style={{ width: `${(ok/total)*100}%`, backgroundColor: ok===total ? '#059669' : ok>=total*0.7 ? '#D97706' : '#DC2626' }} />
                                                     </div>
                                                 </div>
-                                                {/* Grid de itens */}
                                                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-1 mb-3">
                                                     {CHECKLIST_ITENS.map(item => (
                                                         <div key={item.id} className="flex items-center gap-1 text-xs px-2 py-1 rounded"
@@ -412,7 +354,6 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                                         </div>
                                                     ))}
                                                 </div>
-                                                {/* Observações */}
                                                 {(c.problemas || c.necessidades || c.obs_manutencao) && (
                                                     <div className="text-xs space-y-1 mb-3 p-3 rounded-lg bg-gray-50">
                                                         {c.problemas && <p><span className="font-medium text-red-600">⚠ Problemas:</span> {c.problemas}</p>}
@@ -420,7 +361,6 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                                         {c.obs_manutencao && <p className="p-2 rounded bg-orange-50 text-orange-700 border border-orange-100"><span className="font-medium">Manutenção:</span> {c.obs_manutencao}</p>}
                                                     </div>
                                                 )}
-                                                {/* Ações admin */}
                                                 {!c.aprovado && (
                                                     <div className="flex flex-wrap gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                                         <button onClick={() => handleAprovar(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700">
@@ -437,7 +377,7 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                 </div>
                             )}
 
-                            {/* ── ABA: Diárias ── */}
+                            {/* ── Diárias ── */}
                             {tab === 'diarias' && (
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
@@ -451,18 +391,17 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                             <Icon name="Plus" size={14} color="white" /> Nova Diária
                                         </button>
                                     </div>
-
                                     {diarias.length === 0 ? (
                                         <div className="text-center py-12 rounded-xl border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                                             <Icon name="CalendarDays" size={32} color="var(--color-muted-foreground)" />
-                                            <p className="text-sm mt-2">Nenhuma diária registrada para motoristas deste veículo</p>
+                                            <p className="text-sm mt-2">Nenhuma diária no período</p>
                                             <p className="text-xs mt-1">Clique em "Nova Diária" para lançar</p>
                                         </div>
                                     ) : (
                                         <div className="bg-white rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-                                            <table className="w-full text-sm min-w-[500px]">
+                                            <table className="w-full text-sm min-w-[480px]">
                                                 <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                                    <tr>{['Data','Motorista','Dias','Valor/Dia','Total','Descrição',''].map(h =>
+                                                    <tr>{['Data', 'Dias', 'Valor/Dia', 'Total', 'Descrição', ''].map(h =>
                                                         <th key={h} className="px-3 py-2.5 text-left font-medium whitespace-nowrap">{h}</th>
                                                     )}</tr>
                                                 </thead>
@@ -470,11 +409,10 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                                     {diarias.map((d, i) => (
                                                         <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i%2===0?'#fff':'#F8FAFC' }}>
                                                             <td className="px-3 py-2.5 whitespace-nowrap">{FMT(d.data_inicio)}</td>
-                                                            <td className="px-3 py-2.5 font-medium">{d.motorista?.name||'—'}</td>
                                                             <td className="px-3 py-2.5 font-data text-center">{d.quantidade_dias}</td>
                                                             <td className="px-3 py-2.5 font-data">{BRL(d.valor_dia)}</td>
                                                             <td className="px-3 py-2.5 font-data font-semibold text-indigo-600">{BRL(d.valor_total)}</td>
-                                                            <td className="px-3 py-2.5 text-xs max-w-[180px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao||'—'}</td>
+                                                            <td className="px-3 py-2.5 text-xs max-w-[180px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
                                                             <td className="px-3 py-2.5">
                                                                 <div className="flex gap-1">
                                                                     <button onClick={() => openEditDiaria(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
@@ -486,7 +424,7 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                                 </tbody>
                                                 <tfoot>
                                                     <tr style={{ backgroundColor: '#EEF2FF', borderTop: '2px solid #C7D2FE' }}>
-                                                        <td colSpan={4} className="px-3 py-2 text-xs font-bold text-indigo-800">TOTAL</td>
+                                                        <td colSpan={3} className="px-3 py-2 text-xs font-bold text-indigo-800">TOTAL</td>
                                                         <td className="px-3 py-2 font-data font-bold text-indigo-700">{BRL(totalDiarias)}</td>
                                                         <td colSpan={2} />
                                                     </tr>
@@ -501,7 +439,7 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                 </div>
             </div>
 
-            {/* Modal manutenção checklist */}
+            {/* Modal manutenção */}
             {modalManut && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
@@ -527,17 +465,17 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                 </div>
             )}
 
-            {/* Modal foto checklist */}
+            {/* Modal foto */}
             {modalFoto && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }} onClick={() => setModalFoto(null)}>
-                    <img src={modalFoto} alt="Foto do checklist" className="rounded-xl max-w-2xl w-full max-h-[80vh] object-contain" />
+                    <img src={modalFoto} alt="Foto checklist" className="rounded-xl max-w-2xl w-full max-h-[80vh] object-contain" />
                 </div>
             )}
 
-            {/* Modal nova/editar diária */}
+            {/* Modal diária */}
             {modalDiaria && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
                         <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-indigo-50"><Icon name="CalendarDays" size={18} color="#4F46E5" /></div>
@@ -547,13 +485,7 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                             </div>
                             <button onClick={() => setModalDiaria(null)} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
                         </div>
-                        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <Field label="Motorista" required>
-                                <select value={formDiaria.motorista_id} onChange={e => setFormDiaria(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione...</option>
-                                    {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                </select>
-                            </Field>
+                        <div className="p-5 grid grid-cols-2 gap-4">
                             <Field label="Data de início" required>
                                 <input type="date" value={formDiaria.data_inicio} onChange={e => setFormDiaria(f => ({ ...f, data_inicio: e.target.value }))} className={inputCls} style={inputStyle} />
                             </Field>
@@ -564,12 +496,12 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
                                 <input type="number" step="0.01" min="0" value={formDiaria.valor_dia} onChange={e => setFormDiaria(f => ({ ...f, valor_dia: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
                             </Field>
                             {previewDiaria > 0 && (
-                                <div className="sm:col-span-2 p-3 rounded-xl text-center" style={{ backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE' }}>
-                                    <p className="text-xs text-indigo-600 font-medium mb-0.5">Total calculado</p>
-                                    <p className="text-2xl font-bold font-data text-indigo-700">{BRL(previewDiaria)}</p>
+                                <div className="flex flex-col justify-center p-3 rounded-xl text-center" style={{ backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE' }}>
+                                    <p className="text-xs text-indigo-600 font-medium">Total</p>
+                                    <p className="text-xl font-bold font-data text-indigo-700">{BRL(previewDiaria)}</p>
                                 </div>
                             )}
-                            <div className="sm:col-span-2">
+                            <div className="col-span-2">
                                 <Field label="Descrição / motivo">
                                     <input value={formDiaria.descricao} onChange={e => setFormDiaria(f => ({ ...f, descricao: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: Viagem a Ibotirama — 2 diárias" />
                                 </Field>
@@ -590,6 +522,92 @@ function VehicleDataPanel({ vehicle, adminProfile, onClose }) {
     );
 }
 
+// ─── Aba Motoristas ───────────────────────────────────────────────────────────
+function TabMotoristas({ adminProfile }) {
+    const { toast, showToast } = useToast();
+    const [motoristas, setMotoristas] = useState([]);
+    const [loading, setLoading]       = useState(true);
+    const [selecionado, setSelecionado] = useState(null);
+    const [busca, setBusca]           = useState('');
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const m = await fetchMotoristasCaminhao();
+                setMotoristas(m);
+            } catch (e) { showToast('Erro ao carregar motoristas: ' + e.message, 'error'); }
+            finally { setLoading(false); }
+        })();
+    }, []); // eslint-disable-line
+
+    const filtrados = useMemo(() =>
+        motoristas.filter(m => m.name?.toLowerCase().includes(busca.toLowerCase()))
+    , [motoristas, busca]);
+
+    if (loading) return (
+        <div className="flex justify-center py-16">
+            <div className="animate-spin h-8 w-8 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
+        </div>
+    );
+
+    return (
+        <div>
+            {/* Busca */}
+            <div className="flex items-center gap-3 mb-5">
+                <div className="flex-1 relative">
+                    <Icon name="Search" size={15} color="var(--color-muted-foreground)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+                    <input value={busca} onChange={e => setBusca(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 rounded-lg border text-sm outline-none" style={inputStyle}
+                        placeholder="Buscar motorista..." />
+                </div>
+                <span className="text-xs px-2 py-1 rounded-lg" style={{ backgroundColor: '#F1F5F9', color: 'var(--color-muted-foreground)' }}>
+                    {filtrados.length} motorista{filtrados.length !== 1 ? 's' : ''}
+                </span>
+            </div>
+
+            {filtrados.length === 0 ? (
+                <div className="bg-white rounded-xl border p-12 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                    <Icon name="Users" size={40} color="var(--color-muted-foreground)" />
+                    <p className="text-sm mt-3 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
+                        {busca ? 'Nenhum motorista encontrado' : 'Nenhum motorista de caminhão cadastrado'}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>
+                        Motoristas com role "motorista" sem tipo_veiculo "carreta" aparecem aqui
+                    </p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {filtrados.map(m => (
+                        <button key={m.id} onClick={() => setSelecionado(m)}
+                            className="flex items-center gap-4 p-4 bg-white rounded-xl border shadow-sm hover:shadow-md hover:border-blue-200 transition-all text-left"
+                            style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0"
+                                style={{ background: 'linear-gradient(135deg, #1D4ED8, #7C3AED)' }}>
+                                {m.name[0]?.toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-sm truncate" style={{ color: 'var(--color-text-primary)' }}>{m.name}</p>
+                                <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Motorista · Caminhão</p>
+                            </div>
+                            <Icon name="ChevronRight" size={16} color="var(--color-muted-foreground)" />
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* Painel do motorista selecionado */}
+            {selecionado && (
+                <PainelMotorista
+                    motorista={selecionado}
+                    adminProfile={adminProfile}
+                    onClose={() => setSelecionado(null)}
+                />
+            )}
+            <Toast toast={toast} />
+        </div>
+    );
+}
+
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
 export default function VehicleFleetManagement() {
     const { isAdmin, profile } = useAuth();
@@ -599,10 +617,11 @@ export default function VehicleFleetManagement() {
     const [romaneios, setRomaneios] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState(EMPTY_FILTERS);
+    const [activeTab, setActiveTab] = useState('frota'); // 'frota' | 'motoristas'
     const [formModal, setFormModal] = useState({ open: false, vehicle: null });
     const [statusModal, setStatusModal] = useState({ open: false, vehicle: null });
     const [historyModal, setHistoryModal] = useState({ open: false, vehicle: null });
-    const [dataPanel, setDataPanel] = useState(null); // veículo selecionado para o painel
+    const importFileRef = useRef();
 
     useEffect(() => {
         (async () => {
@@ -610,16 +629,16 @@ export default function VehicleFleetManagement() {
                 setLoading(true);
                 const [data, roms] = await Promise.all([fetchVehicles(), fetchRomaneios()]);
                 setVehicles(data); setRomaneios(roms);
-            } catch (err) { showToast("Erro ao carregar veículos: " + err.message, "error"); }
+            } catch (err) { showToast("Erro ao carregar: " + err.message, "error"); }
             finally { setLoading(false); }
         })();
-    }, []);
+    }, []); // eslint-disable-line
 
     const filtered = useMemo(() => vehicles?.filter(v => {
-        const matchSearch = filters?.search === "" || v?.placa?.toLowerCase()?.includes(filters?.search?.toLowerCase()) || v?.tipo?.toLowerCase()?.includes(filters?.search?.toLowerCase());
-        const matchTipo   = filters?.tipo   === "Todos" || v?.tipo   === filters?.tipo;
-        const matchStatus = filters?.status === "Todos" || v?.status === filters?.status;
-        return matchSearch && matchTipo && matchStatus;
+        const s = filters?.search?.toLowerCase();
+        return (!s || v?.placa?.toLowerCase().includes(s) || v?.tipo?.toLowerCase().includes(s))
+            && (filters?.tipo === "Todos" || v?.tipo === filters?.tipo)
+            && (filters?.status === "Todos" || v?.status === filters?.status);
     }), [vehicles, filters]);
 
     const handleSave = async (data) => {
@@ -628,14 +647,14 @@ export default function VehicleFleetManagement() {
             if (formModal?.vehicle) {
                 const updated = await updateVehicle(formModal.vehicle.id, data);
                 setVehicles(prev => prev.map(v => v.id === updated.id ? updated : v));
-                showToast(`Veículo ${data?.placa} atualizado com sucesso.`);
+                showToast(`Veículo ${data?.placa} atualizado.`);
             } else {
                 const created = await createVehicle({ ...data, ultima_utilizacao: null });
                 setVehicles(prev => [created, ...prev]);
-                showToast(`Veículo ${data?.placa} cadastrado com sucesso.`);
+                showToast(`Veículo ${data?.placa} cadastrado.`);
             }
             setFormModal({ open: false, vehicle: null });
-        } catch (err) { showToast("Erro ao salvar veículo: " + err.message, "error"); }
+        } catch (err) { showToast("Erro: " + err.message, "error"); }
     };
 
     const handleStatusUpdate = async (id, newStatus) => {
@@ -643,113 +662,108 @@ export default function VehicleFleetManagement() {
         try {
             const updated = await updateVehicle(id, { status: newStatus });
             setVehicles(prev => prev.map(v => v.id === id ? { ...v, status: updated.status } : v));
-            showToast("Status atualizado com sucesso.");
-        } catch (err) { showToast("Erro ao atualizar status: " + err.message, "error"); }
+            showToast("Status atualizado.");
+        } catch (err) { showToast("Erro: " + err.message, "error"); }
     };
 
     const handleDelete = async (id) => {
         if (!isAdmin()) { setAccessDenied(true); return; }
-        try {
-            await deleteVehicle(id);
-            setVehicles(prev => prev.filter(v => v.id !== id));
-            showToast("Veículo removido com sucesso.");
-        } catch (err) { showToast("Erro ao remover veículo: " + err.message, "error"); }
+        try { await deleteVehicle(id); setVehicles(prev => prev.filter(v => v.id !== id)); showToast("Veículo removido."); }
+        catch (err) { showToast("Erro: " + err.message, "error"); }
     };
 
-    const handleExportExcel = () => { exportVehiclesToExcel(vehicles); showToast("Frota exportada como Excel!"); };
     const handleImportExcel = async (file) => {
         try {
+            const { parseVehiclesFromFile } = await import("utils/excelUtils");
             const parsed = await parseVehiclesFromFile(file);
-            if (!parsed.length) { showToast("Nenhum veículo válido encontrado.", "error"); return; }
+            if (!parsed.length) { showToast("Nenhum veículo válido.", "error"); return; }
             let created = 0, errors = 0;
             for (const v of parsed) { try { await createVehicle(v); created++; } catch { errors++; } }
             const data = await fetchVehicles(); setVehicles(data);
-            showToast(`${created} veículo(s) importado(s)${errors ? ` · ${errors} erro(s)` : ""}!`, errors ? "warning" : "success");
-        } catch (err) { showToast("Erro na importação: " + err.message, "error"); }
+            showToast(`${created} importado(s)${errors ? ` · ${errors} erro(s)` : ""}!`, errors ? "warning" : "success");
+        } catch (err) { showToast("Erro: " + err.message, "error"); }
     };
-
-    const importFileRef = React.useRef();
 
     return (
         <div className="min-h-screen" style={{ backgroundColor: "var(--color-background)" }}>
             <AccessDeniedModal show={accessDenied} onClose={() => setAccessDenied(false)} />
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-2xl mx-auto px-4 tab:px-6 lg:px-8 py-6">
-                    {/* Page Header */}
+                <div className="max-w-screen-2xl mx-auto px-4 lg:px-8 py-6">
+
+                    {/* Header */}
                     <div className="mb-6">
                         <BreadcrumbTrail className="mb-3" />
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                             <div>
-                                <h1 className="text-2xl md:text-3xl font-heading font-bold" style={{ color: "var(--color-text-primary)" }}>
-                                    Gestão de Veículos
-                                </h1>
-                                <p className="text-sm mt-1" style={{ color: "var(--color-muted-foreground)" }}>
-                                    Gerencie a frota · clique em um veículo para ver combustível, checklists e diárias
-                                </p>
+                                <h1 className="text-2xl md:text-3xl font-heading font-bold" style={{ color: "var(--color-text-primary)" }}>Gestão de Veículos</h1>
+                                <p className="text-sm mt-1" style={{ color: "var(--color-muted-foreground)" }}>Frota e motoristas de caminhão</p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <Button variant="outline" size="sm" iconName="FileDown" iconSize={14} onClick={handleExportExcel}>Exportar Excel</Button>
-                                <Button variant="outline" size="sm" iconName="FileUp"   iconSize={14} onClick={() => { if (!isAdmin()) { setAccessDenied(true); return; } importFileRef.current?.click(); }}>Importar Excel</Button>
-                                <Button variant="ghost"   size="sm" iconName="FileSpreadsheet" iconSize={14} onClick={downloadVehiclesTemplate}>Modelo</Button>
-                                <Button variant="default" iconName="Plus" iconSize={16} onClick={() => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: null }); }}>Cadastrar Veículo</Button>
-                                <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
-                                    onChange={e => { const f = e.target.files?.[0]; if (f) handleImportExcel(f); e.target.value=''; }} />
-                            </div>
+                            {activeTab === 'frota' && (
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Button variant="outline" size="sm" iconName="FileDown" iconSize={14} onClick={() => { exportVehiclesToExcel(vehicles); showToast("Exportado!"); }}>Exportar</Button>
+                                    <Button variant="outline" size="sm" iconName="FileUp"   iconSize={14} onClick={() => { if (!isAdmin()) { setAccessDenied(true); return; } importFileRef.current?.click(); }}>Importar</Button>
+                                    <Button variant="ghost"   size="sm" iconName="FileSpreadsheet" iconSize={14} onClick={downloadVehiclesTemplate}>Modelo</Button>
+                                    <Button variant="default" iconName="Plus" iconSize={16} onClick={() => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: null }); }}>Cadastrar</Button>
+                                    <input ref={importFileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
+                                        onChange={e => { const f = e.target.files?.[0]; if (f) handleImportExcel(f); e.target.value=''; }} />
+                                </div>
+                            )}
                         </div>
                     </div>
 
-                    <MetricCards vehicles={vehicles} romaneios={romaneios} />
-                    <FilterBar filters={filters} onChange={setFilters} resultCount={filtered?.length} onClear={() => setFilters(EMPTY_FILTERS)} />
-
-                    {/* Indicação visual que veículos são clicáveis */}
-                    <div className="flex items-center gap-2 mb-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                        <Icon name="MousePointerClick" size={13} />
-                        <span>Clique no ícone <strong>📊</strong> de qualquer veículo para ver combustível, checklists e diárias</span>
+                    {/* Tabs de página */}
+                    <div className="flex border-b mb-6" style={{ borderColor: 'var(--color-border)' }}>
+                        {[
+                            { id: 'frota',       label: 'Frota de Veículos', icon: 'Truck' },
+                            { id: 'motoristas',  label: 'Motoristas',        icon: 'Users' },
+                        ].map(t => (
+                            <button key={t.id} onClick={() => setActiveTab(t.id)}
+                                className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                                <Icon name={t.icon} size={16} color="currentColor" />
+                                {t.label}
+                            </button>
+                        ))}
                     </div>
 
-                    {/* Table (desktop) */}
-                    <div className="hidden md:block">
-                        <VehicleTable
-                            vehicles={filtered}
-                            onEdit={v => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: v }); }}
-                            onStatusChange={v => { if (!isAdmin()) { setAccessDenied(true); return; } setStatusModal({ open: true, vehicle: v }); }}
-                            onViewHistory={v => setHistoryModal({ open: true, vehicle: v })}
-                            onViewData={v => setDataPanel(v)}
-                        />
-                    </div>
+                    {/* Aba Frota */}
+                    {activeTab === 'frota' && (
+                        <>
+                            <MetricCards vehicles={vehicles} romaneios={romaneios} />
+                            <FilterBar filters={filters} onChange={setFilters} resultCount={filtered?.length} onClear={() => setFilters(EMPTY_FILTERS)} />
+                            <div className="hidden md:block">
+                                <VehicleTable
+                                    vehicles={filtered}
+                                    onEdit={v => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: v }); }}
+                                    onStatusChange={v => { if (!isAdmin()) { setAccessDenied(true); return; } setStatusModal({ open: true, vehicle: v }); }}
+                                    onViewHistory={v => setHistoryModal({ open: true, vehicle: v })}
+                                />
+                            </div>
+                            <div className="md:hidden">
+                                <VehicleCards
+                                    vehicles={filtered}
+                                    onEdit={v => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: v }); }}
+                                    onStatusChange={v => { if (!isAdmin()) { setAccessDenied(true); return; } setStatusModal({ open: true, vehicle: v }); }}
+                                    onViewHistory={v => setHistoryModal({ open: true, vehicle: v })}
+                                />
+                            </div>
+                        </>
+                    )}
 
-                    {/* Cards (mobile) */}
-                    <div className="md:hidden">
-                        <VehicleCards
-                            vehicles={filtered}
-                            onEdit={v => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: v }); }}
-                            onStatusChange={v => { if (!isAdmin()) { setAccessDenied(true); return; } setStatusModal({ open: true, vehicle: v }); }}
-                            onViewHistory={v => setHistoryModal({ open: true, vehicle: v })}
-                            onViewData={v => setDataPanel(v)}
-                        />
-                    </div>
+                    {/* Aba Motoristas */}
+                    {activeTab === 'motoristas' && (
+                        <TabMotoristas adminProfile={profile} />
+                    )}
 
-                    <div className="mt-6 text-center text-xs font-caption" style={{ color: "var(--color-muted-foreground)" }}>
-                        © {new Date()?.getFullYear()} LogiFlow — Gestão Logística. Todos os direitos reservados.
+                    <div className="mt-6 text-center text-xs" style={{ color: "var(--color-muted-foreground)" }}>
+                        © {new Date().getFullYear()} LogiFlow — Gestão Logística
                     </div>
                 </div>
             </main>
 
-            {/* Modals existentes */}
             <VehicleFormModal isOpen={formModal?.open} editVehicle={formModal?.vehicle} onClose={() => setFormModal({ open: false, vehicle: null })} onSave={handleSave} />
             <StatusUpdateModal isOpen={statusModal?.open} vehicle={statusModal?.vehicle} onClose={() => setStatusModal({ open: false, vehicle: null })} onUpdate={handleStatusUpdate} />
             <HistoryModal isOpen={historyModal?.open} vehicle={historyModal?.vehicle} onClose={() => setHistoryModal({ open: false, vehicle: null })} />
-
-            {/* Painel de dados do veículo */}
-            {dataPanel && (
-                <VehicleDataPanel
-                    vehicle={dataPanel}
-                    adminProfile={profile}
-                    onClose={() => setDataPanel(null)}
-                />
-            )}
-
             <Toast toast={toast} />
         </div>
     );

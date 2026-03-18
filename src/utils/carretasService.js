@@ -700,3 +700,17 @@ export async function deleteDiaria(id) {
     const { error } = await supabase.from('carretas_diarias').delete().eq('id', id);
     if (error) throw error;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MOTORISTAS DE CAMINHÃO (excluindo carreteiros)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchMotoristasCaminhao() {
+    const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, name, role, tipo_veiculo')
+        .eq('role', 'motorista')
+        .or('tipo_veiculo.neq.carreta,tipo_veiculo.is.null')
+        .order('name', { ascending: true });
+    if (error) throw error;
+    return data || [];
+}

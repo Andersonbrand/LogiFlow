@@ -12,6 +12,7 @@ import {
     fetchChecklists, createChecklist,
     fetchCarretasVeiculos,
     fetchPostos,
+    fetchConfigAbastecimento,
     CHECKLIST_ITENS,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
@@ -33,14 +34,6 @@ const STATUS_ROM = {
     'Finalizado':  { bg: '#F3F4F6', text: '#374151' },
     'Cancelado':   { bg: '#FEE2E2', text: '#991B1B' },
 };
-const STATUS_VIAGEM = {
-    'Agendado':            { bg: '#EFF6FF', text: '#1D4ED8' },
-    'Em processamento':    { bg: '#FEF9C3', text: '#B45309' },
-    'Aguardando no pátio': { bg: '#FEE2E2', text: '#B91C1C' },
-    'Em trânsito':         { bg: '#D1FAE5', text: '#065F46' },
-    'Entrega finalizada':  { bg: '#F0FDF4', text: '#15803D' },
-    'Cancelado':           { bg: '#F3F4F6', text: '#6B7280' },
-};
 
 function Field({ label, children, required }) {
     return (
@@ -58,41 +51,36 @@ export default function MotoristaDashboard() {
     const { toast, showToast } = useToast();
     const fotoRef = useRef(null);
 
-    // ── State ─────────────────────────────────────────────────────────────────
     const [tab, setTab]               = useState('viagens');
     const [period, setPeriod]         = useState(30);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [loading, setLoading]       = useState(true);
 
-    // Romaneios (caminhão)
-    const [romaneios, setRomaneios]     = useState([]);
-    // Viagens admin (carretas_viagens)
-    const [viagensAdmin, setViagensAdmin] = useState([]);
-    // Abastecimentos
+    const [romaneios, setRomaneios]   = useState([]);
     const [abast, setAbast]           = useState([]);
-    // Checklists
     const [checklists, setChecklists] = useState([]);
-    // Veículos e postos
     const [veiculos, setVeiculos]     = useState([]);
     const [postos, setPostos]         = useState([]);
+    const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
 
-    // Modais
     const [modalAbast, setModalAbast] = useState(false);
     const [modalCheck, setModalCheck] = useState(false);
     const [fotoPreview, setFotoPreview] = useState(null);
 
-    const [formAbast, setFormAbast] = useState({
+    const emptyAbast = () => ({
         veiculo_id: '', posto_id: '',
         data_abastecimento: new Date().toISOString().split('T')[0],
         horario: '', litros_diesel: '', valor_diesel: '',
         litros_arla: '', valor_arla: '', observacoes: '',
     });
-    const [formCheck, setFormCheck] = useState({
+    const emptyCheck = () => ({
         veiculo_id: '', itens: {}, problemas: '', necessidades: '',
         observacoes_livres: '', foto_url: '',
     });
+    const [formAbast, setFormAbast] = useState(emptyAbast());
+    const [formCheck, setFormCheck] = useState(emptyCheck());
 
-    // ── Load ──────────────────────────────────────────────────────────────────
+    // ── Load ─────────────────────────────────────────────────────────────────
     const load = useCallback(async () => {
         if (!user?.id || !profile?.name) return;
         setLoading(true);
@@ -100,7 +88,7 @@ export default function MotoristaDashboard() {
             const cut = new Date(); cut.setDate(cut.getDate() - period);
             const dateStr = cut.toISOString().split('T')[0];
 
-            const [roms, a, c, ve, p, vAdmin] = await Promise.all([
+            const [roms, a, c, ve, p, cfg] = await Promise.all([
                 supabase.from('romaneios')
                     .select(`id, numero, motorista, motorista_id, placa, destino, status,
                         aprovado, aprovado_em, peso_total, saida, created_at,
@@ -114,63 +102,71 @@ export default function MotoristaDashboard() {
                 fetchChecklists({ motoristaId: user.id }),
                 fetchCarretasVeiculos(),
                 fetchPostos().catch(() => []),
-                supabase.from('carretas_viagens')
-                    .select('*, veiculo:veiculo_id(id, placa, modelo)')
-                    .eq('motorista_id', user.id)
-                    .order('created_at', { ascending: false })
-                    .then(r => r.data || []).catch(() => []),
+                fetchConfigAbastecimento().catch(() => ({ preco_diesel: 0, preco_arla: 0 })),
             ]);
 
             setRomaneios(roms);
             setAbast(a); setChecklists(c);
             setVeiculos(ve); setPostos(p);
-            setViagensAdmin(vAdmin);
+            setConfigAbast(cfg || { preco_diesel: 0, preco_arla: 0 });
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [user?.id, profile?.name, period]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
 
-    // ── Computed ──────────────────────────────────────────────────────────────
+    // ── Computed ─────────────────────────────────────────────────────────────
     const bonificacoes = useMemo(() =>
         romaneios.map(r => ({ ...r, bonif: calcularBonificacao(r) }))
     , [romaneios]);
 
     const totais = useMemo(() => ({
-        viagens:    romaneios.length,
-        finalizadas: romaneios.filter(r => r.status === 'Finalizado').length,
-        emTransito:  romaneios.filter(r => r.status === 'Em Trânsito').length,
-        totalBonus:  bonificacoes.reduce((s, r) => s + (r.bonif?.valorTotal || 0), 0),
+        viagens:      romaneios.length,
+        finalizadas:  romaneios.filter(r => r.status === 'Finalizado').length,
+        emTransito:   romaneios.filter(r => r.status === 'Em Trânsito').length,
+        totalBonus:   bonificacoes.reduce((s, r) => s + (r.bonif?.valorTotal || 0), 0),
         litrosDiesel: abast.reduce((s, a) => s + Number(a.litros_diesel || 0), 0),
         gastoTotal:   abast.reduce((s, a) => s + Number(a.valor_total || 0), 0),
     }), [romaneios, bonificacoes, abast]);
 
-    // ── Postos — auto-fill ────────────────────────────────────────────────────
-    const handlePostoChange = (postoId) => {
+    // ── Preços: posto tem prioridade, senão usa config global do admin ────────
+    const getPreco = useCallback((postoId, tipo) => {
         const posto = postos.find(p => p.id === postoId);
+        if (tipo === 'diesel') return Number(posto?.preco_diesel || configAbast?.preco_diesel || 0);
+        if (tipo === 'arla')   return Number(posto?.preco_arla   || configAbast?.preco_arla   || 0);
+        return 0;
+    }, [postos, configAbast]);
+
+    const handlePostoChange = (postoId) => {
+        const precoDiesel = getPreco(postoId, 'diesel');
+        const precoArla   = getPreco(postoId, 'arla');
         setFormAbast(f => ({
             ...f, posto_id: postoId,
-            valor_diesel: posto?.preco_diesel && f.litros_diesel
-                ? (Number(f.litros_diesel) * Number(posto.preco_diesel)).toFixed(2) : f.valor_diesel,
-            valor_arla: posto?.preco_arla && f.litros_arla
-                ? (Number(f.litros_arla) * Number(posto.preco_arla)).toFixed(2) : f.valor_arla,
+            valor_diesel: precoDiesel && f.litros_diesel
+                ? (Number(f.litros_diesel) * precoDiesel).toFixed(2) : f.valor_diesel,
+            valor_arla: precoArla && f.litros_arla
+                ? (Number(f.litros_arla) * precoArla).toFixed(2) : f.valor_arla,
         }));
     };
+
     const handleLitros = (campo, valor) => {
-        const posto = postos.find(p => p.id === formAbast.posto_id);
+        const precoDiesel = getPreco(formAbast.posto_id, 'diesel');
+        const precoArla   = getPreco(formAbast.posto_id, 'arla');
         setFormAbast(f => {
             const n = { ...f, [campo]: valor };
-            if (campo === 'litros_diesel' && posto?.preco_diesel)
-                n.valor_diesel = valor ? (Number(valor) * Number(posto.preco_diesel)).toFixed(2) : '';
-            if (campo === 'litros_arla' && posto?.preco_arla)
-                n.valor_arla = valor ? (Number(valor) * Number(posto.preco_arla)).toFixed(2) : '';
+            if (campo === 'litros_diesel' && precoDiesel)
+                n.valor_diesel = valor ? (Number(valor) * precoDiesel).toFixed(2) : '';
+            if (campo === 'litros_arla' && precoArla)
+                n.valor_arla = valor ? (Number(valor) * precoArla).toFixed(2) : '';
             return n;
         });
     };
 
-    // ── Handlers ──────────────────────────────────────────────────────────────
+    // ── Handlers ─────────────────────────────────────────────────────────────
     const handleAbast = async () => {
-        if (!formAbast.veiculo_id || !formAbast.data_abastecimento) { showToast('Veículo e data são obrigatórios', 'error'); return; }
+        if (!formAbast.veiculo_id || !formAbast.data_abastecimento) {
+            showToast('Veículo e data são obrigatórios', 'error'); return;
+        }
         try {
             const payload = { ...formAbast, motorista_id: user.id };
             if (!payload.posto_id) delete payload.posto_id;
@@ -178,9 +174,7 @@ export default function MotoristaDashboard() {
             if (posto) payload.posto = posto.nome;
             await createAbastecimento(payload);
             showToast('Abastecimento registrado!', 'success');
-            setModalAbast(false);
-            setFormAbast({ veiculo_id: '', posto_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' });
-            load();
+            setModalAbast(false); setFormAbast(emptyAbast()); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
@@ -189,7 +183,10 @@ export default function MotoristaDashboard() {
         if (!file) return;
         if (file.size > 5 * 1024 * 1024) { showToast('Foto muito grande (máx 5MB)', 'error'); return; }
         const reader = new FileReader();
-        reader.onload = ev => { setFotoPreview(ev.target.result); setFormCheck(f => ({ ...f, foto_url: ev.target.result })); };
+        reader.onload = ev => {
+            setFotoPreview(ev.target.result);
+            setFormCheck(f => ({ ...f, foto_url: ev.target.result }));
+        };
         reader.readAsDataURL(file);
     };
 
@@ -199,9 +196,7 @@ export default function MotoristaDashboard() {
         try {
             await createChecklist({ ...formCheck, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
             showToast('Checklist enviado!', 'success');
-            setModalCheck(false); setFotoPreview(null);
-            setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
-            load();
+            setModalCheck(false); setFotoPreview(null); setFormCheck(emptyCheck()); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
@@ -222,15 +217,18 @@ export default function MotoristaDashboard() {
         showToast('Exportado!', 'success');
     };
 
-    // ── Tabs ──────────────────────────────────────────────────────────────────
+    // ── Tabs ─────────────────────────────────────────────────────────────────
     const TABS = [
-        { id: 'viagens',       label: 'Meus Romaneios',   icon: 'FileText' },
-        { id: 'viagens_admin', label: 'Viagens (Admin)',  icon: 'Truck' },
-        { id: 'abastecimentos',label: 'Abastecimentos',   icon: 'Fuel' },
-        { id: 'checklist',     label: 'Checklist',        icon: 'ClipboardCheck' },
-        { id: 'bonificacoes',  label: 'Bonificações',     icon: 'DollarSign' },
+        { id: 'viagens',        label: 'Meus Romaneios', icon: 'FileText' },
+        { id: 'abastecimentos', label: 'Abastecimentos', icon: 'Fuel' },
+        { id: 'checklist',      label: 'Checklist',      icon: 'ClipboardCheck' },
+        { id: 'bonificacoes',   label: 'Bonificações',   icon: 'DollarSign' },
     ];
     const tabAtual = TABS.find(t => t.id === tab);
+
+    // Helper: preço efetivo para exibir no modal
+    const precoDieselEfetivo = getPreco(formAbast.posto_id, 'diesel');
+    const precoArlaEfetivo   = getPreco(formAbast.posto_id, 'arla');
 
     return (
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
@@ -239,11 +237,10 @@ export default function MotoristaDashboard() {
                 <div className="max-w-screen-xl mx-auto">
                     <div className="flex">
 
-                        {/* ── Sidebar desktop (lg+) ── */}
+                        {/* ── Sidebar desktop ── */}
                         <aside className="hidden lg:flex flex-col flex-shrink-0 sticky top-[60px] h-[calc(100vh-60px)] overflow-y-auto border-r"
                             style={{ width: 210, borderColor: 'var(--color-border)', backgroundColor: 'var(--color-card)' }}>
                             <nav className="flex flex-col gap-1 p-3">
-                                {/* Perfil */}
                                 <div className="px-3 py-3 mb-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
                                     <div className="flex items-center gap-3">
                                         <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold text-base flex-shrink-0"
@@ -264,23 +261,16 @@ export default function MotoristaDashboard() {
                                             style={{ backgroundColor: ativo ? 'var(--color-primary)' : 'transparent', color: ativo ? '#fff' : 'var(--color-muted-foreground)' }}>
                                             <Icon name={t.icon} size={16} color={ativo ? '#fff' : 'currentColor'} />
                                             <span>{t.label}</span>
-                                            {t.id === 'viagens_admin' && viagensAdmin.length > 0 && (
-                                                <span className="ml-auto text-xs px-1.5 py-0.5 rounded-full font-bold"
-                                                    style={{ backgroundColor: ativo ? 'rgba(255,255,255,0.25)' : 'var(--color-primary)', color: '#fff' }}>
-                                                    {viagensAdmin.length}
-                                                </span>
-                                            )}
                                         </button>
                                     );
                                 })}
-                                {/* Período */}
                                 <div className="mt-4 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                     <p className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-muted-foreground)', fontSize: 10 }}>Período</p>
                                     <div className="flex flex-col gap-1 px-3">
                                         {PERIOD_OPTIONS.map(p => (
                                             <button key={p.days} onClick={() => setPeriod(p.days)}
                                                 className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors text-left"
-                                                style={period === p.days ? { backgroundColor: 'var(--color-primary)', color: '#fff' } : { color: 'var(--color-muted-foreground)', backgroundColor: 'transparent' }}>
+                                                style={period === p.days ? { backgroundColor: 'var(--color-primary)', color: '#fff' } : { color: 'var(--color-muted-foreground)' }}>
                                                 {p.label}
                                             </button>
                                         ))}
@@ -289,7 +279,7 @@ export default function MotoristaDashboard() {
                             </nav>
                         </aside>
 
-                        {/* ── Conteúdo principal ── */}
+                        {/* ── Conteúdo ── */}
                         <div className="flex-1 min-w-0 px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
                             <BreadcrumbTrail className="mb-4" />
 
@@ -308,7 +298,6 @@ export default function MotoristaDashboard() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    {/* Período mobile */}
                                     <div className="lg:hidden flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
                                         {PERIOD_OPTIONS.map(p => (
                                             <button key={p.days} onClick={() => setPeriod(p.days)}
@@ -326,12 +315,10 @@ export default function MotoristaDashboard() {
                                         <Icon name="FileDown" size={14} color="currentColor" />
                                         <span className="hidden sm:inline">Exportar</span>
                                     </button>
-                                    {/* Hamburger mobile */}
                                     <button onClick={() => setDrawerOpen(true)}
                                         className="lg:hidden flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50"
                                         style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
                                         <Icon name="Menu" size={16} color="currentColor" />
-                                        <span className="hidden sm:inline">{tabAtual?.label}</span>
                                     </button>
                                 </div>
                             </div>
@@ -339,9 +326,9 @@ export default function MotoristaDashboard() {
                             {/* KPIs */}
                             <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-5">
                                 {[
-                                    { l: 'Total Romaneios', v: totais.viagens,     i: 'FileText',    c: '#1D4ED8', bg: '#EFF6FF' },
-                                    { l: 'Finalizados',     v: totais.finalizadas, i: 'CheckCircle2',c: '#059669', bg: '#D1FAE5' },
-                                    { l: 'Em Trânsito',     v: totais.emTransito,  i: 'Navigation',  c: '#D97706', bg: '#FEF9C3' },
+                                    { l: 'Total Romaneios', v: totais.viagens,     i: 'FileText',     c: '#1D4ED8', bg: '#EFF6FF' },
+                                    { l: 'Finalizados',     v: totais.finalizadas, i: 'CheckCircle2', c: '#059669', bg: '#D1FAE5' },
+                                    { l: 'Em Trânsito',     v: totais.emTransito,  i: 'Navigation',   c: '#D97706', bg: '#FEF9C3' },
                                     { l: 'Bônus no Período',v: BRL(totais.totalBonus), i: 'DollarSign', c: '#7C3AED', bg: '#EDE9FE' },
                                 ].map(k => (
                                     <div key={k.l} className="bg-white rounded-xl border p-3 sm:p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
@@ -356,9 +343,9 @@ export default function MotoristaDashboard() {
                                 ))}
                             </div>
 
-                            {/* Quick actions — Abastecimento + Checklist */}
+                            {/* Quick actions */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-                                <button onClick={() => { setFormAbast({ veiculo_id: '', posto_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' }); setModalAbast(true); }}
+                                <button onClick={() => { setFormAbast(emptyAbast()); setModalAbast(true); }}
                                     className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all"
                                     style={{ borderColor: 'var(--color-border)' }}>
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#D1FAE5' }}>
@@ -369,7 +356,7 @@ export default function MotoristaDashboard() {
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Diesel + Arla</p>
                                     </div>
                                 </button>
-                                <button onClick={() => { setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' }); setFotoPreview(null); setModalCheck(true); }}
+                                <button onClick={() => { setFormCheck(emptyCheck()); setFotoPreview(null); setModalCheck(true); }}
                                     className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all"
                                     style={{ borderColor: 'var(--color-border)' }}>
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#EFF6FF' }}>
@@ -382,14 +369,14 @@ export default function MotoristaDashboard() {
                                 </button>
                             </div>
 
-                            {/* Conteúdo da aba */}
+                            {/* Conteúdo das abas */}
                             {loading ? (
                                 <div className="flex justify-center py-16">
                                     <div className="animate-spin h-8 w-8 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                                 </div>
                             ) : (
                                 <>
-                                    {/* ── Meus Romaneios ── */}
+                                    {/* Meus Romaneios */}
                                     {tab === 'viagens' && (
                                         <div className="flex flex-col gap-2">
                                             {romaneios.length === 0
@@ -420,45 +407,9 @@ export default function MotoristaDashboard() {
                                         </div>
                                     )}
 
-                                    {/* ── Viagens Admin ── */}
-                                    {tab === 'viagens_admin' && (
-                                        <div className="flex flex-col gap-2">
-                                            <div className="flex items-center gap-2 mb-1 p-3 rounded-xl" style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
-                                                <Icon name="Info" size={14} color="#1D4ED8" />
-                                                <p className="text-xs text-blue-700">Viagens lançadas pela administração com seu nome.</p>
-                                            </div>
-                                            {viagensAdmin.length === 0
-                                                ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem lançada pelo admin</div>
-                                                : viagensAdmin.map(v => {
-                                                    const sc = STATUS_VIAGEM[v.status] || STATUS_VIAGEM['Agendado'];
-                                                    return (
-                                                        <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                            <div className="flex items-start justify-between mb-2 gap-2">
-                                                                <div>
-                                                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                                                        <span className="font-bold font-data text-blue-700">{v.numero}</span>
-                                                                        <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{v.status}</span>
-                                                                    </div>
-                                                                    <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{v.destino || '—'}</p>
-                                                                </div>
-                                                                <div className="text-right flex-shrink-0">
-                                                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{FMT(v.data_saida)}</p>
-                                                                    {v.veiculo?.placa && <p className="text-xs font-data font-semibold mt-0.5 text-blue-700">{v.veiculo.placa}</p>}
-                                                                </div>
-                                                            </div>
-                                                            {v.toneladas && <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>{v.toneladas} ton</p>}
-                                                            {v.observacoes && <p className="text-xs mt-1.5 p-2 rounded-lg bg-amber-50 text-amber-700 border border-amber-100">{v.observacoes}</p>}
-                                                        </div>
-                                                    );
-                                                })
-                                            }
-                                        </div>
-                                    )}
-
-                                    {/* ── Abastecimentos ── */}
+                                    {/* Abastecimentos */}
                                     {tab === 'abastecimentos' && (
                                         <div className="flex flex-col gap-3">
-                                            {/* KPIs combustível */}
                                             <div className="grid grid-cols-2 gap-3 mb-2">
                                                 {[
                                                     { l: 'Diesel (L)', v: totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#1D4ED8', bg: '#EFF6FF', i: 'Fuel' },
@@ -487,12 +438,12 @@ export default function MotoristaDashboard() {
                                                         <div className="grid grid-cols-2 gap-2 text-xs">
                                                             {Number(a.litros_diesel||0) > 0 && (
                                                                 <div className="flex items-center gap-1.5 p-2 rounded-lg bg-blue-50">
-                                                                    <span className="text-blue-700">🛢️ {Number(a.litros_diesel).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}L · {BRL(a.valor_diesel)}</span>
+                                                                    <span className="text-blue-700">🛢️ {Number(a.litros_diesel).toLocaleString('pt-BR',{maximumFractionDigits:1})}L · {BRL(a.valor_diesel)}</span>
                                                                 </div>
                                                             )}
                                                             {Number(a.litros_arla||0) > 0 && (
                                                                 <div className="flex items-center gap-1.5 p-2 rounded-lg bg-emerald-50">
-                                                                    <span className="text-emerald-700">💧 {Number(a.litros_arla).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}L · {BRL(a.valor_arla)}</span>
+                                                                    <span className="text-emerald-700">💧 {Number(a.litros_arla).toLocaleString('pt-BR',{maximumFractionDigits:1})}L · {BRL(a.valor_arla)}</span>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -502,7 +453,7 @@ export default function MotoristaDashboard() {
                                         </div>
                                     )}
 
-                                    {/* ── Checklist ── */}
+                                    {/* Checklist */}
                                     {tab === 'checklist' && (
                                         <div className="flex flex-col gap-4">
                                             {checklists.length === 0
@@ -517,24 +468,20 @@ export default function MotoristaDashboard() {
                                                                     <p className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.veiculo?.placa || '—'}</p>
                                                                     <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Semana de {c.semana_ref ? FMT(c.semana_ref) : '—'}</p>
                                                                 </div>
-                                                                <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                                                                    {c.aprovado
-                                                                        ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"><Icon name="CheckCircle2" size={11} />Aprovado</span>
-                                                                        : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Icon name="Clock" size={11} />Pendente</span>
-                                                                    }
-                                                                </div>
+                                                                {c.aprovado
+                                                                    ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"><Icon name="CheckCircle2" size={11} />Aprovado</span>
+                                                                    : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Icon name="Clock" size={11} />Pendente</span>
+                                                                }
                                                             </div>
                                                             <div className="flex items-center justify-between text-xs mb-1">
                                                                 <span style={{ color: 'var(--color-muted-foreground)' }}>Itens OK</span>
                                                                 <span className="font-medium">{ok}/{CHECKLIST_ITENS.length}</span>
                                                             </div>
                                                             <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                                                                <div className="h-full rounded-full" style={{ width: `${(ok / CHECKLIST_ITENS.length) * 100}%`, backgroundColor: ok === CHECKLIST_ITENS.length ? '#059669' : '#D97706' }} />
+                                                                <div className="h-full rounded-full" style={{ width: `${(ok/CHECKLIST_ITENS.length)*100}%`, backgroundColor: ok===CHECKLIST_ITENS.length ? '#059669' : '#D97706' }} />
                                                             </div>
                                                             {c.obs_manutencao && (
-                                                                <p className="text-xs mt-2 p-2 rounded-lg bg-orange-50 text-orange-700 border border-orange-100">
-                                                                    🔧 {c.obs_manutencao}
-                                                                </p>
+                                                                <p className="text-xs mt-2 p-2 rounded-lg bg-orange-50 text-orange-700 border border-orange-100">🔧 {c.obs_manutencao}</p>
                                                             )}
                                                         </div>
                                                     );
@@ -543,7 +490,7 @@ export default function MotoristaDashboard() {
                                         </div>
                                     )}
 
-                                    {/* ── Bonificações ── */}
+                                    {/* Bonificações */}
                                     {tab === 'bonificacoes' && (
                                         <div className="flex flex-col gap-4">
                                             <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
@@ -588,7 +535,7 @@ export default function MotoristaDashboard() {
                 </div>
             </main>
 
-            {/* ── Drawer mobile (< lg) ── */}
+            {/* Drawer mobile */}
             {drawerOpen && (
                 <>
                     <div className="fixed inset-0 z-40 lg:hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={() => setDrawerOpen(false)} />
@@ -619,12 +566,6 @@ export default function MotoristaDashboard() {
                                         style={{ backgroundColor: ativo ? 'var(--color-primary)' : 'transparent', color: ativo ? '#fff' : 'var(--color-muted-foreground)' }}>
                                         <Icon name={t.icon} size={18} color={ativo ? '#fff' : 'currentColor'} />
                                         <span>{t.label}</span>
-                                        {t.id === 'viagens_admin' && viagensAdmin.length > 0 && (
-                                            <span className="ml-auto text-xs px-1.5 py-0.5 rounded-full font-bold"
-                                                style={{ backgroundColor: ativo ? 'rgba(255,255,255,0.25)' : 'var(--color-primary)', color: '#fff' }}>
-                                                {viagensAdmin.length}
-                                            </span>
-                                        )}
                                     </button>
                                 );
                             })}
@@ -633,7 +574,7 @@ export default function MotoristaDashboard() {
                 </>
             )}
 
-            {/* ── Modal Abastecimento ── */}
+            {/* Modal Abastecimento */}
             {modalAbast && (
                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
                     style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
@@ -670,33 +611,49 @@ export default function MotoristaDashboard() {
                                     {postos.map(p => (
                                         <option key={p.id} value={p.id}>
                                             {p.nome}{p.cidade ? ` — ${p.cidade}` : ''}
-                                            {p.preco_diesel ? ` · D:R$${Number(p.preco_diesel).toFixed(3)}` : ''}
-                                            {p.preco_arla   ? ` · A:R$${Number(p.preco_arla).toFixed(3)}` : ''}
                                         </option>
                                     ))}
                                 </select>
-                                {formAbast.posto_id && (() => {
-                                    const p = postos.find(x => x.id === formAbast.posto_id);
-                                    return (p?.preco_diesel || p?.preco_arla) ? (
-                                        <div className="flex gap-3 mt-1 text-xs">
-                                            {p.preco_diesel && <span className="text-blue-600 font-medium">🛢️ R${Number(p.preco_diesel).toFixed(3)}/L</span>}
-                                            {p.preco_arla   && <span className="text-emerald-600 font-medium">💧 R${Number(p.preco_arla).toFixed(3)}/L</span>}
-                                        </div>
-                                    ) : null;
-                                })()}
+                                {/* Mostra preço efetivo (posto ou config global) */}
+                                <div className="flex gap-3 mt-1 text-xs">
+                                    {precoDieselEfetivo > 0 && (
+                                        <span className="text-blue-600 font-medium">
+                                            🛢️ R${precoDieselEfetivo.toFixed(3)}/L
+                                            {!postos.find(p => p.id === formAbast.posto_id)?.preco_diesel && configAbast?.preco_diesel > 0 && (
+                                                <span className="text-gray-400 ml-1">(padrão)</span>
+                                            )}
+                                        </span>
+                                    )}
+                                    {precoArlaEfetivo > 0 && (
+                                        <span className="text-emerald-600 font-medium">
+                                            💧 R${precoArlaEfetivo.toFixed(3)}/L
+                                            {!postos.find(p => p.id === formAbast.posto_id)?.preco_arla && configAbast?.preco_arla > 0 && (
+                                                <span className="text-gray-400 ml-1">(padrão)</span>
+                                            )}
+                                        </span>
+                                    )}
+                                </div>
                             </Field>
                             <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
                                 <p className="text-xs font-semibold text-blue-700 mb-2">🛢️ Diesel</p>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <Field label="Litros"><input type="number" step="0.01" value={formAbast.litros_diesel} onChange={e => handleLitros('litros_diesel', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
-                                    <Field label="Valor R$"><input type="number" step="0.01" value={formAbast.valor_diesel} onChange={e => setFormAbast(f => ({ ...f, valor_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
+                                    <Field label="Litros">
+                                        <input type="number" step="0.01" value={formAbast.litros_diesel} onChange={e => handleLitros('litros_diesel', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                    </Field>
+                                    <Field label="Valor R$">
+                                        <input type="number" step="0.01" value={formAbast.valor_diesel} onChange={e => setFormAbast(f => ({ ...f, valor_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                    </Field>
                                 </div>
                             </div>
                             <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
                                 <p className="text-xs font-semibold text-emerald-700 mb-2">💧 ARLA 32</p>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <Field label="Litros"><input type="number" step="0.01" value={formAbast.litros_arla} onChange={e => handleLitros('litros_arla', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
-                                    <Field label="Valor R$"><input type="number" step="0.01" value={formAbast.valor_arla} onChange={e => setFormAbast(f => ({ ...f, valor_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
+                                    <Field label="Litros">
+                                        <input type="number" step="0.01" value={formAbast.litros_arla} onChange={e => handleLitros('litros_arla', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                    </Field>
+                                    <Field label="Valor R$">
+                                        <input type="number" step="0.01" value={formAbast.valor_arla} onChange={e => setFormAbast(f => ({ ...f, valor_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                    </Field>
                                 </div>
                             </div>
                             <div className="sm:col-span-2">
@@ -715,7 +672,7 @@ export default function MotoristaDashboard() {
                 </div>
             )}
 
-            {/* ── Modal Checklist ── */}
+            {/* Modal Checklist */}
             {modalCheck && (
                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
                     style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
@@ -757,7 +714,6 @@ export default function MotoristaDashboard() {
                             <Field label="Necessidades / peças">
                                 <textarea value={formCheck.necessidades} onChange={e => setFormCheck(f => ({ ...f, necessidades: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Pneus, peças, etc..." />
                             </Field>
-                            {/* Foto */}
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>📷 Foto do problema (opcional)</label>
                                 <div className="flex items-center gap-2">
