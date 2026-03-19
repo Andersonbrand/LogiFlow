@@ -1490,18 +1490,20 @@ function TabDespesasExtras({ isAdmin }) {
     const barcodeInputRef = useRef(null);
     const [barcodeMode, setBarcodeMode] = useState(false);
     const [barcodeBuffer, setBarcodeBuffer] = useState('');
+    const [loadingNFe, setLoadingNFe] = useState(false);
 
     const emptyForm = () => ({
         veiculo_id: '', categoria: 'Pneus', descricao: '', valor: '',
-        data_despesa: new Date().toISOString().split('T')[0], nota_fiscal: '', observacoes: '',
+        data_despesa: new Date().toISOString().split('T')[0], nota_fiscal: '',
+        fornecedor: '', observacoes: '',
         // item 8: pagamento
-        forma_pagamento: 'a_vista',       // 'a_vista' | 'a_prazo'
-        tipo_pagamento: 'pix',            // a_vista: 'transferencia_m'|'pix'|'dinheiro'  a_prazo: 'boleto'|'permuta'|'cheque'
-        comprovante_url: '',              // a_vista: anexo comprovante
-        boletos: [],                      // [{vencimento, valor, pago}]
+        forma_pagamento: 'a_vista',
+        tipo_pagamento: 'pix',
+        comprovante_url: '',
+        boletos: [],
         permuta_obs: '',
         permuta_doc_url: '',
-        cheques: [],                      // [{numero, banco, valor, vencimento}]
+        cheques: [],
         // item 9: itens da NF
         nf_itens: [],
     });
@@ -1543,32 +1545,36 @@ function TabDespesasExtras({ isAdmin }) {
                 const parser = new DOMParser();
                 const xml = parser.parseFromString(ev.target.result, 'application/xml');
                 const itens = [];
-                // Tenta pegar dados básicos da NF
-                const nNF = xml.querySelector('nNF')?.textContent || '';
+                // Dados básicos da NF
+                const nNF   = xml.querySelector('nNF')?.textContent || '';
                 const dhEmi = xml.querySelector('dhEmi')?.textContent?.slice(0, 10) || '';
-                const vnf = xml.querySelector('vNF')?.textContent || '';
-                const emit = xml.querySelector('emit xNome')?.textContent || xml.querySelector('xNome')?.textContent || '';
+                const vnf   = xml.querySelector('vNF')?.textContent || '';
+                // Emitente (fornecedor)
+                const emitNome  = xml.querySelector('emit xNome')?.textContent || '';
+                const emitCNPJ  = xml.querySelector('emit CNPJ')?.textContent || '';
+                const fornecedor = emitNome || (emitCNPJ ? `CNPJ ${emitCNPJ}` : '');
                 // Itens do produto
                 const prods = xml.querySelectorAll('det prod');
                 prods.forEach((p) => {
                     itens.push({
-                        codigo: p.querySelector('cProd')?.textContent || '',
-                        descricao: p.querySelector('xProd')?.textContent || '',
-                        quantidade: p.querySelector('qCom')?.textContent || '',
-                        unidade: p.querySelector('uCom')?.textContent || '',
-                        valor_unit: p.querySelector('vUnCom')?.textContent || '',
-                        valor_total: p.querySelector('vProd')?.textContent || '',
+                        codigo:      p.querySelector('cProd')?.textContent  || '',
+                        descricao:   p.querySelector('xProd')?.textContent  || '',
+                        quantidade:  p.querySelector('qCom')?.textContent   || '',
+                        unidade:     p.querySelector('uCom')?.textContent   || '',
+                        valor_unit:  p.querySelector('vUnCom')?.textContent || '',
+                        valor_total: p.querySelector('vProd')?.textContent  || '',
                     });
                 });
                 setForm(f => ({
                     ...f,
-                    nota_fiscal: nNF || f.nota_fiscal,
-                    valor: vnf || f.valor,
-                    data_despesa: dhEmi || f.data_despesa,
-                    descricao: emit ? `Compra — ${emit}` : f.descricao,
+                    nota_fiscal:  nNF       || f.nota_fiscal,
+                    valor:        vnf       || f.valor,
+                    data_despesa: dhEmi     || f.data_despesa,
+                    fornecedor:   fornecedor || f.fornecedor,
+                    descricao:    (fornecedor && !f.descricao) ? `Compra — ${fornecedor}` : f.descricao,
                     nf_itens: itens,
                 }));
-                showToast(`NF importada: ${itens.length} item(s) encontrado(s)`, 'success');
+                showToast(`NF importada: ${fornecedor || 'emissor não identificado'} · ${itens.length} item(s)`, 'success');
             } catch {
                 showToast('Erro ao ler XML. Verifique o arquivo.', 'error');
             }
@@ -1581,29 +1587,88 @@ function TabDespesasExtras({ isAdmin }) {
     // Leitores a laser digitam os caracteres muito rápido e encerram com Enter.
     // Capturamos o buffer e preenchemos o campo da NF automaticamente.
     const handleBarcodeInput = (e) => {
-        const val = e.target.value;
-        setBarcodeBuffer(val);
+        setBarcodeBuffer(e.target.value);
     };
-    const handleBarcodeKeyDown = (e) => {
+
+    // Busca dados completos da NF-e pela chave de acesso (44 dígitos)
+    // usando a API pública da ReceitaWS / NFe.io / nfe.fazenda.gov.br
+    const buscarDadosNFe = async (chave) => {
+        setLoadingNFe(true);
+        try {
+            // Extrai campos da chave de acesso NF-e (44 dígitos):
+            // cUF(2) + AAMM(4) + CNPJ(14) + mod(2) + serie(3) + nNF(9) + tpEmis(1) + cNF(8) + cDV(1)
+            const nNF = chave.substring(25, 34).replace(/^0+/, '') || chave.substring(25, 34);
+            const cnpjEmit = chave.substring(6, 20);
+            const serie = chave.substring(22, 25).replace(/^0+/, '') || '1';
+
+            // Tenta buscar via API da ReceitaWS (CORS-friendly, gratuita)
+            let dados = null;
+            try {
+                const resp = await fetch(`https://receitaws.com.br/v1/cnpj/${cnpjEmit}`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (resp.ok) {
+                    const json = await resp.json();
+                    if (json && json.nome) {
+                        dados = { fornecedor: json.nome, cnpj: cnpjEmit };
+                    }
+                }
+            } catch { /* silencioso — tenta próxima fonte */ }
+
+            // Monta os dados extraídos da própria chave (sempre disponíveis)
+            const aamm = chave.substring(2, 6);
+            const ano  = '20' + aamm.substring(0, 2);
+            const mes  = aamm.substring(2, 4);
+            const dataEmissao = `${ano}-${mes}-01`; // aproximada (dia não está na chave)
+
+            setForm(f => ({
+                ...f,
+                nota_fiscal: nNF,
+                data_despesa: dataEmissao,
+                fornecedor: dados?.fornecedor
+                    ? dados.fornecedor
+                    : f.fornecedor || `CNPJ ${cnpjEmit.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')}`,
+                descricao: f.descricao || `NF ${nNF} · Série ${serie}`,
+            }));
+
+            const msg = dados?.fornecedor
+                ? `✅ NF ${nNF} — ${dados.fornecedor}`
+                : `NF ${nNF} lida. Consulte o XML para dados completos.`;
+            showToast(msg, dados?.fornecedor ? 'success' : 'info');
+
+        } catch (err) {
+            // Fallback mínimo: preenche só o número
+            const nNF = chave.length === 44
+                ? chave.substring(25, 34).replace(/^0+/, '') || chave
+                : chave;
+            setForm(f => ({ ...f, nota_fiscal: nNF }));
+            showToast(`NF ${nNF} lida (sem dados adicionais)`, 'info');
+        } finally {
+            setLoadingNFe(false);
+        }
+    };
+
+    const handleBarcodeKeyDown = async (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
             const codigo = barcodeBuffer.trim();
             if (!codigo) return;
-            // Extrai número da NF do código de barras (geralmente posições 25–34 em barcode 44 dígitos NF-e)
-            let nfNumero = codigo;
-            if (codigo.length === 44) {
-                // Chave de acesso NF-e: posições 25-34 (0-indexed) = nNF
-                nfNumero = codigo.substring(25, 34).replace(/^0+/, '') || codigo;
-            } else if (codigo.length > 10) {
-                // Outros formatos: usa o código inteiro como número
-                nfNumero = codigo;
-            }
-            setForm(f => ({ ...f, nota_fiscal: nfNumero }));
             setBarcodeBuffer('');
             setBarcodeMode(false);
-            showToast(`Código lido: NF ${nfNumero}`, 'success');
-            // Foca no próximo campo
+
+            if (codigo.length === 44 && /^\d{44}$/.test(codigo)) {
+                // Chave de acesso completa → consulta SEFAZ/ReceitaWS
+                await buscarDadosNFe(codigo);
+            } else {
+                // Código curto ou formato desconhecido → só número
+                setForm(f => ({ ...f, nota_fiscal: codigo }));
+                showToast(`Código lido: ${codigo}`, 'success');
+            }
             setTimeout(() => document.getElementById('despesa-valor')?.focus(), 100);
+        }
+        if (e.key === 'Escape') {
+            setBarcodeMode(false);
+            setBarcodeBuffer('');
         }
     };
 
@@ -1656,14 +1721,15 @@ function TabDespesasExtras({ isAdmin }) {
         if (!despesas.length) { showToast('Nenhuma despesa no período selecionado.', 'error'); return; }
         const rows = despesas.map(d => ({
             'Data': FMT_DATE(d.data_despesa), 'Placa': d.veiculo?.placa || '—',
-            'Categoria': d.categoria, 'Descrição': d.descricao || '',
-            'NF': d.nota_fiscal || '', 'Forma Pgto': d.forma_pagamento === 'a_vista' ? 'À Vista' : 'A Prazo',
+            'Categoria': d.categoria, 'Fornecedor': d.fornecedor || '',
+            'Descrição': d.descricao || '', 'NF': d.nota_fiscal || '',
+            'Forma Pgto': d.forma_pagamento === 'a_vista' ? 'À Vista' : 'A Prazo',
             'Tipo Pgto': d.tipo_pagamento || '', 'Valor (R$)': Number(d.valor || 0),
             'Observações': d.observacoes || '',
         }));
         rows.push({ 'Data': 'TOTAL', 'Valor (R$)': totalPeriodo });
         const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [12,12,22,30,14,12,14,14,30].map(w => ({ wch: w }));
+        ws['!cols'] = [12,12,22,28,28,12,12,14,14,30].map(w => ({ wch: w }));
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Despesas');
         XLSX.writeFile(wb, `despesas_extras_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
@@ -1756,18 +1822,19 @@ function TabDespesasExtras({ isAdmin }) {
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-                    <table className="w-full text-sm min-w-[640px]">
+                    <table className="w-full text-sm min-w-[740px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Data','Placa','Categoria','Descrição','NF','Pagamento','Valor',''].map(h => <th key={h} className="px-3 py-3 text-left font-medium">{h}</th>)}</tr>
+                            <tr>{['Data','Placa','Categoria','Fornecedor','Descrição','NF','Pagamento','Valor',''].map(h => <th key={h} className="px-3 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {despesas.length === 0 ? <tr><td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma despesa registrada</td></tr>
+                            {despesas.length === 0 ? <tr><td colSpan={9} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma despesa registrada</td></tr>
                             : despesas.map((d, i) => (
                                 <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(d.data_despesa)}</td>
                                     <td className="px-3 py-3 font-data">{d.veiculo?.placa || '—'}</td>
                                     <td className="px-3 py-3"><span className="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700 font-medium">{d.categoria}</span></td>
-                                    <td className="px-3 py-3 text-xs max-w-[150px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
+                                    <td className="px-3 py-3 text-xs max-w-[130px] truncate font-medium" style={{ color: 'var(--color-text-primary)' }}>{d.fornecedor || '—'}</td>
+                                    <td className="px-3 py-3 text-xs max-w-[130px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
                                     <td className="px-3 py-3 text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.nota_fiscal || '—'}</td>
                                     <td className="px-3 py-3">{pgBadge(d)}</td>
                                     <td className="px-3 py-3 font-data font-semibold text-red-600">{BRL(d.valor)}</td>
@@ -1809,11 +1876,11 @@ function TabDespesasExtras({ isAdmin }) {
                                     <Icon name="ScanLine" size={12} /> {barcodeMode ? 'Aguardando leitura...' : 'Ler código de barras'}
                                 </button>
                             </div>
-                            {/* Campo captura do leitor laser — aparece só no modo barcode */}
+                            {/* Campo captura do leitor laser */}
                             {barcodeMode && (
                                 <div className="mt-2">
                                     <p className="text-xs text-blue-600 mb-1.5">
-                                        🔫 Aponte o leitor para o código de barras da NF impressa. O campo será preenchido automaticamente.
+                                        🔫 Aponte o leitor para o código de barras da NF impressa. Fornecedor, valor e data serão preenchidos automaticamente.
                                     </p>
                                     <input
                                         ref={barcodeInputRef}
@@ -1823,13 +1890,19 @@ function TabDespesasExtras({ isAdmin }) {
                                         onKeyDown={handleBarcodeKeyDown}
                                         className={inputCls}
                                         style={{ ...inputStyle, borderColor: '#3B82F6', boxShadow: '0 0 0 3px rgba(59,130,246,0.15)' }}
-                                        placeholder="Aguardando leitura do scanner... (ou digite e pressione Enter)"
+                                        placeholder="Aguardando leitura do scanner..."
                                         autoFocus
                                         autoComplete="off"
+                                        disabled={loadingNFe}
                                     />
-                                    <p className="text-xs text-blue-500 mt-1">Pressione Esc para cancelar</p>
+                                    {loadingNFe && (
+                                        <div className="flex items-center gap-2 mt-2 text-xs text-blue-600">
+                                            <div className="animate-spin h-3 w-3 rounded-full border-2 border-blue-600" style={{ borderTopColor: 'transparent' }} />
+                                            Consultando dados da NF na SEFAZ...
+                                        </div>
+                                    )}
                                     <button type="button" onClick={() => { setBarcodeMode(false); setBarcodeBuffer(''); }}
-                                        className="text-xs text-blue-600 underline mt-1">Cancelar</button>
+                                        className="text-xs text-blue-600 underline mt-1">Cancelar (Esc)</button>
                                 </div>
                             )}
                             {form.nf_itens?.length > 0 && (
@@ -1873,12 +1946,17 @@ function TabDespesasExtras({ isAdmin }) {
                             <Field label="Valor (R$)" required>
                                 <input id="despesa-valor" type="number" step="0.01" min="0" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
                             </Field>
-                            <Field label="Descrição">
-                                <input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 4 pneus traseiros Bridgestone" />
+                            <Field label="Fornecedor">
+                                <input value={form.fornecedor||''} onChange={e => setForm(f => ({ ...f, fornecedor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: Auto Peças Silva Ltda" />
                             </Field>
                             <Field label="Nº Nota Fiscal">
                                 <input value={form.nota_fiscal} onChange={e => setForm(f => ({ ...f, nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 12345" />
                             </Field>
+                            <div className="sm:col-span-2">
+                                <Field label="Descrição">
+                                    <input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 4 pneus traseiros Bridgestone" />
+                                </Field>
+                            </div>
                         </div>
 
                         {/* item 8: forma de pagamento */}

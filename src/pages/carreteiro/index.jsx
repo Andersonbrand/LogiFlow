@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -97,7 +97,21 @@ export default function CarreteiroDashboard() {
     const [modalAbast, setModalAbast]   = useState(false);
     const [modalCheck, setModalCheck]   = useState(false);
     const [formAbast, setFormAbast]     = useState({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' });
-    const [formCheck, setFormCheck]     = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '' });
+    const [formCheck, setFormCheck]     = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
+    const [fotoPreview, setFotoPreview] = useState(null);
+    const fotoRef = useRef(null);
+
+    const handleFotoCheck = (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) { showToast('Foto muito grande (máx 5MB)', 'error'); return; }
+        const reader = new FileReader();
+        reader.onload = ev => {
+            setFotoPreview(ev.target.result);
+            setFormCheck(f => ({ ...f, foto_url: ev.target.result }));
+        };
+        reader.readAsDataURL(file);
+    };
 
     const load = useCallback(async () => {
         if (!user?.id) return;
@@ -175,6 +189,8 @@ export default function CarreteiroDashboard() {
             await createChecklist({ ...formCheck, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
             showToast('Checklist enviado para análise!', 'success');
             setModalCheck(false);
+            setFotoPreview(null);
+            setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -660,16 +676,17 @@ export default function CarreteiroDashboard() {
                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
                     style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                     onClick={e => e.target === e.currentTarget && setModalCheck(false)}>
-                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl"
+                        style={{ maxHeight: '95dvh', overflowY: 'auto' }}>
                         <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
-                        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="flex items-center justify-between p-5 border-b sticky top-0 bg-white z-10" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
                                     <Icon name="ClipboardCheck" size={18} color="#1D4ED8" />
                                 </div>
                                 <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>Checklist Semanal</h2>
                             </div>
-                            <button onClick={() => setModalCheck(false)} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
+                            <button onClick={() => { setModalCheck(false); setFotoPreview(null); }} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
                         </div>
                         <div className="p-5 space-y-4">
                             <Field label="Veículo" required>
@@ -678,6 +695,42 @@ export default function CarreteiroDashboard() {
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </select>
                             </Field>
+
+                            {/* Foto — topo do form, destaque visual */}
+                            <div className="rounded-xl border-2 border-dashed p-4"
+                                style={{ borderColor: fotoPreview ? '#059669' : '#93C5FD', backgroundColor: fotoPreview ? '#F0FDF4' : '#EFF6FF' }}>
+                                <p className="text-xs font-semibold mb-3 flex items-center gap-1.5"
+                                    style={{ color: fotoPreview ? '#065F46' : '#1D4ED8' }}>
+                                    <Icon name="Camera" size={14} color={fotoPreview ? '#059669' : '#1D4ED8'} />
+                                    {fotoPreview ? '✅ Foto anexada' : '📷 Foto do problema (opcional)'}
+                                </p>
+                                {fotoPreview ? (
+                                    <div className="flex flex-col gap-2">
+                                        <img src={fotoPreview} alt="Preview" className="rounded-xl border w-full max-h-48 object-cover" style={{ borderColor: '#BBF7D0' }} />
+                                        <div className="flex gap-2">
+                                            <button type="button" onClick={() => fotoRef.current?.click()}
+                                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white border flex-1 justify-center"
+                                                style={{ borderColor: '#BBF7D0', color: '#065F46' }}>
+                                                <Icon name="RefreshCw" size={13} /> Trocar foto
+                                            </button>
+                                            <button type="button" onClick={() => { setFotoPreview(null); setFormCheck(f => ({ ...f, foto_url: '' })); }}
+                                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-red-600 bg-white border border-red-200">
+                                                <Icon name="Trash2" size={13} /> Remover
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button type="button" onClick={() => fotoRef.current?.click()}
+                                        className="w-full flex flex-col items-center gap-2 py-5 rounded-xl text-sm font-medium transition-colors"
+                                        style={{ backgroundColor: 'white', border: '1px solid #BFDBFE', color: '#1D4ED8' }}>
+                                        <Icon name="Camera" size={28} color="#1D4ED8" />
+                                        <span>Tirar foto ou escolher da galeria</span>
+                                        <span className="text-xs font-normal" style={{ color: '#93C5FD' }}>Toque para abrir a câmera</span>
+                                    </button>
+                                )}
+                                <input ref={fotoRef} type="file" accept="image/*" capture="environment" onChange={handleFotoCheck} className="hidden" />
+                            </div>
+
                             <div>
                                 <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>Itens verificados</p>
                                 <div className="grid grid-cols-1 gap-2">
@@ -694,7 +747,7 @@ export default function CarreteiroDashboard() {
                             <Field label="Observações livres"><textarea value={formCheck.observacoes_livres} onChange={e => setFormCheck(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 pt-0 sm:justify-end">
-                            <button onClick={() => setModalCheck(false)} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <button onClick={() => { setModalCheck(false); setFotoPreview(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <Button onClick={handleCheck} size="sm" iconName="Send">Enviar</Button>
                         </div>
                     </div>

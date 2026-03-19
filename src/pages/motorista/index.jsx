@@ -677,9 +677,11 @@ export default function MotoristaDashboard() {
                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
                     style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                     onClick={e => e.target === e.currentTarget && setModalCheck(false)}>
-                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl"
+                        style={{ maxHeight: '95dvh', overflowY: 'auto' }}>
                         <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
-                        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                        {/* Header fixo no topo */}
+                        <div className="flex items-center justify-between p-5 border-b sticky top-0 bg-white z-10" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50">
                                     <Icon name="ClipboardCheck" size={18} color="#1D4ED8" />
@@ -697,6 +699,42 @@ export default function MotoristaDashboard() {
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </select>
                             </Field>
+
+                            {/* Foto — logo no topo, destaque visual, antes dos campos de texto */}
+                            <div className="rounded-xl border-2 border-dashed p-4"
+                                style={{ borderColor: fotoPreview ? '#059669' : '#93C5FD', backgroundColor: fotoPreview ? '#F0FDF4' : '#EFF6FF' }}>
+                                <p className="text-xs font-semibold mb-3 flex items-center gap-1.5"
+                                    style={{ color: fotoPreview ? '#065F46' : '#1D4ED8' }}>
+                                    <Icon name="Camera" size={14} color={fotoPreview ? '#059669' : '#1D4ED8'} />
+                                    {fotoPreview ? '✅ Foto anexada' : '📷 Foto do problema (opcional)'}
+                                </p>
+                                {fotoPreview ? (
+                                    <div className="flex flex-col gap-2">
+                                        <img src={fotoPreview} alt="Preview" className="rounded-xl border w-full max-h-48 object-cover" style={{ borderColor: '#BBF7D0' }} />
+                                        <div className="flex gap-2">
+                                            <button type="button" onClick={() => fotoRef.current?.click()}
+                                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white border flex-1 justify-center"
+                                                style={{ borderColor: '#BBF7D0', color: '#065F46' }}>
+                                                <Icon name="RefreshCw" size={13} /> Trocar foto
+                                            </button>
+                                            <button type="button" onClick={() => { setFotoPreview(null); setFormCheck(f => ({ ...f, foto_url: '' })); }}
+                                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-red-600 bg-white border border-red-200">
+                                                <Icon name="Trash2" size={13} /> Remover
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button type="button" onClick={() => fotoRef.current?.click()}
+                                        className="w-full flex flex-col items-center gap-2 py-5 rounded-xl text-sm font-medium transition-colors"
+                                        style={{ backgroundColor: 'white', border: '1px solid #BFDBFE', color: '#1D4ED8' }}>
+                                        <Icon name="Camera" size={28} color="#1D4ED8" />
+                                        <span>Tirar foto ou escolher da galeria</span>
+                                        <span className="text-xs font-normal" style={{ color: '#93C5FD' }}>Toque para abrir a câmera</span>
+                                    </button>
+                                )}
+                                <input ref={fotoRef} type="file" accept="image/*" capture="environment" onChange={handleFoto} className="hidden" />
+                            </div>
+
                             <div>
                                 <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>Itens verificados</p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -714,17 +752,6 @@ export default function MotoristaDashboard() {
                             <Field label="Necessidades / peças">
                                 <textarea value={formCheck.necessidades} onChange={e => setFormCheck(f => ({ ...f, necessidades: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Pneus, peças, etc..." />
                             </Field>
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>📷 Foto do problema (opcional)</label>
-                                <div className="flex items-center gap-2">
-                                    <button type="button" onClick={() => fotoRef.current?.click()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>
-                                        <Icon name="Camera" size={13} /> {fotoPreview ? 'Trocar foto' : 'Tirar / Anexar foto'}
-                                    </button>
-                                    {fotoPreview && <button type="button" onClick={() => { setFotoPreview(null); setFormCheck(f => ({ ...f, foto_url: '' })); }} className="text-xs text-red-500">Remover</button>}
-                                    <input ref={fotoRef} type="file" accept="image/*" capture="environment" onChange={handleFoto} className="hidden" />
-                                </div>
-                                {fotoPreview && <img src={fotoPreview} alt="Preview" className="mt-2 rounded-lg border max-h-40 object-cover" style={{ borderColor: 'var(--color-border)' }} />}
-                            </div>
                             <Field label="Observações livres">
                                 <textarea value={formCheck.observacoes_livres} onChange={e => setFormCheck(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
                             </Field>
