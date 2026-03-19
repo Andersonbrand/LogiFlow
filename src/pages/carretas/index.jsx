@@ -61,11 +61,11 @@ function StatusBadge({ status }) {
 
 function ModalOverlay({ children, onClose }) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)', paddingTop: '68px' }}
             onClick={e => e.target === e.currentTarget && onClose()}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col"
-                style={{ maxHeight: '95dvh' }}>
+                style={{ maxHeight: 'calc(100dvh - 76px)' }}>
                 {children}
             </div>
         </div>
@@ -4265,9 +4265,9 @@ function TabRomaneioCarreta({ isAdmin, profile }) {
 
             {/* Modal criar/editar */}
             {modal && isAdmin && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)', paddingTop: '68px' }}
                     onClick={e => e.target === e.currentTarget && setModal(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col" style={{ maxHeight: '95dvh' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col" style={{ maxHeight: 'calc(100dvh - 76px)' }}>
                         <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
@@ -4302,7 +4302,12 @@ function TabRomaneioCarreta({ isAdmin, profile }) {
                                     </select>
                                 </Field>
                                 <Field label="Empresa">
-                                    <input value={form.empresa} onChange={e => setForm(f => ({ ...f, empresa: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: Comercial Araguaia" />
+                                    <select value={form.empresa} onChange={e => setForm(f => ({ ...f, empresa: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione a empresa...</option>
+                                        <option value="Comercial Araguaia">Comercial Araguaia</option>
+                                        <option value="Aços Confiance">Aços Confiance</option>
+                                        <option value="Confiance">Confiance</option>
+                                    </select>
                                 </Field>
                                 <Field label="Destino" required>
                                     <input value={form.destino} onChange={e => setForm(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Cidade de destino" />
@@ -4370,15 +4375,39 @@ function TabRomaneioCarreta({ isAdmin, profile }) {
                                         <div className="sm:col-span-2">
                                             <select value={novoItem.material_id} onChange={e => {
                                                 const mat = materials.find(m => m.id === e.target.value);
-                                                setNovoItem(n => ({ ...n, material_id: e.target.value, descricao: mat?.nome || n.descricao, unidade: mat?.unidade || n.unidade }));
+                                                const qtd = Number(novoItem.quantidade) || 0;
+                                                const pesoCalc = mat?.peso && qtd > 0 ? (qtd * Number(mat.peso)).toFixed(3) : '';
+                                                setNovoItem(n => ({ ...n, material_id: e.target.value, descricao: mat?.nome || n.descricao, unidade: mat?.unidade || n.unidade, peso_total: pesoCalc }));
                                             }} className={inputCls} style={inputStyle}>
                                                 <option value="">Selecione o material...</option>
                                                 {materials.map(m => <option key={m.id} value={m.id}>{m.nome} ({m.unidade})</option>)}
                                             </select>
                                         </div>
-                                        <input type="number" step="0.001" value={novoItem.quantidade} onChange={e => setNovoItem(n => ({ ...n, quantidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Quantidade" />
-                                        <input value={novoItem.unidade} onChange={e => setNovoItem(n => ({ ...n, unidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Unidade (ton, pc...)" />
+                                        <input type="number" step="0.001" value={novoItem.quantidade} onChange={e => {
+                                            const qtd = Number(e.target.value) || 0;
+                                            const mat = materials.find(m => m.id === novoItem.material_id);
+                                            const pesoCalc = mat?.peso && qtd > 0 ? (qtd * Number(mat.peso)).toFixed(3) : novoItem.peso_total;
+                                            setNovoItem(n => ({ ...n, quantidade: e.target.value, peso_total: pesoCalc }));
+                                        }} className={inputCls} style={inputStyle} placeholder="Quantidade" />
+                                        <div className="relative">
+                                            <input value={novoItem.unidade} onChange={e => setNovoItem(n => ({ ...n, unidade: e.target.value }))} className={inputCls} style={{ ...inputStyle, paddingRight: novoItem.material_id ? '2rem' : undefined }} placeholder="Unidade" />
+                                            {novoItem.material_id && (
+                                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs px-1 rounded" style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>auto</span>
+                                            )}
+                                        </div>
                                     </div>
+                                    {/* Linha de peso calculado */}
+                                    {novoItem.material_id && novoItem.quantidade && (
+                                        <div className="mb-2 flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs" style={{ backgroundColor: '#F0FDF4', color: '#065F46' }}>
+                                            <Icon name="Scale" size={12} color="#059669" />
+                                            {(() => {
+                                                const mat = materials.find(m => m.id === novoItem.material_id);
+                                                return mat?.peso
+                                                    ? <>Peso unitário: <strong>{Number(mat.peso).toLocaleString('pt-BR')} kg/{mat.unidade}</strong> → Peso total estimado: <strong>{novoItem.peso_total ? Number(novoItem.peso_total).toLocaleString('pt-BR') + ' kg' : '—'}</strong></>
+                                                    : <span>Peso unitário não cadastrado para este material</span>;
+                                            })()}
+                                        </div>
+                                    )}
                                     <div className="flex gap-2">
                                         <input value={novoItem.descricao} onChange={e => setNovoItem(n => ({ ...n, descricao: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Descrição alternativa (se não selecionar material)" />
                                         <button onClick={addItem} className="flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold text-white" style={{ backgroundColor: 'var(--color-primary)' }}>
@@ -4404,9 +4433,9 @@ function TabRomaneioCarreta({ isAdmin, profile }) {
 
             {/* Modal de visualização (clicando na linha) */}
             {viewModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)', paddingTop: '68px' }}
                     onClick={e => e.target === e.currentTarget && setViewModal(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: '90dvh' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: 'calc(100dvh - 76px)' }}>
                         <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
                             <div>
                                 <p className="font-data font-bold text-xl text-blue-700">{viewModal.numero}</p>
