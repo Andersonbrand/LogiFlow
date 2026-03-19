@@ -57,10 +57,11 @@ function StatusBadge({ status }) {
 
 function ModalOverlay({ children, onClose }) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
             style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
             onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col"
+                style={{ maxHeight: '95dvh' }}>
                 {children}
             </div>
         </div>
@@ -69,7 +70,8 @@ function ModalOverlay({ children, onClose }) {
 
 function ModalHeader({ title, icon, onClose }) {
     return (
-        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
+        <div className="flex items-center justify-between p-5 border-b flex-shrink-0 rounded-t-2xl"
+            style={{ borderColor: 'var(--color-border)' }}>
             <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center"
                     style={{ backgroundColor: '#EFF6FF' }}>
@@ -1591,58 +1593,99 @@ function TabDespesasExtras({ isAdmin }) {
     };
 
     // Busca dados completos da NF-e pela chave de acesso (44 dígitos)
-    // usando a API pública da ReceitaWS / NFe.io / nfe.fazenda.gov.br
     const buscarDadosNFe = async (chave) => {
         setLoadingNFe(true);
         try {
-            // Extrai campos da chave de acesso NF-e (44 dígitos):
-            // cUF(2) + AAMM(4) + CNPJ(14) + mod(2) + serie(3) + nNF(9) + tpEmis(1) + cNF(8) + cDV(1)
-            const nNF = chave.substring(25, 34).replace(/^0+/, '') || chave.substring(25, 34);
+            // Decodifica campos fixos da chave de acesso NF-e (44 dígitos):
+            // cUF(2) AAMM(4) CNPJ(14) mod(2) serie(3) nNF(9) tpEmis(1) cNF(8) cDV(1)
+            const cuf      = chave.substring(0, 2);
+            const aamm     = chave.substring(2, 6);
             const cnpjEmit = chave.substring(6, 20);
-            const serie = chave.substring(22, 25).replace(/^0+/, '') || '1';
+            const nNF      = chave.substring(25, 34).replace(/^0+/, '') || chave.substring(25, 34);
+            const serie    = chave.substring(22, 25).replace(/^0+/, '') || '1';
+            const ano      = '20' + aamm.substring(0, 2);
+            const mes      = aamm.substring(2, 4);
+            const dataEmissao = `${ano}-${mes}-01`; // dia não consta na chave
 
-            // Tenta buscar via API da ReceitaWS (CORS-friendly, gratuita)
-            let dados = null;
+            const cnpjFmt = cnpjEmit.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+
+            let fornecedor = '';
+            let valor      = '';
+            let itens      = [];
+            let fonteUsada = '';
+
+            // ── Tentativa 1: ReceitaWS — nome da empresa pelo CNPJ (gratuito, CORS OK) ──
             try {
-                const resp = await fetch(`https://receitaws.com.br/v1/cnpj/${cnpjEmit}`, {
-                    headers: { 'Accept': 'application/json' }
+                const r = await fetch(`https://receitaws.com.br/v1/cnpj/${cnpjEmit}`, {
+                    signal: AbortSignal.timeout(5000),
                 });
-                if (resp.ok) {
-                    const json = await resp.json();
-                    if (json && json.nome) {
-                        dados = { fornecedor: json.nome, cnpj: cnpjEmit };
+                if (r.ok) {
+                    const j = await r.json();
+                    if (j?.nome && j.status !== 'ERROR') {
+                        fornecedor = j.nome;
+                        fonteUsada = 'ReceitaWS';
                     }
                 }
-            } catch { /* silencioso — tenta próxima fonte */ }
+            } catch { /* timeout ou CORS — tenta próxima */ }
 
-            // Monta os dados extraídos da própria chave (sempre disponíveis)
-            const aamm = chave.substring(2, 6);
-            const ano  = '20' + aamm.substring(0, 2);
-            const mes  = aamm.substring(2, 4);
-            const dataEmissao = `${ano}-${mes}-01`; // aproximada (dia não está na chave)
+            // ── Tentativa 2: Publica.io — consulta NF-e completa (gratuito com limite) ──
+            if (!fornecedor || !valor) {
+                try {
+                    const r = await fetch(
+                        `https://api.nfse.io/nfe/${chave}`,
+                        { signal: AbortSignal.timeout(5000), headers: { 'Accept': 'application/json' } }
+                    );
+                    if (r.ok) {
+                        const j = await r.json();
+                        if (j?.emitente?.razaoSocial) fornecedor = j.emitente.razaoSocial;
+                        if (j?.total?.valorNota) valor = String(j.total.valorNota);
+                        if (j?.itens?.length) {
+                            itens = j.itens.map(it => ({
+                                codigo:      it.codigo       || '',
+                                descricao:   it.descricao    || '',
+                                quantidade:  it.quantidade   || '',
+                                unidade:     it.unidade      || '',
+                                valor_unit:  it.valorUnitario || '',
+                                valor_total: it.valorTotal    || '',
+                            }));
+                        }
+                        if (fornecedor) fonteUsada = 'NF-e API';
+                    }
+                } catch { /* indisponível */ }
+            }
+
+            // ── Monta resultado com o que foi obtido ──
+            const descricaoAuto = fornecedor ? `Compra — ${fornecedor}` : `NF ${nNF} · Série ${serie}`;
 
             setForm(f => ({
                 ...f,
-                nota_fiscal: nNF,
+                nota_fiscal:  nNF,
                 data_despesa: dataEmissao,
-                fornecedor: dados?.fornecedor
-                    ? dados.fornecedor
-                    : f.fornecedor || `CNPJ ${cnpjEmit.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')}`,
-                descricao: f.descricao || `NF ${nNF} · Série ${serie}`,
+                fornecedor:   fornecedor || f.fornecedor || cnpjFmt,
+                valor:        valor      || f.valor,
+                descricao:    f.descricao || descricaoAuto,
+                nf_itens:     itens.length ? itens : f.nf_itens,
             }));
 
-            const msg = dados?.fornecedor
-                ? `✅ NF ${nNF} — ${dados.fornecedor}`
-                : `NF ${nNF} lida. Consulte o XML para dados completos.`;
-            showToast(msg, dados?.fornecedor ? 'success' : 'info');
+            // Feedback para o usuário
+            if (fornecedor && valor) {
+                showToast(`✅ NF ${nNF} — ${fornecedor} — ${BRL(Number(valor))}`, 'success');
+            } else if (fornecedor) {
+                showToast(`✅ NF ${nNF} — ${fornecedor} (valor não obtido — preencha manualmente)`, 'success');
+            } else {
+                // Sem API disponível — mostra o que foi extraído da chave
+                showToast(
+                    `NF ${nNF} lida. Fornecedor: CNPJ ${cnpjFmt}. Importe o XML para dados completos.`,
+                    'info'
+                );
+            }
 
         } catch (err) {
-            // Fallback mínimo: preenche só o número
             const nNF = chave.length === 44
-                ? chave.substring(25, 34).replace(/^0+/, '') || chave
+                ? chave.substring(25, 34).replace(/^0+/, '')
                 : chave;
             setForm(f => ({ ...f, nota_fiscal: nNF }));
-            showToast(`NF ${nNF} lida (sem dados adicionais)`, 'info');
+            showToast(`NF ${nNF} lida. Importe o XML para dados completos.`, 'info');
         } finally {
             setLoadingNFe(false);
         }
@@ -1854,7 +1897,8 @@ function TabDespesasExtras({ isAdmin }) {
             {modal && isAdmin && (
                 <ModalOverlay onClose={() => setModal(null)}>
                     <ModalHeader title={modal.mode === 'create' ? 'Nova Despesa' : 'Editar Despesa'} icon="Receipt" onClose={() => setModal(null)} />
-                    <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+                    <div className="p-5 space-y-4 overflow-y-auto flex-1"
+                        style={{ overscrollBehavior: 'contain' }}>
 
                         {/* item 9: importar XML NF + leitura código de barras */}
                         <div className="p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
@@ -2389,9 +2433,10 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const bonusTotal = Object.values(bonusPorMotorista).reduce((s, m) => s + m.bonus, 0);
 
             // ── Margens ───────────────────────────────────────────────────
-            const despesaTotal  = despesaCombustivel + bonusTotal;
-            const margemBruta   = receitaTotal - despesaCombustivel;          // receita − combustível
-            const margemLiquida = receitaTotal - despesaTotal;                // receita − combustível − bônus
+            // despesaTotal = TODAS as saídas: combustível + bônus + diárias + despesas extras
+            const despesaTotal  = despesaCombustivel + bonusTotal + totalDiariasLancadas + totalDespesasExtras;
+            const margemBruta   = receitaTotal - despesaCombustivel;   // receita − só combustível
+            const margemLiquida = receitaTotal - despesaTotal;         // receita − tudo
             const margemPct     = receitaTotal > 0 ? (margemLiquida / receitaTotal) * 100 : 0;
 
             // ── Por motorista (frete + bônus) ─────────────────────────────
