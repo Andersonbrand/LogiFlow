@@ -615,10 +615,33 @@ export async function fetchMecanicos() {
 // ─────────────────────────────────────────────────────────────────────────────
 // DESPESAS EXTRAS (por veículo)
 // ─────────────────────────────────────────────────────────────────────────────
+// Categorias padrão — usadas como fallback se a tabela ainda não existir
 export const CATEGORIAS_DESPESA = [
     'Pneus', 'Peças', 'Acessórios', 'Oficina / Mão de obra',
     'Depreciação', 'Seguro', 'IPVA / Licenciamento', 'Lavagem', 'Outros',
 ];
+
+// Busca categorias do banco (inclui as customizadas pelo admin)
+export async function fetchCategoriasDespesa() {
+    const { data, error } = await supabase
+        .from('carretas_categorias_despesa')
+        .select('id, nome')
+        .eq('ativo', true)
+        .order('nome', { ascending: true });
+    if (error) return CATEGORIAS_DESPESA; // fallback para lista estática
+    return data?.map(c => c.nome) || CATEGORIAS_DESPESA;
+}
+
+// Admin cria nova categoria
+export async function createCategoriaDespesa(nome) {
+    const { data, error } = await supabase
+        .from('carretas_categorias_despesa')
+        .insert({ nome: nome.trim() })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
 
 export async function fetchDespesasExtras(filters = {}) {
     let q = supabase
@@ -790,4 +813,127 @@ export async function fetchMotoristasCaminhao() {
         .order('name', { ascending: true });
     if (error) throw error;
     return data || [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROMANEIOS DE CARRETA
+// ─────────────────────────────────────────────────────────────────────────────
+export async function gerarNumeroRomaneioCarreta() {
+    const ano = new Date().getFullYear();
+    const { count } = await supabase
+        .from('carretas_romaneios')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', `${ano}-01-01`);
+    const seq = String((count || 0) + 1).padStart(4, '0');
+    return `CROM-${ano}-${seq}`;
+}
+
+export async function fetchRomaneiosCarreta(filters = {}) {
+    let q = supabase
+        .from('carretas_romaneios')
+        .select(`
+            *,
+            motorista:motorista_id(id, name),
+            veiculo:veiculo_id(id, placa, modelo),
+            aprovado_por_user:aprovado_por(id, name),
+            carretas_romaneio_itens(
+                id, quantidade, unidade, peso_total, descricao, observacoes,
+                material:material_id(id, nome, unidade, peso)
+            )
+        `)
+        .order('created_at', { ascending: false });
+
+    if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
+    if (filters.veiculoId)   q = q.eq('veiculo_id',   filters.veiculoId);
+    if (filters.status)      q = q.eq('status',        filters.status);
+    if (filters.dataInicio)  q = q.gte('data_saida',   filters.dataInicio);
+    if (filters.dataFim)     q = q.lte('data_saida',   filters.dataFim);
+
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createRomaneioCarreta(romaneio, itens = []) {
+    const numero = await gerarNumeroRomaneioCarreta();
+    const payload = { ...romaneio, numero };
+    ['motorista_id','veiculo_id'].forEach(f => { if (payload[f] === '') payload[f] = null; });
+
+    const { data: rom, error } = await supabase
+        .from('carretas_romaneios')
+        .insert(payload)
+        .select('id, numero')
+        .single();
+    if (error) throw error;
+
+    if (itens.length > 0) {
+        const { error: ie } = await supabase
+            .from('carretas_romaneio_itens')
+            .insert(itens.map(it => ({
+                romaneio_id:  rom.id,
+                material_id:  it.material_id || null,
+                descricao:    it.descricao || null,
+                quantidade:   Number(it.quantidade) || 1,
+                unidade:      it.unidade || 'ton',
+                peso_total:   it.peso_total ? Number(it.peso_total) : null,
+                observacoes:  it.observacoes || null,
+            })));
+        if (ie) throw ie;
+    }
+
+    // Retorna com joins
+    const { data: full } = await supabase
+        .from('carretas_romaneios')
+        .select(`*, motorista:motorista_id(id, name), veiculo:veiculo_id(id, placa, modelo),
+            carretas_romaneio_itens(id, quantidade, unidade, peso_total, descricao, material:material_id(id, nome, unidade, peso))`)
+        .eq('id', rom.id)
+        .single();
+    return full;
+}
+
+export async function updateRomaneioCarreta(id, romaneio, itens) {
+    const payload = { ...romaneio, updated_at: new Date().toISOString() };
+    ['motorista_id','veiculo_id'].forEach(f => { if (payload[f] === '') payload[f] = null; });
+
+    const { error } = await supabase.from('carretas_romaneios').update(payload).eq('id', id);
+    if (error) throw error;
+
+    if (itens !== undefined) {
+        await supabase.from('carretas_romaneio_itens').delete().eq('romaneio_id', id);
+        if (itens.length > 0) {
+            await supabase.from('carretas_romaneio_itens').insert(
+                itens.map(it => ({
+                    romaneio_id: id,
+                    material_id: it.material_id || null,
+                    descricao:   it.descricao || null,
+                    quantidade:  Number(it.quantidade) || 1,
+                    unidade:     it.unidade || 'ton',
+                    peso_total:  it.peso_total ? Number(it.peso_total) : null,
+                    observacoes: it.observacoes || null,
+                }))
+            );
+        }
+    }
+
+    const { data: full } = await supabase
+        .from('carretas_romaneios')
+        .select(`*, motorista:motorista_id(id, name), veiculo:veiculo_id(id, placa, modelo),
+            carretas_romaneio_itens(id, quantidade, unidade, peso_total, descricao, material:material_id(id, nome, unidade, peso))`)
+        .eq('id', id)
+        .single();
+    return full;
+}
+
+export async function aprovarRomaneioCarreta(id, adminId) {
+    const { data, error } = await supabase
+        .from('carretas_romaneios')
+        .update({ aprovado: true, aprovado_por: adminId, aprovado_em: new Date().toISOString() })
+        .eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deleteRomaneioCarreta(id) {
+    const { error } = await supabase.from('carretas_romaneios').delete().eq('id', id);
+    if (error) throw error;
 }

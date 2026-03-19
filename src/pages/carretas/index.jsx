@@ -23,10 +23,13 @@ import {
     fetchMecanicos,
     fetchDespesasExtras, createDespesaExtra, updateDespesaExtra, deleteDespesaExtra,
     fetchDiarias, createDiaria, updateDiaria, deleteDiaria,
-    CATEGORIAS_DESPESA,
+    CATEGORIAS_DESPESA, fetchCategoriasDespesa, createCategoriaDespesa,
     CIDADES_BONUS_BAIXO, BONUS_BAIXO, BONUS_ALTO,
     fetchPostos, createPosto, updatePosto, deletePosto,
+    fetchRomaneiosCarreta, createRomaneioCarreta, updateRomaneioCarreta,
+    aprovarRomaneioCarreta, deleteRomaneioCarreta,
 } from 'utils/carretasService';
+import { fetchMaterials } from 'utils/materialService';
 import * as XLSX from 'xlsx';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -848,9 +851,9 @@ function TabChecklist({ isAdmin, profile }) {
     const [modalManut, setModalManut] = useState(null);
     const [obsManut, setObsManut] = useState('');
     const [filtro, setFiltro] = useState('pendentes');
-    const [form, setForm] = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
-    const [fotoPreview, setFotoPreview] = useState(null);
-    const [modalFoto, setModalFoto] = useState(null); // url para visualizar
+    const [form, setForm] = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] });
+    const [galeriaPreviews, setGaleriaPreviews] = useState([]);
+    const [modalGaleria, setModalGaleria] = useState(null);
     const fotoRef = useRef(null);
 
     const load = useCallback(async () => {
@@ -863,17 +866,37 @@ function TabChecklist({ isAdmin, profile }) {
     }, [filtro]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
-    // Converte foto para base64 para armazenar (ou pode ser URL do Storage)
     const handleFotoChange = (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        if (file.size > 5 * 1024 * 1024) { showToast('Foto muito grande (máx 5MB)', 'error'); return; }
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            setFotoPreview(ev.target.result);
-            setForm(f => ({ ...f, foto_url: ev.target.result }));
-        };
-        reader.readAsDataURL(file);
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+        const MAX_SIZE = 5 * 1024 * 1024;
+        const tooBig = files.filter(f => f.size > MAX_SIZE);
+        if (tooBig.length) { showToast(`${tooBig.length} foto(s) muito grande(s) (máx 5MB cada)`, 'error'); return; }
+        const MAX_FOTOS = 6;
+        const restam = MAX_FOTOS - galeriaPreviews.length;
+        if (restam <= 0) { showToast(`Máximo de ${MAX_FOTOS} fotos atingido`, 'error'); return; }
+        const filesToAdd = files.slice(0, restam);
+        if (files.length > restam) showToast(`Apenas ${restam} foto(s) adicionada(s)`, 'info');
+        filesToAdd.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const b64 = ev.target.result;
+                setGaleriaPreviews(prev => [...prev, b64]);
+                setForm(f => ({ ...f, fotos_urls: [...(f.fotos_urls || []), b64], foto_url: f.foto_url || b64 }));
+            };
+            reader.readAsDataURL(file);
+        });
+        e.target.value = '';
+    };
+
+    const removerFoto = (idx) => {
+        setGaleriaPreviews(prev => prev.filter((_, i) => i !== idx));
+        setForm(f => { const novas = (f.fotos_urls || []).filter((_, i) => i !== idx); return { ...f, fotos_urls: novas, foto_url: novas[0] || '' }; });
+    };
+
+    const resetForm = () => {
+        setForm({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] });
+        setGaleriaPreviews([]);
     };
 
     const handleSubmit = async () => {
@@ -881,15 +904,17 @@ function TabChecklist({ isAdmin, profile }) {
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
         try {
             await createChecklist({ ...form, motorista_id: profile.id, semana_ref: semana.toISOString().split('T')[0] });
-            showToast('Checklist enviado!', 'success'); setModal(null); setFotoPreview(null); load();
+            showToast('Checklist enviado!', 'success'); setModal(null); resetForm(); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
+
     const handleAprovar = async (c) => {
         try {
             await aprovarChecklistComNotificacao(c.id, profile.id, c.motorista_id);
             showToast('Aprovado! Motorista notificado.', 'success'); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
+
     const handleManutencao = async () => {
         if (!obsManut.trim()) { showToast('Descreva a manutenção', 'error'); return; }
         const checklist = checklists.find(c => c.id === modalManut);
@@ -898,6 +923,11 @@ function TabChecklist({ isAdmin, profile }) {
             showToast('Manutenção registrada! Motorista notificado.', 'success');
             setModalManut(null); setObsManut(''); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const getFotos = (c) => {
+        const arr = Array.isArray(c.fotos_urls) && c.fotos_urls.length > 0 ? c.fotos_urls : c.foto_url ? [c.foto_url] : [];
+        return arr.filter(Boolean);
     };
 
     return (
@@ -910,12 +940,11 @@ function TabChecklist({ isAdmin, profile }) {
                                 style={filtro === v ? { backgroundColor: 'var(--color-primary)', color: '#fff' } : { backgroundColor: 'white', color: 'var(--color-muted-foreground)' }}>{l}</button>
                         ))}
                     </div>
-                    {/* item 4: refresh */}
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
                 </div>
-                <Button onClick={() => { setForm({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' }); setFotoPreview(null); setModal(true); }} iconName="ClipboardCheck" size="sm">Novo Checklist</Button>
+                <Button onClick={() => { resetForm(); setModal(true); }} iconName="ClipboardCheck" size="sm">Novo Checklist</Button>
             </div>
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
@@ -925,6 +954,7 @@ function TabChecklist({ isAdmin, profile }) {
                         const itens = c.itens || {};
                         const ok = Object.values(itens).filter(Boolean).length;
                         const total = CHECKLIST_ITENS.length;
+                        const fotos = getFotos(c);
                         return (
                             <div key={c.id} className="bg-white rounded-xl border p-4 sm:p-5 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                 <div className="flex items-start justify-between mb-3 gap-2">
@@ -943,9 +973,11 @@ function TabChecklist({ isAdmin, profile }) {
                                             : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 whitespace-nowrap"><Icon name="Clock" size={11} />Pendente</span>
                                         }
                                         {c.manutencao_registrada && <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 whitespace-nowrap"><Icon name="Wrench" size={11} />Manutenção</span>}
-                                        {c.foto_url && (
-                                            <button onClick={() => setModalFoto(c.foto_url)} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap">
-                                                <Icon name="Camera" size={11} />Foto
+                                        {fotos.length > 0 && (
+                                            <button onClick={() => setModalGaleria({ fotos, idx: 0 })}
+                                                className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap">
+                                                <Icon name="Camera" size={11} />
+                                                {fotos.length > 1 ? `${fotos.length} fotos` : 'Foto'}
                                             </button>
                                         )}
                                     </div>
@@ -967,6 +999,17 @@ function TabChecklist({ isAdmin, profile }) {
                                         </div>
                                     ))}
                                 </div>
+                                {fotos.length > 0 && (
+                                    <div className="flex gap-2 mb-3 flex-wrap">
+                                        {fotos.map((foto, idx) => (
+                                            <button key={idx} onClick={() => setModalGaleria({ fotos, idx })}
+                                                className="rounded-lg overflow-hidden border hover:opacity-80 transition-opacity"
+                                                style={{ borderColor: 'var(--color-border)' }}>
+                                                <img src={foto} alt={`Foto ${idx + 1}`} className="object-cover" style={{ width: 64, height: 64 }} />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                                 {(c.problemas || c.necessidades || c.observacoes_livres) && (
                                     <div className="text-xs space-y-1 mb-3 p-3 rounded-lg bg-gray-50">
                                         {c.problemas && <p><span className="font-medium text-red-600">⚠ Problemas:</span> {c.problemas}</p>}
@@ -975,7 +1018,7 @@ function TabChecklist({ isAdmin, profile }) {
                                     </div>
                                 )}
                                 {c.obs_manutencao && (
-                                    <div className="text-xs p-3 rounded-lg mb-3" style={{ backgroundColor: '#FFF7ED', border: '1px solid #FED7AA' }}>
+                                    <div className="text-xs p-2 rounded-lg mb-3" style={{ backgroundColor: '#FFF7ED', border: '1px solid #FED7AA' }}>
                                         <span className="font-medium text-orange-700">Manutenção registrada:</span> {c.obs_manutencao}
                                     </div>
                                 )}
@@ -991,11 +1034,10 @@ function TabChecklist({ isAdmin, profile }) {
                 </div>
             )}
 
-            {/* Modal novo checklist */}
             {modal && (
-                <ModalOverlay onClose={() => { setModal(null); setFotoPreview(null); }}>
-                    <ModalHeader title="Checklist Semanal" icon="ClipboardCheck" onClose={() => { setModal(null); setFotoPreview(null); }} />
-                    <div className="p-5 space-y-4">
+                <ModalOverlay onClose={() => { setModal(null); resetForm(); }}>
+                    <ModalHeader title="Checklist Semanal" icon="ClipboardCheck" onClose={() => { setModal(null); resetForm(); }} />
+                    <div className="p-5 space-y-4 overflow-y-auto flex-1">
                         <Field label="Veículo" required>
                             <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
@@ -1014,40 +1056,54 @@ function TabChecklist({ isAdmin, profile }) {
                             </div>
                         </div>
                         <Field label="Problemas identificados"><textarea value={form.problemas} onChange={e => setForm(f => ({ ...f, problemas: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Descreva problemas encontrados..." /></Field>
-                        {/* item 3: foto de necessidades/problemas */}
-                        <Field label="Necessidades / peças">
-                            <textarea value={form.necessidades} onChange={e => setForm(f => ({ ...f, necessidades: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Pneus, cintas, etc..." />
-                        </Field>
-                        <div className="space-y-2">
-                            <label className="block text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                                📷 Foto do problema/necessidade <span className="text-gray-400 font-normal">(opcional)</span>
-                            </label>
-                            <div className="flex items-center gap-3">
-                                <button type="button" onClick={() => fotoRef.current?.click()} className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
-                                    <Icon name="Camera" size={15} color="var(--color-muted-foreground)" />
-                                    {fotoPreview ? 'Trocar foto' : 'Tirar/Anexar foto'}
-                                </button>
-                                {fotoPreview && (
-                                    <button type="button" onClick={() => { setFotoPreview(null); setForm(f => ({ ...f, foto_url: '' })); }} className="text-xs text-red-500 hover:text-red-700">Remover</button>
-                                )}
-                                <input ref={fotoRef} type="file" accept="image/*" capture="environment" onChange={handleFotoChange} className="hidden" />
+                        <Field label="Necessidades / peças"><textarea value={form.necessidades} onChange={e => setForm(f => ({ ...f, necessidades: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Pneus, cintas, etc..." /></Field>
+                        <div>
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                    📷 Fotos do problema <span className="text-gray-400 font-normal">(até 6 fotos)</span>
+                                </label>
+                                {galeriaPreviews.length > 0 && <span className="text-xs font-medium text-blue-600">{galeriaPreviews.length}/6</span>}
                             </div>
-                            {fotoPreview && (
-                                <div className="relative inline-block mt-2">
-                                    <img src={fotoPreview} alt="Preview" className="rounded-lg border object-cover" style={{ maxHeight: 180, maxWidth: '100%', borderColor: 'var(--color-border)' }} />
+                            {galeriaPreviews.length > 0 && (
+                                <div className="grid grid-cols-3 gap-2 mb-3">
+                                    {galeriaPreviews.map((src, idx) => (
+                                        <div key={idx} className="relative rounded-xl overflow-hidden border" style={{ borderColor: 'var(--color-border)', aspectRatio: '1' }}>
+                                            <img src={src} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
+                                            <button type="button" onClick={() => removerFoto(idx)}
+                                                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-500 text-white text-xs flex items-center justify-center hover:bg-red-600">✕</button>
+                                            <span className="absolute bottom-1 left-1 text-xs text-white font-bold bg-black/50 px-1 rounded">{idx + 1}</span>
+                                        </div>
+                                    ))}
+                                    {galeriaPreviews.length < 6 && (
+                                        <button type="button" onClick={() => fotoRef.current?.click()}
+                                            className="rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1 hover:bg-blue-50 transition-colors"
+                                            style={{ borderColor: '#93C5FD', aspectRatio: '1' }}>
+                                            <Icon name="Plus" size={20} color="#1D4ED8" />
+                                            <span className="text-xs text-blue-600">Adicionar</span>
+                                        </button>
+                                    )}
                                 </div>
                             )}
+                            {galeriaPreviews.length === 0 && (
+                                <button type="button" onClick={() => fotoRef.current?.click()}
+                                    className="w-full flex flex-col items-center gap-2 py-6 rounded-xl border-2 border-dashed hover:bg-blue-50 transition-colors"
+                                    style={{ borderColor: '#93C5FD' }}>
+                                    <Icon name="Camera" size={28} color="#1D4ED8" />
+                                    <span className="text-sm text-blue-600 font-medium">Tirar foto ou escolher da galeria</span>
+                                    <span className="text-xs text-gray-400">Você pode adicionar até 6 fotos</span>
+                                </button>
+                            )}
+                            <input ref={fotoRef} type="file" accept="image/*" capture="environment" multiple onChange={handleFotoChange} className="hidden" />
                         </div>
                         <Field label="Observações livres"><textarea value={form.observacoes_livres} onChange={e => setForm(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                     </div>
                     <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                        <button onClick={() => { setModal(null); setFotoPreview(null); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <button onClick={() => { setModal(null); resetForm(); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Send">Enviar Checklist</Button>
                     </div>
                 </ModalOverlay>
             )}
 
-            {/* Modal manutenção */}
             {modalManut && (
                 <ModalOverlay onClose={() => setModalManut(null)}>
                     <ModalHeader title="Registrar Manutenção" icon="Wrench" onClose={() => setModalManut(null)} />
@@ -1063,22 +1119,49 @@ function TabChecklist({ isAdmin, profile }) {
                 </ModalOverlay>
             )}
 
-            {/* Modal visualizar foto */}
-            {modalFoto && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }} onClick={() => setModalFoto(null)}>
-                    <div className="relative max-w-2xl w-full">
-                        <button onClick={() => setModalFoto(null)} className="absolute -top-10 right-0 text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
-                            <Icon name="X" size={16} color="white" /> Fechar
+            {modalGaleria && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.92)' }} onClick={() => setModalGaleria(null)}>
+                    <div className="relative w-full max-w-3xl px-4" onClick={e => e.stopPropagation()}>
+                        <img src={modalGaleria.fotos[modalGaleria.idx]} alt={`Foto ${modalGaleria.idx + 1}`}
+                            className="w-full rounded-2xl object-contain shadow-2xl" style={{ maxHeight: '75vh' }} />
+                        <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-3 py-1 rounded-full">
+                            {modalGaleria.idx + 1} / {modalGaleria.fotos.length}
+                        </div>
+                        <button onClick={() => setModalGaleria(null)} className="absolute top-3 right-4 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80">
+                            <Icon name="X" size={16} color="white" />
                         </button>
-                        <img src={modalFoto} alt="Foto do checklist" className="rounded-xl w-full object-contain max-h-[80vh]" />
+                        {modalGaleria.fotos.length > 1 && modalGaleria.idx > 0 && (
+                            <button onClick={() => setModalGaleria(g => ({ ...g, idx: g.idx - 1 }))}
+                                className="absolute left-6 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80">
+                                <Icon name="ChevronLeft" size={20} color="white" />
+                            </button>
+                        )}
+                        {modalGaleria.fotos.length > 1 && modalGaleria.idx < modalGaleria.fotos.length - 1 && (
+                            <button onClick={() => setModalGaleria(g => ({ ...g, idx: g.idx + 1 }))}
+                                className="absolute right-6 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80">
+                                <Icon name="ChevronRight" size={20} color="white" />
+                            </button>
+                        )}
+                        {modalGaleria.fotos.length > 1 && (
+                            <div className="flex gap-2 justify-center mt-4 flex-wrap">
+                                {modalGaleria.fotos.map((f, i) => (
+                                    <button key={i} onClick={() => setModalGaleria(g => ({ ...g, idx: i }))}
+                                        className="rounded-lg overflow-hidden transition-all"
+                                        style={{ border: `2px solid ${i === modalGaleria.idx ? '#3B82F6' : 'transparent'}`, opacity: i === modalGaleria.idx ? 1 : 0.6 }}>
+                                        <img src={f} alt="" className="object-cover" style={{ width: 52, height: 52 }} />
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
-                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
+
             <Toast toast={toast} />
         </div>
     );
 }
+
 
 // ─── TAB: Carregamentos ───────────────────────────────────────────────────────
 function TabCarregamentos({ isAdmin }) {
@@ -1497,9 +1580,14 @@ function TabDespesasExtras({ isAdmin }) {
     const { confirm, ConfirmDialog } = useConfirm();
     const [despesas, setDespesas]   = useState([]);
     const [veiculos, setVeiculos]   = useState([]);
+    const [categorias, setCategorias] = useState(CATEGORIAS_DESPESA);
     const [loading, setLoading]     = useState(true);
     const [modal, setModal]         = useState(null);
     const [filtro, setFiltro]       = useState({ veiculoId: '', categoria: '', mes: '' });
+    // Nova categoria inline
+    const [novaCategoria, setNovaCategoria] = useState('');
+    const [showNovaCategoria, setShowNovaCategoria] = useState(false);
+    const [savingCategoria, setSavingCategoria] = useState(false);
     const xmlRef = useRef(null);
     const comprovanteRef = useRef(null);
     const permutaRef = useRef(null);
@@ -1509,10 +1597,9 @@ function TabDespesasExtras({ isAdmin }) {
     const [loadingNFe, setLoadingNFe] = useState(false);
 
     const emptyForm = () => ({
-        veiculo_id: '', categoria: 'Pneus', descricao: '', valor: '',
+        veiculo_id: '', categoria: categorias[0] || 'Pneus', descricao: '', valor: '',
         data_despesa: new Date().toISOString().split('T')[0], nota_fiscal: '',
         fornecedor: '', observacoes: '',
-        // item 8: pagamento
         forma_pagamento: 'a_vista',
         tipo_pagamento: 'pix',
         comprovante_url: '',
@@ -1520,12 +1607,16 @@ function TabDespesasExtras({ isAdmin }) {
         permuta_obs: '',
         permuta_doc_url: '',
         cheques: [],
-        // item 9: itens da NF
         nf_itens: [],
     });
     const [form, setForm] = useState(emptyForm());
     const [novoBoleto, setNovoBoleto] = useState({ vencimento: '', valor: '' });
     const [novoCheque, setNovoCheque] = useState({ numero: '', banco: '', valor: '', vencimento: '' });
+
+    const loadCategorias = useCallback(async () => {
+        const cats = await fetchCategoriasDespesa();
+        setCategorias(cats);
+    }, []);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -1542,7 +1633,26 @@ function TabDespesasExtras({ isAdmin }) {
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtro]); // eslint-disable-line
+
+    useEffect(() => { loadCategorias(); }, [loadCategorias]);
     useEffect(() => { load(); }, [load]);
+
+    // Salvar nova categoria criada inline pelo admin
+    const handleSalvarNovaCategoria = async () => {
+        const nome = novaCategoria.trim();
+        if (!nome) { showToast('Digite o nome da categoria', 'error'); return; }
+        if (categorias.includes(nome)) { showToast('Categoria já existe', 'error'); return; }
+        setSavingCategoria(true);
+        try {
+            await createCategoriaDespesa(nome);
+            await loadCategorias();
+            setForm(f => ({ ...f, categoria: nome }));
+            setNovaCategoria('');
+            setShowNovaCategoria(false);
+            showToast(`Categoria "${nome}" criada!`, 'success');
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingCategoria(false); }
+    };
 
     const totalPeriodo = useMemo(() => despesas.reduce((s, d) => s + Number(d.valor || 0), 0), [despesas]);
     const totalPorCategoria = useMemo(() => {
@@ -1833,7 +1943,7 @@ function TabDespesasExtras({ isAdmin }) {
                     </select>
                     <select value={filtro.categoria} onChange={e => setFiltro(f => ({ ...f, categoria: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todas categorias</option>
-                        {CATEGORIAS_DESPESA.map(c => <option key={c} value={c}>{c}</option>)}
+                        {categorias.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
                 </div>
@@ -1992,11 +2102,49 @@ function TabDespesasExtras({ isAdmin }) {
 
                         {/* dados básicos */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <Field label="Categoria" required>
-                                <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    {CATEGORIAS_DESPESA.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
-                            </Field>
+                            <div className="sm:col-span-2">
+                                <Field label="Categoria" required>
+                                    <div className="flex gap-2">
+                                        <select value={form.categoria}
+                                            onChange={e => {
+                                                if (e.target.value === '__nova__') {
+                                                    setShowNovaCategoria(true);
+                                                } else {
+                                                    setForm(f => ({ ...f, categoria: e.target.value }));
+                                                    setShowNovaCategoria(false);
+                                                }
+                                            }}
+                                            className={inputCls} style={inputStyle}>
+                                            {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+                                            {isAdmin && <option value="__nova__">➕ Nova categoria...</option>}
+                                        </select>
+                                    </div>
+                                    {/* Input inline para nova categoria */}
+                                    {showNovaCategoria && isAdmin && (
+                                        <div className="flex gap-2 mt-2">
+                                            <input
+                                                autoFocus
+                                                value={novaCategoria}
+                                                onChange={e => setNovaCategoria(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter') handleSalvarNovaCategoria(); if (e.key === 'Escape') { setShowNovaCategoria(false); setNovaCategoria(''); } }}
+                                                className={inputCls}
+                                                style={{ ...inputStyle, borderColor: '#3B82F6' }}
+                                                placeholder="Nome da nova categoria..."
+                                            />
+                                            <button type="button" onClick={handleSalvarNovaCategoria} disabled={savingCategoria}
+                                                className="px-3 py-2 rounded-lg text-xs font-semibold text-white flex-shrink-0"
+                                                style={{ backgroundColor: '#059669', opacity: savingCategoria ? 0.7 : 1 }}>
+                                                {savingCategoria ? '...' : 'Salvar'}
+                                            </button>
+                                            <button type="button" onClick={() => { setShowNovaCategoria(false); setNovaCategoria(''); }}
+                                                className="px-3 py-2 rounded-lg text-xs font-medium border flex-shrink-0"
+                                                style={{ borderColor: 'var(--color-border)' }}>
+                                                ✕
+                                            </button>
+                                        </div>
+                                    )}
+                                </Field>
+                            </div>
                             <Field label="Veículo">
                                 <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Sem veículo específico</option>
@@ -2410,21 +2558,33 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const filtros = { dataInicio, dataFim };
             if (empresa) filtros.empresaId = empresa;
 
-            const [carregamentos, abastecimentos, viagens, despesasExtras, diariasLancadas] = await Promise.all([
+            const [carregamentos, abastecimentos, viagens, despesasExtras, diariasLancadas, romaneiosCarreta] = await Promise.all([
                 fetchCarregamentos(filtros),
                 fetchAbastecimentos({ dataInicio, dataFim }),
                 fetchViagens({ dataInicio, dataFim }),
                 fetchDespesasExtras({ dataInicio, dataFim }),
                 fetchDiarias({ dataInicio, dataFim }),
+                fetchRomaneiosCarreta({ dataInicio, dataFim }).catch(() => []),
             ]);
 
-            // ── Receitas (fretes) ──────────────────────────────────────────
-            const receitaTotal     = carregamentos.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);
+            // ── Receitas (fretes de carregamentos) ────────────────────────
+            const receitaCarregamentos = carregamentos.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);
             const receitaPorEmpresa = {};
             carregamentos.forEach(c => {
                 const nome = c.empresa?.nome || 'Sem empresa';
                 receitaPorEmpresa[nome] = (receitaPorEmpresa[nome] || 0) + Number(c.valor_frete_calculado || 0);
             });
+
+            // ── Receitas de Romaneios de Carreta ──────────────────────────
+            const receitaRomaneiosCarreta = romaneiosCarreta.reduce((s, r) => s + Number(r.valor_frete || 0), 0);
+            const romaneiosPorDestino = {};
+            romaneiosCarreta.forEach(r => {
+                const dest = r.destino || 'Sem destino';
+                romaneiosPorDestino[dest] = (romaneiosPorDestino[dest] || 0) + Number(r.valor_frete || 0);
+            });
+
+            // ── Receita total = carregamentos + romaneios de carreta ───────
+            const receitaTotal = receitaCarregamentos + receitaRomaneiosCarreta;
 
             // ── Despesas combustível ───────────────────────────────────────
             const valorDiesel        = abastecimentos.reduce((s, a) => s + Number(a.valor_diesel || 0), 0);
@@ -2487,7 +2647,8 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 
             setDados({
                 periodo: `${periodoInicio === periodoFim ? periodoInicio : `${periodoInicio} a ${periodoFim}`}`,
-                receitaTotal, receitaPorEmpresa,
+                receitaTotal, receitaCarregamentos, receitaRomaneiosCarreta,
+                receitaPorEmpresa, romaneiosPorDestino,
                 despesaCombustivel, litrosDiesel, litrosArla, valorDiesel, valorArla,
                 bonusTotal, despesaTotal,
                 margemBruta, margemLiquida, margemPct,
@@ -2497,12 +2658,14 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 viagensFinalizadas: viagensFinalizadas.length,
                 totalDespesasExtras, despesasPorCategoria,
                 totalDiariasLancadas,
-                // raw data for placa filter (item 7)
+                totalRomaneiosCarreta: romaneiosCarreta.length,
+                // raw data
                 _carregamentos: carregamentos,
                 _abastecimentos: abastecimentos,
                 _viagens: viagens,
                 _despesasExtras: despesasExtras,
                 _diarias: diariasLancadas,
+                _romaneiosCarreta: romaneiosCarreta,
             });
         } catch (e) { showToast('Erro ao calcular: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -2513,14 +2676,17 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 
         const wb = XLSX.utils.book_new();
 
-        // Aba 1 — Resumo Financeiro (item 6: diesel e arla separados)
+        // Aba 1 — Resumo Financeiro
         const resumo = [
             ['RELATÓRIO FINANCEIRO — TRANSPORTE CARRETAS', '', ''],
             ['Período:', dados.periodo, ''],
             ['', '', ''],
             ['RECEITAS', '', ''],
-            ['Receita Total de Fretes', dados.receitaTotal, ''],
-            ...Object.entries(dados.receitaPorEmpresa).map(([nome, val]) => [`  → ${nome}`, val, '']),
+            ['Receita Total', dados.receitaTotal, ''],
+            ['  → Fretes (Carregamentos)', dados.receitaCarregamentos, ''],
+            ...Object.entries(dados.receitaPorEmpresa).map(([nome, val]) => [`      ↳ ${nome}`, val, '']),
+            ['  → Romaneios de Carreta', dados.receitaRomaneiosCarreta, ''],
+            ...Object.entries(dados.romaneiosPorDestino || {}).map(([dest, val]) => [`      ↳ ${dest}`, val, '']),
             ['', '', ''],
             ['DESPESAS', '', ''],
             ['Combustível — Diesel', dados.valorDiesel, ''],
@@ -2543,6 +2709,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             ['Total de Viagens', dados.totalViagens, ''],
             ['Viagens Finalizadas', dados.viagensFinalizadas, ''],
             ['Carregamentos', dados.totalCarregamentos, ''],
+            ['Romaneios de Carreta', dados.totalRomaneiosCarreta || 0, ''],
         ];
         const ws1 = XLSX.utils.aoa_to_sheet(resumo);
         ws1['!cols'] = [{ wch: 45 }, { wch: 18 }, { wch: 10 }];
@@ -2554,7 +2721,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             ...dados.consolidadoMotoristas.map(m => [
                 m.nome, m.carregamentos, m.frete, m.viagens, m.bonus, m.frete + m.bonus,
             ]),
-            ['TOTAL', dados.totalCarregamentos, dados.receitaTotal, dados.viagensFinalizadas, dados.bonusTotal, dados.receitaTotal + dados.bonusTotal],
+            ['TOTAL', dados.totalCarregamentos, dados.receitaCarregamentos, dados.viagensFinalizadas, dados.bonusTotal, dados.receitaCarregamentos + dados.bonusTotal],
         ];
         const ws2 = XLSX.utils.aoa_to_sheet(rowsM);
         ws2['!cols'] = [{ wch: 22 },{ wch: 15 },{ wch: 20 },{ wch: 20 },{ wch: 14 },{ wch: 20 }];
@@ -2573,6 +2740,24 @@ function TabRelatorioFinanceiro({ isAdmin }) {
         const ws3 = XLSX.utils.aoa_to_sheet(rowsAbst);
         ws3['!cols'] = [12,20,12,18,10,14,10,14,14].map(w => ({ wch: w }));
         XLSX.utils.book_append_sheet(wb, ws3, 'Abastecimentos');
+
+        // Aba 4 — Romaneios de Carreta
+        if ((dados._romaneiosCarreta || []).length > 0) {
+            const rowsRom = [
+                ['Número','Status','Motorista','Placa','Destino','Empresa','Data Saída','Tonelagem','Valor Frete (R$)','Aprovado'],
+                ...(dados._romaneiosCarreta || []).map(r => [
+                    r.numero, r.status, r.motorista?.name || '', r.veiculo?.placa || '',
+                    r.destino || '', r.empresa || '',
+                    r.data_saida ? new Date(r.data_saida+'T00:00:00').toLocaleDateString('pt-BR') : '',
+                    Number(r.toneladas || 0), Number(r.valor_frete || 0),
+                    r.aprovado ? 'Sim' : 'Não',
+                ]),
+                ['TOTAL','','','','','','', dados._romaneiosCarreta.reduce((s,r)=>s+Number(r.toneladas||0),0), dados.receitaRomaneiosCarreta, ''],
+            ];
+            const wsRom = XLSX.utils.aoa_to_sheet(rowsRom);
+            wsRom['!cols'] = [16,18,22,12,20,22,14,12,16,10].map(w => ({ wch: w }));
+            XLSX.utils.book_append_sheet(wb, wsRom, 'Romaneios Carreta');
+        }
 
         const nome = `relatorio_financeiro_carretas_${dados.periodo.replace(/\s/g,'_')}.xlsx`;
         XLSX.writeFile(wb, nome);
@@ -2804,17 +2989,39 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                             {/* Receitas */}
                             <div className="flex justify-between py-2 border-b" style={{ borderColor: '#F1F5F9' }}>
                                 <span className="text-xs font-semibold uppercase tracking-wide text-green-700">Receitas</span>
+                                <span className="font-data font-bold text-green-700">{BRL(dados.receitaTotal)}</span>
                             </div>
-                            <div className="flex justify-between py-1.5 pl-3">
-                                <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Receita de Fretes</span>
-                                <span className="font-data font-semibold text-green-700">{BRL(dados.receitaTotal)}</span>
-                            </div>
+                            {/* Fretes de carregamentos */}
+                            {dados.receitaCarregamentos > 0 && (
+                                <div className="flex justify-between py-1.5 pl-3">
+                                    <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Receita de Fretes (Carregamentos)</span>
+                                    <span className="font-data font-semibold text-green-700">{BRL(dados.receitaCarregamentos)}</span>
+                                </div>
+                            )}
                             {Object.entries(dados.receitaPorEmpresa).map(([nome, val]) => (
                                 <div key={nome} className="flex justify-between py-1 pl-6">
                                     <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ {nome}</span>
                                     <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(val)}</span>
                                 </div>
                             ))}
+                            {/* Fretes de romaneios de carreta */}
+                            {dados.receitaRomaneiosCarreta > 0 && (
+                                <>
+                                    <div className="flex justify-between py-1.5 pl-3">
+                                        <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                                            Receita Romaneios Carreta
+                                            <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">{dados.totalRomaneiosCarreta} rom.</span>
+                                        </span>
+                                        <span className="font-data font-semibold text-green-700">{BRL(dados.receitaRomaneiosCarreta)}</span>
+                                    </div>
+                                    {Object.entries(dados.romaneiosPorDestino).map(([dest, val]) => (
+                                        <div key={dest} className="flex justify-between py-1 pl-6">
+                                            <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ {dest}</span>
+                                            <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(val)}</span>
+                                        </div>
+                                    ))}
+                                </>
+                            )}
 
                             {/* Despesas */}
                             <div className="flex justify-between py-2 border-b mt-2" style={{ borderColor: '#F1F5F9' }}>
@@ -3726,6 +3933,556 @@ function TabOrdensServico({ isAdmin, profile }) {
     );
 }
 
+// ─── TAB: Romaneios de Carreta ───────────────────────────────────────────────
+function TabRomaneioCarreta({ isAdmin, profile }) {
+    const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
+    const [romaneios, setRomaneios] = useState([]);
+    const [materials, setMaterials] = useState([]);
+    const [veiculos,  setVeiculos]  = useState([]);
+    const [motoristas,setMotoristas]= useState([]);
+    const [loading,   setLoading]   = useState(true);
+    const [modal,     setModal]     = useState(null);   // null | { mode, data? }
+    const [viewModal, setViewModal] = useState(null);   // romaneio para visualização
+    const [filtro,    setFiltro]    = useState({ status: '', mes: '' });
+
+    const BRL_LOC = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const FMT_LOC = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+
+    const STATUS_CARRETA = ['Aguardando','Carregando','Em Trânsito','Entrega finalizada','Cancelado'];
+    const STATUS_CFG = {
+        'Aguardando':        { bg: '#FEF9C3', text: '#B45309' },
+        'Carregando':        { bg: '#DBEAFE', text: '#1D4ED8' },
+        'Em Trânsito':       { bg: '#D1FAE5', text: '#065F46' },
+        'Entrega finalizada':{ bg: '#F0FDF4', text: '#15803D' },
+        'Cancelado':         { bg: '#FEE2E2', text: '#991B1B' },
+    };
+
+    const TIPOS_FRETE = [
+        { value: 'fixo',         label: 'Valor fixo (R$)' },
+        { value: 'por_tonelada', label: 'Por tonelada (R$/ton)' },
+    ];
+
+    const emptyForm = () => ({
+        status: 'Aguardando', motorista_id: '', veiculo_id: '',
+        data_saida: new Date().toISOString().split('T')[0], data_chegada: '',
+        destino: '', toneladas: '', empresa: '', valor_frete: '',
+        tipo_calculo_frete: 'fixo', observacoes: '',
+    });
+    const [form,  setForm]  = useState(emptyForm());
+    const [itens, setItens] = useState([]);
+    const [novoItem, setNovoItem] = useState({ material_id: '', descricao: '', quantidade: '', unidade: 'ton', peso_total: '' });
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const f = {};
+            if (filtro.status) f.status = filtro.status;
+            if (filtro.mes) {
+                const [ano, m] = filtro.mes.split('-').map(Number);
+                f.dataInicio = filtro.mes + '-01';
+                f.dataFim = filtro.mes + '-' + String(new Date(ano, m, 0).getDate()).padStart(2,'0');
+            }
+            const [r, mat, v, mot] = await Promise.all([
+                fetchRomaneiosCarreta(f),
+                fetchMaterials(),
+                fetchCarretasVeiculos(),
+                fetchCarreteiros(),
+            ]);
+            setRomaneios(r); setMaterials(mat); setVeiculos(v); setMotoristas(mot);
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    }, [filtro]); // eslint-disable-line
+    useEffect(() => { load(); }, [load]);
+
+    // Calcula frete baseado no tipo
+    const calcularFrete = (f, it) => {
+        if (f.tipo_calculo_frete === 'por_tonelada') {
+            const tons = it.reduce((s, i) => s + Number(i.toneladas || i.quantidade || 0), 0) || Number(f.toneladas || 0);
+            return (Number(f.valor_frete || 0) * tons).toFixed(2);
+        }
+        return f.valor_frete || '0';
+    };
+
+    const freteCalculado = useMemo(() => calcularFrete(form, itens), [form, itens]); // eslint-disable-line
+
+    // Item handlers
+    const addItem = () => {
+        if (!novoItem.material_id && !novoItem.descricao) { showToast('Selecione um material ou informe a descrição', 'error'); return; }
+        if (!novoItem.quantidade) { showToast('Informe a quantidade', 'error'); return; }
+        const mat = materials.find(m => m.id === novoItem.material_id);
+        const pesoCalc = mat?.peso && novoItem.quantidade ? (Number(novoItem.quantidade) * Number(mat.peso)).toFixed(3) : novoItem.peso_total;
+        setItens(prev => [...prev, {
+            ...novoItem,
+            descricao: novoItem.descricao || mat?.nome || '',
+            unidade: novoItem.unidade || mat?.unidade || 'ton',
+            peso_total: pesoCalc || '',
+        }]);
+        setNovoItem({ material_id: '', descricao: '', quantidade: '', unidade: 'ton', peso_total: '' });
+    };
+    const removeItem = (idx) => setItens(prev => prev.filter((_, i) => i !== idx));
+
+    const handleSave = async () => {
+        if (!form.destino) { showToast('Destino é obrigatório', 'error'); return; }
+        try {
+            const payload = { ...form };
+            if (form.tipo_calculo_frete === 'por_tonelada') {
+                payload.valor_frete = freteCalculado;
+            }
+            if (modal.mode === 'create') {
+                await createRomaneioCarreta(payload, itens);
+                showToast('Romaneio criado!', 'success');
+            } else {
+                await updateRomaneioCarreta(modal.data.id, payload, itens);
+                showToast('Romaneio atualizado!', 'success');
+            }
+            setModal(null); setForm(emptyForm()); setItens([]); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleAprovar = async (r) => {
+        try {
+            await aprovarRomaneioCarreta(r.id, profile?.id);
+            showToast('Romaneio aprovado!', 'success'); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleDelete = async (id) => {
+        if (!await confirm({ title: 'Excluir romaneio?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir' })) return;
+        try { await deleteRomaneioCarreta(id); showToast('Excluído!', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const openCreate = () => { setForm(emptyForm()); setItens([]); setModal({ mode: 'create' }); };
+    const openEdit = (r) => {
+        setForm({
+            status: r.status, motorista_id: r.motorista_id || '', veiculo_id: r.veiculo_id || '',
+            data_saida: r.data_saida || '', data_chegada: r.data_chegada || '',
+            destino: r.destino || '', toneladas: r.toneladas || '', empresa: r.empresa || '',
+            valor_frete: r.valor_frete || '', tipo_calculo_frete: r.tipo_calculo_frete || 'fixo',
+            observacoes: r.observacoes || '',
+        });
+        setItens((r.carretas_romaneio_itens || []).map(it => ({
+            material_id: it.material_id || '',
+            descricao: it.descricao || it.material?.nome || '',
+            quantidade: it.quantidade || '',
+            unidade: it.unidade || 'ton',
+            peso_total: it.peso_total || '',
+        })));
+        setModal({ mode: 'edit', data: r });
+    };
+
+    // Exportar romaneio como PDF via janela de impressão
+    const imprimirRomaneio = (r) => {
+        const itensHtml = (r.carretas_romaneio_itens || []).map((it, i) => `
+            <tr>
+                <td>${i+1}</td>
+                <td>${it.material?.nome || it.descricao || '—'}</td>
+                <td>${Number(it.quantidade||0).toLocaleString('pt-BR')} ${it.unidade || ''}</td>
+                <td>${it.peso_total ? Number(it.peso_total).toLocaleString('pt-BR') + ' ton' : '—'}</td>
+            </tr>
+        `).join('');
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+        <title>Romaneio ${r.numero}</title>
+        <style>
+            body { font-family: Arial, sans-serif; padding: 40px; color: #111; }
+            h1 { font-size: 22px; margin: 0; } h2 { font-size: 16px; color: #444; }
+            .header { border-bottom: 2px solid #1D4ED8; padding-bottom: 12px; margin-bottom: 20px; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin-bottom: 20px; }
+            .field { } .label { font-size: 11px; color: #666; text-transform: uppercase; } .value { font-size: 14px; font-weight: 600; }
+            table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+            th { background: #1D4ED8; color: white; padding: 8px; text-align: left; font-size: 12px; }
+            td { padding: 7px 8px; border-bottom: 1px solid #eee; font-size: 13px; }
+            tr:nth-child(even) td { background: #F8FAFF; }
+            .totais { margin-top: 20px; padding: 12px; background: #F0F9FF; border-radius: 8px; }
+            .frete { font-size: 18px; font-weight: bold; color: #1D4ED8; }
+            .assinaturas { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; margin-top: 60px; }
+            .assinatura { border-top: 1px solid #999; padding-top: 8px; text-align: center; font-size: 12px; color: #555; }
+            @media print { body { padding: 20px; } }
+        </style></head><body>
+        <div class="header">
+            <div style="display:flex;justify-content:space-between;align-items:start">
+                <div>
+                    <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:1px">ROMANEIO DE CARRETA</div>
+                    <h1>${r.numero}</h1>
+                    <h2>Ferragens / Materiais — Carreta</h2>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:12px;color:#666">Emitido em: ${new Date().toLocaleDateString('pt-BR')}</div>
+                    <div style="font-size:14px;font-weight:600;margin-top:4px;padding:4px 12px;background:${STATUS_CFG[r.status]?.bg||'#f5f5f5'};color:${STATUS_CFG[r.status]?.text||'#333'};border-radius:20px;display:inline-block">${r.status}</div>
+                </div>
+            </div>
+        </div>
+        <div class="grid">
+            <div class="field"><div class="label">Motorista</div><div class="value">${r.motorista?.name || '—'}</div></div>
+            <div class="field"><div class="label">Veículo / Placa</div><div class="value">${r.veiculo?.placa || '—'} ${r.veiculo?.modelo ? '· ' + r.veiculo.modelo : ''}</div></div>
+            <div class="field"><div class="label">Destino</div><div class="value">${r.destino || '—'}</div></div>
+            <div class="field"><div class="label">Empresa</div><div class="value">${r.empresa || '—'}</div></div>
+            <div class="field"><div class="label">Data de Saída</div><div class="value">${r.data_saida ? new Date(r.data_saida+'T00:00:00').toLocaleDateString('pt-BR') : '—'}</div></div>
+            <div class="field"><div class="label">Data de Chegada</div><div class="value">${r.data_chegada ? new Date(r.data_chegada+'T00:00:00').toLocaleDateString('pt-BR') : 'Em trânsito'}</div></div>
+            <div class="field"><div class="label">Tonelagem Total</div><div class="value">${r.toneladas ? Number(r.toneladas).toLocaleString('pt-BR') + ' ton' : '—'}</div></div>
+        </div>
+        <h3 style="margin-bottom:4px;color:#1D4ED8">Itens Transportados</h3>
+        <table>
+            <thead><tr><th>#</th><th>Material / Produto</th><th>Quantidade</th><th>Peso</th></tr></thead>
+            <tbody>${itensHtml || '<tr><td colspan="4" style="text-align:center;color:#999">Nenhum item cadastrado</td></tr>'}</tbody>
+        </table>
+        <div class="totais">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <div>
+                    <div style="font-size:12px;color:#666">Valor do Frete</div>
+                    <div class="frete">${Number(r.valor_frete||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}</div>
+                </div>
+                <div style="text-align:right">
+                    ${r.aprovado ? '<div style="color:#059669;font-weight:bold">✓ APROVADO</div>' : '<div style="color:#D97706">Aguardando aprovação</div>'}
+                </div>
+            </div>
+        </div>
+        ${r.observacoes ? `<div style="margin-top:16px;padding:10px;background:#FFF7ED;border-radius:6px;font-size:13px"><strong>Observações:</strong> ${r.observacoes}</div>` : ''}
+        <div class="assinaturas">
+            <div class="assinatura">Motorista: ${r.motorista?.name || '_______________'}</div>
+            <div class="assinatura">Responsável / Admin</div>
+            <div class="assinatura">Conferente / Destinatário</div>
+        </div>
+        <script>window.print(); window.onafterprint = () => window.close();</script>
+        </body></html>`;
+
+        const w = window.open('', '_blank');
+        w.document.write(html);
+        w.document.close();
+    };
+
+    const totalRomaneios = romaneios.length;
+    const totalFrete = romaneios.reduce((s, r) => s + Number(r.valor_frete || 0), 0);
+    const totalTon = romaneios.reduce((s, r) => s + Number(r.toneladas || 0), 0);
+    const pendentes = romaneios.filter(r => !r.aprovado).length;
+
+    return (
+        <div>
+            {/* Toolbar */}
+            <div className="flex flex-wrap gap-2 items-center justify-between mb-5">
+                <div className="flex flex-wrap gap-2">
+                    <select value={filtro.status} onChange={e => setFiltro(f => ({ ...f, status: e.target.value }))}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                        <option value="">Todos os status</option>
+                        {STATUS_CARRETA.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                    <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                        <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
+                    </button>
+                </div>
+                {isAdmin && <Button onClick={openCreate} iconName="Plus" size="sm">Novo Romaneio</Button>}
+            </div>
+
+            {/* KPIs */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                {[
+                    { l: 'Total Romaneios', v: totalRomaneios, c: '#1D4ED8', bg: '#EFF6FF', i: 'FileText' },
+                    { l: 'Frete Total',     v: BRL_LOC(totalFrete), c: '#059669', bg: '#D1FAE5', i: 'DollarSign' },
+                    { l: 'Tonelagem',       v: totalTon.toLocaleString('pt-BR',{maximumFractionDigits:1}) + ' ton', c: '#D97706', bg: '#FEF9C3', i: 'Package' },
+                    { l: 'Pendentes aprovação', v: pendentes, c: '#DC2626', bg: '#FEE2E2', i: 'Clock' },
+                ].map(k => (
+                    <div key={k.l} className="bg-white rounded-xl border p-3 sm:p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{k.l}</span>
+                            <div className="rounded-lg flex items-center justify-center" style={{ width: 28, height: 28, backgroundColor: k.bg }}>
+                                <Icon name={k.i} size={14} color={k.c} />
+                            </div>
+                        </div>
+                        <p className="text-lg font-bold font-data" style={{ color: k.c }}>{k.v}</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* Lista */}
+            {loading ? (
+                <div className="flex justify-center py-16"><div className="animate-spin h-8 w-8 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div>
+            ) : romaneios.length === 0 ? (
+                <div className="bg-white rounded-xl border p-12 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                    <Icon name="FileText" size={40} color="var(--color-muted-foreground)" />
+                    <p className="text-sm mt-3 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum romaneio encontrado</p>
+                    {isAdmin && <Button onClick={openCreate} iconName="Plus" size="sm" className="mt-4">Criar primeiro romaneio</Button>}
+                </div>
+            ) : (
+                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                    <table className="w-full text-sm min-w-[800px]">
+                        <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                            <tr>{['Número','Status','Motorista','Placa','Destino','Saída','Tonelagem','Frete','Aprovado',''].map(h =>
+                                <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                            )}</tr>
+                        </thead>
+                        <tbody>
+                            {romaneios.map((r, i) => {
+                                const sc = STATUS_CFG[r.status] || STATUS_CFG['Aguardando'];
+                                const itsCount = r.carretas_romaneio_itens?.length || 0;
+                                return (
+                                    <tr key={r.id} className="border-t hover:bg-gray-50 cursor-pointer" style={{ borderColor: 'var(--color-border)', backgroundColor: i%2===0?'#fff':'#F8FAFC' }}
+                                        onClick={() => setViewModal(r)}>
+                                        <td className="px-3 py-3 font-data font-bold text-blue-700 whitespace-nowrap">{r.numero}</td>
+                                        <td className="px-3 py-3">
+                                            <span className="px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: sc.bg, color: sc.text }}>{r.status}</span>
+                                        </td>
+                                        <td className="px-3 py-3 font-medium">{r.motorista?.name || '—'}</td>
+                                        <td className="px-3 py-3 font-data">{r.veiculo?.placa || '—'}</td>
+                                        <td className="px-3 py-3">{r.destino || '—'}</td>
+                                        <td className="px-3 py-3 whitespace-nowrap">{FMT_LOC(r.data_saida)}</td>
+                                        <td className="px-3 py-3 font-data">{r.toneladas ? Number(r.toneladas).toLocaleString('pt-BR') + ' ton' : '—'}</td>
+                                        <td className="px-3 py-3 font-data font-semibold text-green-700">{BRL_LOC(r.valor_frete)}</td>
+                                        <td className="px-3 py-3">
+                                            {r.aprovado
+                                                ? <span className="flex items-center gap-1 text-xs text-green-700"><Icon name="CheckCircle2" size={13} color="#059669" />Aprovado</span>
+                                                : isAdmin
+                                                    ? <button onClick={e => { e.stopPropagation(); handleAprovar(r); }} className="flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700 hover:bg-amber-200">
+                                                        <Icon name="Clock" size={11} />Aprovar
+                                                    </button>
+                                                    : <span className="text-xs text-amber-600">Pendente</span>
+                                            }
+                                        </td>
+                                        <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                                            <div className="flex gap-1">
+                                                <button onClick={() => imprimirRomaneio(r)} className="p-1.5 rounded hover:bg-blue-50" title="Imprimir / PDF"><Icon name="Printer" size={13} color="#1D4ED8" /></button>
+                                                {isAdmin && <button onClick={() => openEdit(r)} className="p-1.5 rounded hover:bg-gray-50"><Icon name="Pencil" size={13} color="var(--color-muted-foreground)" /></button>}
+                                                {isAdmin && <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                        <tfoot>
+                            <tr style={{ backgroundColor: '#F0FDF4', borderTop: '2px solid #BBF7D0' }}>
+                                <td colSpan={6} className="px-3 py-2 text-xs font-bold text-green-800">TOTAIS</td>
+                                <td className="px-3 py-2 font-data font-bold text-green-700">{totalTon.toLocaleString('pt-BR',{maximumFractionDigits:1})} ton</td>
+                                <td className="px-3 py-2 font-data font-bold text-green-700">{BRL_LOC(totalFrete)}</td>
+                                <td colSpan={2} />
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            )}
+
+            {/* Modal criar/editar */}
+            {modal && isAdmin && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                    onClick={e => e.target === e.currentTarget && setModal(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col" style={{ maxHeight: '95dvh' }}>
+                        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
+                                    <Icon name="FileText" size={18} color="#1D4ED8" />
+                                </div>
+                                <h2 className="font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>
+                                    {modal.mode === 'create' ? 'Novo Romaneio de Carreta' : `Editar ${modal.data?.numero}`}
+                                </h2>
+                            </div>
+                            <button onClick={() => setModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100">
+                                <Icon name="X" size={18} color="var(--color-muted-foreground)" />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                            {/* Dados básicos */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <Field label="Status" required>
+                                    <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        {STATUS_CARRETA.map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                </Field>
+                                <Field label="Motorista">
+                                    <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione o motorista...</option>
+                                        {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                    </select>
+                                </Field>
+                                <Field label="Veículo / Carreta">
+                                    <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione a carreta...</option>
+                                        {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                    </select>
+                                </Field>
+                                <Field label="Empresa">
+                                    <input value={form.empresa} onChange={e => setForm(f => ({ ...f, empresa: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: Comercial Araguaia" />
+                                </Field>
+                                <Field label="Destino" required>
+                                    <input value={form.destino} onChange={e => setForm(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Cidade de destino" />
+                                </Field>
+                                <Field label="Tonelagem total">
+                                    <input type="number" step="0.001" value={form.toneladas} onChange={e => setForm(f => ({ ...f, toneladas: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 28.500" />
+                                </Field>
+                                <Field label="Data de Saída">
+                                    <input type="date" value={form.data_saida} onChange={e => setForm(f => ({ ...f, data_saida: e.target.value }))} className={inputCls} style={inputStyle} />
+                                </Field>
+                                <Field label="Data de Chegada">
+                                    <input type="date" value={form.data_chegada} onChange={e => setForm(f => ({ ...f, data_chegada: e.target.value }))} className={inputCls} style={inputStyle} />
+                                </Field>
+                            </div>
+
+                            {/* Frete */}
+                            <div className="p-4 rounded-xl border" style={{ borderColor: '#BBF7D0', backgroundColor: '#F0FDF4' }}>
+                                <p className="text-xs font-semibold text-green-700 mb-3">💰 Valor do Frete</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <Field label="Tipo de cálculo">
+                                        <select value={form.tipo_calculo_frete} onChange={e => setForm(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
+                                            {TIPOS_FRETE.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                        </select>
+                                    </Field>
+                                    <Field label={form.tipo_calculo_frete === 'por_tonelada' ? 'Preço por tonelada (R$/ton)' : 'Valor do frete (R$)'}>
+                                        <input type="number" step="0.01" value={form.valor_frete} onChange={e => setForm(f => ({ ...f, valor_frete: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                    </Field>
+                                </div>
+                                {form.tipo_calculo_frete === 'por_tonelada' && Number(form.valor_frete) > 0 && (
+                                    <div className="mt-2 p-2 rounded-lg bg-white text-sm text-green-700 font-semibold">
+                                        Frete estimado: {BRL_LOC(freteCalculado)} ({form.toneladas||'0'} ton × {BRL_LOC(form.valor_frete)})
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Itens — produtos */}
+                            <div>
+                                <p className="text-xs font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>📦 Itens / Materiais transportados</p>
+                                {itens.length > 0 && (
+                                    <div className="bg-white rounded-xl border mb-3 overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                                        <table className="w-full text-xs min-w-[500px]">
+                                            <thead className="border-b" style={{ backgroundColor: '#F8FAFC', borderColor: 'var(--color-border)' }}>
+                                                <tr>{['Material','Qtd','Unidade','Peso',''].map(h => <th key={h} className="px-3 py-2 text-left font-medium">{h}</th>)}</tr>
+                                            </thead>
+                                            <tbody>
+                                                {itens.map((it, idx) => (
+                                                    <tr key={idx} className="border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                                        <td className="px-3 py-2 font-medium">{it.descricao || materials.find(m => m.id === it.material_id)?.nome || '—'}</td>
+                                                        <td className="px-3 py-2 font-data">{Number(it.quantidade).toLocaleString('pt-BR')}</td>
+                                                        <td className="px-3 py-2">{it.unidade}</td>
+                                                        <td className="px-3 py-2 font-data">{it.peso_total ? Number(it.peso_total).toLocaleString('pt-BR') + ' ton' : '—'}</td>
+                                                        <td className="px-3 py-2">
+                                                            <button onClick={() => removeItem(idx)} className="p-1 rounded hover:bg-red-50"><Icon name="Trash2" size={12} color="#DC2626" /></button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                                {/* Adicionar item */}
+                                <div className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
+                                    <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-muted-foreground)' }}>Adicionar item</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-2">
+                                        <div className="sm:col-span-2">
+                                            <select value={novoItem.material_id} onChange={e => {
+                                                const mat = materials.find(m => m.id === e.target.value);
+                                                setNovoItem(n => ({ ...n, material_id: e.target.value, descricao: mat?.nome || n.descricao, unidade: mat?.unidade || n.unidade }));
+                                            }} className={inputCls} style={inputStyle}>
+                                                <option value="">Selecione o material...</option>
+                                                {materials.map(m => <option key={m.id} value={m.id}>{m.nome} ({m.unidade})</option>)}
+                                            </select>
+                                        </div>
+                                        <input type="number" step="0.001" value={novoItem.quantidade} onChange={e => setNovoItem(n => ({ ...n, quantidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Quantidade" />
+                                        <input value={novoItem.unidade} onChange={e => setNovoItem(n => ({ ...n, unidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Unidade (ton, pc...)" />
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input value={novoItem.descricao} onChange={e => setNovoItem(n => ({ ...n, descricao: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Descrição alternativa (se não selecionar material)" />
+                                        <button onClick={addItem} className="flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold text-white" style={{ backgroundColor: 'var(--color-primary)' }}>
+                                            <Icon name="Plus" size={14} color="white" />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <Field label="Observações">
+                                <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
+                            </Field>
+                        </div>
+                        <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                            <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <Button onClick={handleSave} iconName="Check" size="sm">
+                                {modal.mode === 'create' ? 'Criar Romaneio' : 'Salvar alterações'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de visualização (clicando na linha) */}
+            {viewModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+                    onClick={e => e.target === e.currentTarget && setViewModal(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: '90dvh' }}>
+                        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
+                            <div>
+                                <p className="font-data font-bold text-xl text-blue-700">{viewModal.numero}</p>
+                                <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>{viewModal.motorista?.name || '—'} · {viewModal.veiculo?.placa || '—'}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => imprimirRomaneio(viewModal)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>
+                                    <Icon name="Printer" size={13} /> Imprimir
+                                </button>
+                                <button onClick={() => setViewModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100">
+                                    <Icon name="X" size={18} color="var(--color-muted-foreground)" />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                                {[
+                                    { l: 'Status', v: <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: STATUS_CFG[viewModal.status]?.bg, color: STATUS_CFG[viewModal.status]?.text }}>{viewModal.status}</span> },
+                                    { l: 'Destino', v: viewModal.destino || '—' },
+                                    { l: 'Empresa', v: viewModal.empresa || '—' },
+                                    { l: 'Data Saída', v: FMT_LOC(viewModal.data_saida) },
+                                    { l: 'Data Chegada', v: FMT_LOC(viewModal.data_chegada) },
+                                    { l: 'Tonelagem', v: viewModal.toneladas ? Number(viewModal.toneladas).toLocaleString('pt-BR') + ' ton' : '—' },
+                                    { l: 'Frete', v: <span className="font-data font-bold text-green-700">{BRL_LOC(viewModal.valor_frete)}</span> },
+                                    { l: 'Aprovado', v: viewModal.aprovado ? <span className="text-green-600">✓ Sim</span> : <span className="text-amber-600">Pendente</span> },
+                                ].map(({ l, v }) => (
+                                    <div key={l} className="p-3 rounded-lg" style={{ backgroundColor: '#F8FAFC', border: '1px solid var(--color-border)' }}>
+                                        <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>{l}</p>
+                                        <div className="font-medium">{v}</div>
+                                    </div>
+                                ))}
+                            </div>
+                            {/* Itens */}
+                            {(viewModal.carretas_romaneio_itens || []).length > 0 && (
+                                <div>
+                                    <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>📦 Itens transportados</p>
+                                    <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                                        <table className="w-full text-sm">
+                                            <thead className="text-xs border-b" style={{ backgroundColor: '#F8FAFC', borderColor: 'var(--color-border)' }}>
+                                                <tr>{['Material','Quantidade','Peso'].map(h => <th key={h} className="px-3 py-2 text-left">{h}</th>)}</tr>
+                                            </thead>
+                                            <tbody>
+                                                {viewModal.carretas_romaneio_itens.map((it, i) => (
+                                                    <tr key={it.id} className="border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: i%2===0?'#fff':'#F8FAFC' }}>
+                                                        <td className="px-3 py-2 font-medium">{it.material?.nome || it.descricao || '—'}</td>
+                                                        <td className="px-3 py-2 font-data">{Number(it.quantidade||0).toLocaleString('pt-BR')} {it.unidade}</td>
+                                                        <td className="px-3 py-2 font-data">{it.peso_total ? Number(it.peso_total).toLocaleString('pt-BR') + ' ton' : '—'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                            {viewModal.observacoes && (
+                                <div className="p-3 rounded-lg text-sm" style={{ backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' }}>
+                                    <span className="font-medium text-amber-700">Obs:</span> {viewModal.observacoes}
+                                </div>
+                            )}
+                            {isAdmin && !viewModal.aprovado && (
+                                <button onClick={() => { handleAprovar(viewModal); setViewModal(null); }}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-green-600 hover:bg-green-700">
+                                    <Icon name="CheckCircle2" size={16} color="white" /> Aprovar Romaneio
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {ConfirmDialog}
+            <Toast toast={toast} />
+        </div>
+    );
+}
+
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
 // ─── TAB: Histórico de Rotas por Motorista ───────────────────────────────────
 function TabHistoricoViagens({ isAdmin }) {
@@ -4129,7 +4886,8 @@ function TabHistoricoViagens({ isAdmin }) {
 
 // ─── Constantes da página principal ─────────────────────────────────────────
 const TABS = [
-    { id: 'viagens',       label: 'Viagens',          icon: 'Navigation',    group: 'Operação' },
+    { id: 'viagens',          label: 'Viagens',            icon: 'Navigation',    group: 'Operação' },
+    { id: 'romaneios_carreta',label: 'Romaneios Carreta',  icon: 'FileText',      group: 'Operação' },
     { id: 'veiculos',      label: 'Veículos',          icon: 'Truck',         group: 'Operação' },
     { id: 'abastecimentos',label: 'Abastecimentos',    icon: 'Fuel',          group: 'Operação' },
     { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck',group: 'Operação' },
@@ -4232,7 +4990,8 @@ export default function CarretasPage() {
                             </div>
 
                             {/* Conteúdo da aba */}
-                            {tab === 'viagens'        && <TabViagens        isAdmin={admin} profile={profile} />}
+                            {tab === 'viagens'          && <TabViagens        isAdmin={admin} profile={profile} />}
+                            {tab === 'romaneios_carreta' && <TabRomaneioCarreta isAdmin={admin} profile={profile} />}
                             {tab === 'veiculos'       && <TabVeiculos       isAdmin={admin} />}
                             {tab === 'abastecimentos' && <TabAbastecimentos  isAdmin={admin} profile={profile} />}
                             {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}
