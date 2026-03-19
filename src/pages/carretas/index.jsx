@@ -5,6 +5,7 @@ import Button from 'components/ui/Button';
 import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
+import { useConfirm } from 'components/ui/ConfirmDialog';
 import { useAuth } from 'utils/AuthContext';
 import { fetchCorredores, CORREDORES_PADRAO } from 'utils/corredoresService';
 import {
@@ -103,6 +104,7 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 // ─── TAB: Viagens ────────────────────────────────────────────────────────────
 function TabViagens({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [viagens, setViagens] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
@@ -152,7 +154,7 @@ function TabViagens({ isAdmin, profile }) {
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
-        if (!confirm('Excluir esta viagem?')) return;
+        if (!await confirm({ title: 'Excluir viagem?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir' })) return;
         try { await deleteViagem(id); showToast('Excluída!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -335,6 +337,7 @@ function TabViagens({ isAdmin, profile }) {
                     </div>
                 </ModalOverlay>
             )}
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
@@ -343,6 +346,7 @@ function TabViagens({ isAdmin, profile }) {
 // ─── TAB: Veículos ────────────────────────────────────────────────────────────
 function TabVeiculos({ isAdmin }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [veiculos, setVeiculos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(null);
@@ -373,7 +377,7 @@ function TabVeiculos({ isAdmin }) {
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
-        if (!confirm('Excluir veículo?')) return;
+        if (!await confirm({ title: 'Excluir veículo?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir' })) return;
         try { await deleteCarretaVeiculo(id); showToast('Excluído!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -437,6 +441,7 @@ function TabVeiculos({ isAdmin }) {
                     </div>
                 </ModalOverlay>
             )}
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
@@ -445,6 +450,7 @@ function TabVeiculos({ isAdmin }) {
 // ─── TAB: Abastecimentos ──────────────────────────────────────────────────────
 function TabAbastecimentos({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [abast, setAbast] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
@@ -490,7 +496,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
-        if (!confirm('Excluir registro?')) return;
+        if (!await confirm({ title: 'Excluir abastecimento?', message: 'Este registro será removido permanentemente.', confirmLabel: 'Excluir' })) return;
         try { await deleteAbastecimento(id); showToast('Excluído!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -536,7 +542,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
         });
     };
     const handleDeletePosto = async (id) => {
-        if (!confirm('Excluir este posto?')) return;
+        if (!await confirm({ title: 'Excluir posto?', message: 'Os abastecimentos vinculados a este posto não serão afetados.', confirmLabel: 'Excluir' })) return;
         try { await deletePosto(id); showToast('Excluído!', 'success'); const p = await fetchPostos().catch(() => []); setPostos(p); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -825,6 +831,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                     </div>
                 </ModalOverlay>
             )}
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
@@ -1067,6 +1074,7 @@ function TabChecklist({ isAdmin, profile }) {
                     </div>
                 </div>
             )}
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
@@ -1075,6 +1083,7 @@ function TabChecklist({ isAdmin, profile }) {
 // ─── TAB: Carregamentos ───────────────────────────────────────────────────────
 function TabCarregamentos({ isAdmin }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [carregamentos, setCarregamentos] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
@@ -1116,7 +1125,7 @@ function TabCarregamentos({ isAdmin }) {
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
-        if (!confirm('Excluir?')) return;
+        if (!await confirm({ title: 'Excluir carregamento?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir' })) return;
         try { await deleteCarregamento(id); showToast('Excluído!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -1259,6 +1268,7 @@ function TabCarregamentos({ isAdmin }) {
                     </div>
                 </ModalOverlay>
             )}
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
@@ -1267,6 +1277,7 @@ function TabCarregamentos({ isAdmin }) {
 // ─── TAB: Empresas ────────────────────────────────────────────────────────────
 function TabEmpresas({ isAdmin }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [empresas, setEmpresas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(false);
@@ -1286,7 +1297,7 @@ function TabEmpresas({ isAdmin }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
-        if (!confirm('Excluir empresa?')) return;
+        if (!await confirm({ title: 'Excluir empresa?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir' })) return;
         try { await deleteEmpresa(id); showToast('Excluída!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -1330,6 +1341,7 @@ function TabEmpresas({ isAdmin }) {
                     </div>
                 </ModalOverlay>
             )}
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
@@ -1473,6 +1485,7 @@ function TabBonificacoes({ isAdmin }) {
                     </table>
                 </div>
             )}
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
@@ -1481,6 +1494,7 @@ function TabBonificacoes({ isAdmin }) {
 // ─── TAB: Despesas Extras (por veículo) ──────────────────────────────────────
 function TabDespesasExtras({ isAdmin }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [despesas, setDespesas]   = useState([]);
     const [veiculos, setVeiculos]   = useState([]);
     const [loading, setLoading]     = useState(true);
@@ -1755,7 +1769,7 @@ function TabDespesasExtras({ isAdmin }) {
     };
 
     const handleDelete = async (id) => {
-        if (!confirm('Excluir despesa?')) return;
+        if (!await confirm({ title: 'Excluir despesa?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir' })) return;
         try { await deleteDespesaExtra(id); showToast('Excluída!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -2133,6 +2147,7 @@ function TabDespesasExtras({ isAdmin }) {
                     </div>
                 </ModalOverlay>
             )}
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
@@ -2141,6 +2156,7 @@ function TabDespesasExtras({ isAdmin }) {
 // ─── TAB: Diárias de Motoristas ───────────────────────────────────────────────
 function TabDiarias({ isAdmin }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [diarias, setDiarias]     = useState([]);
     const [motoristas, setMotoristas] = useState([]);
     const [viagens, setViagens]     = useState([]);
@@ -2196,7 +2212,7 @@ function TabDiarias({ isAdmin }) {
     };
 
     const handleDelete = async (id) => {
-        if (!confirm('Excluir diária?')) return;
+        if (!await confirm({ title: 'Excluir diária?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir' })) return;
         try { await deleteDiaria(id); showToast('Excluída!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -2341,6 +2357,7 @@ function TabDiarias({ isAdmin }) {
                     </div>
                 </ModalOverlay>
             )}
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
@@ -2970,10 +2987,211 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                     </div>
                 </div>
             )}
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
 }
+// ─── BACKUP DE SEGURANÇA ─────────────────────────────────────────────────────
+function BackupSeguranca({ showToast }) {
+    const [loading, setLoading] = useState(false);
+    const [progresso, setProgresso] = useState('');
+    const [ultimoBackup, setUltimoBackup] = useState(() => {
+        try { return localStorage.getItem('logiflow_ultimo_backup') || null; } catch { return null; }
+    });
+
+    const TABELAS = [
+        { key: 'viagens',        label: 'Viagens',          fn: () => fetchViagens({}) },
+        { key: 'carregamentos',  label: 'Carregamentos',     fn: () => fetchCarregamentos({}) },
+        { key: 'abastecimentos', label: 'Abastecimentos',    fn: () => fetchAbastecimentos({}) },
+        { key: 'checklists',     label: 'Checklists',        fn: () => fetchChecklists({}) },
+        { key: 'despesas',       label: 'Despesas Extras',   fn: () => fetchDespesasExtras({}) },
+        { key: 'diarias',        label: 'Diárias',           fn: () => fetchDiarias({}) },
+        { key: 'ordens_servico', label: 'Ordens de Serviço', fn: () => fetchOrdensServico({}) },
+        { key: 'veiculos',       label: 'Veículos',          fn: () => fetchCarretasVeiculos() },
+        { key: 'postos',         label: 'Postos',            fn: () => fetchPostos().catch(() => []) },
+    ];
+
+    const gerarBackupJSON = async () => {
+        setLoading(true);
+        const backup = {
+            versao: '1.0',
+            app: 'LogiFlow',
+            gerado_em: new Date().toISOString(),
+            tabelas: {},
+            totais: {},
+        };
+        try {
+            for (const tabela of TABELAS) {
+                setProgresso(`Exportando ${tabela.label}...`);
+                const dados = await tabela.fn();
+                backup.tabelas[tabela.key] = dados;
+                backup.totais[tabela.key]  = dados.length;
+            }
+            setProgresso('Gerando arquivo...');
+
+            // Serializa e faz download do JSON
+            const json    = JSON.stringify(backup, null, 2);
+            const blob    = new Blob([json], { type: 'application/json' });
+            const url     = URL.createObjectURL(blob);
+            const a       = document.createElement('a');
+            const dataStr = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+            a.href        = url;
+            a.download    = `logiflow_backup_${dataStr}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            const agora = new Date().toLocaleString('pt-BR');
+            localStorage.setItem('logiflow_ultimo_backup', agora);
+            setUltimoBackup(agora);
+
+            const total = Object.values(backup.totais).reduce((s, n) => s + n, 0);
+            showToast(`✅ Backup gerado! ${total} registros exportados.`, 'success');
+        } catch (e) {
+            showToast('Erro ao gerar backup: ' + e.message, 'error');
+        } finally {
+            setLoading(false);
+            setProgresso('');
+        }
+    };
+
+    const gerarBackupExcel = async () => {
+        setLoading(true);
+        const wb = XLSX.utils.book_new();
+        try {
+            for (const tabela of TABELAS) {
+                setProgresso(`Exportando ${tabela.label}...`);
+                const dados = await tabela.fn();
+                if (dados.length === 0) continue;
+                // Aplana objetos aninhados removendo joins profundos
+                const rows = dados.map(row => {
+                    const flat = {};
+                    Object.entries(row).forEach(([k, v]) => {
+                        if (v === null || v === undefined) flat[k] = '';
+                        else if (typeof v === 'object' && !Array.isArray(v))
+                            flat[k] = JSON.stringify(v); // joins como string JSON
+                        else if (Array.isArray(v))
+                            flat[k] = JSON.stringify(v);
+                        else flat[k] = v;
+                    });
+                    return flat;
+                });
+                const ws = XLSX.utils.json_to_sheet(rows);
+                XLSX.utils.book_append_sheet(wb, ws, tabela.label.substring(0, 31));
+            }
+
+            // Aba de meta
+            const meta = [
+                ['LogiFlow — Backup de Dados', ''],
+                ['Gerado em', new Date().toLocaleString('pt-BR')],
+                ['', ''],
+                ['Tabela', 'Registros'],
+            ];
+            const dataForMeta = await Promise.all(TABELAS.map(t => t.fn().catch(() => [])));
+            TABELAS.forEach((t, i) => meta.push([t.label, dataForMeta[i].length]));
+            const wsMeta = XLSX.utils.aoa_to_sheet(meta);
+            wsMeta['!cols'] = [{ wch: 25 }, { wch: 20 }];
+            XLSX.utils.book_append_sheet(wb, wsMeta, 'Resumo do Backup');
+
+            setProgresso('Gerando arquivo...');
+            const dataStr = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+            XLSX.writeFile(wb, `logiflow_backup_${dataStr}.xlsx`);
+
+            const agora = new Date().toLocaleString('pt-BR');
+            localStorage.setItem('logiflow_ultimo_backup', agora);
+            setUltimoBackup(agora);
+            showToast('✅ Backup Excel gerado com sucesso!', 'success');
+        } catch (e) {
+            showToast('Erro: ' + e.message, 'error');
+        } finally {
+            setLoading(false);
+            setProgresso('');
+        }
+    };
+
+    return (
+        <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: '#BFDBFE', backgroundColor: '#F8FAFF' }}>
+            <div className="flex items-center gap-3 mb-4">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#DBEAFE' }}>
+                    <Icon name="ShieldCheck" size={18} color="#1D4ED8" />
+                </div>
+                <div>
+                    <h3 className="font-heading font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Backup de Segurança</h3>
+                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Exporta todos os dados do banco para arquivo local</p>
+                </div>
+                <span className="ml-auto text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">Admin</span>
+            </div>
+
+            {/* O que é exportado */}
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-4">
+                {[
+                    { label: 'Viagens',        icon: 'Navigation'    },
+                    { label: 'Carregamentos',  icon: 'Package'       },
+                    { label: 'Abastecimentos', icon: 'Fuel'          },
+                    { label: 'Checklists',     icon: 'ClipboardCheck'},
+                    { label: 'Despesas',       icon: 'Receipt'       },
+                    { label: 'Diárias',        icon: 'CalendarDays'  },
+                    { label: 'Ordens Serv.',   icon: 'Wrench'        },
+                    { label: 'Veículos',       icon: 'Truck'         },
+                    { label: 'Postos',         icon: 'MapPin'        },
+                ].map(t => (
+                    <div key={t.label} className="flex items-center gap-1.5 p-2 rounded-lg bg-white border text-xs"
+                        style={{ borderColor: '#DBEAFE', color: '#1D4ED8' }}>
+                        <Icon name={t.icon} size={11} color="#1D4ED8" />
+                        {t.label}
+                    </div>
+                ))}
+            </div>
+
+            {/* Progresso */}
+            {loading && progresso && (
+                <div className="flex items-center gap-2 p-3 rounded-lg mb-4 text-xs text-blue-700" style={{ backgroundColor: '#EFF6FF' }}>
+                    <div className="w-4 h-4 rounded-full border-2 border-blue-600 animate-spin" style={{ borderTopColor: 'transparent' }} />
+                    {progresso}
+                </div>
+            )}
+
+            {/* Último backup */}
+            {ultimoBackup && !loading && (
+                <div className="flex items-center gap-2 p-3 rounded-lg mb-4 text-xs" style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+                    <Icon name="CheckCircle2" size={13} color="#059669" />
+                    <span className="text-green-700">Último backup gerado: <strong>{ultimoBackup}</strong></span>
+                </div>
+            )}
+
+            {/* Aviso */}
+            <div className="p-3 rounded-lg mb-4 text-xs" style={{ backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' }}>
+                <p className="text-amber-700 font-medium mb-1">⚠️ Recomendações de backup:</p>
+                <ul className="text-amber-600 space-y-0.5 ml-2">
+                    <li>• Faça backup <strong>semanalmente</strong> ou antes de mudanças grandes</li>
+                    <li>• Salve o arquivo no <strong>Google Drive, OneDrive ou HD externo</strong></li>
+                    <li>• Mantenha ao menos os últimos <strong>4 backups</strong> (1 mês)</li>
+                    <li>• O JSON pode ser reimportado; o Excel serve para visualização e auditoria</li>
+                </ul>
+            </div>
+
+            {/* Botões */}
+            <div className="flex flex-wrap gap-3">
+                <button onClick={gerarBackupJSON} disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-opacity"
+                    style={{ backgroundColor: '#1D4ED8', opacity: loading ? 0.6 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
+                    <Icon name="Download" size={15} color="white" />
+                    {loading ? 'Gerando...' : 'Backup JSON (completo)'}
+                </button>
+                <button onClick={gerarBackupExcel} disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-opacity border"
+                    style={{ borderColor: '#1D4ED8', color: '#1D4ED8', backgroundColor: 'white', opacity: loading ? 0.6 : 1, cursor: loading ? 'not-allowed' : 'pointer' }}>
+                    <Icon name="FileSpreadsheet" size={15} color="#1D4ED8" />
+                    Backup Excel (visualização)
+                </button>
+            </div>
+            <p className="text-xs mt-3" style={{ color: 'var(--color-muted-foreground)' }}>
+                O arquivo JSON é o backup completo e pode ser usado para restauração. O Excel serve para auditoria e leitura humana.
+            </p>
+        </div>
+    );
+}
+
 // ─── TAB: Configurações ──────────────────────────────────────────────────────
 function TabConfiguracoes({ isAdmin }) {
     const { toast, showToast } = useToast();
@@ -3229,6 +3447,10 @@ function TabConfiguracoes({ isAdmin }) {
                 </Button>
             </div>
 
+            {/* ── Backup de Segurança ───────────────────────────────────── */}
+            {isAdmin && <BackupSeguranca showToast={showToast} />}
+
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
@@ -3466,6 +3688,7 @@ function TabOrdensServico({ isAdmin, profile }) {
                     />
                 </div>
             )}
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
@@ -3866,6 +4089,7 @@ function TabHistoricoViagens({ isAdmin }) {
                     )}
                 </div>
             )}
+                        {typeof ConfirmDialog !== "undefined" && ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );

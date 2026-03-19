@@ -13,6 +13,7 @@ import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { fetchMaterials } from 'utils/materialService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { useToast } from 'utils/useToast';
+import { useConfirm } from 'components/ui/ConfirmDialog';
 import { subscribeTabela } from 'utils/supabaseClient';
 
 const STATUS_COLORS = {
@@ -35,6 +36,7 @@ export default function Romaneios() {
     const [formModal, setFormModal] = useState({ open: false, romaneio: null });
     const [detailModal, setDetailModal] = useState({ open: false, romaneio: null });
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [importModal, setImportModal] = useState(false);
 
     // Carrega APENAS romaneios (usado pelo Realtime — não recarrega veículos/materiais desnecessariamente)
@@ -108,7 +110,7 @@ export default function Romaneios() {
     };
 
     const handleDelete = async (id) => {
-        if (!confirm('Tem certeza que deseja excluir este romaneio?')) return;
+        if (!await confirm({ title: 'Excluir romaneio?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir' })) return;
         try {
             await deleteRomaneio(id);
             setRomaneios(prev => prev.filter(r => r.id !== id));
@@ -400,6 +402,7 @@ export default function Romaneios() {
                 onClose={() => setImportModal(false)}
                 onImported={() => { load(); showToast('Romaneios importados com sucesso!'); }}
             />
+            {ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );

@@ -66,6 +66,7 @@ export default function MotoristaDashboard() {
     const [modalAbast, setModalAbast] = useState(false);
     const [modalCheck, setModalCheck] = useState(false);
     const [fotoPreview, setFotoPreview] = useState(null);
+    const [submittingCheck, setSubmittingCheck] = useState(false);
 
     const emptyAbast = () => ({
         veiculo_id: '', posto_id: '',
@@ -191,13 +192,16 @@ export default function MotoristaDashboard() {
     };
 
     const handleCheck = async () => {
+        if (submittingCheck) return; // previne duplo envio
         if (!formCheck.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
+        setSubmittingCheck(true);
         try {
             await createChecklist({ ...formCheck, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
             showToast('Checklist enviado!', 'success');
             setModalCheck(false); setFotoPreview(null); setFormCheck(emptyCheck()); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSubmittingCheck(false); }
     };
 
     const exportar = () => {
@@ -758,8 +762,19 @@ export default function MotoristaDashboard() {
                         </div>
                         <div className="flex gap-3 p-5 pt-0 justify-end">
                             <button onClick={() => setModalCheck(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <button onClick={handleCheck} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: 'var(--color-primary)' }}>
-                                <Icon name="Send" size={15} color="white" /> Enviar
+                            <button onClick={handleCheck} disabled={submittingCheck}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-opacity"
+                                style={{ backgroundColor: 'var(--color-primary)', opacity: submittingCheck ? 0.7 : 1, cursor: submittingCheck ? 'not-allowed' : 'pointer' }}>
+                                {submittingCheck ? (
+                                    <>
+                                        <div className="w-4 h-4 rounded-full border-2 border-white animate-spin" style={{ borderTopColor: 'transparent' }} />
+                                        Enviando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Icon name="Send" size={15} color="white" /> Enviar
+                                    </>
+                                )}
                             </button>
                         </div>
                     </div>

@@ -100,6 +100,7 @@ export default function CarreteiroDashboard() {
     const [formCheck, setFormCheck]     = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
     const [fotoPreview, setFotoPreview] = useState(null);
     const fotoRef = useRef(null);
+    const [submittingCheck, setSubmittingCheck] = useState(false);
 
     const handleFotoCheck = (e) => {
         const file = e.target.files?.[0];
@@ -183,8 +184,10 @@ export default function CarreteiroDashboard() {
     };
 
     const handleCheck = async () => {
+        if (submittingCheck) return;
         if (!formCheck.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
+        setSubmittingCheck(true);
         try {
             await createChecklist({ ...formCheck, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
             showToast('Checklist enviado para análise!', 'success');
@@ -193,6 +196,7 @@ export default function CarreteiroDashboard() {
             setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSubmittingCheck(false); }
     };
 
     const exportar = () => {
@@ -748,7 +752,20 @@ export default function CarreteiroDashboard() {
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 pt-0 sm:justify-end">
                             <button onClick={() => { setModalCheck(false); setFotoPreview(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleCheck} size="sm" iconName="Send">Enviar</Button>
+                            <button onClick={handleCheck} disabled={submittingCheck}
+                                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white transition-opacity"
+                                style={{ backgroundColor: 'var(--color-primary)', opacity: submittingCheck ? 0.7 : 1, cursor: submittingCheck ? 'not-allowed' : 'pointer' }}>
+                                {submittingCheck ? (
+                                    <>
+                                        <div className="w-4 h-4 rounded-full border-2 border-white animate-spin" style={{ borderTopColor: 'transparent' }} />
+                                        Enviando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Icon name="Send" size={15} color="white" /> Enviar
+                                    </>
+                                )}
+                            </button>
                         </div>
                     </div>
                 </div>
