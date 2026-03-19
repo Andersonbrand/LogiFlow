@@ -331,7 +331,7 @@ function TabViagens({ isAdmin, profile }) {
                             <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={3} placeholder="Observações gerais..." />
                         </Field>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -435,7 +435,7 @@ function TabVeiculos({ isAdmin }) {
                             <Field label="Observações"><textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                         </div>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -735,7 +735,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                             <Field label="Observações"><textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                         </div>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setModal(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -1040,7 +1040,7 @@ function TabChecklist({ isAdmin, profile }) {
                         </div>
                         <Field label="Observações livres"><textarea value={form.observacoes_livres} onChange={e => setForm(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => { setModal(null); setFotoPreview(null); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Send">Enviar Checklist</Button>
                     </div>
@@ -1056,7 +1056,7 @@ function TabChecklist({ isAdmin, profile }) {
                             <textarea value={obsManut} onChange={e => setObsManut(e.target.value)} className={inputCls} style={inputStyle} rows={4} placeholder="Detalhes da manutenção..." />
                         </Field>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setModalManut(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleManutencao} size="sm" iconName="Wrench">Registrar</Button>
                     </div>
@@ -1262,7 +1262,7 @@ function TabCarregamentos({ isAdmin }) {
                         </div>
                         <div className="sm:col-span-2"><Field label="Observações"><textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field></div>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -1335,7 +1335,7 @@ function TabEmpresas({ isAdmin }) {
                         <Field label="CNPJ"><input value={form.cnpj} onChange={e => setForm(f => ({ ...f, cnpj: e.target.value }))} className={inputCls} style={inputStyle} placeholder="00.000.000/0000-00" /></Field>
                         <Field label="Observações"><textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setModal(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -1760,12 +1760,19 @@ function TabDespesasExtras({ isAdmin }) {
     const removerCheque = (idx) => setForm(f => ({ ...f, cheques: f.cheques.filter((_, i) => i !== idx) }));
 
     const handleSubmit = async () => {
-        if (!form.categoria || !form.valor || !form.data_despesa) { showToast('Categoria, valor e data são obrigatórios', 'error'); return; }
+        if (!form.categoria || !form.valor || !form.data_despesa) {
+            showToast('Categoria, valor e data são obrigatórios', 'error'); return;
+        }
         try {
             if (modal.mode === 'create') await createDespesaExtra(form);
             else await updateDespesaExtra(modal.data.id, form);
             showToast('Despesa salva!', 'success'); setModal(null); load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        } catch (e) {
+            // Mostra o erro real do banco para facilitar diagnóstico
+            const msg = e?.message || e?.details || JSON.stringify(e);
+            showToast('Erro ao salvar: ' + msg, 'error');
+            console.error('[Despesa] Erro ao salvar:', e);
+        }
     };
 
     const handleDelete = async (id) => {
@@ -1913,8 +1920,6 @@ function TabDespesasExtras({ isAdmin }) {
                     <ModalHeader title={modal.mode === 'create' ? 'Nova Despesa' : 'Editar Despesa'} icon="Receipt" onClose={() => setModal(null)} />
                     <div className="p-5 space-y-4 overflow-y-auto flex-1"
                         style={{ overscrollBehavior: 'contain' }}>
-
-                        {/* item 9: importar XML NF + leitura código de barras */}
                         <div className="p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
                             <p className="text-xs font-semibold text-blue-700 mb-2">📄 Nota Fiscal — Importar dados</p>
                             <div className="flex flex-wrap gap-2 mb-2">
@@ -2141,9 +2146,10 @@ function TabDespesasExtras({ isAdmin }) {
                             <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
                         </Field>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end border-t" style={{ borderColor: 'var(--color-border)' }}>
-                        <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
+                    {/* Footer fixo — fora da área scrollável */}
+                    <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                        <button onClick={() => setModal(null)} className="flex-1 px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <Button onClick={handleSubmit} size="sm" iconName="Check" className="flex-1">Salvar despesa</Button>
                     </div>
                 </ModalOverlay>
             )}
@@ -2351,7 +2357,7 @@ function TabDiarias({ isAdmin }) {
                             </Field>
                         </div>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -3058,40 +3064,66 @@ function BackupSeguranca({ showToast }) {
     const gerarBackupExcel = async () => {
         setLoading(true);
         const wb = XLSX.utils.book_new();
+
+        // Campos que contêm base64 ou JSON muito grande — substituir por indicador no Excel
+        // (esses dados ficam íntegros no backup JSON)
+        const CAMPOS_BASE64  = ['foto_url', 'comprovante_url', 'permuta_doc_url', 'pdf_url'];
+        const CAMPOS_JSON    = ['nf_itens', 'boletos', 'cheques', 'itens'];
+        const LIMITE_EXCEL   = 32000; // margem de segurança abaixo do limite de 32767
+
+        const sanitizarValor = (k, v) => {
+            if (v === null || v === undefined) return '';
+            // Campos base64 — só indica presença
+            if (CAMPOS_BASE64.includes(k)) return v ? '[imagem anexada]' : '';
+            // Arrays/objetos JSON — resume em texto curto
+            if (CAMPOS_JSON.includes(k)) {
+                if (Array.isArray(v)) return v.length > 0 ? `[${v.length} item(s)]` : '';
+                if (typeof v === 'object') return Object.keys(v).length > 0 ? `[${Object.keys(v).length} campo(s)]` : '';
+                return '';
+            }
+            // Objetos aninhados (joins do Supabase) — aplana campos simples
+            if (typeof v === 'object' && !Array.isArray(v)) {
+                return Object.entries(v)
+                    .filter(([, val]) => typeof val !== 'object')
+                    .map(([key, val]) => `${key}:${val}`)
+                    .join(' | ');
+            }
+            // String muito longa — trunca
+            const str = String(v);
+            return str.length > LIMITE_EXCEL ? str.substring(0, LIMITE_EXCEL) + '...[truncado]' : str;
+        };
+
         try {
             for (const tabela of TABELAS) {
                 setProgresso(`Exportando ${tabela.label}...`);
                 const dados = await tabela.fn();
                 if (dados.length === 0) continue;
-                // Aplana objetos aninhados removendo joins profundos
+
                 const rows = dados.map(row => {
                     const flat = {};
                     Object.entries(row).forEach(([k, v]) => {
-                        if (v === null || v === undefined) flat[k] = '';
-                        else if (typeof v === 'object' && !Array.isArray(v))
-                            flat[k] = JSON.stringify(v); // joins como string JSON
-                        else if (Array.isArray(v))
-                            flat[k] = JSON.stringify(v);
-                        else flat[k] = v;
+                        flat[k] = sanitizarValor(k, v);
                     });
                     return flat;
                 });
+
                 const ws = XLSX.utils.json_to_sheet(rows);
                 XLSX.utils.book_append_sheet(wb, ws, tabela.label.substring(0, 31));
             }
 
-            // Aba de meta
+            // Aba de resumo
             const meta = [
-                ['LogiFlow — Backup de Dados', ''],
+                ['LogiFlow — Backup de Dados (Excel — visualização)', ''],
                 ['Gerado em', new Date().toLocaleString('pt-BR')],
+                ['Nota', 'Imagens e dados binários são indicados como [imagem anexada]. Use o Backup JSON para dados completos.'],
                 ['', ''],
                 ['Tabela', 'Registros'],
             ];
             const dataForMeta = await Promise.all(TABELAS.map(t => t.fn().catch(() => [])));
             TABELAS.forEach((t, i) => meta.push([t.label, dataForMeta[i].length]));
             const wsMeta = XLSX.utils.aoa_to_sheet(meta);
-            wsMeta['!cols'] = [{ wch: 25 }, { wch: 20 }];
-            XLSX.utils.book_append_sheet(wb, wsMeta, 'Resumo do Backup');
+            wsMeta['!cols'] = [{ wch: 28 }, { wch: 60 }];
+            XLSX.utils.book_append_sheet(wb, wsMeta, 'Resumo');
 
             setProgresso('Gerando arquivo...');
             const dataStr = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
@@ -3650,7 +3682,7 @@ function TabOrdensServico({ isAdmin, profile }) {
                             </label>
                         </div>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setModal(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleCreate} iconName={uploading ? 'Loader' : 'Send'} size="sm" disabled={uploading}>
                             {uploading ? 'Enviando...' : 'Criar OS'}

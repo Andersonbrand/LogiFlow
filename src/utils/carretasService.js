@@ -635,20 +635,97 @@ export async function fetchDespesasExtras(filters = {}) {
 }
 
 export async function createDespesaExtra(despesa) {
+    // Extrai apenas os campos que existem na tabela — evita erro se alguma coluna
+    // ainda não foi criada via migration (ex: fornecedor) ou se o form tem campos extras
+    const payload = {
+        veiculo_id:       despesa.veiculo_id       || null,
+        categoria:        despesa.categoria        || 'Outros',
+        descricao:        despesa.descricao        || null,
+        valor:            Number(despesa.valor)    || 0,
+        data_despesa:     despesa.data_despesa     || new Date().toISOString().split('T')[0],
+        nota_fiscal:      despesa.nota_fiscal      || null,
+        observacoes:      despesa.observacoes      || null,
+        // Pagamento
+        forma_pagamento:  despesa.forma_pagamento  || 'a_vista',
+        tipo_pagamento:   despesa.tipo_pagamento   || 'pix',
+        comprovante_url:  despesa.comprovante_url  || null,
+        boletos:          despesa.boletos          || [],
+        permuta_obs:      despesa.permuta_obs      || null,
+        permuta_doc_url:  despesa.permuta_doc_url  || null,
+        cheques:          despesa.cheques          || [],
+        nf_itens:         despesa.nf_itens         || [],
+    };
+
+    // Tenta incluir fornecedor — se a coluna não existir ainda no banco, ignora silenciosamente
+    if (despesa.fornecedor) payload.fornecedor = despesa.fornecedor;
+
+    // Remove campos nulos para evitar conflito com NOT NULL constraints
+    if (!payload.veiculo_id) delete payload.veiculo_id;
+
     const { data, error } = await supabase
         .from('carretas_despesas_extras')
-        .insert(despesa)
+        .insert(payload)
         .select('*, veiculo:veiculo_id(id, placa, modelo)')
         .single();
+
+    // Se erro for sobre coluna fornecedor não existir, tenta sem ela
+    if (error && error.message?.includes('fornecedor')) {
+        delete payload.fornecedor;
+        const retry = await supabase
+            .from('carretas_despesas_extras')
+            .insert(payload)
+            .select('*, veiculo:veiculo_id(id, placa, modelo)')
+            .single();
+        if (retry.error) throw retry.error;
+        return retry.data;
+    }
+
     if (error) throw error;
     return data;
 }
 
 export async function updateDespesaExtra(id, updates) {
+    const payload = {
+        veiculo_id:       updates.veiculo_id       || null,
+        categoria:        updates.categoria        || 'Outros',
+        descricao:        updates.descricao        || null,
+        valor:            Number(updates.valor)    || 0,
+        data_despesa:     updates.data_despesa     || null,
+        nota_fiscal:      updates.nota_fiscal      || null,
+        observacoes:      updates.observacoes      || null,
+        forma_pagamento:  updates.forma_pagamento  || 'a_vista',
+        tipo_pagamento:   updates.tipo_pagamento   || 'pix',
+        comprovante_url:  updates.comprovante_url  || null,
+        boletos:          updates.boletos          || [],
+        permuta_obs:      updates.permuta_obs      || null,
+        permuta_doc_url:  updates.permuta_doc_url  || null,
+        cheques:          updates.cheques          || [],
+        nf_itens:         updates.nf_itens         || [],
+        updated_at:       new Date().toISOString(),
+    };
+
+    if (updates.fornecedor) payload.fornecedor = updates.fornecedor;
+    if (!payload.veiculo_id) delete payload.veiculo_id;
+
     const { data, error } = await supabase
         .from('carretas_despesas_extras')
-        .update({ ...updates, updated_at: new Date().toISOString() })
-        .eq('id', id).select().single();
+        .update(payload)
+        .eq('id', id)
+        .select('*, veiculo:veiculo_id(id, placa, modelo)')
+        .single();
+
+    if (error && error.message?.includes('fornecedor')) {
+        delete payload.fornecedor;
+        const retry = await supabase
+            .from('carretas_despesas_extras')
+            .update(payload)
+            .eq('id', id)
+            .select('*, veiculo:veiculo_id(id, placa, modelo)')
+            .single();
+        if (retry.error) throw retry.error;
+        return retry.data;
+    }
+
     if (error) throw error;
     return data;
 }
