@@ -46,8 +46,8 @@ function Field({ label, children, required }) {
 
 function ModalOverlay({ children, onClose }) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' , paddingTop: '68px' }}
             onClick={e => e.target === e.currentTarget && onClose()}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
                 {children}
@@ -570,7 +570,7 @@ export default function CarreteiroDashboard() {
             {/* ── Drawer mobile/tablet (< lg) ──────────────────────────── */}
             {drawerOpen && (
                 <>
-                    <div className="fixed inset-0 z-40 lg:hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={() => setDrawerOpen(false)} />
+                    <div className="fixed inset-0 z-40 lg:hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' , paddingTop: '68px' }} onClick={() => setDrawerOpen(false)} />
                     <div className="fixed top-0 left-0 bottom-0 z-50 lg:hidden flex flex-col overflow-y-auto shadow-2xl"
                         style={{ width: 240, backgroundColor: 'var(--color-card)' }}>
                         <div className="flex items-center justify-between px-4 py-4 border-b flex-shrink-0"
@@ -611,8 +611,8 @@ export default function CarreteiroDashboard() {
 
             {/* Modais */}
             {modalAbast && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' , paddingTop: '68px' }}
                     onClick={e => e.target === e.currentTarget && setModalAbast(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
                         <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
@@ -677,11 +677,11 @@ export default function CarreteiroDashboard() {
             )}
 
             {modalCheck && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' , paddingTop: '68px' }}
                     onClick={e => e.target === e.currentTarget && setModalCheck(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl"
-                        style={{ maxHeight: '95dvh', overflowY: 'auto' }}>
+                        style={{ maxHeight: 'calc(100dvh - 76px)', overflowY: 'auto' }}>
                         <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
                         <div className="flex items-center justify-between p-5 border-b sticky top-0 bg-white z-10" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
@@ -772,8 +772,8 @@ export default function CarreteiroDashboard() {
             )}
 
             {modalRegistro && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' , paddingTop: '68px' }}
                     onClick={e => e.target === e.currentTarget && setModalRegistro(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
                         <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
