@@ -1896,6 +1896,23 @@ function TabDespesasExtras({ isAdmin }) {
     };
     const removerBoleto = (idx) => setForm(f => ({ ...f, boletos: f.boletos.filter((_, i) => i !== idx) }));
 
+    // ── Dar baixa num boleto diretamente da tabela (sem abrir o modal) ──────
+    const darBaixaBoleto = async (despesa, boletoIdx) => {
+        const novosBoletos = (despesa.boletos || []).map((b, i) =>
+            i === boletoIdx ? { ...b, pago: true, data_pagamento: new Date().toISOString().split('T')[0] } : b
+        );
+        try {
+            await updateDespesaExtra(despesa.id, { ...despesa, boletos: novosBoletos });
+            // Atualiza localmente sem recarregar tudo
+            setDespesas(prev => prev.map(d =>
+                d.id === despesa.id ? { ...d, boletos: novosBoletos } : d
+            ));
+            showToast('Boleto marcado como pago!', 'success');
+        } catch (e) {
+            showToast('Erro ao dar baixa: ' + e.message, 'error');
+        }
+    };
+
     const adicionarCheque = () => {
         if (!novoCheque.numero || !novoCheque.valor) { showToast('Preencha número e valor do cheque', 'error'); return; }
         setForm(f => ({ ...f, cheques: [...(f.cheques || []), { ...novoCheque }] }));
@@ -2138,17 +2155,33 @@ function TabDespesasExtras({ isAdmin }) {
                                                             const venceHoje = venc && venc === hoje && !b.pago;
                                                             return (
                                                                 <div key={bi} className="flex items-center justify-between px-3 py-2 rounded-lg border text-xs"
-                                                                    style={{ borderColor: atrasado ? '#FCA5A5' : venceHoje ? '#FCD34D' : '#E5E7EB', backgroundColor: atrasado ? '#FFF5F5' : venceHoje ? '#FFFBEB' : '#fff' }}>
-                                                                    <div>
+                                                                    style={{ borderColor: b.pago ? '#BBF7D0' : atrasado ? '#FCA5A5' : venceHoje ? '#FCD34D' : '#E5E7EB', backgroundColor: b.pago ? '#F0FDF4' : atrasado ? '#FFF5F5' : venceHoje ? '#FFFBEB' : '#fff' }}>
+                                                                    <div className="flex-1 min-w-0">
                                                                         <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>Parcela {bi + 1}</span>
-                                                                        <span className="ml-2 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                        <span className="ml-2" style={{ color: 'var(--color-muted-foreground)' }}>
                                                                             Venc: {venc ? new Date(venc + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
                                                                         </span>
                                                                         {atrasado && <span className="ml-1 font-bold text-red-600">⚠ VENCIDO</span>}
                                                                         {venceHoje && <span className="ml-1 font-bold text-amber-600">📅 Hoje</span>}
-                                                                        {b.pago && <span className="ml-1 text-green-600 font-medium">✓ Pago</span>}
+                                                                        {b.pago && (
+                                                                            <span className="ml-1 text-green-700 font-medium">
+                                                                                ✓ Pago{b.data_pagamento ? ` em ${new Date(b.data_pagamento + 'T00:00:00').toLocaleDateString('pt-BR')}` : ''}
+                                                                            </span>
+                                                                        )}
                                                                     </div>
-                                                                    <span className="font-data font-bold" style={{ color: atrasado ? '#DC2626' : '#111' }}>{BRL(b.valor)}</span>
+                                                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                                                        <span className="font-data font-bold" style={{ color: b.pago ? '#15803D' : atrasado ? '#DC2626' : '#111' }}>{BRL(b.valor)}</span>
+                                                                        {!b.pago && isAdmin && (
+                                                                            <button
+                                                                                onClick={e => { e.stopPropagation(); darBaixaBoleto(d, bi); }}
+                                                                                className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold text-white transition-colors hover:opacity-90"
+                                                                                style={{ backgroundColor: '#059669' }}
+                                                                                title="Marcar como pago"
+                                                                            >
+                                                                                <Icon name="Check" size={11} color="#fff" /> Pago
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                             );
                                                         })}
