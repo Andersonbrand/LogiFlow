@@ -390,6 +390,17 @@ export async function createEmpresa(empresa) {
     return data;
 }
 
+export async function updateEmpresa(id, empresa) {
+    const { data, error } = await supabase
+        .from('carretas_empresas')
+        .update(empresa)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
 export async function deleteEmpresa(id) {
     const { error } = await supabase.from('carretas_empresas').delete().eq('id', id);
     if (error) throw error;

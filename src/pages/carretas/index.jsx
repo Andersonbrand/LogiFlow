@@ -14,7 +14,7 @@ import {
     fetchAbastecimentos, createAbastecimento, deleteAbastecimento,
     fetchChecklists, createChecklist, aprovarChecklist, registrarManutencaoChecklist,
     fetchCarregamentos, createCarregamento, updateCarregamento, deleteCarregamento,
-    fetchEmpresas, createEmpresa, deleteEmpresa,
+    fetchEmpresas, createEmpresa, updateEmpresa, deleteEmpresa,
     fetchCarreteiros, fetchTodosMotoristas,
     fetchConfigAbastecimento, saveConfigAbastecimento,
     CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
@@ -1363,6 +1363,7 @@ function TabEmpresas({ isAdmin }) {
     const { confirm, ConfirmDialog } = useConfirm();
     const [empresas, setEmpresas] = useState([]);
     const [loading, setLoading] = useState(true);
+    // modal: false | { mode: 'create' | 'edit', data?: empresa }
     const [modal, setModal] = useState(false);
     const [form, setForm] = useState({ nome: '', cnpj: '', observacoes: '' });
 
@@ -1374,21 +1375,43 @@ function TabEmpresas({ isAdmin }) {
     }, []); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
+    const openCreate = () => { setForm({ nome: '', cnpj: '', observacoes: '' }); setModal({ mode: 'create' }); };
+    const openEdit = (emp) => { setForm({ nome: emp.nome, cnpj: emp.cnpj || '', observacoes: emp.observacoes || '' }); setModal({ mode: 'edit', data: emp }); };
+
     const handleSubmit = async () => {
         if (!form.nome.trim()) { showToast('Nome é obrigatório', 'error'); return; }
-        try { await createEmpresa(form); showToast('Empresa cadastrada!', 'success'); setModal(false); load(); }
-        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        try {
+            if (modal.mode === 'edit') {
+                await updateEmpresa(modal.data.id, form);
+                showToast('Empresa atualizada!', 'success');
+            } else {
+                await createEmpresa(form);
+                showToast('Empresa cadastrada!', 'success');
+            }
+            setModal(false); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
-    const handleDelete = async (id) => {
-        if (!await confirm({ title: 'Excluir empresa?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir' })) return;
-        try { await deleteEmpresa(id); showToast('Excluída!', 'success'); load(); }
-        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+
+    const handleDelete = async (emp) => {
+        if (!await confirm({ title: `Excluir "${emp.nome}"?`, message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir' })) return;
+        try {
+            await deleteEmpresa(emp.id);
+            showToast('Excluída!', 'success'); load();
+        } catch (e) {
+            // Erro de FK: empresa está vinculada a carregamentos
+            const msg = e?.message || '';
+            if (msg.includes('foreign key') || msg.includes('fkey') || msg.includes('violates')) {
+                showToast(`Não é possível excluir "${emp.nome}" pois ela está vinculada a carregamentos. Edite ou desative-a.`, 'error');
+            } else {
+                showToast('Erro: ' + msg, 'error');
+            }
+        }
     };
 
     return (
         <div>
             <div className="flex justify-end mb-5">
-                {isAdmin && <Button onClick={() => { setForm({ nome: '', cnpj: '', observacoes: '' }); setModal(true); }} iconName="Plus" size="sm">Nova Empresa</Button>}
+                {isAdmin && <Button onClick={openCreate} iconName="Plus" size="sm">Nova Empresa</Button>}
             </div>
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
@@ -1403,7 +1426,18 @@ function TabEmpresas({ isAdmin }) {
                                     <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{e.nome}</td>
                                     <td className="px-4 py-3 font-data text-sm" style={{ color: 'var(--color-muted-foreground)' }}>{e.cnpj || '—'}</td>
                                     <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{e.observacoes || '—'}</td>
-                                    <td className="px-4 py-3">{isAdmin && <button onClick={() => handleDelete(e.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}</td>
+                                    <td className="px-4 py-3">
+                                        {isAdmin && (
+                                            <div className="flex gap-1">
+                                                <button onClick={() => openEdit(e)} className="p-1.5 rounded hover:bg-blue-50" title="Editar empresa">
+                                                    <Icon name="Pencil" size={13} color="#1D4ED8" />
+                                                </button>
+                                                <button onClick={() => handleDelete(e)} className="p-1.5 rounded hover:bg-red-50" title="Excluir empresa">
+                                                    <Icon name="Trash2" size={13} color="#DC2626" />
+                                                </button>
+                                            </div>
+                                        )}
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -1412,7 +1446,7 @@ function TabEmpresas({ isAdmin }) {
             )}
             {modal && (
                 <ModalOverlay onClose={() => setModal(false)}>
-                    <ModalHeader title="Nova Empresa" icon="Building2" onClose={() => setModal(false)} />
+                    <ModalHeader title={modal.mode === 'edit' ? 'Editar Empresa' : 'Nova Empresa'} icon="Building2" onClose={() => setModal(false)} />
                     <div className="p-5 space-y-4">
                         <Field label="Nome da empresa" required><input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Comercial Araguaia" /></Field>
                         <Field label="CNPJ"><input value={form.cnpj} onChange={e => setForm(f => ({ ...f, cnpj: e.target.value }))} className={inputCls} style={inputStyle} placeholder="00.000.000/0000-00" /></Field>
@@ -1420,7 +1454,7 @@ function TabEmpresas({ isAdmin }) {
                     </div>
                     <div className="flex gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setModal(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
+                        <Button onClick={handleSubmit} size="sm" iconName="Check">{modal.mode === 'edit' ? 'Salvar Alterações' : 'Cadastrar'}</Button>
                     </div>
                 </ModalOverlay>
             )}
@@ -1869,6 +1903,26 @@ function TabDespesasExtras({ isAdmin }) {
     };
     const removerCheque = (idx) => setForm(f => ({ ...f, cheques: f.cheques.filter((_, i) => i !== idx) }));
 
+    // ── Painel expansível por despesa ──────────────────────────────────────
+    const [expandedDespesa, setExpandedDespesa] = useState(null);
+    const toggleDespesa = (id) => setExpandedDespesa(prev => prev === id ? null : id);
+
+    // ── Alertas de vencimento (boletos vencendo hoje ou vencidos) ──────────
+    const hoje = new Date().toISOString().split('T')[0];
+    const boletosAlerta = useMemo(() => {
+        const alertas = [];
+        despesas.forEach(d => {
+            if (d.forma_pagamento !== 'a_prazo' || d.tipo_pagamento !== 'boleto') return;
+            (d.boletos || []).forEach((b, idx) => {
+                if (b.pago) return;
+                if (b.vencimento && b.vencimento <= hoje) {
+                    alertas.push({ despesa: d, boleto: b, idx, atrasado: b.vencimento < hoje });
+                }
+            });
+        });
+        return alertas;
+    }, [despesas, hoje]);
+
     const handleSubmit = async () => {
         if (!form.categoria || !form.valor || !form.data_despesa) {
             showToast('Categoria, valor e data são obrigatórios', 'error'); return;
@@ -1994,6 +2048,43 @@ function TabDespesasExtras({ isAdmin }) {
                 </div>
             )}
 
+            {/* ── Alertas de boletos vencendo hoje/vencidos ── */}
+            {boletosAlerta.length > 0 && (
+                <div className="mb-4 rounded-xl border-2 overflow-hidden" style={{ borderColor: '#FCA5A5' }}>
+                    <div className="flex items-center gap-2 px-4 py-2.5" style={{ backgroundColor: '#FEF2F2' }}>
+                        <Icon name="AlertTriangle" size={16} color="#DC2626" />
+                        <span className="text-sm font-semibold text-red-700">
+                            {boletosAlerta.filter(a => a.atrasado).length > 0
+                                ? `${boletosAlerta.filter(a => a.atrasado).length} boleto(s) vencido(s)!`
+                                : ''
+                            }
+                            {boletosAlerta.filter(a => !a.atrasado).length > 0
+                                ? ` ${boletosAlerta.filter(a => !a.atrasado).length} boleto(s) vencem hoje!`
+                                : ''
+                            }
+                        </span>
+                    </div>
+                    <div className="divide-y" style={{ backgroundColor: '#FFF5F5' }}>
+                        {boletosAlerta.map((alerta, i) => (
+                            <div key={i} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                                <div className="flex items-center gap-3">
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${alerta.atrasado ? 'bg-red-200 text-red-800' : 'bg-amber-200 text-amber-800'}`}>
+                                        {alerta.atrasado ? 'VENCIDO' : 'HOJE'}
+                                    </span>
+                                    <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                                        {alerta.despesa.descricao || alerta.despesa.categoria}
+                                    </span>
+                                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                        {alerta.despesa.veiculo?.placa || '—'} · Venc. {new Date(alerta.boleto.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                    </span>
+                                </div>
+                                <span className="font-data font-bold text-red-700">{BRL(alerta.boleto.valor)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                     <table className="w-full text-sm min-w-[740px]">
@@ -2002,24 +2093,82 @@ function TabDespesasExtras({ isAdmin }) {
                         </thead>
                         <tbody>
                             {despesas.length === 0 ? <tr><td colSpan={9} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma despesa registrada</td></tr>
-                            : despesas.map((d, i) => (
-                                <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                    <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(d.data_despesa)}</td>
-                                    <td className="px-3 py-3 font-data">{d.veiculo?.placa || '—'}</td>
-                                    <td className="px-3 py-3"><span className="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700 font-medium">{d.categoria}</span></td>
-                                    <td className="px-3 py-3 text-xs max-w-[130px] truncate font-medium" style={{ color: 'var(--color-text-primary)' }}>{d.fornecedor || '—'}</td>
-                                    <td className="px-3 py-3 text-xs max-w-[130px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
-                                    <td className="px-3 py-3 text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.nota_fiscal || '—'}</td>
-                                    <td className="px-3 py-3">{pgBadge(d)}</td>
-                                    <td className="px-3 py-3 font-data font-semibold text-red-600">{BRL(d.valor)}</td>
-                                    <td className="px-3 py-3">
-                                        <div className="flex gap-1">
-                                            {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
-                                            {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                            : despesas.map((d, i) => {
+                                const isExp = expandedDespesa === d.id;
+                                const temParcelas = d.forma_pagamento === 'a_prazo' && (d.boletos?.length > 0 || d.cheques?.length > 0);
+                                const boletosVencidos = (d.boletos || []).filter(b => !b.pago && b.vencimento && b.vencimento < hoje).length;
+                                const boletosHoje = (d.boletos || []).filter(b => !b.pago && b.vencimento && b.vencimento === hoje).length;
+                                return (
+                                    <React.Fragment key={d.id}>
+                                        <tr className="border-t hover:bg-gray-50 cursor-pointer" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}
+                                            onClick={() => temParcelas && toggleDespesa(d.id)}>
+                                            <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(d.data_despesa)}</td>
+                                            <td className="px-3 py-3 font-data">{d.veiculo?.placa || '—'}</td>
+                                            <td className="px-3 py-3"><span className="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700 font-medium">{d.categoria}</span></td>
+                                            <td className="px-3 py-3 text-xs max-w-[130px] truncate font-medium" style={{ color: 'var(--color-text-primary)' }}>{d.fornecedor || '—'}</td>
+                                            <td className="px-3 py-3 text-xs max-w-[130px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
+                                            <td className="px-3 py-3 text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.nota_fiscal || '—'}</td>
+                                            <td className="px-3 py-3">
+                                                <div className="flex items-center gap-1.5">
+                                                    {pgBadge(d)}
+                                                    {boletosVencidos > 0 && <span className="px-1.5 py-0.5 rounded text-xs bg-red-100 text-red-700 font-bold">⚠ {boletosVencidos} vencido{boletosVencidos > 1 ? 's' : ''}</span>}
+                                                    {boletosHoje > 0 && <span className="px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-700 font-bold">📅 hoje</span>}
+                                                    {temParcelas && <Icon name={isExp ? 'ChevronUp' : 'ChevronDown'} size={13} color="var(--color-muted-foreground)" />}
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-3 font-data font-semibold text-red-600">{BRL(d.valor)}</td>
+                                            <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                                                <div className="flex gap-1">
+                                                    {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
+                                                    {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {/* Painel de parcelas expansível */}
+                                        {isExp && temParcelas && (
+                                            <tr style={{ backgroundColor: '#FAFBFF' }}>
+                                                <td colSpan={9} className="px-6 py-3">
+                                                    <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                                                        Parcelas / Boletos ({(d.boletos || []).length})
+                                                    </p>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                                        {(d.boletos || []).map((b, bi) => {
+                                                            const venc = b.vencimento;
+                                                            const atrasado = venc && venc < hoje && !b.pago;
+                                                            const venceHoje = venc && venc === hoje && !b.pago;
+                                                            return (
+                                                                <div key={bi} className="flex items-center justify-between px-3 py-2 rounded-lg border text-xs"
+                                                                    style={{ borderColor: atrasado ? '#FCA5A5' : venceHoje ? '#FCD34D' : '#E5E7EB', backgroundColor: atrasado ? '#FFF5F5' : venceHoje ? '#FFFBEB' : '#fff' }}>
+                                                                    <div>
+                                                                        <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>Parcela {bi + 1}</span>
+                                                                        <span className="ml-2 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                            Venc: {venc ? new Date(venc + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                                                                        </span>
+                                                                        {atrasado && <span className="ml-1 font-bold text-red-600">⚠ VENCIDO</span>}
+                                                                        {venceHoje && <span className="ml-1 font-bold text-amber-600">📅 Hoje</span>}
+                                                                        {b.pago && <span className="ml-1 text-green-600 font-medium">✓ Pago</span>}
+                                                                    </div>
+                                                                    <span className="font-data font-bold" style={{ color: atrasado ? '#DC2626' : '#111' }}>{BRL(b.valor)}</span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                        {(d.cheques || []).map((ch, ci) => (
+                                                            <div key={'ch' + ci} className="flex items-center justify-between px-3 py-2 rounded-lg border text-xs" style={{ borderColor: '#E5E7EB', backgroundColor: '#fff' }}>
+                                                                <div>
+                                                                    <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>Cheque {ci + 1}</span>
+                                                                    {ch.numero && <span className="ml-2 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>#{ch.numero}</span>}
+                                                                    {ch.vencimento && <span className="ml-2 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Venc: {new Date(ch.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
+                                                                </div>
+                                                                <span className="font-data font-bold">{BRL(ch.valor)}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -2771,13 +2920,21 @@ function TabRelatorioFinanceiro({ isAdmin }) {
         const carrg = (dados._carregamentos || []).filter(c => c.veiculo_id === filtroPlaca);
         const absts = (dados._abastecimentos || []).filter(a => a.veiculo_id === filtroPlaca);
         const viags = (dados._viagens || []).filter(v => v.veiculo_id === filtroPlaca);
-        const desps = (dados._despesasExtras || []).filter(d => d.veiculo_id === filtroPlaca);
+        const viagIds = new Set(viags.map(v => v.id));
+        // Despesas: pelo veiculo_id direto OU pela viagem vinculada ao veículo
+        const desps = (dados._despesasExtras || []).filter(d =>
+            d.veiculo_id === filtroPlaca || (d.viagem_id && viagIds.has(d.viagem_id))
+        );
         const diar  = (dados._diarias || []).filter(d => {
             // diárias vinculadas ao veículo via viagem
             const viagIds = viags.map(v => v.id);
             return d.viagem_id && viagIds.includes(d.viagem_id);
         });
-        const receita     = carrg.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);
+        // Receitas: fretes de carregamentos + romaneios de carreta vinculados a este veículo
+        const romaneiosPlaca = (dados._romaneiosCarreta || []).filter(r => r.veiculo_id === filtroPlaca);
+        const receitaCarrg   = carrg.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);
+        const receitaRom     = romaneiosPlaca.reduce((s, r) => s + Number(r.valor_frete || 0), 0);
+        const receita        = receitaCarrg + receitaRom;
         const vDiesel     = absts.reduce((s, a) => s + Number(a.valor_diesel || 0), 0);
         const vArla       = absts.reduce((s, a) => s + Number(a.valor_arla || 0), 0);
         const combustivel = vDiesel + vArla;
@@ -2788,7 +2945,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
         const diarias     = diar.reduce((s, d) => s + Number(d.valor_total || 0), 0);
         const totalDesp   = combustivel + bonus + despExtra + diarias;
         const margem      = receita - totalDesp;
-        return { veic, carrg, absts, viags, desps, diar, receita, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, totalDesp, margem };
+        return { veic, carrg, romaneiosPlaca, absts, viags, desps, diar, receita, receitaCarrg, receitaRom, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, totalDesp, margem };
     }, [dados, filtroPlaca, veiculos]);
 
     const exportarPorPlaca = () => {
@@ -3178,8 +3335,10 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                                     </div>
                                     <div className="p-4 space-y-1 text-sm">
                                         <div className="flex justify-between py-1 font-semibold text-green-700">
-                                            <span>Receita de Fretes</span><span className="font-data">{BRL(dadosPorPlaca.receita)}</span>
+                                            <span>Receita Total</span><span className="font-data">{BRL(dadosPorPlaca.receita)}</span>
                                         </div>
+                                        {dadosPorPlaca.receitaCarrg > 0 && <div className="flex justify-between py-0.5 pl-3 text-xs text-green-600"><span>↳ Fretes de carregamento</span><span className="font-data">{BRL(dadosPorPlaca.receitaCarrg)}</span></div>}
+                                        {dadosPorPlaca.receitaRom > 0 && <div className="flex justify-between py-0.5 pl-3 text-xs text-green-600"><span>↳ Romaneios de carreta</span><span className="font-data">{BRL(dadosPorPlaca.receitaRom)}</span></div>}
                                         <div className="flex justify-between py-1 text-amber-700">
                                             <span>(-) Diesel {dadosPorPlaca.lDiesel.toFixed(1)}L</span><span className="font-data">({BRL(dadosPorPlaca.vDiesel)})</span>
                                         </div>
@@ -4010,7 +4169,7 @@ function TabRomaneioCarreta({ isAdmin, profile }) {
     const addItem = () => {
         if (!novoItem.material_id && !novoItem.descricao) { showToast('Selecione um material ou informe a descrição', 'error'); return; }
         if (!novoItem.quantidade) { showToast('Informe a quantidade', 'error'); return; }
-        const mat = materials.find(m => m.id === novoItem.material_id);
+        const mat = materials.find(m => String(m.id) === String(novoItem.material_id));
         const pesoCalc = mat?.peso && novoItem.quantidade ? (Number(novoItem.quantidade) * Number(mat.peso)).toFixed(3) : novoItem.peso_total;
         setItens(prev => [...prev, {
             ...novoItem,
@@ -4374,7 +4533,7 @@ function TabRomaneioCarreta({ isAdmin, profile }) {
                                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-2">
                                         <div className="sm:col-span-2">
                                             <select value={novoItem.material_id} onChange={e => {
-                                                const mat = materials.find(m => m.id === e.target.value);
+                                                const mat = materials.find(m => String(m.id) === String(e.target.value));
                                                 const qtd = Number(novoItem.quantidade) || 0;
                                                 const pesoCalc = mat?.peso && qtd > 0 ? (qtd * Number(mat.peso)).toFixed(3) : '';
                                                 setNovoItem(n => ({ ...n, material_id: e.target.value, descricao: mat?.nome || n.descricao, unidade: mat?.unidade || n.unidade, peso_total: pesoCalc }));
@@ -4385,7 +4544,7 @@ function TabRomaneioCarreta({ isAdmin, profile }) {
                                         </div>
                                         <input type="number" step="0.001" value={novoItem.quantidade} onChange={e => {
                                             const qtd = Number(e.target.value) || 0;
-                                            const mat = materials.find(m => m.id === novoItem.material_id);
+                                            const mat = materials.find(m => String(m.id) === String(novoItem.material_id));
                                             const pesoCalc = mat?.peso && qtd > 0 ? (qtd * Number(mat.peso)).toFixed(3) : novoItem.peso_total;
                                             setNovoItem(n => ({ ...n, quantidade: e.target.value, peso_total: pesoCalc }));
                                         }} className={inputCls} style={inputStyle} placeholder="Quantidade" />
@@ -4401,7 +4560,7 @@ function TabRomaneioCarreta({ isAdmin, profile }) {
                                         <div className="mb-2 flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs" style={{ backgroundColor: '#F0FDF4', color: '#065F46' }}>
                                             <Icon name="Scale" size={12} color="#059669" />
                                             {(() => {
-                                                const mat = materials.find(m => m.id === novoItem.material_id);
+                                                const mat = materials.find(m => String(m.id) === String(novoItem.material_id));
                                                 return mat?.peso
                                                     ? <>Peso unitário: <strong>{Number(mat.peso).toLocaleString('pt-BR')} kg/{mat.unidade}</strong> → Peso total estimado: <strong>{novoItem.peso_total ? Number(novoItem.peso_total).toLocaleString('pt-BR') + ' kg' : '—'}</strong></>
                                                     : <span>Peso unitário não cadastrado para este material</span>;
