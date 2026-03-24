@@ -243,6 +243,8 @@ export async function updateRomaneioStatus(id, status) {
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 export async function deleteRomaneio(id) {
+    // Remove dependentes com FK para romaneios antes de excluir
+    await supabase.from('notifications').delete().eq('romaneio_id', id);
     await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
     await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
     const { error } = await supabase.from('romaneios').delete().eq('id', id);

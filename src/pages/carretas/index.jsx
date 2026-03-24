@@ -13,13 +13,14 @@ import {
     fetchCarretasVeiculos, createCarretaVeiculo, updateCarretaVeiculo, deleteCarretaVeiculo,
     fetchAbastecimentos, createAbastecimento, deleteAbastecimento,
     fetchChecklists, createChecklist, aprovarChecklist, registrarManutencaoChecklist,
+    deleteChecklist,
     fetchCarregamentos, createCarregamento, updateCarregamento, deleteCarregamento,
     fetchEmpresas, createEmpresa, updateEmpresa, deleteEmpresa,
     fetchCarreteiros, fetchTodosMotoristas,
     fetchConfigAbastecimento, saveConfigAbastecimento,
     CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
     aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
-    fetchOrdensServico, createOrdemServico, updateOrdemServico,
+    fetchOrdensServico, createOrdemServico, updateOrdemServico, deleteOrdemServico,
     fetchMecanicos,
     fetchDespesasExtras, createDespesaExtra, updateDespesaExtra, deleteDespesaExtra,
     fetchDiarias, createDiaria, updateDiaria, deleteDiaria,
@@ -843,6 +844,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
 // ─── TAB: Checklist ───────────────────────────────────────────────────────────
 function TabChecklist({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [checklists, setChecklists] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
@@ -912,6 +914,14 @@ function TabChecklist({ isAdmin, profile }) {
         try {
             await aprovarChecklistComNotificacao(c.id, profile.id, c.motorista_id);
             showToast('Aprovado! Motorista notificado.', 'success'); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleDeleteChecklist = async (c) => {
+        if (!await confirm({ title: 'Excluir checklist?', message: `Checklist de ${c.motorista?.name || 'motorista'} será excluído permanentemente. Esta ação não pode ser desfeita.`, confirmLabel: 'Excluir', danger: true })) return;
+        try {
+            await deleteChecklist(c.id);
+            showToast('Checklist excluído!', 'success'); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
@@ -1026,6 +1036,11 @@ function TabChecklist({ isAdmin, profile }) {
                                     <div className="flex flex-wrap gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                         <button onClick={() => handleAprovar(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"><Icon name="CheckCircle2" size={13} />Aprovar</button>
                                         <button onClick={() => { setModalManut(c.id); setObsManut(''); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-orange-300 text-orange-700 hover:bg-orange-50 transition-colors"><Icon name="Wrench" size={13} />Registrar Manutenção</button>
+                                    </div>
+                                )}
+                                {isAdmin && (
+                                    <div className="flex justify-end pt-2">
+                                        <button onClick={() => handleDeleteChecklist(c)} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 hover:underline transition-colors"><Icon name="Trash2" size={12} color="currentColor" />Excluir</button>
                                     </div>
                                 )}
                             </div>
@@ -1158,6 +1173,7 @@ function TabChecklist({ isAdmin, profile }) {
             )}
 
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -3890,6 +3906,7 @@ function TabConfiguracoes({ isAdmin }) {
 // ─── TAB: Ordens de Serviço ───────────────────────────────────────────────────
 function TabOrdensServico({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [ordens, setOrdens]     = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [mecanicos, setMecanicos] = useState([]);
@@ -3951,6 +3968,14 @@ function TabOrdensServico({ isAdmin, profile }) {
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setUploading(false); }
+    };
+
+    const handleDeleteOS = async (o) => {
+        if (!await confirm({ title: 'Excluir Ordem de Serviço?', message: `OS do veículo ${o.veiculo?.placa || ''} será excluída permanentemente. Esta ação não pode ser desfeita.`, confirmLabel: 'Excluir', danger: true })) return;
+        try {
+            await deleteOrdemServico(o.id);
+            showToast('Ordem de serviço excluída!', 'success'); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
     const STATUS_OS = ['Pendente', 'Em Andamento', 'Problema Reportado', 'Finalizada'];
@@ -4027,6 +4052,11 @@ function TabOrdensServico({ isAdmin, profile }) {
                                     <div className="p-3 rounded-lg text-xs" style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
                                         <p className="font-medium text-green-600 mb-1">✅ Finalizada pelo mecânico:</p>
                                         <p className="text-green-700">{o.obs_finalizacao}</p>
+                                    </div>
+                                )}
+                                {isAdmin && (
+                                    <div className="flex justify-end pt-2 mt-1 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                        <button onClick={() => handleDeleteOS(o)} className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 hover:underline transition-colors"><Icon name="Trash2" size={12} color="currentColor" />Excluir OS</button>
                                     </div>
                                 )}
                             </div>

@@ -56,6 +56,10 @@ export async function updateVehicle(id, vehicle) {
 }
 
 export async function deleteVehicle(id) {
+    // Remove dependentes que possuem FK para vehicles antes de excluir o veículo
+    await supabase.from('vehicle_history').delete().eq('vehicle_id', id);
+    // Desvincula romaneios (seta vehicle_id = null para não perder histórico)
+    await supabase.from('romaneios').update({ vehicle_id: null }).eq('vehicle_id', id);
     const { error } = await supabase.from('vehicles').delete().eq('id', id);
     if (error) throw error;
 }

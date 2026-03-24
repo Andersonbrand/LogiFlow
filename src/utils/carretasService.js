@@ -122,6 +122,15 @@ export async function updateCarretaVeiculo(id, updates) {
 }
 
 export async function deleteCarretaVeiculo(id) {
+    // Remove dependentes com FK para carretas_veiculos antes de excluir
+    await supabase.from('carretas_checklists').delete().eq('veiculo_id', id);
+    await supabase.from('carretas_ordens_servico').delete().eq('veiculo_id', id);
+    await supabase.from('carretas_abastecimentos').delete().eq('veiculo_id', id);
+    await supabase.from('carretas_despesas_extras').delete().eq('veiculo_id', id);
+    // Desvincula viagens e carregamentos (mantém histórico, apenas remove referência)
+    await supabase.from('carretas_viagens').update({ veiculo_id: null }).eq('veiculo_id', id);
+    await supabase.from('carretas_carregamentos').update({ veiculo_id: null }).eq('veiculo_id', id);
+    await supabase.from('carretas_registros_viagem').update({ veiculo_id: null }).eq('veiculo_id', id);
     const { error } = await supabase.from('carretas_veiculos').delete().eq('id', id);
     if (error) throw error;
 }
@@ -255,6 +264,11 @@ export async function aprovarChecklist(id, adminId) {
         .single();
     if (error) throw error;
     return data;
+}
+
+export async function deleteChecklist(id) {
+    const { error } = await supabase.from('carretas_checklists').delete().eq('id', id);
+    if (error) throw error;
 }
 
 export async function registrarManutencaoChecklist(id, observacao) {
@@ -598,6 +612,11 @@ export async function finalizarOrdemServico(id, mecanicoId, observacoes) {
         .eq('id', id).select().single();
     if (error) throw error;
     return data;
+}
+
+export async function deleteOrdemServico(id) {
+    const { error } = await supabase.from('carretas_ordens_servico').delete().eq('id', id);
+    if (error) throw error;
 }
 
 export async function reportarProblemaOS(id, problema) {

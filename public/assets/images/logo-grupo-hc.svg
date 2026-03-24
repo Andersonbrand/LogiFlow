@@ -1,0 +1,29 @@
+<svg width="100%" viewBox="0 0 680 280" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ink { fill: #0a1a3a; }
+      @media (prefers-color-scheme: dark) { .ink { fill: #c8d8f0; } }
+    </style>
+  </defs>
+
+  <!-- GRUPO label -->
+  <text font-family="'Anthropic Sans', sans-serif" font-weight="400" font-size="16" letter-spacing="10"
+    x="60" y="50" class="ink">GRUPO</text>
+
+  <!-- HC monogram grande -->
+  <text font-family="'Anthropic Sans', sans-serif" font-weight="800" font-size="155"
+    x="48" y="218" class="ink">HC</text>
+
+  <!-- HUGO COSTA maiúsculas -->
+  <text font-family="'Anthropic Sans', sans-serif" font-weight="800" font-size="70" letter-spacing="2"
+    x="310" y="145" class="ink">HUGO</text>
+  <text font-family="'Anthropic Sans', sans-serif" font-weight="800" font-size="70" letter-spacing="2"
+    x="310" y="218" class="ink">COSTA</text>
+
+  <!-- Divider linha horizontal -->
+  <rect class="ink" x="60" y="232" width="580" height="1.5" rx="1" opacity="0.2"/>
+
+  <!-- Tagline -->
+  <text font-family="'Anthropic Sans', sans-serif" font-weight="400" font-size="13" letter-spacing="5"
+    x="340" y="258" text-anchor="middle" class="ink">CONFIANÇA &amp; RESPONSABILIDADE</text>
+</svg>
