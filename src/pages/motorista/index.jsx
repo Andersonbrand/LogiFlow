@@ -66,7 +66,6 @@ export default function MotoristaDashboard() {
     const [modalAbast, setModalAbast] = useState(false);
     const [modalCheck, setModalCheck] = useState(false);
     const [fotoPreview, setFotoPreview] = useState(null);
-    const [submittingCheck, setSubmittingCheck] = useState(false);
 
     const emptyAbast = () => ({
         veiculo_id: '', posto_id: '',
@@ -192,16 +191,13 @@ export default function MotoristaDashboard() {
     };
 
     const handleCheck = async () => {
-        if (submittingCheck) return; // previne duplo envio
         if (!formCheck.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
-        setSubmittingCheck(true);
         try {
             await createChecklist({ ...formCheck, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
             showToast('Checklist enviado!', 'success');
             setModalCheck(false); setFotoPreview(null); setFormCheck(emptyCheck()); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-        finally { setSubmittingCheck(false); }
     };
 
     const exportar = () => {
@@ -542,7 +538,7 @@ export default function MotoristaDashboard() {
             {/* Drawer mobile */}
             {drawerOpen && (
                 <>
-                    <div className="fixed inset-0 z-40 lg:hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' , paddingTop: '68px' }} onClick={() => setDrawerOpen(false)} />
+                    <div className="fixed inset-0 z-40 lg:hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={() => setDrawerOpen(false)} />
                     <div className="fixed top-0 left-0 bottom-0 z-50 lg:hidden flex flex-col overflow-y-auto shadow-2xl"
                         style={{ width: 240, backgroundColor: 'var(--color-card)' }}>
                         <div className="flex items-center justify-between px-4 py-4 border-b flex-shrink-0"
@@ -580,8 +576,8 @@ export default function MotoristaDashboard() {
 
             {/* Modal Abastecimento */}
             {modalAbast && (
-                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' , paddingTop: '68px' }}
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                     onClick={e => e.target === e.currentTarget && setModalAbast(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
                         <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
@@ -678,11 +674,11 @@ export default function MotoristaDashboard() {
 
             {/* Modal Checklist */}
             {modalCheck && (
-                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' , paddingTop: '68px' }}
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                     onClick={e => e.target === e.currentTarget && setModalCheck(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl"
-                        style={{ maxHeight: 'calc(100dvh - 76px)', overflowY: 'auto' }}>
+                        style={{ maxHeight: '95dvh', overflowY: 'auto' }}>
                         <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
                         {/* Header fixo no topo */}
                         <div className="flex items-center justify-between p-5 border-b sticky top-0 bg-white z-10" style={{ borderColor: 'var(--color-border)' }}>
@@ -762,19 +758,8 @@ export default function MotoristaDashboard() {
                         </div>
                         <div className="flex gap-3 p-5 pt-0 justify-end">
                             <button onClick={() => setModalCheck(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <button onClick={handleCheck} disabled={submittingCheck}
-                                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-opacity"
-                                style={{ backgroundColor: 'var(--color-primary)', opacity: submittingCheck ? 0.7 : 1, cursor: submittingCheck ? 'not-allowed' : 'pointer' }}>
-                                {submittingCheck ? (
-                                    <>
-                                        <div className="w-4 h-4 rounded-full border-2 border-white animate-spin" style={{ borderTopColor: 'transparent' }} />
-                                        Enviando...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Icon name="Send" size={15} color="white" /> Enviar
-                                    </>
-                                )}
+                            <button onClick={handleCheck} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: 'var(--color-primary)' }}>
+                                <Icon name="Send" size={15} color="white" /> Enviar
                             </button>
                         </div>
                     </div>

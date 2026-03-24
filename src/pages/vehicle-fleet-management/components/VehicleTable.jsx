@@ -92,6 +92,14 @@ export default function VehicleTable({ vehicles, onEdit, onStatusChange, onViewH
                                 <td className="px-4 py-3">
                                     <div className="flex items-center gap-1">
                                         <button
+                                            title="Combustível · Checklist · Diárias"
+                                            onClick={() => onViewData?.(v)}
+                                            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-150 hover:bg-emerald-50"
+                                            style={{ color: "#059669" }}
+                                        >
+                                            <Icon name="BarChart2" size={15} color="currentColor" strokeWidth={2} />
+                                        </button>
+                                        <button
                                             title="Editar veículo"
                                             onClick={() => onEdit(v)}
                                             className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-150 hover:bg-blue-50"

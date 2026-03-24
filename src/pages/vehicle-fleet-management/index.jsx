@@ -14,7 +14,6 @@ import StatusUpdateModal from "./components/StatusUpdateModal";
 import HistoryModal from "./components/HistoryModal";
 import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate } from "utils/excelUtils";
 import { useAuth } from "utils/AuthContext";
-import { useConfirm } from "components/ui/ConfirmDialog";
 import AccessDeniedModal from "components/ui/AccessDeniedModal";
 import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle } from "utils/vehicleService";
 import { fetchRomaneios } from "utils/romaneioService";
@@ -47,7 +46,6 @@ function Field({ label, children, required }) {
 // ─── Painel de dados por motorista ────────────────────────────────────────────
 function PainelMotorista({ motorista, adminProfile, onClose }) {
     const { toast, showToast } = useToast();
-    const { confirm, ConfirmDialog } = useConfirm();
     const [tab, setTab]         = useState('abastecimentos');
     const [loading, setLoading] = useState(true);
     const [mes, setMes]         = useState(() => new Date().toISOString().slice(0, 7));
@@ -126,7 +124,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDeleteDiaria = async (id) => {
-        if (!await confirm({ title: 'Excluir diária?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir' })) return;
+        if (!window.confirm('Excluir esta diária?')) return;
         try { await deleteDiaria(id); showToast('Excluída!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -183,7 +181,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
     ];
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)' , paddingTop: '68px' }}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
             onClick={e => e.target === e.currentTarget && onClose()}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
 
@@ -443,7 +441,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
 
             {/* Modal manutenção */}
             {modalManut && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' , paddingTop: '68px' }}>
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
                         <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
@@ -469,14 +467,14 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
 
             {/* Modal foto */}
             {modalFoto && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' , paddingTop: '68px' }} onClick={() => setModalFoto(null)}>
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }} onClick={() => setModalFoto(null)}>
                     <img src={modalFoto} alt="Foto checklist" className="rounded-xl max-w-2xl w-full max-h-[80vh] object-contain" />
                 </div>
             )}
 
             {/* Modal diária */}
             {modalDiaria && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' , paddingTop: '68px' }}>
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
                         <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
@@ -519,7 +517,6 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                 </div>
             )}
 
-            {ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );

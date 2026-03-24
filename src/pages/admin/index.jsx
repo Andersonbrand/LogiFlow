@@ -406,8 +406,8 @@ export default function AdminPanel() {
 
             {/* ── MODAL DE REPROVAÇÃO ──────────────────────────────────────── */}
             {modalReprovar.open && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' , paddingTop: '68px' }}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
                         style={{ border: '1px solid #FEE2E2' }}>
 

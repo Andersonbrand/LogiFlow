@@ -46,8 +46,8 @@ function Field({ label, children, required }) {
 
 function ModalOverlay({ children, onClose }) {
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.5)' , paddingTop: '68px' }}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
             onClick={e => e.target === e.currentTarget && onClose()}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
                 {children}
@@ -100,7 +100,6 @@ export default function CarreteiroDashboard() {
     const [formCheck, setFormCheck]     = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
     const [fotoPreview, setFotoPreview] = useState(null);
     const fotoRef = useRef(null);
-    const [submittingCheck, setSubmittingCheck] = useState(false);
 
     const handleFotoCheck = (e) => {
         const file = e.target.files?.[0];
@@ -184,10 +183,8 @@ export default function CarreteiroDashboard() {
     };
 
     const handleCheck = async () => {
-        if (submittingCheck) return;
         if (!formCheck.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
-        setSubmittingCheck(true);
         try {
             await createChecklist({ ...formCheck, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
             showToast('Checklist enviado para análise!', 'success');
@@ -196,7 +193,6 @@ export default function CarreteiroDashboard() {
             setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-        finally { setSubmittingCheck(false); }
     };
 
     const exportar = () => {
@@ -570,7 +566,7 @@ export default function CarreteiroDashboard() {
             {/* ── Drawer mobile/tablet (< lg) ──────────────────────────── */}
             {drawerOpen && (
                 <>
-                    <div className="fixed inset-0 z-40 lg:hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' , paddingTop: '68px' }} onClick={() => setDrawerOpen(false)} />
+                    <div className="fixed inset-0 z-40 lg:hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={() => setDrawerOpen(false)} />
                     <div className="fixed top-0 left-0 bottom-0 z-50 lg:hidden flex flex-col overflow-y-auto shadow-2xl"
                         style={{ width: 240, backgroundColor: 'var(--color-card)' }}>
                         <div className="flex items-center justify-between px-4 py-4 border-b flex-shrink-0"
@@ -611,8 +607,8 @@ export default function CarreteiroDashboard() {
 
             {/* Modais */}
             {modalAbast && (
-                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' , paddingTop: '68px' }}
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                     onClick={e => e.target === e.currentTarget && setModalAbast(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
                         <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
@@ -677,11 +673,11 @@ export default function CarreteiroDashboard() {
             )}
 
             {modalCheck && (
-                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' , paddingTop: '68px' }}
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                     onClick={e => e.target === e.currentTarget && setModalCheck(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl"
-                        style={{ maxHeight: 'calc(100dvh - 76px)', overflowY: 'auto' }}>
+                        style={{ maxHeight: '95dvh', overflowY: 'auto' }}>
                         <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
                         <div className="flex items-center justify-between p-5 border-b sticky top-0 bg-white z-10" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
@@ -752,28 +748,15 @@ export default function CarreteiroDashboard() {
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 pt-0 sm:justify-end">
                             <button onClick={() => { setModalCheck(false); setFotoPreview(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <button onClick={handleCheck} disabled={submittingCheck}
-                                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white transition-opacity"
-                                style={{ backgroundColor: 'var(--color-primary)', opacity: submittingCheck ? 0.7 : 1, cursor: submittingCheck ? 'not-allowed' : 'pointer' }}>
-                                {submittingCheck ? (
-                                    <>
-                                        <div className="w-4 h-4 rounded-full border-2 border-white animate-spin" style={{ borderTopColor: 'transparent' }} />
-                                        Enviando...
-                                    </>
-                                ) : (
-                                    <>
-                                        <Icon name="Send" size={15} color="white" /> Enviar
-                                    </>
-                                )}
-                            </button>
+                            <Button onClick={handleCheck} size="sm" iconName="Send">Enviar</Button>
                         </div>
                     </div>
                 </div>
             )}
 
             {modalRegistro && (
-                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' , paddingTop: '68px' }}
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                     onClick={e => e.target === e.currentTarget && setModalRegistro(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
                         <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
