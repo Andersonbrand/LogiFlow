@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Icon from 'components/AppIcon';
-import Toast from 'components/ui/Toast';
-import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import { supabase } from 'utils/supabaseClient';
 import { updateUserProfile } from 'utils/userService';
@@ -18,7 +16,7 @@ function SectionCard({ title, icon, children }) {
             <div className="flex items-center gap-3 px-6 py-4 border-b"
                 style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: 'var(--color-primary)', opacity: 0.9 }}>
+                    style={{ backgroundColor: 'var(--color-primary)' }}>
                     <Icon name={icon} size={15} color="#fff" />
                 </div>
                 <h2 className="font-heading font-semibold text-sm"
@@ -40,95 +38,119 @@ function Field({ label, required, children }) {
     );
 }
 
+// Banner de feedback inline dentro do card
+function FeedbackBanner({ status, message }) {
+    if (!status || !message) return null;
+    const cfg = {
+        success: { bg: '#F0FDF4', border: '#BBF7D0', text: '#15803D', icon: 'CheckCircle2', iconColor: '#16A34A' },
+        error:   { bg: '#FEF2F2', border: '#FECACA', text: '#B91C1C', icon: 'AlertCircle',  iconColor: '#DC2626' },
+        info:    { bg: '#EFF6FF', border: '#BFDBFE', text: '#1D4ED8', icon: 'Info',          iconColor: '#2563EB' },
+    }[status] || {};
+    return (
+        <div className="flex items-start gap-3 p-3.5 rounded-xl text-sm"
+            style={{ backgroundColor: cfg.bg, border: `1px solid ${cfg.border}` }}>
+            <Icon name={cfg.icon} size={17} color={cfg.iconColor} style={{ flexShrink: 0, marginTop: 1 }} />
+            <p style={{ color: cfg.text }}>{message}</p>
+        </div>
+    );
+}
+
 const ROLE_LABELS = {
-    admin: 'Administrador',
-    operador: 'Operador',
-    motorista: 'Motorista',
-    carreteiro: 'Carreteiro',
-    mecanico: 'Mecânico',
+    admin: 'Administrador', operador: 'Operador', motorista: 'Motorista',
+    carreteiro: 'Carreteiro', mecanico: 'Mecânico',
 };
 
 export default function PerfilUsuario() {
-    const { user, profile, isAdmin } = useAuth();
-    const { toast, showToast } = useToast();
+    const { user, profile } = useAuth();
 
     // ── Nome ──────────────────────────────────────────────────────────────────
-    const [nome, setNome] = useState(profile?.name || '');
+    const [nome, setNome]           = useState(profile?.name || '');
     const [savingNome, setSavingNome] = useState(false);
+    const [feedbackNome, setFeedbackNome] = useState(null); // { status, message }
 
     // ── E-mail ────────────────────────────────────────────────────────────────
-    const [novoEmail, setNovoEmail] = useState('');
-    const [senhaEmail, setSenhaEmail] = useState('');
+    const [novoEmail, setNovoEmail]   = useState('');
     const [savingEmail, setSavingEmail] = useState(false);
+    const [feedbackEmail, setFeedbackEmail] = useState(null);
 
     // ── Senha ─────────────────────────────────────────────────────────────────
-    const [senhaAtual, setSenhaAtual] = useState('');
-    const [novaSenha, setNovaSenha] = useState('');
+    const [novaSenha, setNovaSenha]       = useState('');
     const [confirmSenha, setConfirmSenha] = useState('');
-    const [savingSenha, setSavingSenha] = useState(false);
-    const [showSenhas, setShowSenhas] = useState({ atual: false, nova: false, confirm: false });
+    const [savingSenha, setSavingSenha]   = useState(false);
+    const [feedbackSenha, setFeedbackSenha] = useState(null);
+    const [showSenhas, setShowSenhas] = useState({ nova: false, confirm: false });
 
     // ── Recuperação ───────────────────────────────────────────────────────────
     const [sendingReset, setSendingReset] = useState(false);
-    const [resetSent, setResetSent] = useState(false);
+    const [feedbackReset, setFeedbackReset] = useState(null);
 
+    const toggleSenha = (field) => setShowSenhas(s => ({ ...s, [field]: !s[field] }));
+
+    // ── Handlers ──────────────────────────────────────────────────────────────
     const handleSaveNome = async () => {
-        if (!nome.trim()) { showToast('Nome não pode ser vazio', 'error'); return; }
+        if (!nome.trim()) { setFeedbackNome({ status: 'error', message: 'Nome não pode ser vazio.' }); return; }
         setSavingNome(true);
+        setFeedbackNome(null);
         try {
             await updateUserProfile(user.id, { name: nome.trim() });
-            showToast('Nome atualizado com sucesso!', 'success');
+            setFeedbackNome({ status: 'success', message: 'Nome atualizado com sucesso!' });
         } catch (e) {
-            showToast('Erro ao salvar nome: ' + e.message, 'error');
+            setFeedbackNome({ status: 'error', message: 'Erro ao salvar nome: ' + e.message });
         } finally { setSavingNome(false); }
     };
 
     const handleSaveEmail = async () => {
-        if (!novoEmail.trim()) { showToast('Informe o novo e-mail', 'error'); return; }
-        if (!novoEmail.includes('@')) { showToast('E-mail inválido', 'error'); return; }
+        if (!novoEmail.trim()) { setFeedbackEmail({ status: 'error', message: 'Informe o novo e-mail.' }); return; }
+        if (!novoEmail.includes('@')) { setFeedbackEmail({ status: 'error', message: 'Formato de e-mail inválido.' }); return; }
+        if (novoEmail.trim() === user?.email) { setFeedbackEmail({ status: 'error', message: 'O novo e-mail é igual ao atual.' }); return; }
         setSavingEmail(true);
+        setFeedbackEmail({ status: 'info', message: 'Enviando solicitação...' });
         try {
             const { error } = await supabase.auth.updateUser({ email: novoEmail.trim() });
             if (error) throw error;
-            showToast('Verifique sua caixa de entrada para confirmar o novo e-mail.', 'success');
+            setFeedbackEmail({
+                status: 'success',
+                message: `Link de confirmação enviado para "${novoEmail.trim()}". Verifique sua caixa de entrada e clique no link para confirmar a alteração.`,
+            });
             setNovoEmail('');
-            setSenhaEmail('');
         } catch (e) {
-            showToast('Erro: ' + e.message, 'error');
+            setFeedbackEmail({ status: 'error', message: 'Erro: ' + e.message });
         } finally { setSavingEmail(false); }
     };
 
     const handleSaveSenha = async () => {
-        if (!novaSenha) { showToast('Informe a nova senha', 'error'); return; }
-        if (novaSenha.length < 6) { showToast('Senha deve ter pelo menos 6 caracteres', 'error'); return; }
-        if (novaSenha !== confirmSenha) { showToast('Senhas não coincidem', 'error'); return; }
+        if (!novaSenha) { setFeedbackSenha({ status: 'error', message: 'Informe a nova senha.' }); return; }
+        if (novaSenha.length < 6) { setFeedbackSenha({ status: 'error', message: 'A senha deve ter pelo menos 6 caracteres.' }); return; }
+        if (novaSenha !== confirmSenha) { setFeedbackSenha({ status: 'error', message: 'As senhas não coincidem.' }); return; }
         setSavingSenha(true);
+        setFeedbackSenha({ status: 'info', message: 'Alterando senha...' });
         try {
             const { error } = await supabase.auth.updateUser({ password: novaSenha });
             if (error) throw error;
-            showToast('Senha alterada com sucesso!', 'success');
-            setSenhaAtual(''); setNovaSenha(''); setConfirmSenha('');
+            setFeedbackSenha({ status: 'success', message: 'Senha alterada com sucesso! Use a nova senha no próximo login.' });
+            setNovaSenha(''); setConfirmSenha('');
         } catch (e) {
-            showToast('Erro: ' + e.message, 'error');
+            setFeedbackSenha({ status: 'error', message: 'Erro: ' + e.message });
         } finally { setSavingSenha(false); }
     };
 
     const handleRecuperarSenha = async () => {
         if (!user?.email) return;
         setSendingReset(true);
+        setFeedbackReset({ status: 'info', message: 'Enviando link de recuperação...' });
         try {
             const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
                 redirectTo: `${window.location.origin}/reset-password`,
             });
             if (error) throw error;
-            setResetSent(true);
-            showToast('Link de recuperação enviado para ' + user.email, 'success');
+            setFeedbackReset({
+                status: 'success',
+                message: `Link enviado para "${user.email}". Verifique sua caixa de entrada (e pasta de spam) e clique no link para redefinir a senha.`,
+            });
         } catch (e) {
-            showToast('Erro ao enviar: ' + e.message, 'error');
+            setFeedbackReset({ status: 'error', message: 'Erro ao enviar: ' + e.message });
         } finally { setSendingReset(false); }
     };
-
-    const toggleSenha = (field) => setShowSenhas(s => ({ ...s, [field]: !s[field] }));
 
     return (
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
@@ -144,16 +166,15 @@ export default function PerfilUsuario() {
                             {(profile?.name || user?.email || 'U')[0].toUpperCase()}
                         </div>
                         <div>
-                            <h1 className="font-heading font-bold text-2xl"
-                                style={{ color: 'var(--color-text-primary)' }}>
+                            <h1 className="font-heading font-bold text-2xl" style={{ color: 'var(--color-text-primary)' }}>
                                 Meu Perfil
                             </h1>
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 <span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
                                     {user?.email}
                                 </span>
                                 <span className="px-2 py-0.5 rounded-full text-xs font-medium"
-                                    style={{ backgroundColor: 'var(--color-primary)', color: '#fff', opacity: 0.85 }}>
+                                    style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}>
                                     {ROLE_LABELS[profile?.role] || profile?.role || 'Usuário'}
                                 </span>
                             </div>
@@ -170,20 +191,24 @@ export default function PerfilUsuario() {
                                         <div className="flex gap-2">
                                             <input
                                                 value={nome}
-                                                onChange={e => setNome(e.target.value)}
+                                                onChange={e => { setNome(e.target.value); setFeedbackNome(null); }}
                                                 className={inputCls}
                                                 style={inputStyle}
                                                 placeholder="Seu nome"
+                                                onKeyDown={e => e.key === 'Enter' && handleSaveNome()}
                                             />
                                             <button
                                                 onClick={handleSaveNome}
                                                 disabled={savingNome}
-                                                className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors flex-shrink-0"
+                                                className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors flex-shrink-0 flex items-center gap-1.5 disabled:opacity-70"
                                                 style={{ backgroundColor: 'var(--color-primary)' }}>
-                                                {savingNome ? <Icon name="Loader" size={16} color="#fff" className="animate-spin" /> : 'Salvar'}
+                                                {savingNome
+                                                    ? <><Icon name="Loader" size={14} color="#fff" />Salvando</>
+                                                    : 'Salvar'}
                                             </button>
                                         </div>
                                     </Field>
+                                    {feedbackNome && <div className="mt-3"><FeedbackBanner {...feedbackNome} /></div>}
                                 </div>
                                 <div>
                                     <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>E-mail atual</p>
@@ -220,26 +245,30 @@ export default function PerfilUsuario() {
                         <SectionCard title="Alterar E-mail" icon="Mail">
                             <div className="flex flex-col gap-4">
                                 <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                    Um e-mail de confirmação será enviado para o novo endereço. A alteração só terá efeito após a confirmação.
+                                    Um link de confirmação será enviado para o novo endereço. A alteração só terá efeito após clicar no link recebido.
                                 </p>
                                 <Field label="Novo e-mail" required>
                                     <input
                                         type="email"
                                         value={novoEmail}
-                                        onChange={e => setNovoEmail(e.target.value)}
+                                        onChange={e => { setNovoEmail(e.target.value); setFeedbackEmail(null); }}
                                         className={inputCls}
                                         style={inputStyle}
                                         placeholder="novo@email.com"
+                                        onKeyDown={e => e.key === 'Enter' && handleSaveEmail()}
+                                        disabled={savingEmail}
                                     />
                                 </Field>
+                                {feedbackEmail && <FeedbackBanner {...feedbackEmail} />}
                                 <div className="flex justify-end">
                                     <button
                                         onClick={handleSaveEmail}
                                         disabled={savingEmail || !novoEmail}
                                         className="px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 flex items-center gap-2"
                                         style={{ backgroundColor: 'var(--color-primary)' }}>
-                                        {savingEmail && <Icon name="Loader" size={14} color="#fff" />}
-                                        Solicitar alteração
+                                        {savingEmail
+                                            ? <><Icon name="Loader" size={14} color="#fff" />Enviando...</>
+                                            : 'Solicitar alteração'}
                                     </button>
                                 </div>
                             </div>
@@ -253,10 +282,11 @@ export default function PerfilUsuario() {
                                         <input
                                             type={showSenhas.nova ? 'text' : 'password'}
                                             value={novaSenha}
-                                            onChange={e => setNovaSenha(e.target.value)}
+                                            onChange={e => { setNovaSenha(e.target.value); setFeedbackSenha(null); }}
                                             className={inputCls}
                                             style={{ ...inputStyle, paddingRight: 40 }}
                                             placeholder="Mínimo 6 caracteres"
+                                            disabled={savingSenha}
                                         />
                                         <button type="button" onClick={() => toggleSenha('nova')}
                                             className="absolute right-3 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-100 transition-opacity">
@@ -269,10 +299,11 @@ export default function PerfilUsuario() {
                                         <input
                                             type={showSenhas.confirm ? 'text' : 'password'}
                                             value={confirmSenha}
-                                            onChange={e => setConfirmSenha(e.target.value)}
+                                            onChange={e => { setConfirmSenha(e.target.value); setFeedbackSenha(null); }}
                                             className={inputCls}
                                             style={{ ...inputStyle, paddingRight: 40 }}
                                             placeholder="Repita a nova senha"
+                                            disabled={savingSenha}
                                         />
                                         <button type="button" onClick={() => toggleSenha('confirm')}
                                             className="absolute right-3 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-100 transition-opacity">
@@ -280,26 +311,28 @@ export default function PerfilUsuario() {
                                         </button>
                                     </div>
                                 </Field>
-                                {novaSenha && confirmSenha && novaSenha !== confirmSenha && (
-                                    <p className="text-xs text-red-500 flex items-center gap-1">
-                                        <Icon name="AlertCircle" size={12} color="#EF4444" />
-                                        As senhas não coincidem
-                                    </p>
+                                {/* Indicador inline de força/match */}
+                                {novaSenha && confirmSenha && !feedbackSenha && (
+                                    novaSenha !== confirmSenha
+                                        ? <p className="text-xs text-red-500 flex items-center gap-1">
+                                            <Icon name="AlertCircle" size={12} color="#EF4444" />As senhas não coincidem
+                                          </p>
+                                        : novaSenha.length >= 6
+                                            ? <p className="text-xs text-green-600 flex items-center gap-1">
+                                                <Icon name="CheckCircle2" size={12} color="#16A34A" />Senhas coincidem ✓
+                                              </p>
+                                            : null
                                 )}
-                                {novaSenha && confirmSenha && novaSenha === confirmSenha && novaSenha.length >= 6 && (
-                                    <p className="text-xs text-green-600 flex items-center gap-1">
-                                        <Icon name="CheckCircle2" size={12} color="#16A34A" />
-                                        Senhas coincidem
-                                    </p>
-                                )}
+                                {feedbackSenha && <FeedbackBanner {...feedbackSenha} />}
                                 <div className="flex justify-end">
                                     <button
                                         onClick={handleSaveSenha}
-                                        disabled={savingSenha || !novaSenha || novaSenha !== confirmSenha}
+                                        disabled={savingSenha || !novaSenha || novaSenha !== confirmSenha || novaSenha.length < 6}
                                         className="px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 flex items-center gap-2"
                                         style={{ backgroundColor: 'var(--color-primary)' }}>
-                                        {savingSenha && <Icon name="Loader" size={14} color="#fff" />}
-                                        Alterar senha
+                                        {savingSenha
+                                            ? <><Icon name="Loader" size={14} color="#fff" />Alterando...</>
+                                            : 'Alterar senha'}
                                     </button>
                                 </div>
                             </div>
@@ -309,26 +342,19 @@ export default function PerfilUsuario() {
                         <SectionCard title="Recuperação de Senha" icon="KeyRound">
                             <div className="flex flex-col gap-4">
                                 <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                                    Esqueceu sua senha ou quer redefini-la por e-mail? Clique abaixo para receber um link de recuperação no endereço <strong style={{ color: 'var(--color-text-primary)' }}>{user?.email}</strong>.
+                                    Clique abaixo para receber um link de redefinição de senha no endereço{' '}
+                                    <strong style={{ color: 'var(--color-text-primary)' }}>{user?.email}</strong>.
                                 </p>
-                                {resetSent ? (
-                                    <div className="flex items-center gap-3 p-4 rounded-xl"
-                                        style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
-                                        <Icon name="CheckCircle2" size={20} color="#16A34A" />
-                                        <div>
-                                            <p className="text-sm font-medium text-green-700">Link enviado!</p>
-                                            <p className="text-xs text-green-600">Verifique sua caixa de entrada (e spam) e clique no link para redefinir a senha.</p>
-                                        </div>
-                                    </div>
-                                ) : (
+                                {feedbackReset && <FeedbackBanner {...feedbackReset} />}
+                                {!feedbackReset?.status === 'success' && (
                                     <button
                                         onClick={handleRecuperarSenha}
                                         disabled={sendingReset}
                                         className="self-start flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-50"
                                         style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
                                         {sendingReset
-                                            ? <><Icon name="Loader" size={14} color="currentColor" /> Enviando...</>
-                                            : <><Icon name="Mail" size={14} color="currentColor" /> Enviar link de recuperação</>
+                                            ? <><Icon name="Loader" size={14} color="currentColor" />Enviando...</>
+                                            : <><Icon name="Mail" size={14} color="currentColor" />Enviar link de recuperação</>
                                         }
                                     </button>
                                 )}
@@ -338,7 +364,6 @@ export default function PerfilUsuario() {
                     </div>
                 </div>
             </main>
-            <Toast toast={toast} />
         </div>
     );
 }

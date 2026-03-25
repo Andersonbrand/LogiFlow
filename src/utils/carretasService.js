@@ -122,8 +122,11 @@ export async function updateCarretaVeiculo(id, updates) {
 }
 
 export async function deleteCarretaVeiculo(id) {
-    // Apaga checklists vinculados antes (respeita foreign key constraint)
+    // Apaga todos os registros dependentes antes (respeita foreign key constraints)
+    await supabase.from('carretas_registros_viagem').delete().eq('veiculo_id', id);
     await supabase.from('carretas_checklists').delete().eq('veiculo_id', id);
+    await supabase.from('carretas_abastecimentos').delete().eq('veiculo_id', id);
+    await supabase.from('carretas_carregamentos').delete().eq('veiculo_id', id);
     const { error } = await supabase.from('carretas_veiculos').delete().eq('id', id);
     if (error) throw error;
 }

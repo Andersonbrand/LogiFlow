@@ -1509,7 +1509,6 @@ function TabBonificacoes({ isAdmin }) {
                 </div>
             )}
             <Toast toast={toast} />
-            {ConfirmDialog}
         </div>
     );
 }
@@ -2970,7 +2969,6 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 </div>
             )}
             <Toast toast={toast} />
-            {ConfirmDialog}
         </div>
     );
 }
@@ -3230,7 +3228,6 @@ function TabConfiguracoes({ isAdmin }) {
             </div>
 
             <Toast toast={toast} />
-            {ConfirmDialog}
         </div>
     );
 }
@@ -3883,7 +3880,6 @@ function TabHistoricoViagens({ isAdmin }) {
                 </div>
             )}
             <Toast toast={toast} />
-            {ConfirmDialog}
         </div>
     );
 }
