@@ -3,7 +3,7 @@ import Icon from "components/AppIcon";
 
 import StatusBadge from "./StatusBadge";
 
-export default function VehicleTable({ vehicles, onEdit, onStatusChange, onViewHistory, onViewData }) {
+export default function VehicleTable({ vehicles, onEdit, onStatusChange, onViewHistory, onDelete }) {
     if (vehicles?.length === 0) {
         return (
             <div
@@ -51,24 +51,14 @@ export default function VehicleTable({ vehicles, onEdit, onStatusChange, onViewH
                                 style={{ backgroundColor: idx % 2 === 0 ? "var(--color-card)" : "var(--color-muted)" }}
                             >
                                 <td className="px-4 py-3">
-                                    <span
-                                        className="font-data font-medium text-sm"
-                                        style={{ color: "var(--color-primary)" }}
-                                    >
+                                    <span className="font-data font-medium text-sm" style={{ color: "var(--color-primary)" }}>
                                         {v?.placa}
                                     </span>
                                 </td>
                                 <td className="px-4 py-3">
                                     <div className="flex items-center gap-2">
-                                        <Icon
-                                            name={v?.tipo === "Van" ? "Package" : "Truck"}
-                                            size={15}
-                                            color="var(--color-muted-foreground)"
-                                            strokeWidth={2}
-                                        />
-                                        <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>
-                                            {v?.tipo}
-                                        </span>
+                                        <Icon name={v?.tipo === "Van" ? "Package" : "Truck"} size={15} color="var(--color-muted-foreground)" strokeWidth={2} />
+                                        <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>{v?.tipo}</span>
                                     </div>
                                 </td>
                                 <td className="px-4 py-3">
@@ -115,6 +105,16 @@ export default function VehicleTable({ vehicles, onEdit, onStatusChange, onViewH
                                         >
                                             <Icon name="RefreshCw" size={15} color="currentColor" strokeWidth={2} />
                                         </button>
+                                        {onDelete && (
+                                            <button
+                                                title="Excluir veículo"
+                                                onClick={() => onDelete(v)}
+                                                className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-150 hover:bg-red-50"
+                                                style={{ color: "#DC2626" }}
+                                            >
+                                                <Icon name="Trash2" size={15} color="currentColor" strokeWidth={2} />
+                                            </button>
+                                        )}
                                     </div>
                                 </td>
                             </tr>

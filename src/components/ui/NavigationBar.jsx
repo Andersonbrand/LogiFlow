@@ -121,15 +121,6 @@ export default function NavigationBar() {
                                         <Icon name="UserCircle" size={14} color="var(--color-primary)" />
                                         Meu Perfil
                                     </button>
-                                    <div className="border-t" style={{ borderColor: 'var(--color-border)' }} />
-                                    <button
-                                        onClick={handleLogout}
-                                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium text-left transition-colors hover:bg-red-50"
-                                        style={{ color: '#DC2626' }}
-                                    >
-                                        <Icon name="LogOut" size={14} color="#DC2626" />
-                                        Sair
-                                    </button>
                                 </div>
                             </div>
                         )}

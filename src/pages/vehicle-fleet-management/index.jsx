@@ -47,6 +47,7 @@ function Field({ label, children, required }) {
 // ─── Painel de dados por motorista ────────────────────────────────────────────
 function PainelMotorista({ motorista, adminProfile, onClose }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [tab, setTab]         = useState('abastecimentos');
     const [loading, setLoading] = useState(true);
     const [mes, setMes]         = useState(() => new Date().toISOString().slice(0, 7));
@@ -125,7 +126,8 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDeleteDiaria = async (id) => {
-        if (!window.confirm('Excluir esta diária?')) return;
+        const ok = await confirm({ title: 'Excluir diária?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
         try { await deleteDiaria(id); showToast('Excluída!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -519,6 +521,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             )}
 
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -747,6 +750,7 @@ export default function VehicleFleetManagement() {
                                     onEdit={v => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: v }); }}
                                     onStatusChange={v => { if (!isAdmin()) { setAccessDenied(true); return; } setStatusModal({ open: true, vehicle: v }); }}
                                     onViewHistory={v => setHistoryModal({ open: true, vehicle: v })}
+                                    onDelete={v => { if (!isAdmin()) { setAccessDenied(true); return; } handleDelete(v.id); }}
                                 />
                             </div>
                             <div className="md:hidden">
@@ -755,6 +759,7 @@ export default function VehicleFleetManagement() {
                                     onEdit={v => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: v }); }}
                                     onStatusChange={v => { if (!isAdmin()) { setAccessDenied(true); return; } setStatusModal({ open: true, vehicle: v }); }}
                                     onViewHistory={v => setHistoryModal({ open: true, vehicle: v })}
+                                    onDelete={v => { if (!isAdmin()) { setAccessDenied(true); return; } handleDelete(v.id); }}
                                 />
                             </div>
                         </>

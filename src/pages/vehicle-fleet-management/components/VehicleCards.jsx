@@ -2,7 +2,7 @@ import React from "react";
 import Icon from "components/AppIcon";
 import StatusBadge from "./StatusBadge";
 
-export default function VehicleCards({ vehicles, onEdit, onStatusChange, onViewHistory, onViewData }) {
+export default function VehicleCards({ vehicles, onEdit, onStatusChange, onViewHistory, onDelete }) {
     if (vehicles?.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-16">
@@ -24,10 +24,7 @@ export default function VehicleCards({ vehicles, onEdit, onStatusChange, onViewH
                 >
                     <div className="flex items-start justify-between mb-3">
                         <div>
-                            <span
-                                className="font-data font-bold text-base"
-                                style={{ color: "var(--color-primary)" }}
-                            >
+                            <span className="font-data font-bold text-base" style={{ color: "var(--color-primary)" }}>
                                 {v?.placa}
                             </span>
                             <div className="flex items-center gap-1.5 mt-0.5">
@@ -59,14 +56,6 @@ export default function VehicleCards({ vehicles, onEdit, onStatusChange, onViewH
                         </span>
                         <div className="flex items-center gap-1">
                             <button
-                                title="Combustível · Checklist · Diárias"
-                                onClick={() => onViewData?.(v)}
-                                className="w-8 h-8 rounded-lg flex items-center justify-center"
-                                style={{ color: "#059669", backgroundColor: "#ECFDF5" }}
-                            >
-                                <Icon name="BarChart2" size={14} color="currentColor" strokeWidth={2} />
-                            </button>
-                            <button
                                 title="Editar"
                                 onClick={() => onEdit(v)}
                                 className="w-8 h-8 rounded-lg flex items-center justify-center"
@@ -90,6 +79,16 @@ export default function VehicleCards({ vehicles, onEdit, onStatusChange, onViewH
                             >
                                 <Icon name="RefreshCw" size={14} color="currentColor" strokeWidth={2} />
                             </button>
+                            {onDelete && (
+                                <button
+                                    title="Excluir veículo"
+                                    onClick={() => onDelete(v)}
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                    style={{ color: "#DC2626", backgroundColor: "#FEF2F2" }}
+                                >
+                                    <Icon name="Trash2" size={14} color="currentColor" strokeWidth={2} />
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>

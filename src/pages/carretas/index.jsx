@@ -346,6 +346,7 @@ function TabViagens({ isAdmin, profile }) {
 // ─── TAB: Veículos ────────────────────────────────────────────────────────────
 function TabVeiculos({ isAdmin }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [veiculos, setVeiculos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(null);
@@ -450,6 +451,7 @@ function TabVeiculos({ isAdmin }) {
 // ─── TAB: Abastecimentos ──────────────────────────────────────────────────────
 function TabAbastecimentos({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [abast, setAbast] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
