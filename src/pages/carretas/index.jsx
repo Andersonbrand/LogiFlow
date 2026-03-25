@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import TabRomaneios from './TabRomaneios';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -27,6 +28,7 @@ import {
     CATEGORIAS_DESPESA,
     CIDADES_BONUS_BAIXO, BONUS_BAIXO, BONUS_ALTO,
     fetchPostos, createPosto, updatePosto, deletePosto,
+    STATUS_ROMANEIO_COLORS,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
 
@@ -3887,6 +3889,7 @@ function TabHistoricoViagens({ isAdmin }) {
 // ─── Constantes da página principal ─────────────────────────────────────────
 const TABS = [
     { id: 'viagens',       label: 'Viagens',          icon: 'Navigation',    group: 'Operação' },
+    { id: 'romaneios',     label: 'Romaneios',         icon: 'FileText',      group: 'Operação' },
     { id: 'veiculos',      label: 'Veículos',          icon: 'Truck',         group: 'Operação' },
     { id: 'abastecimentos',label: 'Abastecimentos',    icon: 'Fuel',          group: 'Operação' },
     { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck',group: 'Operação' },
@@ -3990,6 +3993,7 @@ export default function CarretasPage() {
 
                             {/* Conteúdo da aba */}
                             {tab === 'viagens'        && <TabViagens        isAdmin={admin} profile={profile} />}
+                            {tab === 'romaneios'      && <TabRomaneios      isAdmin={admin} />}
                             {tab === 'veiculos'       && <TabVeiculos       isAdmin={admin} />}
                             {tab === 'abastecimentos' && <TabAbastecimentos  isAdmin={admin} profile={profile} />}
                             {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}

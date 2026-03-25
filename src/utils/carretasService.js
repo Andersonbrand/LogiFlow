@@ -729,3 +729,119 @@ export async function fetchMotoristasCaminhao() {
     if (error) throw error;
     return data || [];
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROMANEIOS DE CARRETA
+// ─────────────────────────────────────────────────────────────────────────────
+
+let _romaneioCounter = null;
+
+async function nextRomaneioNumero() {
+    const { data } = await supabase
+        .from('carretas_romaneios')
+        .select('numero')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+    if (data?.numero) {
+        const n = parseInt(data.numero.replace(/\D/g, ''), 10);
+        return `ROM-${String((n || 0) + 1).padStart(5, '0')}`;
+    }
+    return 'ROM-00001';
+}
+
+export async function fetchRomaneios(filters = {}) {
+    let q = supabase
+        .from('carretas_romaneios')
+        .select(`
+            *,
+            motorista:motorista_id(id, name),
+            veiculo:veiculo_id(id, placa, modelo),
+            itens:carretas_romaneio_itens(
+                id, quantidade, unidade, peso_total, descricao, observacoes,
+                material:material_id(id, nome, peso, unidade, percentual_frete, categoria_frete)
+            )
+        `)
+        .order('created_at', { ascending: false });
+    if (filters.status)      q = q.eq('status', filters.status);
+    if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
+    if (filters.dataInicio)  q = q.gte('data_saida', filters.dataInicio);
+    if (filters.dataFim)     q = q.lte('data_saida', filters.dataFim);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createRomaneio(romaneio) {
+    const { itens = [], ...payload } = romaneio;
+    // Sanitize optional UUIDs
+    if (!payload.motorista_id) delete payload.motorista_id;
+    if (!payload.veiculo_id)   delete payload.veiculo_id;
+    payload.numero = await nextRomaneioNumero();
+    const { data, error } = await supabase
+        .from('carretas_romaneios')
+        .insert(payload)
+        .select()
+        .single();
+    if (error) throw error;
+    if (itens.length > 0) {
+        const itensPay = itens.map(it => ({
+            romaneio_id: data.id,
+            material_id: it.material_id || null,
+            descricao:   it.descricao   || null,
+            quantidade:  Number(it.quantidade) || 1,
+            unidade:     it.unidade     || 'ton',
+            peso_total:  it.peso_total  ? Number(it.peso_total) : null,
+            observacoes: it.observacoes || null,
+        }));
+        const { error: eItens } = await supabase.from('carretas_romaneio_itens').insert(itensPay);
+        if (eItens) throw eItens;
+    }
+    return data;
+}
+
+export async function updateRomaneio(id, romaneio) {
+    const { itens, ...payload } = romaneio;
+    if (!payload.motorista_id) delete payload.motorista_id;
+    if (!payload.veiculo_id)   delete payload.veiculo_id;
+    payload.updated_at = new Date().toISOString();
+    const { data, error } = await supabase
+        .from('carretas_romaneios')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    if (itens !== undefined) {
+        // Replace all itens
+        await supabase.from('carretas_romaneio_itens').delete().eq('romaneio_id', id);
+        if (itens.length > 0) {
+            const itensPay = itens.map(it => ({
+                romaneio_id: id,
+                material_id: it.material_id || null,
+                descricao:   it.descricao   || null,
+                quantidade:  Number(it.quantidade) || 1,
+                unidade:     it.unidade     || 'ton',
+                peso_total:  it.peso_total  ? Number(it.peso_total) : null,
+                observacoes: it.observacoes || null,
+            }));
+            const { error: eItens } = await supabase.from('carretas_romaneio_itens').insert(itensPay);
+            if (eItens) throw eItens;
+        }
+    }
+    return data;
+}
+
+export async function deleteRomaneio(id) {
+    const { error } = await supabase.from('carretas_romaneios').delete().eq('id', id);
+    if (error) throw error;
+}
+
+export const STATUS_ROMANEIO = ['Aguardando', 'Carregando', 'Em Trânsito', 'Entrega finalizada', 'Cancelado'];
+export const STATUS_ROMANEIO_COLORS = {
+    'Aguardando':          { bg: '#FEF9C3', text: '#B45309' },
+    'Carregando':          { bg: '#DBEAFE', text: '#1D4ED8' },
+    'Em Trânsito':         { bg: '#EDE9FE', text: '#7C3AED' },
+    'Entrega finalizada':  { bg: '#D1FAE5', text: '#065F46' },
+    'Cancelado':           { bg: '#F3F4F6', text: '#6B7280' },
+};
