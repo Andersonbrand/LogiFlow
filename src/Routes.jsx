@@ -20,6 +20,7 @@ import ResetPassword         from "pages/reset-password";
 import CarretasPage          from "pages/carretas";
 import CarreteiroDashboard   from "pages/carreteiro";
 import MecanicoPage          from "pages/mecanico";
+import PerfilUsuario         from "pages/perfil-usuario";
 
 const Routes = () => (
     <BrowserRouter>
@@ -29,6 +30,9 @@ const Routes = () => (
                 <RouterRoutes>
                     <Route path="/login"          element={<Login />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
+
+                    {/* Perfil do usuário — acessível por todos os papéis autenticados */}
+                    <Route path="/perfil"                   element={<ProtectedRoute><PerfilUsuario /></ProtectedRoute>} />
 
                     {/* Rotas para admin e operador */}
                     <Route path="/"                         element={<StaffRoute><MainDashboard /></StaffRoute>} />

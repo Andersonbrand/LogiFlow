@@ -4,6 +4,7 @@ import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
 import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
+import { useConfirm } from 'components/ui/ConfirmDialog';
 import RomaneioFormModal from './components/RomaneioFormModal';
 import RomaneioDetailModal from './components/RomaneioDetailModal';
 import RomaneioImportModal  from './components/RomaneioImportModal';
@@ -36,6 +37,7 @@ export default function Romaneios() {
     const [detailModal, setDetailModal] = useState({ open: false, romaneio: null });
     const { toast, showToast } = useToast();
     const [importModal, setImportModal] = useState(false);
+    const { confirm, ConfirmDialog } = useConfirm();
 
     // Carrega APENAS romaneios (usado pelo Realtime — não recarrega veículos/materiais desnecessariamente)
     const loadRomaneios = useCallback(async () => {
@@ -108,7 +110,14 @@ export default function Romaneios() {
     };
 
     const handleDelete = async (id) => {
-        if (!confirm('Tem certeza que deseja excluir este romaneio?')) return;
+        const ok = await confirm({
+            title: 'Excluir romaneio?',
+            message: 'Esta ação não pode ser desfeita. O romaneio e todos os seus itens serão removidos permanentemente.',
+            confirmLabel: 'Excluir',
+            cancelLabel: 'Cancelar',
+            variant: 'danger',
+        });
+        if (!ok) return;
         try {
             await deleteRomaneio(id);
             setRomaneios(prev => prev.filter(r => r.id !== id));
@@ -401,6 +410,7 @@ export default function Romaneios() {
                 onImported={() => { load(); showToast('Romaneios importados com sucesso!'); }}
             />
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }

@@ -6,19 +6,21 @@ import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
+import { useConfirm } from 'components/ui/ConfirmDialog';
 import { fetchCorredores, CORREDORES_PADRAO } from 'utils/corredoresService';
 import {
     fetchViagens, createViagem, updateViagem, deleteViagem,
     fetchCarretasVeiculos, createCarretaVeiculo, updateCarretaVeiculo, deleteCarretaVeiculo,
     fetchAbastecimentos, createAbastecimento, deleteAbastecimento,
     fetchChecklists, createChecklist, aprovarChecklist, registrarManutencaoChecklist,
+    deleteChecklist,
     fetchCarregamentos, createCarregamento, updateCarregamento, deleteCarregamento,
     fetchEmpresas, createEmpresa, deleteEmpresa,
     fetchCarreteiros, fetchTodosMotoristas,
     fetchConfigAbastecimento, saveConfigAbastecimento,
     CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
     aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
-    fetchOrdensServico, createOrdemServico, updateOrdemServico,
+    fetchOrdensServico, createOrdemServico, updateOrdemServico, deleteOrdemServico,
     fetchMecanicos,
     fetchDespesasExtras, createDespesaExtra, updateDespesaExtra, deleteDespesaExtra,
     fetchDiarias, createDiaria, updateDiaria, deleteDiaria,
@@ -101,6 +103,7 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 // ─── TAB: Viagens ────────────────────────────────────────────────────────────
 function TabViagens({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [viagens, setViagens] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
@@ -150,7 +153,8 @@ function TabViagens({ isAdmin, profile }) {
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
-        if (!confirm('Excluir esta viagem?')) return;
+        const ok = await confirm({ title: 'Excluir viagem?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
         try { await deleteViagem(id); showToast('Excluída!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -334,6 +338,7 @@ function TabViagens({ isAdmin, profile }) {
                 </ModalOverlay>
             )}
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -371,7 +376,8 @@ function TabVeiculos({ isAdmin }) {
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
-        if (!confirm('Excluir veículo?')) return;
+        const ok = await confirm({ title: 'Excluir veículo?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
         try { await deleteCarretaVeiculo(id); showToast('Excluído!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -436,6 +442,7 @@ function TabVeiculos({ isAdmin }) {
                 </ModalOverlay>
             )}
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -488,7 +495,8 @@ function TabAbastecimentos({ isAdmin, profile }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
-        if (!confirm('Excluir registro?')) return;
+        const ok = await confirm({ title: 'Excluir abastecimento?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
         try { await deleteAbastecimento(id); showToast('Excluído!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -534,7 +542,8 @@ function TabAbastecimentos({ isAdmin, profile }) {
         });
     };
     const handleDeletePosto = async (id) => {
-        if (!confirm('Excluir este posto?')) return;
+        const ok = await confirm({ title: 'Excluir posto?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
         try { await deletePosto(id); showToast('Excluído!', 'success'); const p = await fetchPostos().catch(() => []); setPostos(p); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -824,6 +833,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                 </ModalOverlay>
             )}
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -831,6 +841,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
 // ─── TAB: Checklist ───────────────────────────────────────────────────────────
 function TabChecklist({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [checklists, setChecklists] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
@@ -889,6 +900,17 @@ function TabChecklist({ isAdmin, profile }) {
             showToast('Manutenção registrada! Motorista notificado.', 'success');
             setModalManut(null); setObsManut(''); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+    const handleDeleteChecklist = async (id) => {
+        const ok = await confirm({
+            title: 'Excluir Checklist?',
+            message: 'O checklist será removido permanentemente. Esta ação não pode ser desfeita.',
+            confirmLabel: 'Excluir',
+            variant: 'danger',
+        });
+        if (!ok) return;
+        try { await deleteChecklist(id); showToast('Checklist excluído.', 'warning'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
     return (
@@ -974,6 +996,12 @@ function TabChecklist({ isAdmin, profile }) {
                                     <div className="flex flex-wrap gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                         <button onClick={() => handleAprovar(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"><Icon name="CheckCircle2" size={13} />Aprovar</button>
                                         <button onClick={() => { setModalManut(c.id); setObsManut(''); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-orange-300 text-orange-700 hover:bg-orange-50 transition-colors"><Icon name="Wrench" size={13} />Registrar Manutenção</button>
+                                        <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors ml-auto"><Icon name="Trash2" size={13} />Excluir</button>
+                                    </div>
+                                )}
+                                {isAdmin && c.aprovado && (
+                                    <div className="flex justify-end pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                        <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors"><Icon name="Trash2" size={13} />Excluir</button>
                                     </div>
                                 )}
                             </div>
@@ -1066,6 +1094,7 @@ function TabChecklist({ isAdmin, profile }) {
                 </div>
             )}
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -1073,6 +1102,7 @@ function TabChecklist({ isAdmin, profile }) {
 // ─── TAB: Carregamentos ───────────────────────────────────────────────────────
 function TabCarregamentos({ isAdmin }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [carregamentos, setCarregamentos] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
@@ -1114,7 +1144,8 @@ function TabCarregamentos({ isAdmin }) {
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
-        if (!confirm('Excluir?')) return;
+        const ok = await confirm({ title: 'Excluir carregamento?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
         try { await deleteCarregamento(id); showToast('Excluído!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -1258,6 +1289,7 @@ function TabCarregamentos({ isAdmin }) {
                 </ModalOverlay>
             )}
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -1265,6 +1297,7 @@ function TabCarregamentos({ isAdmin }) {
 // ─── TAB: Empresas ────────────────────────────────────────────────────────────
 function TabEmpresas({ isAdmin }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [empresas, setEmpresas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(false);
@@ -1284,7 +1317,8 @@ function TabEmpresas({ isAdmin }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
-        if (!confirm('Excluir empresa?')) return;
+        const ok = await confirm({ title: 'Excluir empresa?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
         try { await deleteEmpresa(id); showToast('Excluída!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -1329,6 +1363,7 @@ function TabEmpresas({ isAdmin }) {
                 </ModalOverlay>
             )}
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -1472,13 +1507,15 @@ function TabBonificacoes({ isAdmin }) {
                 </div>
             )}
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
 
 // ─── TAB: Despesas Extras (por veículo) ──────────────────────────────────────
-function TabDespesasExtras({ isAdmin }) {
+function TabDespesasExtras({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [despesas, setDespesas]   = useState([]);
     const [veiculos, setVeiculos]   = useState([]);
     const [loading, setLoading]     = useState(true);
@@ -1712,7 +1749,8 @@ function TabDespesasExtras({ isAdmin }) {
     };
 
     const handleDelete = async (id) => {
-        if (!confirm('Excluir despesa?')) return;
+        const ok = await confirm({ title: 'Excluir despesa?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
         try { await deleteDespesaExtra(id); showToast('Excluída!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -2090,13 +2128,15 @@ function TabDespesasExtras({ isAdmin }) {
                 </ModalOverlay>
             )}
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
 
 // ─── TAB: Diárias de Motoristas ───────────────────────────────────────────────
-function TabDiarias({ isAdmin }) {
+function TabDiarias({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [diarias, setDiarias]     = useState([]);
     const [motoristas, setMotoristas] = useState([]);
     const [viagens, setViagens]     = useState([]);
@@ -2152,7 +2192,8 @@ function TabDiarias({ isAdmin }) {
     };
 
     const handleDelete = async (id) => {
-        if (!confirm('Excluir diária?')) return;
+        const ok = await confirm({ title: 'Excluir diária?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
         try { await deleteDiaria(id); showToast('Excluída!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -2298,6 +2339,7 @@ function TabDiarias({ isAdmin }) {
                 </ModalOverlay>
             )}
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -2926,6 +2968,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 </div>
             )}
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -3185,6 +3228,7 @@ function TabConfiguracoes({ isAdmin }) {
             </div>
 
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -3192,6 +3236,7 @@ function TabConfiguracoes({ isAdmin }) {
 // ─── TAB: Ordens de Serviço ───────────────────────────────────────────────────
 function TabOrdensServico({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [ordens, setOrdens]     = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [mecanicos, setMecanicos] = useState([]);
@@ -3255,6 +3300,13 @@ function TabOrdensServico({ isAdmin, profile }) {
         finally { setUploading(false); }
     };
 
+    const handleDeleteOS = async (id) => {
+        const ok = await confirm({ title: 'Excluir Ordem de Serviço?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deleteOrdemServico(id); showToast('OS excluída!', 'warning'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
     const STATUS_OS = ['Pendente', 'Em Andamento', 'Problema Reportado', 'Finalizada'];
     const STATUS_COLORS_OS = {
         'Pendente':           { bg: '#FEF9C3', text: '#B45309' },
@@ -3305,6 +3357,12 @@ function TabOrdensServico({ isAdmin, profile }) {
                                         <button onClick={() => setViewPdf(o.pdf_url)}
                                             className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
                                             <Icon name="FileText" size={13} color="#1D4ED8" />Ver PDF
+                                        </button>
+                                    )}
+                                    {isAdmin && (
+                                        <button onClick={() => handleDeleteOS(o.id)}
+                                            className="p-1.5 rounded hover:bg-red-50 transition-colors" title="Excluir OS">
+                                            <Icon name="Trash2" size={14} color="#DC2626" />
                                         </button>
                                     )}
                                 </div>
@@ -3422,6 +3480,7 @@ function TabOrdensServico({ isAdmin, profile }) {
                 </div>
             )}
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -3822,6 +3881,7 @@ function TabHistoricoViagens({ isAdmin }) {
                 </div>
             )}
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }

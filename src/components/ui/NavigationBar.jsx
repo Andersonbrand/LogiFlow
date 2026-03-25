@@ -90,18 +90,46 @@ export default function NavigationBar() {
                     <div className="flex items-center gap-3">
                         {user && <NotificationBell />}
                         {user && (
-                            <div className="hidden tab:flex items-center gap-2 mr-2">
-                                <div className="flex items-center justify-center rounded-full text-xs font-semibold text-white"
-                                    style={{ width: 30, height: 30, backgroundColor: 'var(--color-primary)', fontSize: 12 }}>
-                                    {(profile?.name || user.email || 'U')[0].toUpperCase()}
-                                </div>
-                                <div className="flex flex-col leading-none">
-                                    <span className="text-xs font-medium max-w-[120px] truncate" style={{ color: 'var(--color-text-primary)' }}>
-                                        {profile?.name || user.email}
-                                    </span>
-                                    <span className="text-[10px] font-caption capitalize" style={{ color: 'var(--color-muted-foreground)' }}>
-                                        {profile?.role || 'operador'}
-                                    </span>
+                            <div className="hidden tab:flex items-center gap-2 mr-2 relative group">
+                                <button
+                                    onClick={() => navigate('/perfil')}
+                                    className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-gray-100"
+                                    title="Meu Perfil"
+                                >
+                                    <div className="flex items-center justify-center rounded-full text-xs font-semibold text-white flex-shrink-0"
+                                        style={{ width: 30, height: 30, backgroundColor: 'var(--color-primary)', fontSize: 12 }}>
+                                        {(profile?.name || user.email || 'U')[0].toUpperCase()}
+                                    </div>
+                                    <div className="flex flex-col leading-none text-left">
+                                        <span className="text-xs font-medium max-w-[120px] truncate" style={{ color: 'var(--color-text-primary)' }}>
+                                            {profile?.name || user.email}
+                                        </span>
+                                        <span className="text-[10px] font-caption capitalize" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            {profile?.role || 'operador'}
+                                        </span>
+                                    </div>
+                                    <Icon name="ChevronDown" size={12} color="var(--color-muted-foreground)" />
+                                </button>
+                                {/* Dropdown */}
+                                <div className="absolute right-0 top-full mt-1 w-44 rounded-xl border shadow-lg overflow-hidden z-50 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-150"
+                                    style={{ backgroundColor: 'var(--color-card)', borderColor: 'var(--color-border)' }}>
+                                    <button
+                                        onClick={() => navigate('/perfil')}
+                                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium text-left transition-colors hover:bg-gray-50"
+                                        style={{ color: 'var(--color-text-primary)' }}
+                                    >
+                                        <Icon name="UserCircle" size={14} color="var(--color-primary)" />
+                                        Meu Perfil
+                                    </button>
+                                    <div className="border-t" style={{ borderColor: 'var(--color-border)' }} />
+                                    <button
+                                        onClick={handleLogout}
+                                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium text-left transition-colors hover:bg-red-50"
+                                        style={{ color: '#DC2626' }}
+                                    >
+                                        <Icon name="LogOut" size={14} color="#DC2626" />
+                                        Sair
+                                    </button>
                                 </div>
                             </div>
                         )}

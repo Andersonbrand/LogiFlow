@@ -5,7 +5,7 @@ import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
-import { supabase } from 'utils/supabaseClient';
+import { supabase, subscribeTabela } from 'utils/supabaseClient';
 import { calcularBonificacao } from 'utils/bonificacaoService';
 import {
     fetchAbastecimentos, createAbastecimento,
@@ -113,7 +113,13 @@ export default function MotoristaDashboard() {
         finally { setLoading(false); }
     }, [user?.id, profile?.name, period]); // eslint-disable-line
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        load();
+        // Realtime: atualiza automaticamente quando admin excluir checklist ou abastecimento
+        const unsubCheck = subscribeTabela('carretas_checklists', load);
+        const unsubAbast = subscribeTabela('carretas_abastecimentos', load);
+        return () => { unsubCheck(); unsubAbast(); };
+    }, [load]); // eslint-disable-line
 
     // ── Computed ─────────────────────────────────────────────────────────────
     const bonificacoes = useMemo(() =>

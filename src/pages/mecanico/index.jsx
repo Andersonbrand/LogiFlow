@@ -4,6 +4,7 @@ import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
+import { subscribeTabela } from 'utils/supabaseClient';
 import { fetchOrdensServico, finalizarOrdemServico, reportarProblemaOS } from 'utils/carretasService';
 
 const FMT_DATE = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -52,7 +53,12 @@ export default function MecanicoPage() {
         finally { setLoading(false); }
     }, [user?.id, filtro]); // eslint-disable-line
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        load();
+        // Realtime: atualiza automaticamente quando admin excluir ou modificar uma OS
+        const unsub = subscribeTabela('carretas_ordens_servico', load);
+        return () => unsub();
+    }, [load]); // eslint-disable-line
 
     const handleFinalizar = async () => {
         try {

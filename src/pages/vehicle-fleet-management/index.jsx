@@ -5,6 +5,7 @@ import Icon from "components/AppIcon";
 import Button from "components/ui/Button";
 import Toast from "components/ui/Toast";
 import { useToast } from "utils/useToast";
+import { useConfirm } from "components/ui/ConfirmDialog";
 import MetricCards from "./components/MetricCards";
 import FilterBar from "./components/FilterBar";
 import VehicleTable from "./components/VehicleTable";
@@ -612,6 +613,7 @@ function TabMotoristas({ adminProfile }) {
 export default function VehicleFleetManagement() {
     const { isAdmin, profile } = useAuth();
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [accessDenied, setAccessDenied] = useState(false);
     const [vehicles, setVehicles] = useState([]);
     const [romaneios, setRomaneios] = useState([]);
@@ -668,6 +670,14 @@ export default function VehicleFleetManagement() {
 
     const handleDelete = async (id) => {
         if (!isAdmin()) { setAccessDenied(true); return; }
+        const ok = await confirm({
+            title: 'Excluir veículo?',
+            message: 'Esta ação não pode ser desfeita. O veículo será removido permanentemente.',
+            confirmLabel: 'Excluir',
+            cancelLabel: 'Cancelar',
+            variant: 'danger',
+        });
+        if (!ok) return;
         try { await deleteVehicle(id); setVehicles(prev => prev.filter(v => v.id !== id)); showToast("Veículo removido."); }
         catch (err) { showToast("Erro: " + err.message, "error"); }
     };
@@ -765,6 +775,7 @@ export default function VehicleFleetManagement() {
             <StatusUpdateModal isOpen={statusModal?.open} vehicle={statusModal?.vehicle} onClose={() => setStatusModal({ open: false, vehicle: null })} onUpdate={handleStatusUpdate} />
             <HistoryModal isOpen={historyModal?.open} vehicle={historyModal?.vehicle} onClose={() => setHistoryModal({ open: false, vehicle: null })} />
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }

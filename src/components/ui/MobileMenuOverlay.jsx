@@ -128,8 +128,26 @@ export default function MobileMenuOverlay({ isOpen, onClose, navItems = [], acti
                             </div>
                         </div>
                     )}
-                    {/* Botão Sair */}
-                    <div className="px-4 py-3 border-t border-border">
+                    {/* Botão Meu Perfil + Sair */}
+                    <div className="px-4 py-3 border-t border-border flex flex-col gap-2">
+                        <button
+                            onClick={() => { onClose(); onNavigate && onNavigate('/perfil'); }}
+                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-sm transition-all"
+                            style={{
+                                backgroundColor: 'var(--color-muted)',
+                                color: 'var(--color-text-primary)',
+                                border: '1px solid var(--color-border)',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#EFF6FF'}
+                            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--color-muted)'}
+                        >
+                            <div className="flex items-center justify-center rounded-lg flex-shrink-0"
+                                style={{ width: 32, height: 32, backgroundColor: '#DBEAFE' }}>
+                                <Icon name="UserCircle" size={16} color="#1D4ED8" strokeWidth={2} />
+                            </div>
+                            <span>Meu Perfil</span>
+                            <Icon name="ChevronRight" size={14} color="var(--color-muted-foreground)" strokeWidth={2} style={{ marginLeft: 'auto' }} />
+                        </button>
                         <button
                             onClick={() => { onClose(); onLogout && onLogout(); }}
                             aria-label="Sair da conta"
