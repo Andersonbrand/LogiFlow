@@ -106,7 +106,10 @@ export default function PerfilUsuario() {
         setSavingEmail(true);
         setFeedbackEmail({ status: 'info', message: 'Enviando solicitação...' });
         try {
-            const { error } = await supabase.auth.updateUser({ email: novoEmail.trim() });
+            const { error } = await supabase.auth.updateUser(
+                { email: novoEmail.trim() },
+                { emailRedirectTo: `${window.location.origin}/email-confirmado` }
+            );
             if (error) throw error;
             setFeedbackEmail({
                 status: 'success',
@@ -142,6 +145,7 @@ export default function PerfilUsuario() {
             const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
                 redirectTo: `${window.location.origin}/reset-password`,
             });
+            // Note: link expires in 1 hour
             if (error) throw error;
             setFeedbackReset({
                 status: 'success',

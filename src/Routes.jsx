@@ -21,6 +21,7 @@ import CarretasPage          from "pages/carretas";
 import CarreteiroDashboard   from "pages/carreteiro";
 import MecanicoPage          from "pages/mecanico";
 import PerfilUsuario         from "pages/perfil-usuario";
+import EmailConfirmado       from "pages/email-confirmado";
 
 const Routes = () => (
     <BrowserRouter>
@@ -30,6 +31,9 @@ const Routes = () => (
                 <RouterRoutes>
                     <Route path="/login"          element={<Login />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
+
+                    {/* Página de confirmação de e-mail — pública (link vem do e-mail) */}
+                    <Route path="/email-confirmado"          element={<EmailConfirmado />} />
 
                     {/* Perfil do usuário — acessível por todos os papéis autenticados */}
                     <Route path="/perfil"                   element={<ProtectedRoute><PerfilUsuario /></ProtectedRoute>} />
