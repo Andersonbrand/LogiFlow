@@ -168,6 +168,36 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
     );
 }
 
+// ─── Calcula frete por material (função pura — usada no save e no preview) ──
+function calcularFretePorMaterial(valorCarga, itens, materiais) {
+    if (!valorCarga || !Number(valorCarga)) return 0;
+    const vCarga = Number(valorCarga);
+    const itensComMat = itens.filter(it => it.material_id);
+    if (!itensComMat.length) return 0;
+
+    const pcts = itensComMat.map(it => {
+        const mat = materiais.find(m => m.id === it.material_id);
+        return mat?.percentual_frete ? Number(mat.percentual_frete) : null;
+    });
+    const pctsSemNull = pcts.filter(p => p !== null);
+    if (!pctsSemNull.length) return 0;
+
+    const pesosTotais = itensComMat.map(it => Number(it.peso_total) || 0);
+    const pesoSomado = pesosTotais.reduce((s, p) => s + p, 0);
+
+    let pctFinal = 0;
+    if (pesoSomado > 0) {
+        itensComMat.forEach((it, i) => {
+            const mat = materiais.find(m => m.id === it.material_id);
+            const pct = mat?.percentual_frete ? Number(mat.percentual_frete) : 0;
+            pctFinal += pct * (pesosTotais[i] / pesoSomado);
+        });
+    } else {
+        pctFinal = pctsSemNull.reduce((s, p) => s + p, 0) / pctsSemNull.length;
+    }
+    return vCarga * pctFinal;
+}
+
 // ─── Modal Formulário Romaneio ────────────────────────────────────────────────
 function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empresas, materiais }) {
     const { toast, showToast } = useToast();
@@ -243,38 +273,11 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
     };
     const removeItem = (idx) => setItens(p => p.filter((_, i) => i !== idx));
 
-    // Cálculo do frete percentual preview
-    // ── Cálculo central do frete por material ────────────────────────────────
-    // Independente do tipo selecionado, calcula sempre que materiais têm percentual_frete
-    const freteCalculadoPorMaterial = useMemo(() => {
-        if (!form.valor_carga) return 0;
-        const valorCarga = Number(form.valor_carga);
-        const itensComMat = itens.filter(it => it.material_id);
-        if (!itensComMat.length) return 0;
-
-        const pcts = itensComMat.map(it => {
-            const mat = materiais.find(m => m.id === it.material_id);
-            return mat?.percentual_frete ? Number(mat.percentual_frete) : null;
-        });
-        const pctsSemNull = pcts.filter(p => p !== null);
-        if (!pctsSemNull.length) return 0;
-
-        // Média ponderada por peso — fallback para média simples se sem peso
-        const pesosTotais = itensComMat.map(it => Number(it.peso_total) || 0);
-        const pesoSomado = pesosTotais.reduce((s, p) => s + p, 0);
-
-        let pctFinal = 0;
-        if (pesoSomado > 0) {
-            itensComMat.forEach((it, i) => {
-                const mat = materiais.find(m => m.id === it.material_id);
-                const pct = mat?.percentual_frete ? Number(mat.percentual_frete) : 0;
-                pctFinal += pct * (pesosTotais[i] / pesoSomado);
-            });
-        } else {
-            pctFinal = pctsSemNull.reduce((s, p) => s + p, 0) / pctsSemNull.length;
-        }
-        return valorCarga * pctFinal;
-    }, [form.valor_carga, itens, materiais]);
+    // Frete por material — usa função pura para garantir resultado com itens mais recentes
+    const freteCalculadoPorMaterial = useMemo(
+        () => calcularFretePorMaterial(form.valor_carga, itens, materiais),
+        [form.valor_carga, itens, materiais]
+    );
 
     const fretePreview = useMemo(() => {
         // Tipo fixo: usa valor digitado diretamente
@@ -310,12 +313,16 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 ...form,
                 valor_carga:         form.valor_carga  ? Number(form.valor_carga)  : null,
                 toneladas:           form.toneladas    ? Number(form.toneladas)    : null,
-                // Prioridade: fretePreview (já calculado) → freteCalculadoPorMaterial → null
-                valor_frete:         fretePreview > 0
-                                        ? fretePreview
-                                        : freteCalculadoPorMaterial > 0
-                                            ? freteCalculadoPorMaterial
-                                            : (form.valor_frete ? Number(form.valor_frete) : null),
+                // Calcula o frete na hora do save com os itens mais recentes (evita stale closure)
+                valor_frete: (() => {
+                    if (form.tipo_calculo_frete === 'fixo' && form.valor_frete) return Number(form.valor_frete);
+                    if (form.tipo_calculo_frete === 'percentual' && form.valor_carga && form.valor_frete)
+                        return (Number(form.valor_carga) * Number(form.valor_frete)) / 100;
+                    // por_material ou fixo sem valor: calcula direto com itens atuais
+                    const itensParaSalvar = itens.filter(it => it.material_id || it.descricao);
+                    const freteMat = calcularFretePorMaterial(form.valor_carga, itensParaSalvar, materiais);
+                    return freteMat > 0 ? freteMat : (form.valor_frete ? Number(form.valor_frete) : null);
+                })(),
                 tipo_calculo_frete:  form.tipo_calculo_frete,
                 itens:               itens.filter(it => it.material_id || it.descricao),
             };
@@ -725,6 +732,35 @@ export default function TabRomaneios({ isAdmin }) {
 
     useEffect(() => { load(); }, [load]);
 
+    // Ao receber novos romaneios, verifica auto-atualização de status por data
+    useEffect(() => {
+        if (romaneios.length > 0) autoAtualizarStatus(romaneios);
+    }, [romaneios.length]); // eslint-disable-line
+
+    // Atualiza status inline sem abrir modal de edição
+    const handleStatusChange = async (id, novoStatus) => {
+        try {
+            await updateRomaneio(id, { status: novoStatus });
+            setRomaneios(prev => prev.map(r => r.id === id ? { ...r, status: novoStatus } : r));
+        } catch (e) { showToast('Erro ao atualizar status: ' + e.message, 'error'); }
+    };
+
+    // Auto-atualiza status com base na data de saída ao carregar
+    const autoAtualizarStatus = useCallback(async (lista) => {
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const atualizacoes = lista.filter(r => {
+            if (!r.data_saida || r.status === 'Entrega finalizada' || r.status === 'Cancelado') return false;
+            const saida = new Date(r.data_saida + 'T00:00:00');
+            // Se data de saída já passou e ainda está Aguardando → Em Trânsito
+            return saida <= hoje && r.status === 'Aguardando';
+        });
+        for (const r of atualizacoes) {
+            try { await updateRomaneio(r.id, { status: 'Em Trânsito' }); } catch {}
+        }
+        if (atualizacoes.length > 0) load(); // recarrega com novos status
+    }, [load]); // eslint-disable-line
+
     const handleDelete = async (id) => {
         const ok = await confirm({
             title: 'Excluir romaneio?',
@@ -863,7 +899,21 @@ export default function TabRomaneios({ isAdmin }) {
                                             {r.numero}
                                         </button>
                                     </td>
-                                    <td className="px-3 py-3"><StatusBadge status={r.status} /></td>
+                                    <td className="px-3 py-3">
+                                        <select
+                                            value={r.status}
+                                            onChange={e => handleStatusChange(r.id, e.target.value)}
+                                            className="text-xs font-medium rounded-full px-2 py-0.5 border-0 cursor-pointer outline-none"
+                                            style={{
+                                                backgroundColor: STATUS_ROMANEIO_COLORS[r.status]?.bg || '#F3F4F6',
+                                                color: STATUS_ROMANEIO_COLORS[r.status]?.text || '#374151',
+                                            }}
+                                            title="Clique para mudar o status">
+                                            {STATUS_ROMANEIO.map(s => (
+                                                <option key={s} value={s}>{s}</option>
+                                            ))}
+                                        </select>
+                                    </td>
                                     <td className="px-3 py-3 whitespace-nowrap">{r.motorista?.name || '—'}</td>
                                     <td className="px-3 py-3 font-data whitespace-nowrap">{r.veiculo?.placa || '—'}</td>
                                     <td className="px-3 py-3 text-xs max-w-[120px] truncate">{r.empresa || '—'}</td>
