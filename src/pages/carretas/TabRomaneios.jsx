@@ -93,7 +93,15 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                     onChange={e => {
                         const mid = e.target.value;
                         const m = materiais.find(x => x.id === mid);
-                        onUpdate(index, { material_id: mid, descricao: m?.nome || item.descricao, unidade: m?.unidade || item.unidade });
+                        // Auto-calc peso_total: quantidade × peso unitário do material
+                        const qtd = Number(item.quantidade) || 1;
+                        const pesoAuto = m?.peso ? String(qtd * Number(m.peso)) : item.peso_total;
+                        onUpdate(index, {
+                            material_id: mid,
+                            descricao: m?.nome || item.descricao,
+                            unidade: m?.unidade || item.unidade,
+                            peso_total: pesoAuto,
+                        });
                     }}
                     className={inputCls} style={inputStyle}>
                     <option value="">Selecione...</option>
@@ -105,7 +113,7 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                 </select>
                 {pctFrete !== null && (
                     <p className="text-xs mt-1 text-indigo-600 font-medium">
-                        📦 Frete percentual: {pctFrete.toFixed(2)}%{mat?.categoria_frete ? ` — ${mat.categoria_frete}` : ''}
+                        📦 {pctFrete.toFixed(2)}% frete{mat?.categoria_frete ? ` — ${mat.categoria_frete}` : ''}
                     </p>
                 )}
             </div>
@@ -115,7 +123,12 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                 <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Qtd</label>
                 <input type="number" step="0.001" min="0"
                     value={item.quantidade}
-                    onChange={e => onUpdate(index, { quantidade: e.target.value })}
+                    onChange={e => {
+                        const newQtd = e.target.value;
+                        const mat = materiais.find(m => m.id === item.material_id);
+                        const pesoAuto = mat?.peso ? String(Number(newQtd) * Number(mat.peso)) : item.peso_total;
+                        onUpdate(index, { quantidade: newQtd, peso_total: pesoAuto });
+                    }}
                     className={inputCls} style={inputStyle} placeholder="0" />
             </div>
 
@@ -130,11 +143,18 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
 
             {/* Peso total */}
             <div className="col-span-10 sm:col-span-2">
-                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Peso (kg)</label>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+                    Peso (kg){mat?.peso ? <span className="ml-1 text-emerald-600 font-normal">auto</span> : null}
+                </label>
                 <input type="number" step="0.01" min="0"
                     value={item.peso_total || ''}
                     onChange={e => onUpdate(index, { peso_total: e.target.value })}
                     className={inputCls} style={inputStyle} placeholder="—" />
+                {mat?.peso && (
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
+                        {Number(mat.peso).toLocaleString('pt-BR')} kg/un
+                    </p>
+                )}
             </div>
 
             {/* Remove */}
@@ -217,17 +237,39 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
         if (form.tipo_calculo_frete === 'percentual' && form.valor_carga && form.valor_frete) {
             return (Number(form.valor_carga) * Number(form.valor_frete)) / 100;
         }
-        // frete percentual por material
-        if (form.tipo_calculo_frete === 'por_material') {
-            let total = 0;
-            itens.forEach(it => {
+        // frete percentual por material: cada item aplica seu % ao valor da carga
+        // Se há múltiplos materiais com %s diferentes, usa a média ponderada pelo peso
+        if (form.tipo_calculo_frete === 'por_material' && form.valor_carga) {
+            const valorCarga = Number(form.valor_carga);
+            const itensComMat = itens.filter(it => it.material_id);
+            if (!itensComMat.length) return 0;
+
+            // Verifica se todos os itens têm o mesmo % (caso comum: mesmo produto)
+            const pcts = itensComMat.map(it => {
                 const mat = materiais.find(m => m.id === it.material_id);
-                if (mat?.percentual_frete && form.valor_carga) {
-                    // percentual proporcional por item
-                    total += Number(form.valor_carga) * Number(mat.percentual_frete);
-                }
-            });
-            return total;
+                return mat?.percentual_frete ? Number(mat.percentual_frete) : null;
+            }).filter(p => p !== null);
+
+            if (!pcts.length) return 0;
+
+            // Ponderação por peso total de cada item
+            const pesosTotais = itensComMat.map(it => Number(it.peso_total) || 0);
+            const pesoSomado = pesosTotais.reduce((s, p) => s + p, 0);
+
+            if (pesoSomado > 0) {
+                // Média ponderada por peso
+                let pctPonderado = 0;
+                itensComMat.forEach((it, i) => {
+                    const mat = materiais.find(m => m.id === it.material_id);
+                    const pct = mat?.percentual_frete ? Number(mat.percentual_frete) : 0;
+                    pctPonderado += pct * (pesosTotais[i] / pesoSomado);
+                });
+                return valorCarga * pctPonderado;
+            } else {
+                // Sem pesos: usa média simples dos percentuais
+                const pctMedia = pcts.reduce((s, p) => s + p, 0) / pcts.length;
+                return valorCarga * pctMedia;
+            }
         }
         return 0;
     }, [form.tipo_calculo_frete, form.valor_frete, form.valor_carga, itens, materiais]);

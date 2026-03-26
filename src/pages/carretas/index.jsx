@@ -29,6 +29,7 @@ import {
     CIDADES_BONUS_BAIXO, BONUS_BAIXO, BONUS_ALTO,
     fetchPostos, createPosto, updatePosto, deletePosto,
     STATUS_ROMANEIO_COLORS,
+    fetchRomaneios,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
 
@@ -2438,20 +2439,34 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const filtros = { dataInicio, dataFim };
             if (empresa) filtros.empresaId = empresa;
 
-            const [carregamentos, abastecimentos, viagens, despesasExtras, diariasLancadas] = await Promise.all([
+            const [carregamentos, abastecimentos, viagens, despesasExtras, diariasLancadas, romaneiosCarga] = await Promise.all([
                 fetchCarregamentos(filtros),
                 fetchAbastecimentos({ dataInicio, dataFim }),
                 fetchViagens({ dataInicio, dataFim }),
                 fetchDespesasExtras({ dataInicio, dataFim }),
                 fetchDiarias({ dataInicio, dataFim }),
+                fetchRomaneios({ dataInicio, dataFim }),
             ]);
 
-            // ── Receitas (fretes) ──────────────────────────────────────────
-            const receitaTotal     = carregamentos.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);
+            // ── Receitas (fretes de carregamentos) ────────────────────────
+            const receitaCarregamentos = carregamentos.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);
+
+            // ── Receitas (fretes de romaneios de carga) ───────────────────
+            const receitaRomaneios = romaneiosCarga
+                .filter(r => r.status !== 'Cancelado')
+                .reduce((s, r) => s + Number(r.valor_frete || 0), 0);
+
+            const receitaTotal = receitaCarregamentos + receitaRomaneios;
+
             const receitaPorEmpresa = {};
             carregamentos.forEach(c => {
                 const nome = c.empresa?.nome || 'Sem empresa';
                 receitaPorEmpresa[nome] = (receitaPorEmpresa[nome] || 0) + Number(c.valor_frete_calculado || 0);
+            });
+            // Incluir romaneios na receita por empresa
+            romaneiosCarga.filter(r => r.status !== 'Cancelado').forEach(r => {
+                const nome = r.empresa || 'Sem empresa';
+                receitaPorEmpresa[nome] = (receitaPorEmpresa[nome] || 0) + Number(r.valor_frete || 0);
             });
 
             // ── Despesas combustível ───────────────────────────────────────
@@ -2514,7 +2529,10 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 
             setDados({
                 periodo: `${periodoInicio === periodoFim ? periodoInicio : `${periodoInicio} a ${periodoFim}`}`,
-                receitaTotal, receitaPorEmpresa,
+                receitaTotal, receitaCarregamentos, receitaRomaneios,
+                totalRomaneios: romaneiosCarga.filter(r => r.status !== 'Cancelado').length,
+                receitaPorEmpresa,
+                _romaneios: romaneiosCarga,
                 despesaCombustivel, litrosDiesel, litrosArla, valorDiesel, valorArla,
                 bonusTotal, despesaTotal,
                 margemBruta, margemLiquida, margemPct,
@@ -2547,7 +2565,9 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             ['', '', ''],
             ['RECEITAS', '', ''],
             ['Receita Total de Fretes', dados.receitaTotal, ''],
-            ...Object.entries(dados.receitaPorEmpresa).map(([nome, val]) => [`  → ${nome}`, val, '']),
+            ['  → Carregamentos', dados.receitaCarregamentos || 0, ''],
+            ['  → Romaneios de Carga', dados.receitaRomaneios || 0, ''],
+            ...Object.entries(dados.receitaPorEmpresa).map(([nome, val]) => [`  → Por empresa: ${nome}`, val, '']),
             ['', '', ''],
             ['DESPESAS', '', ''],
             ['Combustível — Diesel', dados.valorDiesel, ''],
@@ -2614,12 +2634,15 @@ function TabRelatorioFinanceiro({ isAdmin }) {
         const absts = (dados._abastecimentos || []).filter(a => a.veiculo_id === filtroPlaca);
         const viags = (dados._viagens || []).filter(v => v.veiculo_id === filtroPlaca);
         const desps = (dados._despesasExtras || []).filter(d => d.veiculo_id === filtroPlaca);
+        const roms  = (dados._romaneios || []).filter(r => r.veiculo_id === filtroPlaca && r.status !== 'Cancelado');
         const diar  = (dados._diarias || []).filter(d => {
             // diárias vinculadas ao veículo via viagem
             const viagIds = viags.map(v => v.id);
             return d.viagem_id && viagIds.includes(d.viagem_id);
         });
-        const receita     = carrg.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);
+        const receitaCarrg = carrg.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);
+        const receitaRoms  = roms.reduce((s, r) => s + Number(r.valor_frete || 0), 0);
+        const receita     = receitaCarrg + receitaRoms;
         const vDiesel     = absts.reduce((s, a) => s + Number(a.valor_diesel || 0), 0);
         const vArla       = absts.reduce((s, a) => s + Number(a.valor_arla || 0), 0);
         const combustivel = vDiesel + vArla;
@@ -2630,12 +2653,12 @@ function TabRelatorioFinanceiro({ isAdmin }) {
         const diarias     = diar.reduce((s, d) => s + Number(d.valor_total || 0), 0);
         const totalDesp   = combustivel + bonus + despExtra + diarias;
         const margem      = receita - totalDesp;
-        return { veic, carrg, absts, viags, desps, diar, receita, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, totalDesp, margem };
+        return { veic, carrg, roms, absts, viags, desps, diar, receita, receitaCarrg, receitaRoms, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, totalDesp, margem };
     }, [dados, filtroPlaca, veiculos]);
 
     const exportarPorPlaca = () => {
         if (!dadosPorPlaca) { showToast('Selecione uma placa e gere o relatório primeiro', 'error'); return; }
-        const { veic, carrg, absts, viags, desps, receita, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, totalDesp, margem } = dadosPorPlaca;
+        const { veic, carrg, roms, absts, viags, desps, receita, receitaCarrg, receitaRoms, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, totalDesp, margem } = dadosPorPlaca;
         const wb = XLSX.utils.book_new();
 
         // Aba Resumo
@@ -2645,7 +2668,9 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             ['Período:', dados.periodo],
             ['', ''],
             ['RECEITAS', ''],
-            ['Receita de Fretes', receita],
+            ['Receita Total', receita],
+            ['  → Carregamentos', receitaCarrg],
+            ['  → Romaneios de Carga', receitaRoms],
             ['', ''],
             ['DESPESAS', ''],
             ['Diesel', vDiesel], [`  → ${lDiesel.toFixed(1)} L`, ''],
@@ -2675,12 +2700,28 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             XLSX.utils.book_append_sheet(wb, wsV, 'Viagens');
         }
 
+        // Aba Romaneios de Carga
+        if (roms && roms.length) {
+            const rowsR = [
+                ['Nº Romaneio', 'Status', 'Motorista', 'Empresa', 'Destino', 'Data Saída', 'Peso (t)', 'Valor Carga (R$)', 'Frete (R$)'],
+                ...roms.map(r => [
+                    r.numero, r.status, r.motorista?.name || '', r.empresa || '',
+                    r.destino || '', FMT_DATE(r.data_saida),
+                    Number(r.toneladas || 0), Number(r.valor_carga || 0), Number(r.valor_frete || 0),
+                ]),
+                ['TOTAL', '', '', '', '', '', '', '', receitaRoms],
+            ];
+            const wsR = XLSX.utils.aoa_to_sheet(rowsR);
+            wsR['!cols'] = [14,16,20,18,20,12,10,16,14].map(w => ({ wch: w }));
+            XLSX.utils.book_append_sheet(wb, wsR, 'Romaneios');
+        }
+
         // Aba Fretes
         if (carrg.length) {
             const rowsC = [
                 ['Data', 'Pedido', 'NF', 'Empresa', 'Destino', 'Motorista', 'Qtd', 'Unidade', 'Frete (R$)'],
                 ...carrg.map(c => [FMT_DATE(c.data_carregamento), c.numero_pedido || '', c.numero_nota_fiscal || '', c.empresa?.nome || '', c.destino || '', c.motorista?.name || '', c.quantidade || 0, c.unidade_quantidade || '', Number(c.valor_frete_calculado || 0)]),
-                ['TOTAL', '', '', '', '', '', '', '', receita],
+                ['TOTAL', '', '', '', '', '', '', '', receitaCarrg],
             ];
             const wsC = XLSX.utils.aoa_to_sheet(rowsC);
             wsC['!cols'] = [12,12,10,18,20,20,8,8,14].map(w => ({ wch: w }));
@@ -2798,7 +2839,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                     {/* ── Cards de margem ─────────────────────────────────── */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         {[
-                            { l: 'Receita Total',     v: BRL(dados.receitaTotal),     c: '#065F46', bg: '#D1FAE5', i: 'TrendingUp',  sub: `${dados.totalCarregamentos} carregamentos` },
+                            { l: 'Receita Total',     v: BRL(dados.receitaTotal),     c: '#065F46', bg: '#D1FAE5', i: 'TrendingUp',  sub: `${dados.totalCarregamentos} carregamentos + ${dados.totalRomaneios || 0} romaneios` },
                             { l: 'Desp. Combustível', v: BRL(dados.despesaCombustivel), c: '#B45309', bg: '#FEF9C3', i: 'Fuel',        sub: `${dados.litrosDiesel.toFixed(0)}L diesel` },
                             { l: 'Bônus Motoristas',  v: BRL(dados.bonusTotal),       c: '#7C3AED', bg: '#EDE9FE', i: 'Award',       sub: `${dados.viagensFinalizadas} viagens finalizadas` },
                             { l: 'Despesas Extras',   v: BRL(dados.totalDespesasExtras), c: '#EA580C', bg: '#FEF3C7', i: 'Receipt',    sub: `${Object.keys(dados.despesasPorCategoria).length} categoria(s)` },
@@ -2836,6 +2877,18 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                                 <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Receita de Fretes</span>
                                 <span className="font-data font-semibold text-green-700">{BRL(dados.receitaTotal)}</span>
                             </div>
+                            {(dados.receitaCarregamentos > 0 || dados.receitaRomaneios > 0) && (
+                                <>
+                                    <div className="flex justify-between py-1 pl-6">
+                                        <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ Carregamentos ({dados.totalCarregamentos})</span>
+                                        <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(dados.receitaCarregamentos || 0)}</span>
+                                    </div>
+                                    <div className="flex justify-between py-1 pl-6">
+                                        <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ Romaneios de Carga ({dados.totalRomaneios || 0})</span>
+                                        <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(dados.receitaRomaneios || 0)}</span>
+                                    </div>
+                                </>
+                            )}
                             {Object.entries(dados.receitaPorEmpresa).map(([nome, val]) => (
                                 <div key={nome} className="flex justify-between py-1 pl-6">
                                     <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ {nome}</span>
