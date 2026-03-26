@@ -753,7 +753,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                 <ModalOverlay onClose={() => { setModalPostos(false); setEditPosto(null); setFormPosto({ nome: '', cidade: '', cnpj: '', preco_diesel: '', preco_arla: '' }); }}>
                     <ModalHeader title="Gerenciar Postos de Combustível" icon="MapPin" onClose={() => { setModalPostos(false); setEditPosto(null); setFormPosto({ nome: '', cidade: '', cnpj: '', preco_diesel: '', preco_arla: '' }); }} />
                     <div className="p-5 overflow-y-auto flex-1">
-                        {/* Formulário add/edit */
+                        {/* Formulário add/edit */}
                         <div className="p-4 rounded-xl border mb-4" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
                             <p className="text-xs font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>
                                 {editPosto ? '✏️ Editar Posto' : '➕ Novo Posto'}
