@@ -243,24 +243,27 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
         try {
             const payload = {
                 ...form,
-                valor_carga:  form.valor_carga  ? Number(form.valor_carga)  : null,
-                toneladas:    form.toneladas    ? Number(form.toneladas)    : null,
-                valor_frete:  fretePreview      || (form.valor_frete ? Number(form.valor_frete) : null),
-                tipo_calculo_frete: form.tipo_calculo_frete,
-                itens: itens.filter(it => it.material_id || it.descricao),
+                valor_carga:         form.valor_carga  ? Number(form.valor_carga)  : null,
+                toneladas:           form.toneladas    ? Number(form.toneladas)    : null,
+                valor_frete:         fretePreview > 0
+                                        ? fretePreview
+                                        : (form.valor_frete ? Number(form.valor_frete) : null),
+                tipo_calculo_frete:  form.tipo_calculo_frete,
+                itens:               itens.filter(it => it.material_id || it.descricao),
             };
-            if (!payload.motorista_id)  delete payload.motorista_id;
-            if (!payload.veiculo_id)    delete payload.veiculo_id;
-            if (!payload.empresa)       delete payload.empresa;
-            if (!payload.data_chegada)  delete payload.data_chegada;
+            if (!payload.motorista_id) delete payload.motorista_id;
+            if (!payload.veiculo_id)   delete payload.veiculo_id;
+            if (!payload.empresa)      delete payload.empresa;
+            if (!payload.data_chegada) delete payload.data_chegada;
 
             if (isEdit) await updateRomaneio(rom.id, payload);
             else        await createRomaneio(payload);
 
             showToast(isEdit ? 'Romaneio atualizado!' : 'Romaneio criado!', 'success');
-            setTimeout(() => { onSaved(); onClose(); }, 600);
+            setTimeout(() => { onSaved(); onClose(); }, 800);
         } catch (e) {
-            showToast('Erro: ' + e.message, 'error');
+            console.error('Erro ao salvar romaneio:', e);
+            showToast('Erro: ' + (e.message || JSON.stringify(e)), 'error');
         } finally {
             setSaving(false);
         }
@@ -354,20 +357,26 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                             </div>
                         </Field>
 
-                        {/* Peso */}
-                        <Field label="Peso do Veículo">
+                        {/* Peso bruto */}
+                        <Field label="Peso Bruto Total (veíc. + carga)">
                             <input type="number" step="0.001" min="0" value={form.toneladas}
                                 onChange={e => set('toneladas', e.target.value)}
                                 className={inputCls} style={inputStyle} placeholder="0,000" />
+                            <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>
+                                Peso total na balança (tara + carga)
+                            </p>
                         </Field>
 
                         {/* Unidade do peso */}
-                        <Field label="Unidade do Peso">
+                        <Field label="Unidade">
                             <select value={form.unidade_peso} onChange={e => set('unidade_peso', e.target.value)}
                                 className={inputCls} style={inputStyle}>
                                 <option value="KG">KG — Quilograma</option>
                                 <option value="TON">TON — Tonelada</option>
                             </select>
+                            <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>
+                                {form.unidade_peso === 'KG' ? 'Será salvo em toneladas no banco' : 'Salvo diretamente em toneladas'}
+                            </p>
                         </Field>
                     </div>
 
@@ -524,7 +533,7 @@ function RomaneioDetailModal({ romaneio, onClose }) {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {[
                         { l: 'Valor da Carga', v: romaneio.valor_carga ? BRL(romaneio.valor_carga) : '—', color: '#065F46' },
-                        { l: 'Peso',           v: romaneio.toneladas ? `${Number(romaneio.toneladas).toLocaleString('pt-BR')} ${romaneio.unidade_peso || 'KG'}` : '—', color: '#B45309' },
+                        { l: 'Peso Bruto',     v: romaneio.toneladas ? `${Number(romaneio.toneladas).toLocaleString('pt-BR')} t` : '—', color: '#B45309' },
                         { l: 'Frete',          v: romaneio.valor_frete ? BRL(romaneio.valor_frete) : '—', color: '#7C3AED' },
                     ].map(({ l, v, color }) => (
                         <div key={l} className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)' }}>
@@ -777,7 +786,7 @@ export default function TabRomaneios({ isAdmin }) {
                                     <td className="px-3 py-3 text-xs max-w-[120px] truncate">{r.empresa || '—'}</td>
                                     <td className="px-3 py-3 max-w-[140px] truncate">{r.destino || '—'}</td>
                                     <td className="px-3 py-3 text-xs whitespace-nowrap font-data">
-                                        {r.toneladas ? `${Number(r.toneladas).toLocaleString('pt-BR')} ${r.unidade_peso || 'KG'}` : '—'}
+                                        {r.toneladas ? `${Number(r.toneladas).toLocaleString('pt-BR')} t` : '—'}
                                     </td>
                                     <td className="px-3 py-3 font-data text-right text-emerald-700">
                                         {r.valor_carga ? BRL(r.valor_carga) : '—'}
