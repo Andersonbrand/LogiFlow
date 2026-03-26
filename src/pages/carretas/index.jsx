@@ -61,10 +61,11 @@ function StatusBadge({ status }) {
 
 function ModalOverlay({ children, onClose }) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
             style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
             onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col"
+                style={{ maxHeight: 'calc(100vh - 32px)' }}>
                 {children}
             </div>
         </div>
@@ -73,7 +74,7 @@ function ModalOverlay({ children, onClose }) {
 
 function ModalHeader({ title, icon, onClose }) {
     return (
-        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
+        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
             <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center"
                     style={{ backgroundColor: '#EFF6FF' }}>
@@ -296,7 +297,7 @@ function TabViagens({ isAdmin, profile }) {
             {modal && isAdmin && (
                 <ModalOverlay onClose={() => setModal(null)}>
                     <ModalHeader title={modal.mode === 'create' ? 'Nova Viagem' : 'Editar Viagem'} icon="Navigation" onClose={() => setModal(null)} />
-                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                         <Field label="Status" required>
                             <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={inputCls} style={inputStyle}>
                                 {STATUS_VIAGEM.map(s => <option key={s} value={s}>{s}</option>)}
@@ -333,7 +334,7 @@ function TabViagens({ isAdmin, profile }) {
                             <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={3} placeholder="Observações gerais..." />
                         </Field>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -421,7 +422,7 @@ function TabVeiculos({ isAdmin }) {
             {modal && (
                 <ModalOverlay onClose={() => setModal(null)}>
                     <ModalHeader title={modal.mode === 'create' ? 'Novo Veículo' : 'Editar Veículo'} icon="Truck" onClose={() => setModal(null)} />
-                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                         <Field label="Placa" required><input value={form.placa} onChange={e => setForm(f => ({ ...f, placa: e.target.value.toUpperCase() }))} className={inputCls} style={inputStyle} placeholder="ABC-1234" /></Field>
                         <Field label="Marca" required><input value={form.marca} onChange={e => setForm(f => ({ ...f, marca: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Volvo, Scania..." /></Field>
                         <Field label="Modelo" required><input value={form.modelo} onChange={e => setForm(f => ({ ...f, modelo: e.target.value }))} className={inputCls} style={inputStyle} placeholder="FH 540..." /></Field>
@@ -438,7 +439,7 @@ function TabVeiculos({ isAdmin }) {
                             <Field label="Observações"><textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                         </div>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -665,7 +666,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
             {modal && (
                 <ModalOverlay onClose={() => setModal(false)}>
                     <ModalHeader title="Registrar Abastecimento" icon="Fuel" onClose={() => setModal(false)} />
-                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                         {isAdmin && (
                             <Field label="Motorista" required>
                                 <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
@@ -740,7 +741,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                             <Field label="Observações"><textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                         </div>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                         <button onClick={() => setModal(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -751,8 +752,8 @@ function TabAbastecimentos({ isAdmin, profile }) {
             {modalPostos && isAdmin && (
                 <ModalOverlay onClose={() => { setModalPostos(false); setEditPosto(null); setFormPosto({ nome: '', cidade: '', cnpj: '', preco_diesel: '', preco_arla: '' }); }}>
                     <ModalHeader title="Gerenciar Postos de Combustível" icon="MapPin" onClose={() => { setModalPostos(false); setEditPosto(null); setFormPosto({ nome: '', cidade: '', cnpj: '', preco_diesel: '', preco_arla: '' }); }} />
-                    <div className="p-5">
-                        {/* Formulário add/edit */}
+                    <div className="p-5 overflow-y-auto flex-1">
+                        {/* Formulário add/edit */
                         <div className="p-4 rounded-xl border mb-4" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
                             <p className="text-xs font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>
                                 {editPosto ? '✏️ Editar Posto' : '➕ Novo Posto'}
@@ -1018,7 +1019,7 @@ function TabChecklist({ isAdmin, profile }) {
             {modal && (
                 <ModalOverlay onClose={() => { setModal(null); setFotoPreview(null); }}>
                     <ModalHeader title="Checklist Semanal" icon="ClipboardCheck" onClose={() => { setModal(null); setFotoPreview(null); }} />
-                    <div className="p-5 space-y-4">
+                    <div className="p-5 space-y-4 overflow-y-auto flex-1">
                         <Field label="Veículo" required>
                             <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
@@ -1063,7 +1064,7 @@ function TabChecklist({ isAdmin, profile }) {
                         </div>
                         <Field label="Observações livres"><textarea value={form.observacoes_livres} onChange={e => setForm(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                         <button onClick={() => { setModal(null); setFotoPreview(null); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Send">Enviar Checklist</Button>
                     </div>
@@ -1074,12 +1075,12 @@ function TabChecklist({ isAdmin, profile }) {
             {modalManut && (
                 <ModalOverlay onClose={() => setModalManut(null)}>
                     <ModalHeader title="Registrar Manutenção" icon="Wrench" onClose={() => setModalManut(null)} />
-                    <div className="p-5">
+                    <div className="p-5 overflow-y-auto flex-1">
                         <Field label="Descreva a manutenção necessária" required>
                             <textarea value={obsManut} onChange={e => setObsManut(e.target.value)} className={inputCls} style={inputStyle} rows={4} placeholder="Detalhes da manutenção..." />
                         </Field>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                         <button onClick={() => setModalManut(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleManutencao} size="sm" iconName="Wrench">Registrar</Button>
                     </div>
@@ -1088,7 +1089,7 @@ function TabChecklist({ isAdmin, profile }) {
 
             {/* Modal visualizar foto */}
             {modalFoto && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }} onClick={() => setModalFoto(null)}>
+                <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }} onClick={() => setModalFoto(null)}>
                     <div className="relative max-w-2xl w-full">
                         <button onClick={() => setModalFoto(null)} className="absolute -top-10 right-0 text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
                             <Icon name="X" size={16} color="white" /> Fechar
@@ -1242,7 +1243,7 @@ function TabCarregamentos({ isAdmin }) {
             {modal && (
                 <ModalOverlay onClose={() => setModal(null)}>
                     <ModalHeader title="Novo Carregamento" icon="Package" onClose={() => setModal(null)} />
-                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                         <Field label="Motorista"><select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}><option value="">Selecione...</option>{motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
                         <Field label="Veículo"><select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}><option value="">Selecione...</option>{veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}</select></Field>
                         <Field label="Empresa (frete)" required><select value={form.empresa_id} onChange={e => setForm(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}><option value="">Selecione...</option>{empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}</select></Field>
@@ -1286,7 +1287,7 @@ function TabCarregamentos({ isAdmin }) {
                         </div>
                         <div className="sm:col-span-2"><Field label="Observações"><textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field></div>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -1355,12 +1356,12 @@ function TabEmpresas({ isAdmin }) {
             {modal && (
                 <ModalOverlay onClose={() => setModal(false)}>
                     <ModalHeader title="Nova Empresa" icon="Building2" onClose={() => setModal(false)} />
-                    <div className="p-5 space-y-4">
+                    <div className="p-5 space-y-4 overflow-y-auto flex-1">
                         <Field label="Nome da empresa" required><input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Comercial Araguaia" /></Field>
                         <Field label="CNPJ"><input value={form.cnpj} onChange={e => setForm(f => ({ ...f, cnpj: e.target.value }))} className={inputCls} style={inputStyle} placeholder="00.000.000/0000-00" /></Field>
                         <Field label="Observações"><textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                         <button onClick={() => setModal(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -1524,6 +1525,11 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const [loading, setLoading]     = useState(true);
     const [modal, setModal]         = useState(null);
     const [filtro, setFiltro]       = useState({ veiculoId: '', categoria: '', mes: '' });
+    const [categoriasExtras, setCategoriasExtras] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('carretas_categorias_extras') || '[]'); } catch { return []; }
+    });
+    const [novaCategoria, setNovaCategoria] = useState('');
+    const [showNovaCategoria, setShowNovaCategoria] = useState(false);
     const xmlRef = useRef(null);
     const comprovanteRef = useRef(null);
     const permutaRef = useRef(null);
@@ -1531,6 +1537,21 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const [barcodeMode, setBarcodeMode] = useState(false);
     const [barcodeBuffer, setBarcodeBuffer] = useState('');
     const [loadingNFe, setLoadingNFe] = useState(false);
+
+    const todasCategorias = useMemo(() => [...CATEGORIAS_DESPESA, ...categoriasExtras], [categoriasExtras]);
+
+    const adicionarCategoria = () => {
+        const cat = novaCategoria.trim();
+        if (!cat) { showToast('Digite o nome da categoria', 'error'); return; }
+        if (todasCategorias.includes(cat)) { showToast('Categoria já existe', 'error'); return; }
+        const novas = [...categoriasExtras, cat];
+        setCategoriasExtras(novas);
+        localStorage.setItem('carretas_categorias_extras', JSON.stringify(novas));
+        setForm(f => ({ ...f, categoria: cat }));
+        setNovaCategoria('');
+        setShowNovaCategoria(false);
+        showToast(`Categoria "${cat}" criada!`, 'success');
+    };
 
     const emptyForm = () => ({
         veiculo_id: '', categoria: 'Pneus', descricao: '', valor: '',
@@ -1810,7 +1831,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                     </select>
                     <select value={filtro.categoria} onChange={e => setFiltro(f => ({ ...f, categoria: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todas categorias</option>
-                        {CATEGORIAS_DESPESA.map(c => <option key={c} value={c}>{c}</option>)}
+                        {todasCategorias.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
                 </div>
@@ -1895,7 +1916,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
             {modal && isAdmin && (
                 <ModalOverlay onClose={() => setModal(null)}>
                     <ModalHeader title={modal.mode === 'create' ? 'Nova Despesa' : 'Editar Despesa'} icon="Receipt" onClose={() => setModal(null)} />
-                    <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+                    <div className="p-5 space-y-4 overflow-y-auto flex-1">
 
                         {/* item 9: importar XML NF + leitura código de barras */}
                         <div className="p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
@@ -1971,9 +1992,38 @@ function TabDespesasExtras({ isAdmin, profile }) {
                         {/* dados básicos */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Field label="Categoria" required>
-                                <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    {CATEGORIAS_DESPESA.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
+                                <div className="space-y-2">
+                                    <div className="flex gap-2">
+                                        <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle}>
+                                            {todasCategorias.map(c => <option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                        {isAdmin && (
+                                            <button type="button" onClick={() => setShowNovaCategoria(s => !s)}
+                                                className="flex-shrink-0 px-2.5 py-2 rounded-lg border text-xs font-medium hover:bg-blue-50 transition-colors"
+                                                style={{ borderColor: '#93C5FD', color: '#1D4ED8' }}
+                                                title="Adicionar nova categoria">
+                                                <Icon name={showNovaCategoria ? 'X' : 'Plus'} size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    {showNovaCategoria && isAdmin && (
+                                        <div className="flex gap-2 p-2 rounded-lg" style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+                                            <input
+                                                value={novaCategoria}
+                                                onChange={e => setNovaCategoria(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && adicionarCategoria()}
+                                                className={inputCls + ' flex-1'}
+                                                style={inputStyle}
+                                                placeholder="Ex: Pedágio, Balança..."
+                                                autoFocus
+                                            />
+                                            <button type="button" onClick={adicionarCategoria}
+                                                className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors">
+                                                Criar
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </Field>
                             <Field label="Veículo">
                                 <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
@@ -2298,7 +2348,7 @@ function TabDiarias({ isAdmin, profile }) {
             {modal && (
                 <ModalOverlay onClose={() => setModal(null)}>
                     <ModalHeader title={modal.mode === 'create' ? 'Nova Diária' : 'Editar Diária'} icon="CalendarDays" onClose={() => setModal(null)} />
-                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                         <Field label="Motorista" required>
                             <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
@@ -2335,7 +2385,7 @@ function TabDiarias({ isAdmin, profile }) {
                             </Field>
                         </div>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
@@ -2919,7 +2969,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                         ) : !dadosPorPlaca ? (
                             <div className="p-8 text-center text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum dado encontrado para esta placa no período</div>
                         ) : (
-                            <div className="p-5 space-y-4">
+                            <div className="p-5 space-y-4 overflow-y-auto flex-1">
                                 {/* KPI cards */}
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                     {[
@@ -3399,7 +3449,7 @@ function TabOrdensServico({ isAdmin, profile }) {
             {modal && (
                 <ModalOverlay onClose={() => setModal(false)}>
                     <ModalHeader title="Nova Ordem de Serviço" icon="Wrench" onClose={() => setModal(false)} />
-                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                         <Field label="Veículo" required>
                             <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
@@ -3442,7 +3492,7 @@ function TabOrdensServico({ isAdmin, profile }) {
                             </label>
                         </div>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end">
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                         <button onClick={() => setModal(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleCreate} iconName={uploading ? 'Loader' : 'Send'} size="sm" disabled={uploading}>
                             {uploading ? 'Enviando...' : 'Criar OS'}
@@ -4016,12 +4066,12 @@ export default function CarretasPage() {
                 <>
                     {/* Overlay */}
                     <div
-                        className="fixed inset-0 z-40 lg:hidden"
+                        className="fixed inset-0 z-[140] lg:hidden"
                         style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
                         onClick={() => setDrawerOpen(false)}
                     />
                     {/* Painel deslizante da esquerda */}
-                    <div className="fixed top-0 left-0 bottom-0 z-50 lg:hidden flex flex-col overflow-y-auto shadow-2xl"
+                    <div className="fixed top-0 left-0 bottom-0 z-[150] lg:hidden flex flex-col overflow-y-auto shadow-2xl"
                         style={{ width: 260, backgroundColor: 'var(--color-card)' }}>
                         {/* Header do drawer */}
                         <div className="flex items-center justify-between px-4 py-4 border-b flex-shrink-0"

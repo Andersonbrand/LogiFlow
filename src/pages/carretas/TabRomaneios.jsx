@@ -21,10 +21,11 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 // ─── Sub-componentes reutilizáveis ────────────────────────────────────────────
 function ModalOverlay({ children, onClose }) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
             style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
             onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col"
+                style={{ maxHeight: 'calc(100vh - 32px)' }}>
                 {children}
             </div>
         </div>
@@ -273,7 +274,7 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 onClose={onClose}
             />
 
-            <div className="p-5 space-y-5">
+            <div className="p-5 space-y-5 overflow-y-auto flex-1">
 
                 {/* ── Bloco 1: Identificação ── */}
                 <div className="p-4 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
@@ -475,7 +476,7 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
             </div>
 
             {/* Footer */}
-            <div className="flex gap-3 p-5 pt-0 justify-end border-t sticky bottom-0 bg-white"
+            <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0"
                 style={{ borderColor: 'var(--color-border)' }}>
                 <button onClick={onClose}
                     className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50"
@@ -500,7 +501,7 @@ function RomaneioDetailModal({ romaneio, onClose }) {
     return (
         <ModalOverlay onClose={onClose}>
             <ModalHeader title={`Romaneio ${romaneio.numero}`} icon="FileText" onClose={onClose} />
-            <div className="p-5 space-y-4" id="romaneio-print">
+            <div className="p-5 space-y-4 overflow-y-auto flex-1" id="romaneio-print">
 
                 {/* Status + info geral */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -577,7 +578,7 @@ function RomaneioDetailModal({ romaneio, onClose }) {
                     </div>
                 )}
             </div>
-            <div className="flex gap-3 p-5 pt-0 justify-end">
+            <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                 <button onClick={handlePrint}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50"
                     style={{ borderColor: 'var(--color-border)' }}>
