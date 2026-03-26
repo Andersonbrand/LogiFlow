@@ -93,14 +93,15 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                     onChange={e => {
                         const mid = e.target.value;
                         const m = materiais.find(x => x.id === mid);
-                        // Auto-calc peso_total: quantidade × peso unitário do material
                         const qtd = Number(item.quantidade) || 1;
-                        const pesoAuto = m?.peso ? String(qtd * Number(m.peso)) : item.peso_total;
+                        // Ao trocar material: recalcula peso e reseta flag manual
+                        const pesoAuto = m?.peso ? String(qtd * Number(m.peso)) : '';
                         onUpdate(index, {
                             material_id: mid,
-                            descricao: m?.nome || item.descricao,
-                            unidade: m?.unidade || item.unidade,
-                            peso_total: pesoAuto,
+                            descricao:   m?.nome     || item.descricao,
+                            unidade:     m?.unidade  || item.unidade,
+                            peso_total:  pesoAuto,
+                            _pesoManual: false,
                         });
                     }}
                     className={inputCls} style={inputStyle}>
@@ -125,8 +126,11 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                     value={item.quantidade}
                     onChange={e => {
                         const newQtd = e.target.value;
-                        const mat = materiais.find(m => m.id === item.material_id);
-                        const pesoAuto = mat?.peso ? String(Number(newQtd) * Number(mat.peso)) : item.peso_total;
+                        const matSel = materiais.find(m => m.id === item.material_id);
+                        // Só recalcula se o usuário não editou o peso manualmente
+                        const pesoAuto = matSel?.peso && !item._pesoManual
+                            ? String(Number(newQtd) * Number(matSel.peso))
+                            : item.peso_total;
                         onUpdate(index, { quantidade: newQtd, peso_total: pesoAuto });
                     }}
                     className={inputCls} style={inputStyle} placeholder="0" />
@@ -141,18 +145,31 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                 </select>
             </div>
 
-            {/* Peso total */}
+            {/* Peso total — calculado automaticamente */}
             <div className="col-span-10 sm:col-span-2">
                 <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>
-                    Peso (kg){mat?.peso ? <span className="ml-1 text-emerald-600 font-normal">auto</span> : null}
+                    Peso (kg)
+                    {mat?.peso
+                        ? <span className="ml-1 px-1 py-0.5 rounded text-xs font-semibold" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>auto</span>
+                        : <span className="ml-1 text-gray-400 font-normal text-xs">manual</span>
+                    }
                 </label>
-                <input type="number" step="0.01" min="0"
+                <input
+                    type="number" step="0.01" min="0"
                     value={item.peso_total || ''}
-                    onChange={e => onUpdate(index, { peso_total: e.target.value })}
-                    className={inputCls} style={inputStyle} placeholder="—" />
+                    onChange={e => onUpdate(index, { peso_total: e.target.value, _pesoManual: true })}
+                    className={inputCls}
+                    style={{
+                        ...inputStyle,
+                        borderColor: mat?.peso && !item._pesoManual ? '#6EE7B7' : 'var(--color-border)',
+                        backgroundColor: mat?.peso && !item._pesoManual ? '#F0FDF4' : undefined,
+                    }}
+                    placeholder={mat?.peso ? `${(Number(item.quantidade || 1) * Number(mat.peso)).toLocaleString('pt-BR')}` : '—'}
+                    title={mat?.peso ? `Calculado automaticamente: ${Number(item.quantidade || 1)} × ${Number(mat.peso)} kg` : 'Digite o peso manualmente'}
+                />
                 {mat?.peso && (
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
-                        {Number(mat.peso).toLocaleString('pt-BR')} kg/un
+                    <p className="text-xs mt-0.5" style={{ color: '#059669' }}>
+                        {Number(item.quantidade || 1).toLocaleString('pt-BR')} × {Number(mat.peso).toLocaleString('pt-BR')} kg/un
                     </p>
                 )}
             </div>
@@ -166,36 +183,6 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
             </div>
         </div>
     );
-}
-
-// ─── Calcula frete por material (função pura — usada no save e no preview) ──
-function calcularFretePorMaterial(valorCarga, itens, materiais) {
-    if (!valorCarga || !Number(valorCarga)) return 0;
-    const vCarga = Number(valorCarga);
-    const itensComMat = itens.filter(it => it.material_id);
-    if (!itensComMat.length) return 0;
-
-    const pcts = itensComMat.map(it => {
-        const mat = materiais.find(m => m.id === it.material_id);
-        return mat?.percentual_frete ? Number(mat.percentual_frete) : null;
-    });
-    const pctsSemNull = pcts.filter(p => p !== null);
-    if (!pctsSemNull.length) return 0;
-
-    const pesosTotais = itensComMat.map(it => Number(it.peso_total) || 0);
-    const pesoSomado = pesosTotais.reduce((s, p) => s + p, 0);
-
-    let pctFinal = 0;
-    if (pesoSomado > 0) {
-        itensComMat.forEach((it, i) => {
-            const mat = materiais.find(m => m.id === it.material_id);
-            const pct = mat?.percentual_frete ? Number(mat.percentual_frete) : 0;
-            pctFinal += pct * (pesosTotais[i] / pesoSomado);
-        });
-    } else {
-        pctFinal = pctsSemNull.reduce((s, p) => s + p, 0) / pctsSemNull.length;
-    }
-    return vCarga * pctFinal;
 }
 
 // ─── Modal Formulário Romaneio ────────────────────────────────────────────────
@@ -260,45 +247,16 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
     const addItem = () => setItens(p => [...p, { material_id: '', descricao: '', quantidade: '1', unidade: 'ton', peso_total: '', observacoes: '' }]);
     const updateItem = (idx, patch) => {
         setItens(p => p.map((it, i) => i === idx ? { ...it, ...patch } : it));
-        // Se um material com percentual_frete foi selecionado, muda automaticamente para 'por_material'
-        if (patch.material_id) {
-            const mat = materiais.find(m => m.id === patch.material_id);
-            if (mat?.percentual_frete && Number(mat.percentual_frete) > 0) {
-                setForm(f => f.tipo_calculo_frete === 'fixo' && !f.valor_frete
-                    ? { ...f, tipo_calculo_frete: 'por_material' }
-                    : f
-                );
-            }
-        }
     };
     const removeItem = (idx) => setItens(p => p.filter((_, i) => i !== idx));
 
-    // Frete por material — usa função pura para garantir resultado com itens mais recentes
-    const freteCalculadoPorMaterial = useMemo(
-        () => calcularFretePorMaterial(form.valor_carga, itens, materiais),
-        [form.valor_carga, itens, materiais]
-    );
-
     const fretePreview = useMemo(() => {
-        // Tipo fixo: usa valor digitado diretamente
         if (form.tipo_calculo_frete === 'fixo') return Number(form.valor_frete) || 0;
-        // Tipo percentual sobre a carga total: valor_carga × %
         if (form.tipo_calculo_frete === 'percentual' && form.valor_carga && form.valor_frete) {
             return (Number(form.valor_carga) * Number(form.valor_frete)) / 100;
         }
-        // Tipo por_material: usa o cálculo ponderado
-        if (form.tipo_calculo_frete === 'por_material') {
-            return freteCalculadoPorMaterial;
-        }
         return 0;
-    }, [form.tipo_calculo_frete, form.valor_frete, form.valor_carga, freteCalculadoPorMaterial]);
-
-    // Se materiais têm % cadastrado e tipo ainda é 'fixo' sem valor, mostra o frete calculado como sugestão
-    const freteSugestao = useMemo(() => {
-        if (form.tipo_calculo_frete !== 'fixo') return 0;
-        if (form.valor_frete) return 0; // usuário já digitou um valor fixo
-        return freteCalculadoPorMaterial;
-    }, [form.tipo_calculo_frete, form.valor_frete, freteCalculadoPorMaterial]);
+    }, [form.tipo_calculo_frete, form.valor_frete, form.valor_carga]);
 
     const pesoTotal = useMemo(() => {
         const soma = itens.reduce((s, it) => s + (Number(it.peso_total) || 0), 0);
@@ -313,15 +271,11 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 ...form,
                 valor_carga:         form.valor_carga  ? Number(form.valor_carga)  : null,
                 toneladas:           form.toneladas    ? Number(form.toneladas)    : null,
-                // Calcula o frete na hora do save com os itens mais recentes (evita stale closure)
                 valor_frete: (() => {
-                    if (form.tipo_calculo_frete === 'fixo' && form.valor_frete) return Number(form.valor_frete);
+                    if (form.tipo_calculo_frete === 'fixo') return form.valor_frete ? Number(form.valor_frete) : null;
                     if (form.tipo_calculo_frete === 'percentual' && form.valor_carga && form.valor_frete)
                         return (Number(form.valor_carga) * Number(form.valor_frete)) / 100;
-                    // por_material ou fixo sem valor: calcula direto com itens atuais
-                    const itensParaSalvar = itens.filter(it => it.material_id || it.descricao);
-                    const freteMat = calcularFretePorMaterial(form.valor_carga, itensParaSalvar, materiais);
-                    return freteMat > 0 ? freteMat : (form.valor_frete ? Number(form.valor_frete) : null);
+                    return null;
                 })(),
                 tipo_calculo_frete:  form.tipo_calculo_frete,
                 itens:               itens.filter(it => it.material_id || it.descricao),
@@ -476,12 +430,11 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                                 className={inputCls} style={inputStyle}>
                                 <option value="fixo">Valor Fixo (R$)</option>
                                 <option value="percentual">Percentual sobre a carga (%)</option>
-                                <option value="por_material">Percentual por Material (cadastrado em /materiais)</option>
                             </select>
                         </Field>
 
                         {/* Valor / percentual */}
-                        {form.tipo_calculo_frete !== 'por_material' && (
+                        {(
                             <Field label={form.tipo_calculo_frete === 'fixo' ? 'Valor do Frete (R$)' : 'Percentual (%)'}>
                                 <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-purple-600">
@@ -503,26 +456,6 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                         </div>
                     )}
 
-                    {freteSugestao > 0 && (
-                        <div className="mt-3 p-3 rounded-xl border-2 border-purple-400 flex items-center justify-between gap-3"
-                            style={{ backgroundColor: '#FAF5FF' }}>
-                            <div>
-                                <p className="text-xs text-purple-700 font-medium">💡 Frete pelos percentuais dos materiais:</p>
-                                <p className="text-lg font-bold font-data text-purple-700">{BRL(freteSugestao)}</p>
-                            </div>
-                            <button
-                                onClick={() => { set('tipo_calculo_frete', 'por_material'); }}
-                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors whitespace-nowrap">
-                                Usar este valor
-                            </button>
-                        </div>
-                    )}
-
-                    {form.tipo_calculo_frete === 'por_material' && itens.filter(it => it.material_id).length === 0 && (
-                        <p className="text-xs text-purple-600 mt-2 p-2 rounded-lg bg-purple-50 border border-purple-200">
-                            ℹ️ Adicione materiais com percentual de frete cadastrado para calcular automaticamente.
-                        </p>
-                    )}
                 </div>
 
                 {/* ── Bloco 4: Materiais ── */}
@@ -879,90 +812,83 @@ export default function TabRomaneios({ isAdmin }) {
                     )}
                 </div>
             ) : (
-                <div className="flex flex-col gap-3">
-                    {romaneios.map((r, i) => {
-                        const statusCfg = STATUS_ROMANEIO_COLORS[r.status] || STATUS_ROMANEIO_COLORS['Aguardando'];
-                        const materiais_nomes = (r.itens || []).map(it => it.material?.nome || it.descricao || '').filter(Boolean).join(', ');
-                        return (
-                            <div key={r.id} className="bg-white rounded-xl border shadow-sm hover:shadow-md transition-shadow"
-                                style={{ borderColor: 'var(--color-border)' }}>
-                                {/* Linha principal */}
-                                <div className="flex items-center justify-between px-4 py-3 gap-3">
-                                    {/* Número + status */}
-                                    <div className="flex items-center gap-3 min-w-0">
+                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                    <table className="w-full text-sm min-w-[720px]">
+                        <thead className="text-xs border-b"
+                            style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                            <tr>
+                                {['Nº Romaneio','Status','Motorista','Placa','Empresa','Destino','Peso','Valor Carga','Frete','Materiais',''].map(h => (
+                                    <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {romaneios.map((r, i) => (
+                                <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors"
+                                    style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                    <td className="px-3 py-3">
                                         <button onClick={() => setDetailModal(r)}
-                                            className="font-bold font-data text-blue-700 hover:underline text-sm whitespace-nowrap">
+                                            className="font-bold font-data text-blue-700 hover:underline">
                                             {r.numero}
                                         </button>
+                                    </td>
+                                    <td className="px-3 py-3">
                                         <select
                                             value={r.status}
                                             onChange={e => handleStatusChange(r.id, e.target.value)}
-                                            className="text-xs font-semibold rounded-full px-2.5 py-1 border-0 cursor-pointer outline-none"
+                                            className="text-xs font-medium rounded-full px-2 py-0.5 border-0 cursor-pointer outline-none"
                                             style={{
-                                                backgroundColor: statusCfg.bg,
-                                                color: statusCfg.text,
+                                                backgroundColor: STATUS_ROMANEIO_COLORS[r.status]?.bg || '#F3F4F6',
+                                                color: STATUS_ROMANEIO_COLORS[r.status]?.text || '#374151',
                                             }}
                                             title="Clique para mudar o status">
                                             {STATUS_ROMANEIO.map(s => (
                                                 <option key={s} value={s}>{s}</option>
                                             ))}
                                         </select>
-                                    </div>
-
-                                    {/* Ações — SEMPRE VISÍVEIS */}
-                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                        <button onClick={() => setDetailModal(r)}
-                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors border"
-                                            style={{ borderColor: '#BFDBFE', color: '#1D4ED8' }}
-                                            title="Ver detalhes">
-                                            <Icon name="Eye" size={13} color="#1D4ED8" /> Ver
-                                        </button>
-                                        {isAdmin && (
-                                            <>
-                                                <button onClick={() => setModal({ mode: 'edit', data: r })}
-                                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors border"
-                                                    style={{ borderColor: '#BFDBFE', color: '#1D4ED8' }}
-                                                    title="Editar">
-                                                    <Icon name="Pencil" size={13} color="#1D4ED8" /> Editar
-                                                </button>
-                                                <button onClick={() => handleDelete(r.id)}
-                                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-red-50 transition-colors border"
-                                                    style={{ borderColor: '#FECACA', color: '#DC2626' }}
-                                                    title="Excluir">
-                                                    <Icon name="Trash2" size={13} color="#DC2626" /> Excluir
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Dados da linha — grid responsivo */}
-                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-0 border-t text-xs"
-                                    style={{ borderColor: 'var(--color-border)' }}>
-                                    {[
-                                        { l: 'Motorista',    v: r.motorista?.name || '—' },
-                                        { l: 'Placa',        v: r.veiculo?.placa  || '—', mono: true },
-                                        { l: 'Empresa',      v: r.empresa         || '—' },
-                                        { l: 'Destino',      v: r.destino         || '—' },
-                                        { l: 'Peso',         v: r.toneladas ? `${Number(r.toneladas).toLocaleString('pt-BR')} t` : '—', mono: true },
-                                        { l: 'Valor Carga',  v: r.valor_carga ? BRL(r.valor_carga) : '—', color: '#065F46', mono: true },
-                                        { l: 'Frete',        v: r.valor_frete ? BRL(r.valor_frete) : '—', color: '#7C3AED', mono: true },
-                                        { l: 'Data Saída',   v: FMT_DATE(r.data_saida) },
-                                        { l: 'Materiais',    v: materiais_nomes || '—', span: true },
-                                    ].map(({ l, v, mono, color, span }) => (
-                                        <div key={l} className={`px-4 py-2 border-r last:border-r-0 ${span ? 'col-span-2 sm:col-span-3 lg:col-span-3' : ''}`}
-                                            style={{ borderColor: 'var(--color-border)' }}>
-                                            <p className="mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{l}</p>
-                                            <p className={`font-medium truncate ${mono ? 'font-data' : ''}`}
-                                                style={{ color: color || 'var(--color-text-primary)' }}>
-                                                {v}
-                                            </p>
+                                    </td>
+                                    <td className="px-3 py-3 whitespace-nowrap">{r.motorista?.name || '—'}</td>
+                                    <td className="px-3 py-3 font-data whitespace-nowrap">{r.veiculo?.placa || '—'}</td>
+                                    <td className="px-3 py-3 text-xs max-w-[120px] truncate">{r.empresa || '—'}</td>
+                                    <td className="px-3 py-3 max-w-[140px] truncate">{r.destino || '—'}</td>
+                                    <td className="px-3 py-3 text-xs whitespace-nowrap font-data">
+                                        {r.toneladas ? `${Number(r.toneladas).toLocaleString('pt-BR')} t` : '—'}
+                                    </td>
+                                    <td className="px-3 py-3 font-data text-right text-emerald-700">
+                                        {r.valor_carga ? BRL(r.valor_carga) : '—'}
+                                    </td>
+                                    <td className="px-3 py-3 font-data text-right font-semibold text-purple-600">
+                                        {r.valor_frete ? BRL(r.valor_frete) : '—'}
+                                    </td>
+                                    <td className="px-3 py-3 text-xs max-w-[160px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>
+                                        {(r.itens || []).length > 0
+                                            ? (r.itens || []).map(it => it.material?.nome || it.descricao || '').filter(Boolean).join(', ')
+                                            : '—'}
+                                    </td>
+                                    <td className="px-3 py-3">
+                                        <div className="flex items-center gap-1">
+                                            <button onClick={() => setDetailModal(r)}
+                                                className="p-1.5 rounded hover:bg-blue-50 transition-colors" title="Ver detalhes">
+                                                <Icon name="Eye" size={13} color="#1D4ED8" />
+                                            </button>
+                                            {isAdmin && (
+                                                <>
+                                                    <button onClick={() => setModal({ mode: 'edit', data: r })}
+                                                        className="p-1.5 rounded hover:bg-blue-50 transition-colors">
+                                                        <Icon name="Pencil" size={13} color="#1D4ED8" />
+                                                    </button>
+                                                    <button onClick={() => handleDelete(r.id)}
+                                                        className="p-1.5 rounded hover:bg-red-50 transition-colors">
+                                                        <Icon name="Trash2" size={13} color="#DC2626" />
+                                                    </button>
+                                                </>
+                                            )}
                                         </div>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
 
