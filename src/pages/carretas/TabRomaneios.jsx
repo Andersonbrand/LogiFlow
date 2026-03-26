@@ -10,7 +10,6 @@ import {
     STATUS_ROMANEIO, STATUS_ROMANEIO_COLORS,
 } from 'utils/carretasService';
 import { fetchMaterials } from 'utils/materialService';
-import { FRETE_CATEGORIAS } from 'utils/freteConfig';
 import * as XLSX from 'xlsx';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -880,84 +879,90 @@ export default function TabRomaneios({ isAdmin }) {
                     )}
                 </div>
             ) : (
-                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-                    <table className="w-full text-sm min-w-[720px]">
-                        <thead className="text-xs border-b"
-                            style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>
-                                {['Nº Romaneio','Status','Motorista','Placa','Empresa','Destino','Peso','Valor Carga','Frete','Materiais'].map(h => (
-                                    <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
-                                ))}
-                                <th className="px-3 py-3 text-left font-medium whitespace-nowrap sticky right-0" style={{ backgroundColor: 'var(--color-muted)' }}>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {romaneios.map((r, i) => (
-                                <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors"
-                                    style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                    <td className="px-3 py-3">
+                <div className="flex flex-col gap-3">
+                    {romaneios.map((r, i) => {
+                        const statusCfg = STATUS_ROMANEIO_COLORS[r.status] || STATUS_ROMANEIO_COLORS['Aguardando'];
+                        const materiais_nomes = (r.itens || []).map(it => it.material?.nome || it.descricao || '').filter(Boolean).join(', ');
+                        return (
+                            <div key={r.id} className="bg-white rounded-xl border shadow-sm hover:shadow-md transition-shadow"
+                                style={{ borderColor: 'var(--color-border)' }}>
+                                {/* Linha principal */}
+                                <div className="flex items-center justify-between px-4 py-3 gap-3">
+                                    {/* Número + status */}
+                                    <div className="flex items-center gap-3 min-w-0">
                                         <button onClick={() => setDetailModal(r)}
-                                            className="font-bold font-data text-blue-700 hover:underline">
+                                            className="font-bold font-data text-blue-700 hover:underline text-sm whitespace-nowrap">
                                             {r.numero}
                                         </button>
-                                    </td>
-                                    <td className="px-3 py-3">
                                         <select
                                             value={r.status}
                                             onChange={e => handleStatusChange(r.id, e.target.value)}
-                                            className="text-xs font-medium rounded-full px-2 py-0.5 border-0 cursor-pointer outline-none"
+                                            className="text-xs font-semibold rounded-full px-2.5 py-1 border-0 cursor-pointer outline-none"
                                             style={{
-                                                backgroundColor: STATUS_ROMANEIO_COLORS[r.status]?.bg || '#F3F4F6',
-                                                color: STATUS_ROMANEIO_COLORS[r.status]?.text || '#374151',
+                                                backgroundColor: statusCfg.bg,
+                                                color: statusCfg.text,
                                             }}
                                             title="Clique para mudar o status">
                                             {STATUS_ROMANEIO.map(s => (
                                                 <option key={s} value={s}>{s}</option>
                                             ))}
                                         </select>
-                                    </td>
-                                    <td className="px-3 py-3 whitespace-nowrap">{r.motorista?.name || '—'}</td>
-                                    <td className="px-3 py-3 font-data whitespace-nowrap">{r.veiculo?.placa || '—'}</td>
-                                    <td className="px-3 py-3 text-xs max-w-[120px] truncate">{r.empresa || '—'}</td>
-                                    <td className="px-3 py-3 max-w-[140px] truncate">{r.destino || '—'}</td>
-                                    <td className="px-3 py-3 text-xs whitespace-nowrap font-data">
-                                        {r.toneladas ? `${Number(r.toneladas).toLocaleString('pt-BR')} t` : '—'}
-                                    </td>
-                                    <td className="px-3 py-3 font-data text-right text-emerald-700">
-                                        {r.valor_carga ? BRL(r.valor_carga) : '—'}
-                                    </td>
-                                    <td className="px-3 py-3 font-data text-right font-semibold text-purple-600">
-                                        {r.valor_frete ? BRL(r.valor_frete) : '—'}
-                                    </td>
-                                    <td className="px-3 py-3 text-xs max-w-[160px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>
-                                        {(r.itens || []).length > 0
-                                            ? (r.itens || []).map(it => it.material?.nome || it.descricao || '').filter(Boolean).join(', ')
-                                            : '—'}
-                                    </td>
-                                    <td className="px-3 py-3 sticky right-0" style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                        <div className="flex items-center gap-1">
-                                            <button onClick={() => setDetailModal(r)}
-                                                className="p-1.5 rounded hover:bg-blue-50 transition-colors" title="Ver detalhes">
-                                                <Icon name="Eye" size={13} color="#1D4ED8" />
-                                            </button>
-                                            {isAdmin && (
-                                                <>
-                                                    <button onClick={() => setModal({ mode: 'edit', data: r })}
-                                                        className="p-1.5 rounded hover:bg-blue-50 transition-colors">
-                                                        <Icon name="Pencil" size={13} color="#1D4ED8" />
-                                                    </button>
-                                                    <button onClick={() => handleDelete(r.id)}
-                                                        className="p-1.5 rounded hover:bg-red-50 transition-colors">
-                                                        <Icon name="Trash2" size={13} color="#DC2626" />
-                                                    </button>
-                                                </>
-                                            )}
+                                    </div>
+
+                                    {/* Ações — SEMPRE VISÍVEIS */}
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                        <button onClick={() => setDetailModal(r)}
+                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors border"
+                                            style={{ borderColor: '#BFDBFE', color: '#1D4ED8' }}
+                                            title="Ver detalhes">
+                                            <Icon name="Eye" size={13} color="#1D4ED8" /> Ver
+                                        </button>
+                                        {isAdmin && (
+                                            <>
+                                                <button onClick={() => setModal({ mode: 'edit', data: r })}
+                                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-50 transition-colors border"
+                                                    style={{ borderColor: '#BFDBFE', color: '#1D4ED8' }}
+                                                    title="Editar">
+                                                    <Icon name="Pencil" size={13} color="#1D4ED8" /> Editar
+                                                </button>
+                                                <button onClick={() => handleDelete(r.id)}
+                                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-red-50 transition-colors border"
+                                                    style={{ borderColor: '#FECACA', color: '#DC2626' }}
+                                                    title="Excluir">
+                                                    <Icon name="Trash2" size={13} color="#DC2626" /> Excluir
+                                                </button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Dados da linha — grid responsivo */}
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-0 border-t text-xs"
+                                    style={{ borderColor: 'var(--color-border)' }}>
+                                    {[
+                                        { l: 'Motorista',    v: r.motorista?.name || '—' },
+                                        { l: 'Placa',        v: r.veiculo?.placa  || '—', mono: true },
+                                        { l: 'Empresa',      v: r.empresa         || '—' },
+                                        { l: 'Destino',      v: r.destino         || '—' },
+                                        { l: 'Peso',         v: r.toneladas ? `${Number(r.toneladas).toLocaleString('pt-BR')} t` : '—', mono: true },
+                                        { l: 'Valor Carga',  v: r.valor_carga ? BRL(r.valor_carga) : '—', color: '#065F46', mono: true },
+                                        { l: 'Frete',        v: r.valor_frete ? BRL(r.valor_frete) : '—', color: '#7C3AED', mono: true },
+                                        { l: 'Data Saída',   v: FMT_DATE(r.data_saida) },
+                                        { l: 'Materiais',    v: materiais_nomes || '—', span: true },
+                                    ].map(({ l, v, mono, color, span }) => (
+                                        <div key={l} className={`px-4 py-2 border-r last:border-r-0 ${span ? 'col-span-2 sm:col-span-3 lg:col-span-3' : ''}`}
+                                            style={{ borderColor: 'var(--color-border)' }}>
+                                            <p className="mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{l}</p>
+                                            <p className={`font-medium truncate ${mono ? 'font-data' : ''}`}
+                                                style={{ color: color || 'var(--color-text-primary)' }}>
+                                                {v}
+                                            </p>
                                         </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
 
