@@ -10,6 +10,7 @@ import {
     STATUS_ROMANEIO, STATUS_ROMANEIO_COLORS,
 } from 'utils/carretasService';
 import { fetchMaterials } from 'utils/materialService';
+import { FRETE_CATEGORIAS } from 'utils/freteConfig';
 import * as XLSX from 'xlsx';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -884,9 +885,10 @@ export default function TabRomaneios({ isAdmin }) {
                         <thead className="text-xs border-b"
                             style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                             <tr>
-                                {['Nº Romaneio','Status','Motorista','Placa','Empresa','Destino','Peso','Valor Carga','Frete','Materiais',''].map(h => (
+                                {['Nº Romaneio','Status','Motorista','Placa','Empresa','Destino','Peso','Valor Carga','Frete','Materiais'].map(h => (
                                     <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                 ))}
+                                <th className="px-3 py-3 text-left font-medium whitespace-nowrap sticky right-0" style={{ backgroundColor: 'var(--color-muted)' }}>Ações</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -932,7 +934,7 @@ export default function TabRomaneios({ isAdmin }) {
                                             ? (r.itens || []).map(it => it.material?.nome || it.descricao || '').filter(Boolean).join(', ')
                                             : '—'}
                                     </td>
-                                    <td className="px-3 py-3">
+                                    <td className="px-3 py-3 sticky right-0" style={{ backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                         <div className="flex items-center gap-1">
                                             <button onClick={() => setDetailModal(r)}
                                                 className="p-1.5 rounded hover:bg-blue-50 transition-colors" title="Ver detalhes">
