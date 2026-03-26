@@ -228,51 +228,74 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
     const addItem = () => setItens(p => [...p, { material_id: '', descricao: '', quantidade: '1', unidade: 'ton', peso_total: '', observacoes: '' }]);
-    const updateItem = (idx, patch) => setItens(p => p.map((it, i) => i === idx ? { ...it, ...patch } : it));
+    const updateItem = (idx, patch) => {
+        setItens(p => p.map((it, i) => i === idx ? { ...it, ...patch } : it));
+        // Se um material com percentual_frete foi selecionado, muda automaticamente para 'por_material'
+        if (patch.material_id) {
+            const mat = materiais.find(m => m.id === patch.material_id);
+            if (mat?.percentual_frete && Number(mat.percentual_frete) > 0) {
+                setForm(f => f.tipo_calculo_frete === 'fixo' && !f.valor_frete
+                    ? { ...f, tipo_calculo_frete: 'por_material' }
+                    : f
+                );
+            }
+        }
+    };
     const removeItem = (idx) => setItens(p => p.filter((_, i) => i !== idx));
 
     // Cálculo do frete percentual preview
+    // ── Cálculo central do frete por material ────────────────────────────────
+    // Independente do tipo selecionado, calcula sempre que materiais têm percentual_frete
+    const freteCalculadoPorMaterial = useMemo(() => {
+        if (!form.valor_carga) return 0;
+        const valorCarga = Number(form.valor_carga);
+        const itensComMat = itens.filter(it => it.material_id);
+        if (!itensComMat.length) return 0;
+
+        const pcts = itensComMat.map(it => {
+            const mat = materiais.find(m => m.id === it.material_id);
+            return mat?.percentual_frete ? Number(mat.percentual_frete) : null;
+        });
+        const pctsSemNull = pcts.filter(p => p !== null);
+        if (!pctsSemNull.length) return 0;
+
+        // Média ponderada por peso — fallback para média simples se sem peso
+        const pesosTotais = itensComMat.map(it => Number(it.peso_total) || 0);
+        const pesoSomado = pesosTotais.reduce((s, p) => s + p, 0);
+
+        let pctFinal = 0;
+        if (pesoSomado > 0) {
+            itensComMat.forEach((it, i) => {
+                const mat = materiais.find(m => m.id === it.material_id);
+                const pct = mat?.percentual_frete ? Number(mat.percentual_frete) : 0;
+                pctFinal += pct * (pesosTotais[i] / pesoSomado);
+            });
+        } else {
+            pctFinal = pctsSemNull.reduce((s, p) => s + p, 0) / pctsSemNull.length;
+        }
+        return valorCarga * pctFinal;
+    }, [form.valor_carga, itens, materiais]);
+
     const fretePreview = useMemo(() => {
+        // Tipo fixo: usa valor digitado diretamente
         if (form.tipo_calculo_frete === 'fixo') return Number(form.valor_frete) || 0;
+        // Tipo percentual sobre a carga total: valor_carga × %
         if (form.tipo_calculo_frete === 'percentual' && form.valor_carga && form.valor_frete) {
             return (Number(form.valor_carga) * Number(form.valor_frete)) / 100;
         }
-        // frete percentual por material: cada item aplica seu % ao valor da carga
-        // Se há múltiplos materiais com %s diferentes, usa a média ponderada pelo peso
-        if (form.tipo_calculo_frete === 'por_material' && form.valor_carga) {
-            const valorCarga = Number(form.valor_carga);
-            const itensComMat = itens.filter(it => it.material_id);
-            if (!itensComMat.length) return 0;
-
-            // Verifica se todos os itens têm o mesmo % (caso comum: mesmo produto)
-            const pcts = itensComMat.map(it => {
-                const mat = materiais.find(m => m.id === it.material_id);
-                return mat?.percentual_frete ? Number(mat.percentual_frete) : null;
-            }).filter(p => p !== null);
-
-            if (!pcts.length) return 0;
-
-            // Ponderação por peso total de cada item
-            const pesosTotais = itensComMat.map(it => Number(it.peso_total) || 0);
-            const pesoSomado = pesosTotais.reduce((s, p) => s + p, 0);
-
-            if (pesoSomado > 0) {
-                // Média ponderada por peso
-                let pctPonderado = 0;
-                itensComMat.forEach((it, i) => {
-                    const mat = materiais.find(m => m.id === it.material_id);
-                    const pct = mat?.percentual_frete ? Number(mat.percentual_frete) : 0;
-                    pctPonderado += pct * (pesosTotais[i] / pesoSomado);
-                });
-                return valorCarga * pctPonderado;
-            } else {
-                // Sem pesos: usa média simples dos percentuais
-                const pctMedia = pcts.reduce((s, p) => s + p, 0) / pcts.length;
-                return valorCarga * pctMedia;
-            }
+        // Tipo por_material: usa o cálculo ponderado
+        if (form.tipo_calculo_frete === 'por_material') {
+            return freteCalculadoPorMaterial;
         }
         return 0;
-    }, [form.tipo_calculo_frete, form.valor_frete, form.valor_carga, itens, materiais]);
+    }, [form.tipo_calculo_frete, form.valor_frete, form.valor_carga, freteCalculadoPorMaterial]);
+
+    // Se materiais têm % cadastrado e tipo ainda é 'fixo' sem valor, mostra o frete calculado como sugestão
+    const freteSugestao = useMemo(() => {
+        if (form.tipo_calculo_frete !== 'fixo') return 0;
+        if (form.valor_frete) return 0; // usuário já digitou um valor fixo
+        return freteCalculadoPorMaterial;
+    }, [form.tipo_calculo_frete, form.valor_frete, freteCalculadoPorMaterial]);
 
     const pesoTotal = useMemo(() => {
         const soma = itens.reduce((s, it) => s + (Number(it.peso_total) || 0), 0);
@@ -287,9 +310,12 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 ...form,
                 valor_carga:         form.valor_carga  ? Number(form.valor_carga)  : null,
                 toneladas:           form.toneladas    ? Number(form.toneladas)    : null,
+                // Prioridade: fretePreview (já calculado) → freteCalculadoPorMaterial → null
                 valor_frete:         fretePreview > 0
                                         ? fretePreview
-                                        : (form.valor_frete ? Number(form.valor_frete) : null),
+                                        : freteCalculadoPorMaterial > 0
+                                            ? freteCalculadoPorMaterial
+                                            : (form.valor_frete ? Number(form.valor_frete) : null),
                 tipo_calculo_frete:  form.tipo_calculo_frete,
                 itens:               itens.filter(it => it.material_id || it.descricao),
             };
@@ -465,8 +491,23 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                     {/* Preview frete */}
                     {fretePreview > 0 && (
                         <div className="mt-3 p-3 rounded-xl bg-purple-600 text-white flex items-center justify-between">
-                            <span className="text-sm font-medium">Frete calculado:</span>
+                            <span className="text-sm font-medium">✅ Frete calculado:</span>
                             <span className="text-lg font-bold font-data">{BRL(fretePreview)}</span>
+                        </div>
+                    )}
+
+                    {freteSugestao > 0 && (
+                        <div className="mt-3 p-3 rounded-xl border-2 border-purple-400 flex items-center justify-between gap-3"
+                            style={{ backgroundColor: '#FAF5FF' }}>
+                            <div>
+                                <p className="text-xs text-purple-700 font-medium">💡 Frete pelos percentuais dos materiais:</p>
+                                <p className="text-lg font-bold font-data text-purple-700">{BRL(freteSugestao)}</p>
+                            </div>
+                            <button
+                                onClick={() => { set('tipo_calculo_frete', 'por_material'); }}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors whitespace-nowrap">
+                                Usar este valor
+                            </button>
                         </div>
                     )}
 
