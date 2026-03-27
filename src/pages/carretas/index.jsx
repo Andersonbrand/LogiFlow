@@ -1558,6 +1558,8 @@ function TabDespesasExtras({ isAdmin, profile }) {
         veiculo_id: '', categoria: 'Pneus', descricao: '', valor: '',
         data_despesa: new Date().toISOString().split('T')[0], nota_fiscal: '',
         fornecedor: '', observacoes: '',
+        // múltiplas NFs
+        notas_fiscais: [], // [{numero, fornecedor, valor, nf_itens}]
         // item 8: pagamento
         forma_pagamento: 'a_vista',
         tipo_pagamento: 'pix',
@@ -1627,16 +1629,18 @@ function TabDespesasExtras({ isAdmin, profile }) {
                         valor_total: p.querySelector('vProd')?.textContent  || '',
                     });
                 });
+                const novaNF = { numero: nNF, fornecedor, valor: vnf, data: dhEmi, nf_itens: itens };
                 setForm(f => ({
                     ...f,
-                    nota_fiscal:  nNF       || f.nota_fiscal,
-                    valor:        vnf       || f.valor,
-                    data_despesa: dhEmi     || f.data_despesa,
-                    fornecedor:   fornecedor || f.fornecedor,
+                    nota_fiscal:  f.nota_fiscal || nNF,
+                    valor:        f.valor || vnf,
+                    data_despesa: f.data_despesa || dhEmi,
+                    fornecedor:   f.fornecedor || fornecedor,
                     descricao:    (fornecedor && !f.descricao) ? `Compra — ${fornecedor}` : f.descricao,
-                    nf_itens: itens,
+                    nf_itens: [...(f.nf_itens || []), ...itens],
+                    notas_fiscais: [...(f.notas_fiscais || []), novaNF],
                 }));
-                showToast(`NF importada: ${fornecedor || 'emissor não identificado'} · ${itens.length} item(s)`, 'success');
+                showToast(`NF ${nNF} importada: ${fornecedor || 'emissor não identificado'} · ${itens.length} item(s)`, 'success');
             } catch {
                 showToast('Erro ao ler XML. Verifique o arquivo.', 'error');
             }
@@ -1767,8 +1771,9 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const handleSubmit = async () => {
         if (!form.categoria || !form.valor || !form.data_despesa) { showToast('Categoria, valor e data são obrigatórios', 'error'); return; }
         try {
-            if (modal.mode === 'create') await createDespesaExtra(form);
-            else await updateDespesaExtra(modal.data.id, form);
+            const formPayload = { ...form, notas_fiscais: form.notas_fiscais || [] };
+            if (modal.mode === 'create') await createDespesaExtra(formPayload);
+            else await updateDespesaExtra(modal.data.id, formPayload);
             showToast('Despesa salva!', 'success'); setModal(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -1804,6 +1809,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
         setForm({
             veiculo_id: d.veiculo_id || '', categoria: d.categoria, descricao: d.descricao || '',
             valor: d.valor, data_despesa: d.data_despesa, nota_fiscal: d.nota_fiscal || '', observacoes: d.observacoes || '',
+            notas_fiscais: d.notas_fiscais || [],
             forma_pagamento: d.forma_pagamento || 'a_vista', tipo_pagamento: d.tipo_pagamento || 'pix',
             comprovante_url: d.comprovante_url || '', boletos: d.boletos || [],
             permuta_obs: d.permuta_obs || '', permuta_doc_url: d.permuta_doc_url || '',
@@ -1921,12 +1927,19 @@ function TabDespesasExtras({ isAdmin, profile }) {
 
                         {/* item 9: importar XML NF + leitura código de barras */}
                         <div className="p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
-                            <p className="text-xs font-semibold text-blue-700 mb-2">📄 Nota Fiscal — Importar dados</p>
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs font-semibold text-blue-700">📄 Notas Fiscais — Importar dados</p>
+                                {(form.notas_fiscais || []).length > 0 && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-600 text-white font-medium">
+                                        {(form.notas_fiscais || []).length} NF{(form.notas_fiscais || []).length > 1 ? 's' : ''}
+                                    </span>
+                                )}
+                            </div>
                             <div className="flex flex-wrap gap-2 mb-2">
                                 {/* XML digital */}
                                 <button type="button" onClick={() => xmlRef.current?.click()}
                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
-                                    <Icon name="FileCode" size={12} /> Ler XML da NF
+                                    <Icon name="FilePlus" size={12} /> {(form.notas_fiscais || []).length > 0 ? 'Adicionar outra NF' : 'Ler XML da NF'}
                                 </button>
                                 <input ref={xmlRef} type="file" accept=".xml" onChange={handleXmlNF} className="hidden" />
                                 {/* Código de barras / laser */}
@@ -1968,7 +1981,52 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                         className="text-xs text-blue-600 underline mt-1">Cancelar (Esc)</button>
                                 </div>
                             )}
-                            {form.nf_itens?.length > 0 && (
+                            {/* Lista de NFs importadas */}
+                            {(form.notas_fiscais || []).length > 0 && (
+                                <div className="mt-2 space-y-2">
+                                    {(form.notas_fiscais || []).map((nf, nfIdx) => (
+                                        <div key={nfIdx} className="rounded-lg border border-blue-200 bg-white overflow-hidden">
+                                            <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50">
+                                                <div className="flex items-center gap-2 text-xs font-medium text-blue-800">
+                                                    <span>NF {nfIdx + 1}: {nf.numero || '—'}</span>
+                                                    {nf.fornecedor && <span className="text-blue-600">· {nf.fornecedor}</span>}
+                                                    {nf.valor && <span className="font-data font-bold text-blue-700">· {BRL(nf.valor)}</span>}
+                                                </div>
+                                                <button type="button"
+                                                    onClick={() => setForm(f => ({
+                                                        ...f,
+                                                        notas_fiscais: f.notas_fiscais.filter((_, i) => i !== nfIdx),
+                                                        nf_itens: f.nf_itens.filter(it => !nf.nf_itens.includes(it)),
+                                                    }))}
+                                                    className="p-1 rounded hover:bg-red-100 transition-colors">
+                                                    <Icon name="X" size={12} color="#DC2626" />
+                                                </button>
+                                            </div>
+                                            {nf.nf_itens?.length > 0 && (
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-xs">
+                                                        <thead><tr className="text-blue-700 border-b border-blue-100">{['Código','Descrição','Qtd','Un','V.Unit','V.Total'].map(h=><th key={h} className="text-left px-2 py-1 font-medium">{h}</th>)}</tr></thead>
+                                                        <tbody>
+                                                            {nf.nf_itens.map((it, idx) => (
+                                                                <tr key={idx} className="border-b border-blue-50">
+                                                                    <td className="px-2 py-1 font-data">{it.codigo}</td>
+                                                                    <td className="px-2 py-1 max-w-[130px] truncate">{it.descricao}</td>
+                                                                    <td className="px-2 py-1 text-right font-data">{it.quantidade}</td>
+                                                                    <td className="px-2 py-1">{it.unidade}</td>
+                                                                    <td className="px-2 py-1 text-right font-data">{BRL(it.valor_unit)}</td>
+                                                                    <td className="px-2 py-1 text-right font-data text-blue-700">{BRL(it.valor_total)}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {/* Campo NF manual (sem XML) — aparece só se não tiver NFs importadas */}
+                            {(form.notas_fiscais || []).length === 0 && form.nf_itens?.length > 0 && (
                                 <div className="mt-2 overflow-x-auto">
                                     <p className="text-xs text-blue-600 font-medium mb-1">{form.nf_itens.length} item(s) da NF:</p>
                                     <table className="w-full text-xs">
@@ -2107,7 +2165,14 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                     {/* Boleto */}
                                     {form.tipo_pagamento === 'boleto' && (
                                         <div className="space-y-2">
-                                            <p className="text-xs font-medium text-amber-800">Boletos / Parcelas</p>
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs font-medium text-amber-800">Boletos / Parcelas</p>
+                                                {(form.notas_fiscais || []).length > 1 && (
+                                                    <p className="text-xs text-amber-600 italic">
+                                                        💡 {(form.notas_fiscais || []).length} NFs — boleto único ou um por NF
+                                                    </p>
+                                                )}
+                                            </div>
                                             {(form.boletos || []).map((b, idx) => (
                                                 <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border" style={{ borderColor: '#FED7AA' }}>
                                                     <span className="text-xs text-amber-700 font-medium">Parcela {idx + 1}</span>
@@ -2175,7 +2240,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
                         </Field>
                     </div>
-                    <div className="flex gap-3 p-5 pt-0 justify-end border-t" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
                     </div>
