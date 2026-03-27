@@ -1559,7 +1559,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
         data_despesa: new Date().toISOString().split('T')[0], nota_fiscal: '',
         fornecedor: '', observacoes: '',
         // múltiplas NFs
-        notas_fiscais: [], // [{numero, fornecedor, valor, nf_itens}]
+        notas_fiscais: [],
         // item 8: pagamento
         forma_pagamento: 'a_vista',
         tipo_pagamento: 'pix',
@@ -1568,6 +1568,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
         permuta_obs: '',
         permuta_doc_url: '',
         cheques: [],
+        parcelas_cartao: [],
         // item 9: itens da NF
         nf_itens: [],
     });
@@ -1771,9 +1772,8 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const handleSubmit = async () => {
         if (!form.categoria || !form.valor || !form.data_despesa) { showToast('Categoria, valor e data são obrigatórios', 'error'); return; }
         try {
-            const formPayload = { ...form, notas_fiscais: form.notas_fiscais || [] };
-            if (modal.mode === 'create') await createDespesaExtra(formPayload);
-            else await updateDespesaExtra(modal.data.id, formPayload);
+            if (modal.mode === 'create') await createDespesaExtra(form);
+            else await updateDespesaExtra(modal.data.id, form);
             showToast('Despesa salva!', 'success'); setModal(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -1809,11 +1809,11 @@ function TabDespesasExtras({ isAdmin, profile }) {
         setForm({
             veiculo_id: d.veiculo_id || '', categoria: d.categoria, descricao: d.descricao || '',
             valor: d.valor, data_despesa: d.data_despesa, nota_fiscal: d.nota_fiscal || '', observacoes: d.observacoes || '',
-            notas_fiscais: d.notas_fiscais || [],
             forma_pagamento: d.forma_pagamento || 'a_vista', tipo_pagamento: d.tipo_pagamento || 'pix',
             comprovante_url: d.comprovante_url || '', boletos: d.boletos || [],
             permuta_obs: d.permuta_obs || '', permuta_doc_url: d.permuta_doc_url || '',
-            cheques: d.cheques || [], nf_itens: d.nf_itens || [],
+            cheques: d.cheques || [], parcelas_cartao: d.parcelas_cartao || [],
+            notas_fiscais: d.notas_fiscais || [], nf_itens: d.nf_itens || [],
         });
         setModal({ mode: 'edit', data: d });
     };
@@ -1821,11 +1821,18 @@ function TabDespesasExtras({ isAdmin, profile }) {
     // Badge de pagamento
     const pgBadge = (d) => {
         if (d.forma_pagamento === 'a_prazo') {
-            const label = d.tipo_pagamento === 'boleto' ? 'Boleto' : d.tipo_pagamento === 'permuta' ? 'Permuta' : 'Cheque';
-            return <span className="px-1.5 py-0.5 rounded text-xs bg-amber-100 text-amber-700 font-medium">{label}</span>;
+            const label = d.tipo_pagamento === 'boleto' ? 'Boleto'
+                : d.tipo_pagamento === 'cartao_prazo' ? '💳 Cartão Parc.'
+                : d.tipo_pagamento === 'permuta' ? 'Permuta' : 'Cheque';
+            const isCartao = d.tipo_pagamento === 'cartao_prazo';
+            return <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${isCartao ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>{label}</span>;
         }
-        const label = d.tipo_pagamento === 'pix' ? 'PIX' : d.tipo_pagamento === 'dinheiro' ? 'Dinheiro' : 'Transf.';
-        return <span className="px-1.5 py-0.5 rounded text-xs bg-green-100 text-green-700 font-medium">{label}</span>;
+        const label = d.tipo_pagamento === 'pix' ? 'PIX'
+            : d.tipo_pagamento === 'dinheiro' ? 'Dinheiro'
+            : d.tipo_pagamento === 'cartao' ? '💳 Cartão'
+            : 'Transf.';
+        const isCartao = d.tipo_pagamento === 'cartao';
+        return <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${isCartao ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>{label}</span>;
     };
 
     return (
@@ -1925,21 +1932,28 @@ function TabDespesasExtras({ isAdmin, profile }) {
                     <ModalHeader title={modal.mode === 'create' ? 'Nova Despesa' : 'Editar Despesa'} icon="Receipt" onClose={() => setModal(null)} />
                     <div className="p-5 space-y-4 overflow-y-auto flex-1">
 
-                        {/* item 9: importar XML NF + leitura código de barras */}
+                        {/* Notas Fiscais — múltiplas NFs */}
                         <div className="p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
                             <div className="flex items-center justify-between mb-2">
-                                <p className="text-xs font-semibold text-blue-700">📄 Notas Fiscais — Importar dados</p>
-                                {(form.notas_fiscais || []).length > 0 && (
-                                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-600 text-white font-medium">
-                                        {(form.notas_fiscais || []).length} NF{(form.notas_fiscais || []).length > 1 ? 's' : ''}
-                                    </span>
-                                )}
+                                <p className="text-xs font-semibold text-blue-700">📄 Notas Fiscais</p>
+                                <div className="flex items-center gap-2">
+                                    {(form.notas_fiscais || []).length > 0 && (
+                                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-600 text-white font-medium">
+                                            {(form.notas_fiscais || []).length} NF{(form.notas_fiscais || []).length > 1 ? 's' : ''}
+                                        </span>
+                                    )}
+                                    <button type="button"
+                                        onClick={() => setForm(f => ({ ...f, notas_fiscais: [...(f.notas_fiscais || []), { numero: '', fornecedor: '', valor: '', data: '', nf_itens: [], _manual: true }] }))}
+                                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border border-blue-300 text-blue-700 hover:bg-blue-100 transition-colors">
+                                        <Icon name="Plus" size={11} /> Nova NF
+                                    </button>
+                                </div>
                             </div>
                             <div className="flex flex-wrap gap-2 mb-2">
                                 {/* XML digital */}
                                 <button type="button" onClick={() => xmlRef.current?.click()}
                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
-                                    <Icon name="FilePlus" size={12} /> {(form.notas_fiscais || []).length > 0 ? 'Adicionar outra NF' : 'Ler XML da NF'}
+                                    <Icon name="FileCode" size={12} /> {(form.notas_fiscais||[]).length > 0 ? 'Importar outro XML' : 'Ler XML da NF'}
                                 </button>
                                 <input ref={xmlRef} type="file" accept=".xml" onChange={handleXmlNF} className="hidden" />
                                 {/* Código de barras / laser */}
@@ -1981,40 +1995,70 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                         className="text-xs text-blue-600 underline mt-1">Cancelar (Esc)</button>
                                 </div>
                             )}
-                            {/* Lista de NFs importadas */}
+                            {/* Lista de NFs (XML importado + manual) */}
                             {(form.notas_fiscais || []).length > 0 && (
-                                <div className="mt-2 space-y-2">
+                                <div className="mt-3 space-y-2">
                                     {(form.notas_fiscais || []).map((nf, nfIdx) => (
-                                        <div key={nfIdx} className="rounded-lg border border-blue-200 bg-white overflow-hidden">
-                                            <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50">
-                                                <div className="flex items-center gap-2 text-xs font-medium text-blue-800">
-                                                    <span>NF {nfIdx + 1}: {nf.numero || '—'}</span>
-                                                    {nf.fornecedor && <span className="text-blue-600">· {nf.fornecedor}</span>}
-                                                    {nf.valor && <span className="font-data font-bold text-blue-700">· {BRL(nf.valor)}</span>}
-                                                </div>
+                                        <div key={nfIdx} className="rounded-xl border border-blue-200 bg-white overflow-hidden">
+                                            {/* Header da NF */}
+                                            <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50 border-b border-blue-100">
+                                                <span className="text-xs font-semibold text-blue-700">NF {nfIdx + 1}{nf._manual ? ' — digitação manual' : ' — XML'}</span>
                                                 <button type="button"
-                                                    onClick={() => setForm(f => ({
-                                                        ...f,
-                                                        notas_fiscais: f.notas_fiscais.filter((_, i) => i !== nfIdx),
-                                                        nf_itens: f.nf_itens.filter(it => !nf.nf_itens.includes(it)),
-                                                    }))}
+                                                    onClick={() => setForm(f => {
+                                                        const novas = f.notas_fiscais.filter((_, i) => i !== nfIdx);
+                                                        return { ...f, notas_fiscais: novas };
+                                                    })}
                                                     className="p-1 rounded hover:bg-red-100 transition-colors">
                                                     <Icon name="X" size={12} color="#DC2626" />
                                                 </button>
                                             </div>
+                                            {/* Campos da NF */}
+                                            <div className="p-3 grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Nº da NF</label>
+                                                    <input value={nf.numero || ''} placeholder="Ex: 35520"
+                                                        onChange={e => setForm(f => { const arr = [...f.notas_fiscais]; arr[nfIdx] = { ...arr[nfIdx], numero: e.target.value }; return { ...f, notas_fiscais: arr }; })}
+                                                        className={inputCls} style={inputStyle} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Valor (R$)</label>
+                                                    <input type="number" step="0.01" value={nf.valor || ''} placeholder="0,00"
+                                                        onChange={e => setForm(f => { const arr = [...f.notas_fiscais]; arr[nfIdx] = { ...arr[nfIdx], valor: e.target.value }; return { ...f, notas_fiscais: arr }; })}
+                                                        className={inputCls} style={inputStyle} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Fornecedor / Emitente</label>
+                                                    <input value={nf.fornecedor || ''} placeholder="Nome do fornecedor"
+                                                        onChange={e => setForm(f => { const arr = [...f.notas_fiscais]; arr[nfIdx] = { ...arr[nfIdx], fornecedor: e.target.value }; return { ...f, notas_fiscais: arr }; })}
+                                                        className={inputCls} style={inputStyle} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Data de emissão</label>
+                                                    <input type="date" value={nf.data || ''}
+                                                        onChange={e => setForm(f => { const arr = [...f.notas_fiscais]; arr[nfIdx] = { ...arr[nfIdx], data: e.target.value }; return { ...f, notas_fiscais: arr }; })}
+                                                        className={inputCls} style={inputStyle} />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Descrição / Tipo (ex: NF de peças, NF de serviços)</label>
+                                                    <input value={nf.descricao || ''} placeholder="Ex: Nota fiscal de serviços"
+                                                        onChange={e => setForm(f => { const arr = [...f.notas_fiscais]; arr[nfIdx] = { ...arr[nfIdx], descricao: e.target.value }; return { ...f, notas_fiscais: arr }; })}
+                                                        className={inputCls} style={inputStyle} />
+                                                </div>
+                                            </div>
+                                            {/* Itens do XML (se importado) */}
                                             {nf.nf_itens?.length > 0 && (
-                                                <div className="overflow-x-auto">
+                                                <div className="px-3 pb-3 overflow-x-auto">
+                                                    <p className="text-xs text-blue-600 font-medium mb-1">{nf.nf_itens.length} item(s):</p>
                                                     <table className="w-full text-xs">
-                                                        <thead><tr className="text-blue-700 border-b border-blue-100">{['Código','Descrição','Qtd','Un','V.Unit','V.Total'].map(h=><th key={h} className="text-left px-2 py-1 font-medium">{h}</th>)}</tr></thead>
+                                                        <thead><tr className="text-blue-700">{['Código','Descrição','Qtd','Un','V.Total'].map(h=><th key={h} className="text-left px-1 py-0.5 border-b border-blue-100 font-medium">{h}</th>)}</tr></thead>
                                                         <tbody>
-                                                            {nf.nf_itens.map((it, idx) => (
-                                                                <tr key={idx} className="border-b border-blue-50">
-                                                                    <td className="px-2 py-1 font-data">{it.codigo}</td>
-                                                                    <td className="px-2 py-1 max-w-[130px] truncate">{it.descricao}</td>
-                                                                    <td className="px-2 py-1 text-right font-data">{it.quantidade}</td>
-                                                                    <td className="px-2 py-1">{it.unidade}</td>
-                                                                    <td className="px-2 py-1 text-right font-data">{BRL(it.valor_unit)}</td>
-                                                                    <td className="px-2 py-1 text-right font-data text-blue-700">{BRL(it.valor_total)}</td>
+                                                            {nf.nf_itens.map((it, i) => (
+                                                                <tr key={i} className="border-b border-blue-50">
+                                                                    <td className="px-1 py-1 font-data">{it.codigo}</td>
+                                                                    <td className="px-1 py-1 max-w-[130px] truncate">{it.descricao}</td>
+                                                                    <td className="px-1 py-1 text-right font-data">{it.quantidade}</td>
+                                                                    <td className="px-1 py-1">{it.unidade}</td>
+                                                                    <td className="px-1 py-1 text-right font-data text-blue-700">{BRL(it.valor_total)}</td>
                                                                 </tr>
                                                             ))}
                                                         </tbody>
@@ -2023,27 +2067,6 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                             )}
                                         </div>
                                     ))}
-                                </div>
-                            )}
-                            {/* Campo NF manual (sem XML) — aparece só se não tiver NFs importadas */}
-                            {(form.notas_fiscais || []).length === 0 && form.nf_itens?.length > 0 && (
-                                <div className="mt-2 overflow-x-auto">
-                                    <p className="text-xs text-blue-600 font-medium mb-1">{form.nf_itens.length} item(s) da NF:</p>
-                                    <table className="w-full text-xs">
-                                        <thead><tr className="text-blue-800">{['Código','Descrição','Qtd','Un','V.Unit','V.Total'].map(h=><th key={h} className="text-left px-1 py-0.5 border-b border-blue-200">{h}</th>)}</tr></thead>
-                                        <tbody>
-                                            {form.nf_itens.map((it, idx) => (
-                                                <tr key={idx} className="border-b border-blue-100">
-                                                    <td className="px-1 py-1 font-data">{it.codigo}</td>
-                                                    <td className="px-1 py-1 max-w-[140px] truncate">{it.descricao}</td>
-                                                    <td className="px-1 py-1 text-right font-data">{it.quantidade}</td>
-                                                    <td className="px-1 py-1">{it.unidade}</td>
-                                                    <td className="px-1 py-1 text-right font-data">{BRL(it.valor_unit)}</td>
-                                                    <td className="px-1 py-1 text-right font-data text-blue-700">{BRL(it.valor_total)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
                                 </div>
                             )}
                         </div>
@@ -2127,7 +2150,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                 <div className="space-y-3 p-3 rounded-xl border" style={{ borderColor: '#BBF7D0', backgroundColor: '#F0FDF4' }}>
                                     <p className="text-xs font-semibold text-green-700">Tipo de pagamento</p>
                                     <div className="flex gap-2 flex-wrap">
-                                        {[['transferencia_m','Transferência M'], ['pix','PIX'], ['dinheiro','Dinheiro']].map(([v, l]) => (
+                                        {[['pix','PIX'], ['dinheiro','Dinheiro'], ['transferencia_m','Transferência'], ['cartao','Cartão (à vista)']].map(([v, l]) => (
                                             <button key={v} type="button" onClick={() => setForm(f => ({ ...f, tipo_pagamento: v }))}
                                                 className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
                                                 style={form.tipo_pagamento === v ? { backgroundColor: '#059669', color: '#fff', borderColor: '#059669' } : { borderColor: '#BBF7D0', color: '#065F46', backgroundColor: 'white' }}>
@@ -2153,7 +2176,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                 <div className="space-y-3 p-3 rounded-xl border" style={{ borderColor: '#FED7AA', backgroundColor: '#FFF7ED' }}>
                                     <p className="text-xs font-semibold text-amber-700">Tipo de pagamento a prazo</p>
                                     <div className="flex gap-2 flex-wrap">
-                                        {[['boleto','Boleto'], ['permuta','Permuta'], ['cheque','Cheque']].map(([v, l]) => (
+                                        {[['boleto','Boleto'], ['cartao_prazo','Cartão Parcelado'], ['cheque','Cheque'], ['permuta','Permuta']].map(([v, l]) => (
                                             <button key={v} type="button" onClick={() => setForm(f => ({ ...f, tipo_pagamento: v }))}
                                                 className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
                                                 style={form.tipo_pagamento === v ? { backgroundColor: '#D97706', color: '#fff', borderColor: '#D97706' } : { borderColor: '#FED7AA', color: '#92400E', backgroundColor: 'white' }}>
@@ -2165,14 +2188,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                     {/* Boleto */}
                                     {form.tipo_pagamento === 'boleto' && (
                                         <div className="space-y-2">
-                                            <div className="flex items-center justify-between">
-                                                <p className="text-xs font-medium text-amber-800">Boletos / Parcelas</p>
-                                                {(form.notas_fiscais || []).length > 1 && (
-                                                    <p className="text-xs text-amber-600 italic">
-                                                        💡 {(form.notas_fiscais || []).length} NFs — boleto único ou um por NF
-                                                    </p>
-                                                )}
-                                            </div>
+                                            <p className="text-xs font-medium text-amber-800">Boletos / Parcelas</p>
                                             {(form.boletos || []).map((b, idx) => (
                                                 <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border" style={{ borderColor: '#FED7AA' }}>
                                                     <span className="text-xs text-amber-700 font-medium">Parcela {idx + 1}</span>
@@ -2230,6 +2246,56 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                             <button type="button" onClick={adicionarCheque} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-300 text-amber-700 hover:bg-amber-50">
                                                 <Icon name="Plus" size={12} /> Adicionar cheque
                                             </button>
+                                        </div>
+                                    )}
+
+                                    {/* Cartão Parcelado */}
+                                    {form.tipo_pagamento === 'cartao_prazo' && (
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs font-medium text-amber-800">Parcelas do Cartão</p>
+                                                {(form.parcelas_cartao || []).length > 0 && (
+                                                    <span className="text-xs text-amber-600 font-data font-semibold">
+                                                        Total: {BRL((form.parcelas_cartao || []).reduce((s, p) => s + Number(p.valor || 0), 0))}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {(form.parcelas_cartao || []).map((p, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border text-xs" style={{ borderColor: '#FED7AA' }}>
+                                                    <span className="text-amber-700 font-medium whitespace-nowrap">Parcela {idx + 1}</span>
+                                                    <span className="font-data">{FMT_DATE(p.vencimento)}</span>
+                                                    <span className="font-data font-semibold text-amber-800">{BRL(p.valor)}</span>
+                                                    {p.cartao && <span className="text-amber-600 truncate max-w-[80px]">{p.cartao}</span>}
+                                                    <span className={`ml-auto px-1.5 py-0.5 rounded text-xs ${p.pago ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{p.pago ? 'Pago' : 'Pendente'}</span>
+                                                    <button type="button" onClick={() => setForm(f => ({ ...f, parcelas_cartao: f.parcelas_cartao.filter((_, i) => i !== idx) }))} className="p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
+                                                </div>
+                                            ))}
+                                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                                <Field label="Vencimento">
+                                                    <input type="date" id="pc_venc" className={inputCls} style={inputStyle} />
+                                                </Field>
+                                                <Field label="Valor (R$)">
+                                                    <input type="number" step="0.01" id="pc_valor" className={inputCls} style={inputStyle} placeholder="0,00" />
+                                                </Field>
+                                                <Field label="Cartão (opcional)" className="col-span-2">
+                                                    <input id="pc_cartao" className={inputCls} style={inputStyle} placeholder="Ex: Nubank, Itaú..." />
+                                                </Field>
+                                            </div>
+                                            <button type="button" onClick={() => {
+                                                const venc  = document.getElementById('pc_venc')?.value;
+                                                const valor = document.getElementById('pc_valor')?.value;
+                                                const cart  = document.getElementById('pc_cartao')?.value || '';
+                                                if (!venc || !valor) return;
+                                                setForm(f => ({ ...f, parcelas_cartao: [...(f.parcelas_cartao || []), { vencimento: venc, valor, cartao: cart, pago: false }] }));
+                                                document.getElementById('pc_venc').value = '';
+                                                document.getElementById('pc_valor').value = '';
+                                                document.getElementById('pc_cartao').value = '';
+                                            }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-300 text-amber-700 hover:bg-amber-50">
+                                                <Icon name="Plus" size={12} /> Adicionar parcela
+                                            </button>
+                                            <p className="text-xs text-amber-600 mt-1">
+                                                💡 Para gerar parcelas automaticamente: informe o valor total no campo "Valor (R$)" da despesa e adicione cada vencimento aqui.
+                                            </p>
                                         </div>
                                     )}
                                 </div>

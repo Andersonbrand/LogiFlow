@@ -75,18 +75,15 @@ function StatusBadge({ status }) {
 function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
     const mat = materiais.find(m => m.id === item.material_id);
 
-    // Peso calculado automaticamente: quantidade × peso unitário do material
-    const pesoCalculado = useMemo(() => {
-        if (!mat?.peso || !item.quantidade) return null;
-        return Number(item.quantidade) * Number(mat.peso);
-    }, [mat, item.quantidade]);
+    // Peso calculado: quantidade × peso unitário (sem useEffect para evitar loop)
+    const pesoCalculado = mat?.peso && item.quantidade
+        ? Number(item.quantidade) * Number(mat.peso)
+        : null;
 
-    // Sempre que pesoCalculado mudar E o usuário não tiver editado manualmente → atualiza
-    useEffect(() => {
-        if (pesoCalculado !== null && !item._pesoManual) {
-            onUpdate(index, { peso_total: String(pesoCalculado) });
-        }
-    }, [pesoCalculado]); // eslint-disable-line
+    // Valor exibido no campo: se auto (não manual), usa pesoCalculado; senão usa o digitado
+    const pesoExibido = (!item._pesoManual && pesoCalculado !== null)
+        ? String(pesoCalculado)
+        : (item.peso_total || '');
 
     return (
         <div className="grid grid-cols-12 gap-2 items-start p-3 rounded-xl border"
@@ -135,11 +132,10 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                     value={item.quantidade}
                     onChange={e => {
                         const newQtd = e.target.value;
-                        // Recalcula peso automaticamente se não foi editado manualmente
                         const newPeso = mat?.peso && !item._pesoManual
                             ? String(Number(newQtd) * Number(mat.peso))
                             : item.peso_total;
-                        onUpdate(index, { quantidade: newQtd, peso_total: newPeso });
+                        onUpdate(index, { quantidade: newQtd, peso_total: newPeso, _pesoManual: item._pesoManual || false });
                     }}
                     className={inputCls} style={inputStyle} placeholder="0" />
             </div>
@@ -160,14 +156,14 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                     {mat?.peso && !item._pesoManual
                         ? <span className="px-1 py-0.5 rounded text-xs font-semibold" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>auto</span>
                         : mat?.peso
-                            ? <button onClick={() => onUpdate(index, { peso_total: String(pesoCalculado || ''), _pesoManual: false })}
+                            ? <button onClick={() => { if (pesoCalculado !== null) onUpdate(index, { peso_total: String(pesoCalculado), _pesoManual: false }); }}
                                 className="px-1 py-0.5 rounded text-xs" style={{ backgroundColor: '#FEF9C3', color: '#B45309' }}
                                 title="Recalcular automaticamente">↻ recalc</button>
                             : null
                     }
                 </div>
                 <input type="number" step="0.01" min="0"
-                    value={item.peso_total || ''}
+                    value={pesoExibido}
                     onChange={e => onUpdate(index, { peso_total: e.target.value, _pesoManual: true })}
                     className={inputCls}
                     style={{
