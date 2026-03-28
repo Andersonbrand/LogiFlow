@@ -75,13 +75,14 @@ function StatusBadge({ status }) {
 function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
     const mat = materiais.find(m => m.id === item.material_id);
 
-    // Peso calculado em tempo real — sem useEffect, sem loop
-    // Se não editado manualmente E material tem peso → calcula; senão usa o digitado
-    const pesoAuto = mat?.peso && item.quantidade
-        ? Number(item.quantidade) * Number(mat.peso)
-        : null;
-    const isAuto = pesoAuto !== null && !item._pesoManual;
-    const valorPesoExibido = isAuto ? String(pesoAuto) : (item.peso_total || '');
+    // peso unitário válido = existe e é > 0
+    const pesoUnit = mat?.peso && Number(mat.peso) > 0 ? Number(mat.peso) : null;
+
+    // Peso exibido: calculado em tempo real sem useEffect (evita loop de re-render)
+    // Se não editado manualmente E material tem peso válido → calcula direto no render
+    const pesoExibido = (pesoUnit && !item._pesoManual && item.quantidade)
+        ? String(pesoUnit * Number(item.quantidade))
+        : (item.peso_total || '');
 
     return (
         <div className="grid grid-cols-12 gap-2 items-start p-3 rounded-xl border"
@@ -101,13 +102,14 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                     onChange={e => {
                         const mid = e.target.value;
                         const m = materiais.find(x => x.id === mid);
+                        const pu = m?.peso && Number(m.peso) > 0 ? Number(m.peso) : null;
                         const qtd = Number(item.quantidade || 1);
                         onUpdate(index, {
                             material_id: mid,
                             descricao:   m?.nome    || '',
                             unidade:     m?.unidade || item.unidade,
                             _pesoManual: false,
-                            peso_total:  m?.peso ? String(qtd * Number(m.peso)) : '',
+                            peso_total:  pu ? String(pu * qtd) : '',
                         });
                     }}
                     className={inputCls} style={inputStyle}>
@@ -116,9 +118,14 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                         <option key={m.id} value={m.id}>{m.nome}</option>
                     ))}
                 </select>
-                {mat?.peso && (
+                {mat && !pesoUnit && item.material_id && (
+                    <p className="text-xs mt-1 font-medium text-amber-600">
+                        ⚠ Peso não cadastrado em /materiais — preencha manualmente
+                    </p>
+                )}
+                {pesoUnit && (
                     <p className="text-xs mt-1 font-medium" style={{ color: '#059669' }}>
-                        {Number(mat.peso).toLocaleString('pt-BR')} kg/un
+                        {pesoUnit.toLocaleString('pt-BR')} kg/un
                     </p>
                 )}
             </div>
@@ -130,8 +137,8 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                     value={item.quantidade}
                     onChange={e => {
                         const newQtd = e.target.value;
-                        const newPeso = mat?.peso && !item._pesoManual
-                            ? String(Number(newQtd) * Number(mat.peso))
+                        const newPeso = pesoUnit && !item._pesoManual
+                            ? String(pesoUnit * Number(newQtd))
                             : item.peso_total;
                         onUpdate(index, { quantidade: newQtd, peso_total: newPeso });
                     }}
@@ -147,31 +154,31 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                 </select>
             </div>
 
-            {/* Peso total — exibe valor calculado diretamente sem depender do estado */}
+            {/* Peso */}
             <div className="col-span-10 sm:col-span-2">
                 <div className="flex items-center gap-1 mb-1">
                     <label className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>Peso (kg)</label>
-                    {isAuto
+                    {pesoUnit && !item._pesoManual
                         ? <span className="px-1 py-0.5 rounded text-xs font-semibold" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>auto</span>
-                        : mat?.peso
-                            ? <button type="button" onClick={() => onUpdate(index, { _pesoManual: false, peso_total: String(pesoAuto || '') })}
+                        : pesoUnit
+                            ? <button type="button" onClick={() => onUpdate(index, { _pesoManual: false, peso_total: String(pesoUnit * Number(item.quantidade || 0)) })}
                                 className="px-1 py-0.5 rounded text-xs" style={{ backgroundColor: '#FEF9C3', color: '#B45309' }}>↻ auto</button>
                             : null
                     }
                 </div>
                 <input type="number" step="0.01" min="0"
-                    value={valorPesoExibido}
+                    value={pesoExibido}
                     onChange={e => onUpdate(index, { peso_total: e.target.value, _pesoManual: true })}
                     className={inputCls}
                     style={{
                         ...inputStyle,
-                        borderColor: isAuto ? '#6EE7B7' : 'var(--color-border)',
-                        backgroundColor: isAuto ? '#F0FDF4' : undefined,
+                        borderColor: pesoUnit && !item._pesoManual ? '#6EE7B7' : 'var(--color-border)',
+                        backgroundColor: pesoUnit && !item._pesoManual ? '#F0FDF4' : undefined,
                     }}
-                    placeholder="—" />
-                {isAuto && item.quantidade && (
+                    placeholder={pesoUnit ? '—' : 'Digite o peso'} />
+                {pesoUnit && !item._pesoManual && item.quantidade && (
                     <p className="text-xs mt-0.5" style={{ color: '#059669' }}>
-                        {Number(item.quantidade).toLocaleString('pt-BR')} × {Number(mat.peso).toLocaleString('pt-BR')}
+                        {Number(item.quantidade).toLocaleString('pt-BR')} × {pesoUnit.toLocaleString('pt-BR')}
                     </p>
                 )}
             </div>
@@ -291,12 +298,12 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 valor_frete:         freteValor,
                 observacoes:         form.observacoes   || undefined,
                 itens: itens.filter(it => it.material_id || it.descricao).map(it => {
-                    // Garante peso calculado ao salvar, mesmo se estado ainda não foi atualizado
                     const matIt = materiais.find(m => m.id === it.material_id);
-                    const pesoFinal = (!it._pesoManual && matIt?.peso && it.quantidade)
-                        ? String(Number(it.quantidade) * Number(matIt.peso))
+                    const pu = matIt?.peso && Number(matIt.peso) > 0 ? Number(matIt.peso) : null;
+                    const pesoSalvo = (pu && !it._pesoManual && it.quantidade)
+                        ? String(pu * Number(it.quantidade))
                         : it.peso_total;
-                    return { ...it, peso_total: pesoFinal };
+                    return { ...it, peso_total: pesoSalvo };
                 }),
             };
             // Remove undefined
