@@ -75,15 +75,13 @@ function StatusBadge({ status }) {
 function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
     const mat = materiais.find(m => m.id === item.material_id);
 
-    // Peso calculado: quantidade × peso unitário (sem useEffect para evitar loop)
-    const pesoCalculado = mat?.peso && item.quantidade
+    // Peso calculado em tempo real — sem useEffect, sem loop
+    // Se não editado manualmente E material tem peso → calcula; senão usa o digitado
+    const pesoAuto = mat?.peso && item.quantidade
         ? Number(item.quantidade) * Number(mat.peso)
         : null;
-
-    // Valor exibido no campo: se auto (não manual), usa pesoCalculado; senão usa o digitado
-    const pesoExibido = (!item._pesoManual && pesoCalculado !== null)
-        ? String(pesoCalculado)
-        : (item.peso_total || '');
+    const isAuto = pesoAuto !== null && !item._pesoManual;
+    const valorPesoExibido = isAuto ? String(pesoAuto) : (item.peso_total || '');
 
     return (
         <div className="grid grid-cols-12 gap-2 items-start p-3 rounded-xl border"
@@ -103,13 +101,13 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                     onChange={e => {
                         const mid = e.target.value;
                         const m = materiais.find(x => x.id === mid);
-                        // Ao trocar material: reseta flag manual para recalcular peso
+                        const qtd = Number(item.quantidade || 1);
                         onUpdate(index, {
                             material_id: mid,
                             descricao:   m?.nome    || '',
                             unidade:     m?.unidade || item.unidade,
                             _pesoManual: false,
-                            peso_total:  m?.peso ? String(Number(item.quantidade || 1) * Number(m.peso)) : '',
+                            peso_total:  m?.peso ? String(qtd * Number(m.peso)) : '',
                         });
                     }}
                     className={inputCls} style={inputStyle}>
@@ -135,7 +133,7 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                         const newPeso = mat?.peso && !item._pesoManual
                             ? String(Number(newQtd) * Number(mat.peso))
                             : item.peso_total;
-                        onUpdate(index, { quantidade: newQtd, peso_total: newPeso, _pesoManual: item._pesoManual || false });
+                        onUpdate(index, { quantidade: newQtd, peso_total: newPeso });
                     }}
                     className={inputCls} style={inputStyle} placeholder="0" />
             </div>
@@ -149,30 +147,29 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                 </select>
             </div>
 
-            {/* Peso total — automático ou manual */}
+            {/* Peso total — exibe valor calculado diretamente sem depender do estado */}
             <div className="col-span-10 sm:col-span-2">
                 <div className="flex items-center gap-1 mb-1">
                     <label className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>Peso (kg)</label>
-                    {mat?.peso && !item._pesoManual
+                    {isAuto
                         ? <span className="px-1 py-0.5 rounded text-xs font-semibold" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>auto</span>
                         : mat?.peso
-                            ? <button onClick={() => { if (pesoCalculado !== null) onUpdate(index, { peso_total: String(pesoCalculado), _pesoManual: false }); }}
-                                className="px-1 py-0.5 rounded text-xs" style={{ backgroundColor: '#FEF9C3', color: '#B45309' }}
-                                title="Recalcular automaticamente">↻ recalc</button>
+                            ? <button type="button" onClick={() => onUpdate(index, { _pesoManual: false, peso_total: String(pesoAuto || '') })}
+                                className="px-1 py-0.5 rounded text-xs" style={{ backgroundColor: '#FEF9C3', color: '#B45309' }}>↻ auto</button>
                             : null
                     }
                 </div>
                 <input type="number" step="0.01" min="0"
-                    value={pesoExibido}
+                    value={valorPesoExibido}
                     onChange={e => onUpdate(index, { peso_total: e.target.value, _pesoManual: true })}
                     className={inputCls}
                     style={{
                         ...inputStyle,
-                        borderColor: mat?.peso && !item._pesoManual ? '#6EE7B7' : 'var(--color-border)',
-                        backgroundColor: mat?.peso && !item._pesoManual ? '#F0FDF4' : undefined,
+                        borderColor: isAuto ? '#6EE7B7' : 'var(--color-border)',
+                        backgroundColor: isAuto ? '#F0FDF4' : undefined,
                     }}
                     placeholder="—" />
-                {mat?.peso && !item._pesoManual && item.quantidade && (
+                {isAuto && item.quantidade && (
                     <p className="text-xs mt-0.5" style={{ color: '#059669' }}>
                         {Number(item.quantidade).toLocaleString('pt-BR')} × {Number(mat.peso).toLocaleString('pt-BR')}
                     </p>
@@ -293,7 +290,14 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 tipo_calculo_frete:  form.tipo_calculo_frete,
                 valor_frete:         freteValor,
                 observacoes:         form.observacoes   || undefined,
-                itens:               itens.filter(it => it.material_id || it.descricao),
+                itens: itens.filter(it => it.material_id || it.descricao).map(it => {
+                    // Garante peso calculado ao salvar, mesmo se estado ainda não foi atualizado
+                    const matIt = materiais.find(m => m.id === it.material_id);
+                    const pesoFinal = (!it._pesoManual && matIt?.peso && it.quantidade)
+                        ? String(Number(it.quantidade) * Number(matIt.peso))
+                        : it.peso_total;
+                    return { ...it, peso_total: pesoFinal };
+                }),
             };
             // Remove undefined
             Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
