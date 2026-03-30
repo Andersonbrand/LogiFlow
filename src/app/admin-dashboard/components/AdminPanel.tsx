@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import AppLogo from '@/components/ui/AppLogo';
 import AppIcon from '@/components/ui/AppIcon';
@@ -10,6 +10,7 @@ import { supabase, Product, Order, Quote } from '@/lib/supabase';
 import { usePrices } from '@/context/PriceContext';
 import { COMPANIES, COMPANY_ORDER, CompanyId } from '@/context/CompanyContext';
 import { useAuth } from '@/context/AuthContext';
+import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch';
 import toast from 'react-hot-toast';
 
 type Tab = 'products' | 'quotes' | 'sent';
@@ -59,7 +60,7 @@ export default function AdminPanel() {
   const [showCatManager, setShowCatManager] = useState(false);
   const [deletingCategory, setDeletingCategory] = useState<string | null>(null);
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     const [{ data: p }, { data: orders }, { data: quotes }, { data: replies }] = await Promise.all([
       supabase.from('products').select('*').order('created_at', { ascending: false }),
@@ -84,9 +85,11 @@ export default function AdminPanel() {
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     ));
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { fetchAll(); }, []);
+  useVisibilityRefetch(fetchAll);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const categories = useMemo(() => ['Todos', ...Array.from(new Set(products.map((p) => p.category)))], [products]);
   const filteredProducts = useMemo(() =>

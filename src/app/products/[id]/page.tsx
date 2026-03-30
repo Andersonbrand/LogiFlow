@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import AppImage from '@/components/ui/AppImage';
 import AppIcon from '@/components/ui/AppIcon';
 import { createClient } from '@/lib/supabase/client';
+import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch';
 import { Product } from '@/lib/supabase';
 import { usePrices } from '@/context/PriceContext';
 import { useCart } from '@/context/CartContext';
@@ -24,7 +25,7 @@ export default function ProductDetailPage() {
   const { showPrices }        = usePrices();
   const { addToCart }         = useCart();
 
-  useEffect(() => {
+  const fetchProduct = useCallback(() => {
     if (!id) return;
     supabase.from('products').select('*').eq('id', id).single()
       .then(({ data }) => {
@@ -37,6 +38,10 @@ export default function ProductDetailPage() {
         setLoading(false);
       });
   }, [id]);
+
+  useVisibilityRefetch(fetchProduct);
+
+  useEffect(() => { fetchProduct(); }, [fetchProduct]);
 
   const handleAdd = () => {
     if (!product) return;

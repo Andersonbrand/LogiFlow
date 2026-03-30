@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import AppImage from '@/components/ui/AppImage';
 import AppIcon from '@/components/ui/AppIcon';
@@ -8,6 +8,7 @@ import { supabase, Product } from '@/lib/supabase';
 import { usePrices } from '@/context/PriceContext';
 import { useCart } from '@/context/CartContext';
 import { useCompany, COMPANIES, COMPANY_ORDER, COMPANY_CATEGORIES, CompanyId } from '@/context/CompanyContext';
+import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch';
 import toast from 'react-hot-toast';
 
 const PAGE_SIZE = 16;
@@ -71,11 +72,15 @@ export default function ProductCatalog() {
   const { addToCart }                       = useCart();
   const { activeCompany, company, setActiveCompany, isGrupoView } = useCompany();
 
-  useEffect(() => {
+  const fetchProducts = useCallback(() => {
     setLoading(true);
     supabase.from('products').select('*').eq('is_active', true).order('category')
       .then(({ data }) => { setProducts(data ?? []); setLoading(false); });
   }, []);
+
+  useVisibilityRefetch(fetchProducts);
+
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
   useEffect(() => {
     const cat   = searchParams.get('categoria');

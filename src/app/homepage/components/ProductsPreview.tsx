@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import AppImage from '@/components/ui/AppImage';
 import AppIcon from '@/components/ui/AppIcon';
@@ -8,6 +8,7 @@ import { supabase, Product } from '@/lib/supabase';
 import { usePrices } from '@/context/PriceContext';
 import { useCart } from '@/context/CartContext';
 import { useCompany, COMPANIES, CompanyId, COMPANY_ORDER, COMPANY_CATEGORIES } from '@/context/CompanyContext';
+import { useVisibilityRefetch } from '@/hooks/useVisibilityRefetch';
 import toast from 'react-hot-toast';
 
 // Imagens fallback por categoria (usando fotos reais de produtos quando possível)
@@ -36,10 +37,14 @@ export default function ProductsPreview() {
   const { addToCart }           = useCart();
   const { activeCompany, company, setActiveCompany, isGrupoView } = useCompany();
 
-  useEffect(() => {
+  const fetchProducts = useCallback(() => {
     supabase.from('products').select('*').eq('is_active', true).limit(40)
       .then(({ data }) => setProducts(data ?? []));
   }, []);
+
+  useVisibilityRefetch(fetchProducts);
+
+  useEffect(() => { fetchProducts(); }, [fetchProducts]);
 
   const handleAdd = (product: Product) => {
     addToCart(product);
