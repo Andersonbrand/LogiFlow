@@ -88,7 +88,8 @@ function pararKeepAlive() {
 
 // ─── Camada 3: Reconexão ao voltar para a aba ─────────────────────────────
 let ultimaVisita = Date.now();
-const LIMITE_RECARREGAR_MS = 2 * 60 * 1000; // 2 minutos fora já recarrega
+// Qualquer ausência dispara reload — evita estado stale após hibernação ou troca de rota
+const LIMITE_RECARREGAR_MS = 30 * 1000; // 30 segundos
 
 if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
@@ -98,6 +99,9 @@ if (typeof document !== 'undefined') {
         } else {
             const tempoFora = Date.now() - ultimaVisita;
             iniciarKeepAlive();
+            // Força renovação do token JWT antes de qualquer query
+            // (previne "JWT expired" silencioso após inatividade ou hibernação)
+            supabase.auth.getSession().catch(() => {});
             if (tempoFora > LIMITE_RECARREGAR_MS) {
                 console.log(`🔄 App ficou ${Math.round(tempoFora/1000)}s inativo — recarregando dados`);
                 window.dispatchEvent(new CustomEvent('supabase:recarregar'));

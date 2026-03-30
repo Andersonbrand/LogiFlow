@@ -45,7 +45,7 @@ export function AuthProvider({ children }) {
 
             const u = session?.user ?? null;
 
-            if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !u) {
+            if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !u)) {
                 setUser(null);
                 setProfile(null);
                 return;
@@ -67,7 +67,17 @@ export function AuthProvider({ children }) {
             }
         });
 
-        return () => subscription.unsubscribe();
+        // Refresca sessão sempre que o evento supabase:recarregar for disparado
+        // (ao voltar para aba, após inatividade ou hibernação do free tier)
+        const handleRecarregar = () => {
+            supabase.auth.getSession().catch(() => {});
+        };
+        window.addEventListener('supabase:recarregar', handleRecarregar);
+
+        return () => {
+            subscription.unsubscribe();
+            window.removeEventListener('supabase:recarregar', handleRecarregar);
+        };
     }, []); // eslint-disable-line
 
     const signIn = async (email, password) => {
@@ -105,28 +115,28 @@ export function AuthProvider({ children }) {
         setProfile(null);
     };
 
-    const isAdmin     = () => profile?.role === 'admin';
-    const isOperador  = () => profile?.role === 'operador';
+    const isAdmin      = () => profile?.role === 'admin';
+    const isOperador   = () => profile?.role === 'operador';
     const isMotorista  = () => profile?.role === 'motorista';
-    // Trata role legado 'carreteiro' e novo padrao 'motorista' + tipo_veiculo='carreta'
+    // Trata role legado 'carreteiro' e novo padrão 'motorista' + tipo_veiculo='carreta'
     const isCarreteiro = () =>
         profile?.role === 'carreteiro' ||
         (profile?.role === 'motorista' && profile?.tipo_veiculo === 'carreta');
-    const hasRole     = (...roles) => roles.includes(profile?.role);
+    const hasRole = (...roles) => roles.includes(profile?.role);
 
     const can = {
-        aprovarRomaneio:   () => isAdmin(),
-        excluirRomaneio:   () => isAdmin(),
-        exportarRomaneio:  (r) => isAdmin() || r?.aprovado === true,
-        editarRomaneio:    () => isAdmin() || isOperador(),
-        criarRomaneio:     () => isAdmin() || isOperador(),
-        verTodosRomaneios: () => isAdmin() || isOperador(),
-        verMeusRomaneios:  () => isMotorista(),
-        gerenciarUsuarios: () => isAdmin(),
-        gerenciarVeiculos: () => isAdmin(),
-        gerenciarMateriais:() => isAdmin(),
-        verFinanceiro:     () => isAdmin(),
-        verBonificacoes:   () => isAdmin() || isMotorista() || isCarreteiro(),
+        aprovarRomaneio:    () => isAdmin(),
+        excluirRomaneio:    () => isAdmin(),
+        exportarRomaneio:   (r) => isAdmin() || r?.aprovado === true,
+        editarRomaneio:     () => isAdmin() || isOperador(),
+        criarRomaneio:      () => isAdmin() || isOperador(),
+        verTodosRomaneios:  () => isAdmin() || isOperador(),
+        verMeusRomaneios:   () => isMotorista(),
+        gerenciarUsuarios:  () => isAdmin(),
+        gerenciarVeiculos:  () => isAdmin(),
+        gerenciarMateriais: () => isAdmin(),
+        verFinanceiro:      () => isAdmin(),
+        verBonificacoes:    () => isAdmin() || isMotorista() || isCarreteiro(),
     };
 
     return (

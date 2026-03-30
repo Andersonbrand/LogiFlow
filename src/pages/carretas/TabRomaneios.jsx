@@ -75,11 +75,14 @@ function StatusBadge({ status }) {
 function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
     const mat = materiais.find(m => m.id === item.material_id);
 
-    // peso unitário válido = existe e é > 0
-    const pesoUnit = mat?.peso && Number(mat.peso) > 0 ? Number(mat.peso) : null;
+    // Prioridade: peso_unit armazenado no item > peso do material cadastrado
+    // Isso garante que o auto-calc funcione mesmo antes dos materiais carregarem
+    const pesoUnit = item.peso_unit
+        ? Number(item.peso_unit)
+        : (mat?.peso && Number(mat.peso) > 0 ? Number(mat.peso) : null);
 
     // Peso exibido: calculado em tempo real sem useEffect (evita loop de re-render)
-    // Se não editado manualmente E material tem peso válido → calcula direto no render
+    // Se não editado manualmente E existe peso unitário → calcula direto no render
     const pesoExibido = (pesoUnit && !item._pesoManual && item.quantidade)
         ? String(pesoUnit * Number(item.quantidade))
         : (item.peso_total || '');
@@ -108,6 +111,7 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                             material_id: mid,
                             descricao:   m?.nome    || '',
                             unidade:     m?.unidade || item.unidade,
+                            peso_unit:   pu ? String(pu) : '',   // armazena no item para uso offline
                             _pesoManual: false,
                             peso_total:  pu ? String(pu * qtd) : '',
                         });
@@ -237,14 +241,28 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 valor_frete:          rom.valor_frete != null ? String(rom.valor_frete) : '',
                 observacoes:          rom.observacoes || '',
             });
-            setItens((rom.itens || []).map(it => ({
-                material_id: it.material_id || '',
-                descricao:   it.descricao || '',
-                quantidade:  String(it.quantidade || 1),
-                unidade:     it.unidade || 'sc',
-                peso_total:  it.peso_total != null ? String(it.peso_total) : '',
-                _pesoManual: true, // ao editar, mantém o peso salvo
-            })));
+            setItens((rom.itens || []).map(it => {
+                // Recupera peso unitário: do join com material ou inferido pelo histórico
+                const matPeso = it.material?.peso && Number(it.material.peso) > 0
+                    ? Number(it.material.peso)
+                    : null;
+                const pesoTotalSalvo = it.peso_total != null ? Number(it.peso_total) : null;
+                const qtd = Number(it.quantidade || 1);
+                // Se o peso salvo coincide com material × qtd → manter auto
+                // Caso contrário (usuário editou manualmente) → manter manual
+                const foiManual = matPeso && pesoTotalSalvo !== null
+                    ? Math.abs(pesoTotalSalvo - matPeso * qtd) > 0.01
+                    : true; // sem material com peso → tratar como manual
+                return {
+                    material_id: it.material_id || '',
+                    descricao:   it.descricao || '',
+                    quantidade:  String(qtd),
+                    unidade:     it.unidade || 'sc',
+                    peso_unit:   matPeso ? String(matPeso) : '',  // armazena para auto-calc
+                    peso_total:  pesoTotalSalvo != null ? String(pesoTotalSalvo) : '',
+                    _pesoManual: foiManual,
+                };
+            }));
         } else {
             setForm(emptyForm());
             setItens([]);
@@ -299,11 +317,16 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 observacoes:         form.observacoes   || undefined,
                 itens: itens.filter(it => it.material_id || it.descricao).map(it => {
                     const matIt = materiais.find(m => m.id === it.material_id);
-                    const pu = matIt?.peso && Number(matIt.peso) > 0 ? Number(matIt.peso) : null;
+                    // Prioridade: peso_unit do item > peso do material > null
+                    const pu = it.peso_unit
+                        ? Number(it.peso_unit)
+                        : (matIt?.peso && Number(matIt.peso) > 0 ? Number(matIt.peso) : null);
                     const pesoSalvo = (pu && !it._pesoManual && it.quantidade)
                         ? String(pu * Number(it.quantidade))
                         : it.peso_total;
-                    return { ...it, peso_total: pesoSalvo };
+                    // Não persistir campos de controle interno no banco
+                    const { _pesoManual, peso_unit, ...itemClean } = it;
+                    return { ...itemClean, peso_total: pesoSalvo };
                 }),
             };
             // Remove undefined

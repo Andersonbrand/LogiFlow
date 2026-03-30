@@ -9,6 +9,18 @@ import { updateUserProfile } from 'utils/userService';
 const inputCls = 'w-full px-3 py-2.5 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-card)' };
 
+// Timeout para operações de auth — evita loading infinito em caso de hibernação
+const AUTH_TIMEOUT_MS = 20_000;
+
+function withTimeout(promise, ms = AUTH_TIMEOUT_MS) {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Tempo limite excedido. Verifique sua conexão e tente novamente.')), ms)
+        ),
+    ]);
+}
+
 function SectionCard({ title, icon, children }) {
     return (
         <div className="rounded-2xl border shadow-sm overflow-hidden"
@@ -55,6 +67,16 @@ function FeedbackBanner({ status, message }) {
     );
 }
 
+// Spinner animado reutilizável
+function Spinner() {
+    return (
+        <svg className="animate-spin" width={14} height={14} viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.3" />
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+    );
+}
+
 const ROLE_LABELS = {
     admin: 'Administrador', operador: 'Operador', motorista: 'Motorista',
     carreteiro: 'Carreteiro', mecanico: 'Mecânico',
@@ -64,12 +86,12 @@ export default function PerfilUsuario() {
     const { user, profile } = useAuth();
 
     // ── Nome ──────────────────────────────────────────────────────────────────
-    const [nome, setNome]           = useState(profile?.name || '');
+    const [nome, setNome]             = useState(profile?.name || '');
     const [savingNome, setSavingNome] = useState(false);
     const [feedbackNome, setFeedbackNome] = useState(null); // { status, message }
 
     // ── E-mail ────────────────────────────────────────────────────────────────
-    const [novoEmail, setNovoEmail]   = useState('');
+    const [novoEmail, setNovoEmail]     = useState('');
     const [savingEmail, setSavingEmail] = useState(false);
     const [feedbackEmail, setFeedbackEmail] = useState(null);
 
@@ -106,9 +128,13 @@ export default function PerfilUsuario() {
         setSavingEmail(true);
         setFeedbackEmail({ status: 'info', message: 'Enviando solicitação...' });
         try {
-            const { error } = await supabase.auth.updateUser(
-                { email: novoEmail.trim() },
-                { emailRedirectTo: `${window.location.origin}/email-confirmado` }
+            // Garante sessão válida antes da operação
+            await supabase.auth.getSession();
+            const { error } = await withTimeout(
+                supabase.auth.updateUser(
+                    { email: novoEmail.trim() },
+                    { emailRedirectTo: `${window.location.origin}/email-confirmado` }
+                )
             );
             if (error) throw error;
             setFeedbackEmail({
@@ -128,10 +154,18 @@ export default function PerfilUsuario() {
         setSavingSenha(true);
         setFeedbackSenha({ status: 'info', message: 'Alterando senha...' });
         try {
-            const { error } = await supabase.auth.updateUser({ password: novaSenha });
+            // Força refresh do token JWT antes de tentar updateUser
+            // Sem isso, sessões expiradas (ex: inatividade) travam indefinidamente
+            const { error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) throw new Error('Sessão inválida. Faça login novamente.');
+
+            const { error } = await withTimeout(
+                supabase.auth.updateUser({ password: novaSenha })
+            );
             if (error) throw error;
             setFeedbackSenha({ status: 'success', message: 'Senha alterada com sucesso! Use a nova senha no próximo login.' });
-            setNovaSenha(''); setConfirmSenha('');
+            setNovaSenha('');
+            setConfirmSenha('');
         } catch (e) {
             setFeedbackSenha({ status: 'error', message: 'Erro: ' + e.message });
         } finally { setSavingSenha(false); }
@@ -142,10 +176,11 @@ export default function PerfilUsuario() {
         setSendingReset(true);
         setFeedbackReset({ status: 'info', message: 'Enviando link de recuperação...' });
         try {
-            const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-                redirectTo: `${window.location.origin}/reset-password`,
-            });
-            // Note: link expires in 1 hour
+            const { error } = await withTimeout(
+                supabase.auth.resetPasswordForEmail(user.email, {
+                    redirectTo: `${window.location.origin}/reset-password`,
+                })
+            );
             if (error) throw error;
             setFeedbackReset({
                 status: 'success',
@@ -206,9 +241,7 @@ export default function PerfilUsuario() {
                                                 disabled={savingNome}
                                                 className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors flex-shrink-0 flex items-center gap-1.5 disabled:opacity-70"
                                                 style={{ backgroundColor: 'var(--color-primary)' }}>
-                                                {savingNome
-                                                    ? <><Icon name="Loader" size={14} color="#fff" />Salvando</>
-                                                    : 'Salvar'}
+                                                {savingNome ? <><Spinner />Salvando</> : 'Salvar'}
                                             </button>
                                         </div>
                                     </Field>
@@ -270,9 +303,7 @@ export default function PerfilUsuario() {
                                         disabled={savingEmail || !novoEmail}
                                         className="px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 flex items-center gap-2"
                                         style={{ backgroundColor: 'var(--color-primary)' }}>
-                                        {savingEmail
-                                            ? <><Icon name="Loader" size={14} color="#fff" />Enviando...</>
-                                            : 'Solicitar alteração'}
+                                        {savingEmail ? <><Spinner />Enviando...</> : 'Solicitar alteração'}
                                     </button>
                                 </div>
                             </div>
@@ -334,9 +365,7 @@ export default function PerfilUsuario() {
                                         disabled={savingSenha || !novaSenha || novaSenha !== confirmSenha || novaSenha.length < 6}
                                         className="px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 flex items-center gap-2"
                                         style={{ backgroundColor: 'var(--color-primary)' }}>
-                                        {savingSenha
-                                            ? <><Icon name="Loader" size={14} color="#fff" />Alterando...</>
-                                            : 'Alterar senha'}
+                                        {savingSenha ? <><Spinner />Alterando...</> : 'Alterar senha'}
                                     </button>
                                 </div>
                             </div>
@@ -350,14 +379,15 @@ export default function PerfilUsuario() {
                                     <strong style={{ color: 'var(--color-text-primary)' }}>{user?.email}</strong>.
                                 </p>
                                 {feedbackReset && <FeedbackBanner {...feedbackReset} />}
-                                {!feedbackReset?.status === 'success' && (
+                                {/* Correção: comparação correta (era !x === 'success' → sempre true) */}
+                                {feedbackReset?.status !== 'success' && (
                                     <button
                                         onClick={handleRecuperarSenha}
                                         disabled={sendingReset}
                                         className="self-start flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-50"
                                         style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
                                         {sendingReset
-                                            ? <><Icon name="Loader" size={14} color="currentColor" />Enviando...</>
+                                            ? <><Spinner />Enviando...</>
                                             : <><Icon name="Mail" size={14} color="currentColor" />Enviar link de recuperação</>
                                         }
                                     </button>
