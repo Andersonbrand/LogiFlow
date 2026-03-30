@@ -154,10 +154,12 @@ export default function PerfilUsuario() {
         setSavingSenha(true);
         setFeedbackSenha({ status: 'info', message: 'Alterando senha...' });
         try {
-            // Força refresh do token JWT antes de tentar updateUser
-            // Sem isso, sessões expiradas (ex: inatividade) travam indefinidamente
-            const { error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) throw new Error('Sessão inválida. Faça login novamente.');
+            // Verifica sessão ativa antes de tentar updateUser
+            // getSession() retorna session=null (sem erro) quando não há sessão → captura esse caso
+            const { data: sessionData } = await supabase.auth.getSession();
+            if (!sessionData?.session) {
+                throw new Error('Sessão expirada. Faça logout e login novamente.');
+            }
 
             const { error } = await withTimeout(
                 supabase.auth.updateUser({ password: novaSenha })
@@ -167,7 +169,17 @@ export default function PerfilUsuario() {
             setNovaSenha('');
             setConfirmSenha('');
         } catch (e) {
-            setFeedbackSenha({ status: 'error', message: 'Erro: ' + e.message });
+            // Mapeia erros comuns do Supabase para mensagens amigáveis
+            const msg = e.message || '';
+            if (msg.includes('Auth session missing') || msg.includes('session_not_found')) {
+                setFeedbackSenha({ status: 'error', message: 'Sessão inválida. Faça logout e login novamente para alterar a senha.' });
+            } else if (msg.includes('same password')) {
+                setFeedbackSenha({ status: 'error', message: 'A nova senha deve ser diferente da senha atual.' });
+            } else if (msg.includes('Password should be')) {
+                setFeedbackSenha({ status: 'error', message: 'Senha fraca. Use pelo menos 8 caracteres, incluindo letras e números.' });
+            } else {
+                setFeedbackSenha({ status: 'error', message: 'Erro ao alterar senha: ' + msg });
+            }
         } finally { setSavingSenha(false); }
     };
 

@@ -75,17 +75,16 @@ function StatusBadge({ status }) {
 function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
     const mat = materiais.find(m => m.id === item.material_id);
 
-    // Prioridade: peso_unit armazenado no item > peso do material cadastrado
-    // Isso garante que o auto-calc funcione mesmo antes dos materiais carregarem
-    const pesoUnit = item.peso_unit
+    // Peso unitário: prioriza o armazenado no item (confiável), fallback no cadastro do material
+    const pesoUnit = item.peso_unit && Number(item.peso_unit) > 0
         ? Number(item.peso_unit)
         : (mat?.peso && Number(mat.peso) > 0 ? Number(mat.peso) : null);
 
-    // Peso exibido: calculado em tempo real sem useEffect (evita loop de re-render)
-    // Se não editado manualmente E existe peso unitário → calcula direto no render
-    const pesoExibido = (pesoUnit && !item._pesoManual && item.quantidade)
-        ? String(pesoUnit * Number(item.quantidade))
-        : (item.peso_total || '');
+    // Peso exibido no input — para modo auto: calcula direto do estado (não drift com pesoUnit)
+    // Assim o input controlado sempre reflete o estado real
+    const pesoExibido = item._pesoManual
+        ? (item.peso_total || '')
+        : (item.peso_total || '');  // estado sempre sincronizado (ver onUpdate abaixo)
 
     return (
         <div className="grid grid-cols-12 gap-2 items-start p-3 rounded-xl border"
@@ -272,7 +271,8 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
     const addItem = () => setItens(p => [...p, {
-        material_id: '', descricao: '', quantidade: '1', unidade: 'sc', peso_total: '', _pesoManual: false,
+        material_id: '', descricao: '', quantidade: '1', unidade: 'sc',
+        peso_unit: '', peso_total: '', _pesoManual: false,
     }]);
     const updateItem = (idx, patch) => setItens(p => p.map((it, i) => i === idx ? { ...it, ...patch } : it));
     const removeItem = (idx) => setItens(p => p.filter((_, i) => i !== idx));
