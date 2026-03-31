@@ -144,25 +144,16 @@ export async function fetchDriverProfiles() {
 
 /**
  * Remove um motorista/mecânico e todo o seu histórico.
- * 1. Deleta dados filhos (bonificacoes, notifications, vehicle_history)
- * 2. Deleta user_profiles
- * 3. Chama Edge Function para remover do auth.users
+ * Todo o cascade delete é feito pela Edge Function com service_role
+ * para garantir que o RLS não bloqueie as operações.
  */
 export async function deleteDriverUser(userId) {
-    // Remove dados relacionados
-    await supabase.from('bonificacoes').delete().eq('user_id', userId);
-    await supabase.from('notifications').delete().eq('user_id', userId);
-    await supabase.from('vehicle_history').delete().eq('user_id', userId);
-
-    // Remove o perfil
-    const { error: profileError } = await supabase
-        .from('user_profiles').delete().eq('id', userId);
-    if (profileError) throw profileError;
-
-    // Remove do auth.users via Edge Function (requer service_role no servidor)
-    try {
-        await supabase.functions.invoke('delete-user', { body: { userId } });
-    } catch {
-        // Edge Function opcional — se não existir, o perfil já foi removido
+    const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { userId },
+    });
+    // A função pode retornar { error } no body mesmo com HTTP 200
+    const bodyError = data?.error;
+    if (error || bodyError) {
+        throw new Error(bodyError || error?.message || 'Erro ao excluir motorista');
     }
 }
