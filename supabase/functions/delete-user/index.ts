@@ -19,7 +19,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Verifica que o chamador é um admin autenticado
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Não autorizado' }), {
@@ -28,17 +27,30 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabaseUrl     = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const anonKey         = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseUrl    = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const anonKey        = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    // Verifica se o chamador é admin (usando a sessão dele)
+    // Cliente service_role — bypassa RLS em todas as operações
+    const admin = createClient(supabaseUrl, serviceRoleKey);
+
+    // Obtém o ID do chamador a partir do JWT (via anon key + token do admin)
     const caller = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     });
-    const { data: callerProfile } = await caller
+    const { data: { user: callerUser }, error: callerErr } = await caller.auth.getUser();
+    if (callerErr || !callerUser) {
+      return new Response(JSON.stringify({ error: 'Token inválido ou expirado' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Verifica papel usando service_role (sem depender de RLS de leitura)
+    const { data: callerProfile } = await admin
       .from('user_profiles')
       .select('role')
+      .eq('id', callerUser.id)
       .single();
 
     if (callerProfile?.role !== 'admin') {
@@ -47,9 +59,6 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-
-    // Cliente com service_role — bypassa RLS
-    const admin = createClient(supabaseUrl, serviceRoleKey);
 
     // ── 1. Tabelas com motorista_id ──────────────────────────────────────────
     await admin.from('abastecimentos').delete().eq('motorista_id', userId);
