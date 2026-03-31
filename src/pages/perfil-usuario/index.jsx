@@ -8,10 +8,10 @@ import { updateUserProfile } from 'utils/userService';
 
 const inputCls = 'w-full px-3 py-2.5 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-card)' };
+const readonlyCls = 'w-full text-sm px-3 py-2.5 rounded-lg border';
+const readonlyStyle = { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: 'var(--color-muted)' };
 
-// Timeout para operações de auth — evita loading infinito em caso de hibernação
 const AUTH_TIMEOUT_MS = 20_000;
-
 function withTimeout(promise, ms = AUTH_TIMEOUT_MS) {
     return Promise.race([
         promise,
@@ -39,18 +39,17 @@ function SectionCard({ title, icon, children }) {
     );
 }
 
-function Field({ label, required, children }) {
+function Field({ label, children }) {
     return (
         <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+                {label}
             </label>
             {children}
         </div>
     );
 }
 
-// Banner de feedback inline dentro do card
 function FeedbackBanner({ status, message }) {
     if (!status || !message) return null;
     const cfg = {
@@ -67,7 +66,6 @@ function FeedbackBanner({ status, message }) {
     );
 }
 
-// Spinner animado reutilizável
 function Spinner() {
     return (
         <svg className="animate-spin" width={14} height={14} viewBox="0 0 24 24" fill="none">
@@ -79,7 +77,7 @@ function Spinner() {
 
 const ROLE_LABELS = {
     admin: 'Administrador', operador: 'Operador', motorista: 'Motorista',
-    carreteiro: 'Carreteiro', mecanico: 'Mecânico',
+    carreteiro: 'Carreteiro', mecanico: 'Mecânico', motorista_carreta: 'Motorista (Carreta)',
 };
 
 export default function PerfilUsuario() {
@@ -88,12 +86,7 @@ export default function PerfilUsuario() {
     // ── Nome ──────────────────────────────────────────────────────────────────
     const [nome, setNome]             = useState(profile?.name || '');
     const [savingNome, setSavingNome] = useState(false);
-    const [feedbackNome, setFeedbackNome] = useState(null); // { status, message }
-
-    // ── E-mail ────────────────────────────────────────────────────────────────
-    const [novoEmail, setNovoEmail]     = useState('');
-    const [savingEmail, setSavingEmail] = useState(false);
-    const [feedbackEmail, setFeedbackEmail] = useState(null);
+    const [feedbackNome, setFeedbackNome] = useState(null);
 
     // ── Senha ─────────────────────────────────────────────────────────────────
     const [novaSenha, setNovaSenha]       = useState('');
@@ -102,13 +95,8 @@ export default function PerfilUsuario() {
     const [feedbackSenha, setFeedbackSenha] = useState(null);
     const [showSenhas, setShowSenhas] = useState({ nova: false, confirm: false });
 
-    // ── Recuperação ───────────────────────────────────────────────────────────
-    const [sendingReset, setSendingReset] = useState(false);
-    const [feedbackReset, setFeedbackReset] = useState(null);
-
     const toggleSenha = (field) => setShowSenhas(s => ({ ...s, [field]: !s[field] }));
 
-    // ── Handlers ──────────────────────────────────────────────────────────────
     const handleSaveNome = async () => {
         if (!nome.trim()) { setFeedbackNome({ status: 'error', message: 'Nome não pode ser vazio.' }); return; }
         setSavingNome(true);
@@ -121,32 +109,6 @@ export default function PerfilUsuario() {
         } finally { setSavingNome(false); }
     };
 
-    const handleSaveEmail = async () => {
-        if (!novoEmail.trim()) { setFeedbackEmail({ status: 'error', message: 'Informe o novo e-mail.' }); return; }
-        if (!novoEmail.includes('@')) { setFeedbackEmail({ status: 'error', message: 'Formato de e-mail inválido.' }); return; }
-        if (novoEmail.trim() === user?.email) { setFeedbackEmail({ status: 'error', message: 'O novo e-mail é igual ao atual.' }); return; }
-        setSavingEmail(true);
-        setFeedbackEmail({ status: 'info', message: 'Enviando solicitação...' });
-        try {
-            // Garante sessão válida antes da operação
-            await supabase.auth.getSession();
-            const { error } = await withTimeout(
-                supabase.auth.updateUser(
-                    { email: novoEmail.trim() },
-                    { emailRedirectTo: `${window.location.origin}/email-confirmado` }
-                )
-            );
-            if (error) throw error;
-            setFeedbackEmail({
-                status: 'success',
-                message: `Link de confirmação enviado para "${novoEmail.trim()}". Verifique sua caixa de entrada e clique no link para confirmar a alteração.`,
-            });
-            setNovoEmail('');
-        } catch (e) {
-            setFeedbackEmail({ status: 'error', message: 'Erro: ' + e.message });
-        } finally { setSavingEmail(false); }
-    };
-
     const handleSaveSenha = async () => {
         if (!novaSenha) { setFeedbackSenha({ status: 'error', message: 'Informe a nova senha.' }); return; }
         if (novaSenha.length < 6) { setFeedbackSenha({ status: 'error', message: 'A senha deve ter pelo menos 6 caracteres.' }); return; }
@@ -154,13 +116,10 @@ export default function PerfilUsuario() {
         setSavingSenha(true);
         setFeedbackSenha({ status: 'info', message: 'Alterando senha...' });
         try {
-            // Verifica sessão ativa antes de tentar updateUser
-            // getSession() retorna session=null (sem erro) quando não há sessão → captura esse caso
             const { data: sessionData } = await supabase.auth.getSession();
             if (!sessionData?.session) {
                 throw new Error('Sessão expirada. Faça logout e login novamente.');
             }
-
             const { error } = await withTimeout(
                 supabase.auth.updateUser({ password: novaSenha })
             );
@@ -169,7 +128,6 @@ export default function PerfilUsuario() {
             setNovaSenha('');
             setConfirmSenha('');
         } catch (e) {
-            // Mapeia erros comuns do Supabase para mensagens amigáveis
             const msg = e.message || '';
             if (msg.includes('Auth session missing') || msg.includes('session_not_found')) {
                 setFeedbackSenha({ status: 'error', message: 'Sessão inválida. Faça logout e login novamente para alterar a senha.' });
@@ -183,25 +141,9 @@ export default function PerfilUsuario() {
         } finally { setSavingSenha(false); }
     };
 
-    const handleRecuperarSenha = async () => {
-        if (!user?.email) return;
-        setSendingReset(true);
-        setFeedbackReset({ status: 'info', message: 'Enviando link de recuperação...' });
-        try {
-            const { error } = await withTimeout(
-                supabase.auth.resetPasswordForEmail(user.email, {
-                    redirectTo: `${window.location.origin}/reset-password`,
-                })
-            );
-            if (error) throw error;
-            setFeedbackReset({
-                status: 'success',
-                message: `Link enviado para "${user.email}". Verifique sua caixa de entrada (e pasta de spam) e clique no link para redefinir a senha.`,
-            });
-        } catch (e) {
-            setFeedbackReset({ status: 'error', message: 'Erro ao enviar: ' + e.message });
-        } finally { setSendingReset(false); }
-    };
+    const roleKey = profile?.role === 'motorista' && profile?.tipo_veiculo === 'carreta'
+        ? 'motorista_carreta'
+        : profile?.role;
 
     return (
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
@@ -226,7 +168,7 @@ export default function PerfilUsuario() {
                                 </span>
                                 <span className="px-2 py-0.5 rounded-full text-xs font-medium"
                                     style={{ backgroundColor: 'var(--color-primary)', color: '#fff' }}>
-                                    {ROLE_LABELS[profile?.role] || profile?.role || 'Usuário'}
+                                    {ROLE_LABELS[roleKey] || profile?.role || 'Usuário'}
                                 </span>
                             </div>
                         </div>
@@ -234,97 +176,51 @@ export default function PerfilUsuario() {
 
                     <div className="flex flex-col gap-6">
 
-                        {/* ── Informações básicas ─────────────────────────── */}
+                        {/* ── Informações Básicas ─────────────────────────── */}
                         <SectionCard title="Informações Básicas" icon="User">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="sm:col-span-2">
-                                    <Field label="Nome de exibição" required>
-                                        <div className="flex gap-2">
-                                            <input
-                                                value={nome}
-                                                onChange={e => { setNome(e.target.value); setFeedbackNome(null); }}
-                                                className={inputCls}
-                                                style={inputStyle}
-                                                placeholder="Seu nome"
-                                                onKeyDown={e => e.key === 'Enter' && handleSaveNome()}
-                                            />
-                                            <button
-                                                onClick={handleSaveNome}
-                                                disabled={savingNome}
-                                                className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors flex-shrink-0 flex items-center gap-1.5 disabled:opacity-70"
-                                                style={{ backgroundColor: 'var(--color-primary)' }}>
-                                                {savingNome ? <><Spinner />Salvando</> : 'Salvar'}
-                                            </button>
-                                        </div>
-                                    </Field>
-                                    {feedbackNome && <div className="mt-3"><FeedbackBanner {...feedbackNome} /></div>}
-                                </div>
-                                <div>
-                                    <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>E-mail atual</p>
-                                    <p className="text-sm px-3 py-2.5 rounded-lg border"
-                                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: 'var(--color-muted)' }}>
-                                        {user?.email}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Cargo / Função</p>
-                                    <p className="text-sm px-3 py-2.5 rounded-lg border"
-                                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: 'var(--color-muted)' }}>
-                                        {ROLE_LABELS[profile?.role] || profile?.role || '—'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Membro desde</p>
-                                    <p className="text-sm px-3 py-2.5 rounded-lg border"
-                                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: 'var(--color-muted)' }}>
-                                        {user?.created_at ? new Date(user.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>ID do usuário</p>
-                                    <p className="text-sm px-3 py-2.5 rounded-lg border font-mono truncate"
-                                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: 'var(--color-muted)', fontSize: 11 }}>
-                                        {user?.id}
-                                    </p>
-                                </div>
-                            </div>
-                        </SectionCard>
-
-                        {/* ── Alterar e-mail ──────────────────────────────── */}
-                        <SectionCard title="Alterar E-mail" icon="Mail">
                             <div className="flex flex-col gap-4">
-                                <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                    Um link de confirmação será enviado para o novo endereço. A alteração só terá efeito após clicar no link recebido.
-                                </p>
-                                <Field label="Novo e-mail" required>
-                                    <input
-                                        type="email"
-                                        value={novoEmail}
-                                        onChange={e => { setNovoEmail(e.target.value); setFeedbackEmail(null); }}
-                                        className={inputCls}
-                                        style={inputStyle}
-                                        placeholder="novo@email.com"
-                                        onKeyDown={e => e.key === 'Enter' && handleSaveEmail()}
-                                        disabled={savingEmail}
-                                    />
+                                {/* Nome — editável */}
+                                <Field label="Nome de exibição">
+                                    <div className="flex gap-2">
+                                        <input
+                                            value={nome}
+                                            onChange={e => { setNome(e.target.value); setFeedbackNome(null); }}
+                                            className={inputCls}
+                                            style={inputStyle}
+                                            placeholder="Seu nome"
+                                            onKeyDown={e => e.key === 'Enter' && handleSaveNome()}
+                                        />
+                                        <button
+                                            onClick={handleSaveNome}
+                                            disabled={savingNome}
+                                            className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors flex-shrink-0 flex items-center gap-1.5 disabled:opacity-70"
+                                            style={{ backgroundColor: 'var(--color-primary)' }}>
+                                            {savingNome ? <><Spinner />Salvando</> : 'Salvar'}
+                                        </button>
+                                    </div>
                                 </Field>
-                                {feedbackEmail && <FeedbackBanner {...feedbackEmail} />}
-                                <div className="flex justify-end">
-                                    <button
-                                        onClick={handleSaveEmail}
-                                        disabled={savingEmail || !novoEmail}
-                                        className="px-5 py-2.5 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-50 flex items-center gap-2"
-                                        style={{ backgroundColor: 'var(--color-primary)' }}>
-                                        {savingEmail ? <><Spinner />Enviando...</> : 'Solicitar alteração'}
-                                    </button>
+                                {feedbackNome && <FeedbackBanner {...feedbackNome} />}
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {/* E-mail — somente leitura */}
+                                    <Field label="E-mail">
+                                        <p className={readonlyCls} style={readonlyStyle}>{user?.email || '—'}</p>
+                                    </Field>
+
+                                    {/* Função — somente leitura */}
+                                    <Field label="Cargo / Função">
+                                        <p className={readonlyCls} style={readonlyStyle}>
+                                            {ROLE_LABELS[roleKey] || profile?.role || '—'}
+                                        </p>
+                                    </Field>
                                 </div>
                             </div>
                         </SectionCard>
 
-                        {/* ── Alterar senha ───────────────────────────────── */}
+                        {/* ── Alterar Senha ───────────────────────────────── */}
                         <SectionCard title="Alterar Senha" icon="Lock">
                             <div className="flex flex-col gap-4">
-                                <Field label="Nova senha" required>
+                                <Field label="Nova senha">
                                     <div className="relative">
                                         <input
                                             type={showSenhas.nova ? 'text' : 'password'}
@@ -341,7 +237,8 @@ export default function PerfilUsuario() {
                                         </button>
                                     </div>
                                 </Field>
-                                <Field label="Confirmar nova senha" required>
+
+                                <Field label="Confirmar nova senha">
                                     <div className="relative">
                                         <input
                                             type={showSenhas.confirm ? 'text' : 'password'}
@@ -358,7 +255,7 @@ export default function PerfilUsuario() {
                                         </button>
                                     </div>
                                 </Field>
-                                {/* Indicador inline de força/match */}
+
                                 {novaSenha && confirmSenha && !feedbackSenha && (
                                     novaSenha !== confirmSenha
                                         ? <p className="text-xs text-red-500 flex items-center gap-1">
@@ -371,6 +268,7 @@ export default function PerfilUsuario() {
                                             : null
                                 )}
                                 {feedbackSenha && <FeedbackBanner {...feedbackSenha} />}
+
                                 <div className="flex justify-end">
                                     <button
                                         onClick={handleSaveSenha}
@@ -380,30 +278,6 @@ export default function PerfilUsuario() {
                                         {savingSenha ? <><Spinner />Alterando...</> : 'Alterar senha'}
                                     </button>
                                 </div>
-                            </div>
-                        </SectionCard>
-
-                        {/* ── Recuperação de senha ────────────────────────── */}
-                        <SectionCard title="Recuperação de Senha" icon="KeyRound">
-                            <div className="flex flex-col gap-4">
-                                <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                                    Clique abaixo para receber um link de redefinição de senha no endereço{' '}
-                                    <strong style={{ color: 'var(--color-text-primary)' }}>{user?.email}</strong>.
-                                </p>
-                                {feedbackReset && <FeedbackBanner {...feedbackReset} />}
-                                {/* Correção: comparação correta (era !x === 'success' → sempre true) */}
-                                {feedbackReset?.status !== 'success' && (
-                                    <button
-                                        onClick={handleRecuperarSenha}
-                                        disabled={sendingReset}
-                                        className="self-start flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium border transition-colors disabled:opacity-50"
-                                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
-                                        {sendingReset
-                                            ? <><Spinner />Enviando...</>
-                                            : <><Icon name="Mail" size={14} color="currentColor" />Enviar link de recuperação</>
-                                        }
-                                    </button>
-                                )}
                             </div>
                         </SectionCard>
 

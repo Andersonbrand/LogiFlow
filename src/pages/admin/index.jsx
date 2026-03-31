@@ -6,12 +6,12 @@ import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
-import { fetchAllUsers, updateUserProfile, fetchMaintenanceAlerts, resolveMaintenanceAlert } from 'utils/userService';
+import { fetchAllUsers, updateUserProfile, fetchMaintenanceAlerts, resolveMaintenanceAlert, createDriverUser, fetchDriverProfiles } from 'utils/userService';
 import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { fetchRomaneios, aprovarRomaneio, reprovarRomaneio } from 'utils/romaneioService';
 import { fetchBonificacoesConsolidadas } from 'utils/bonificacaoService';
-import { subscribeTabela } from 'utils/supabaseClient';
 import { fetchCorredores, upsertCorredor, deleteCorredor, invalidarCache } from 'utils/corredoresService';
+import { supabase, subscribeTabela } from 'utils/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -141,6 +141,7 @@ export default function AdminPanel() {
 
     const TABS = [
         { id: 'usuarios',    label: 'Usuários',    icon: 'Users' },
+        { id: 'motoristas',  label: 'Motoristas',  icon: 'Truck' },
         { id: 'aprovacoes',  label: 'Aprovações',  icon: 'CheckSquare', badge: romaneios.length || null },
         { id: 'alertas',     label: 'Alertas',     icon: 'AlertTriangle', badge: alerts.length || null },
         { id: 'bonificacoes',label: 'Bonificações',icon: 'Award' },
@@ -246,6 +247,11 @@ export default function AdminPanel() {
                                 </table>
                             </div>
                         </div>
+                    )}
+
+                    {/* ── ABA MOTORISTAS ───────────────────────────────────── */}
+                    {tab === 'motoristas' && (
+                        <MotoristasManager showToast={showToast} />
                     )}
 
                     {/* ── ABA APROVAÇÕES ───────────────────────────────────── */}
@@ -487,6 +493,338 @@ export default function AdminPanel() {
                                 Confirmar Reprovação
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Componente de gerenciamento de motoristas
+// ────────────────────────────────────────────────────────────────────────────
+const CNH_CATEGORIAS = ['A', 'B', 'AB', 'C', 'D', 'E', 'ACC'];
+const DRIVER_ROLES = [
+    { value: 'motorista',         label: 'Motorista (Caminhão)' },
+    { value: 'motorista_carreta', label: 'Motorista (Carreta)'  },
+    { value: 'mecanico',          label: 'Mecânico'             },
+];
+
+const FORM_VAZIO = {
+    nome: '', email: '', senha: '', role: 'motorista',
+    cnhNumero: '', cnhCategoria: 'C', cnhVencimento: '', dataNascimento: '',
+};
+
+function MotoristasManager({ showToast }) {
+    const [motoristas, setMotoristas] = useState([]);
+    const [loading, setLoading]       = useState(true);
+    const [showForm, setShowForm]     = useState(false);
+    const [saving, setSaving]         = useState(false);
+    const [form, setForm]             = useState(FORM_VAZIO);
+    const [cnhFile, setCnhFile]       = useState(null);
+    const [showSenha, setShowSenha]   = useState(false);
+    const [detalhe, setDetalhe]       = useState(null); // motorista selecionado para ver detalhe
+
+    const load = useCallback(async () => {
+        try {
+            setLoading(true);
+            const data = await fetchDriverProfiles();
+            setMotoristas(data);
+        } catch (err) {
+            showToast('Erro ao carregar motoristas: ' + err.message, 'error');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { load(); }, []);
+
+    const setField = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+    const handleSubmit = async () => {
+        if (!form.nome.trim())  { showToast('Informe o nome do motorista.', 'error');  return; }
+        if (!form.email.trim()) { showToast('Informe o e-mail.', 'error');             return; }
+        if (!form.email.includes('@')) { showToast('E-mail inválido.', 'error');       return; }
+        if (form.senha.length < 6)     { showToast('Senha deve ter ao menos 6 caracteres.', 'error'); return; }
+
+        setSaving(true);
+        try {
+            // Faz upload da CNH se houver arquivo
+            let cnhFotoUrl = null;
+            if (cnhFile) {
+                const ext = cnhFile.name.split('.').pop();
+                const path = `cnh_${Date.now()}.${ext}`;
+                const { data: uploadData, error: uploadErr } = await supabase.storage
+                    .from('cnh-documents').upload(path, cnhFile, { upsert: true });
+                if (!uploadErr && uploadData) {
+                    const { data: { publicUrl } } = supabase.storage
+                        .from('cnh-documents').getPublicUrl(uploadData.path);
+                    cnhFotoUrl = publicUrl;
+                }
+            }
+
+            await createDriverUser(supabase, { ...form, cnhFotoUrl });
+            showToast(`Motorista ${form.nome} cadastrado com sucesso!`, 'success');
+            setForm(FORM_VAZIO);
+            setCnhFile(null);
+            setShowForm(false);
+            await load();
+        } catch (err) {
+            showToast('Erro ao cadastrar: ' + err.message, 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const inputCls2 = 'w-full h-9 px-3 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200';
+
+    if (loading) return (
+        <div className="flex justify-center py-16">
+            <div className="animate-spin h-7 w-7 rounded-full border-4 border-slate-300" style={{ borderTopColor: 'var(--color-primary)' }} />
+        </div>
+    );
+
+    return (
+        <div className="flex flex-col gap-5">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                        <Icon name="Truck" size={18} color="var(--color-primary)" />
+                        Motoristas Cadastrados
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                        Gerencie os motoristas, mecânicos e dados de CNH da frota.
+                    </p>
+                </div>
+                <Button variant="default" iconName="UserPlus" iconSize={14} onClick={() => { setShowForm(true); setDetalhe(null); }}>
+                    Novo Motorista
+                </Button>
+            </div>
+
+            {/* Formulário de cadastro */}
+            {showForm && (
+                <div className="bg-slate-50 rounded-xl border-2 border-blue-200 p-5">
+                    <h3 className="font-semibold text-sm text-slate-800 mb-4 flex items-center gap-2">
+                        <Icon name="UserPlus" size={15} color="var(--color-primary)" />
+                        Cadastrar novo motorista / mecânico
+                    </h3>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Nome */}
+                        <div className="sm:col-span-2">
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Nome completo *</label>
+                            <input value={form.nome} onChange={e => setField('nome', e.target.value)}
+                                placeholder="Nome do motorista" className={inputCls2} />
+                        </div>
+
+                        {/* E-mail */}
+                        <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">E-mail *</label>
+                            <input type="email" value={form.email} onChange={e => setField('email', e.target.value)}
+                                placeholder="motorista@empresa.com" className={inputCls2} />
+                        </div>
+
+                        {/* Senha */}
+                        <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Senha inicial *</label>
+                            <div className="relative">
+                                <input
+                                    type={showSenha ? 'text' : 'password'}
+                                    value={form.senha} onChange={e => setField('senha', e.target.value)}
+                                    placeholder="Mínimo 6 caracteres"
+                                    className={inputCls2}
+                                    style={{ paddingRight: 36 }} />
+                                <button type="button" onClick={() => setShowSenha(s => !s)}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 opacity-50 hover:opacity-100">
+                                    <Icon name={showSenha ? 'EyeOff' : 'Eye'} size={14} color="#64748B" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Função */}
+                        <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Função *</label>
+                            <select value={form.role} onChange={e => setField('role', e.target.value)} className={inputCls2}>
+                                {DRIVER_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                            </select>
+                        </div>
+
+                        {/* Data de nascimento */}
+                        <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Data de nascimento</label>
+                            <input type="date" value={form.dataNascimento} onChange={e => setField('dataNascimento', e.target.value)}
+                                className={inputCls2} />
+                        </div>
+
+                        {/* Nº CNH */}
+                        <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">N° Registro da CNH</label>
+                            <input value={form.cnhNumero} onChange={e => setField('cnhNumero', e.target.value)}
+                                placeholder="00000000000" className={inputCls2} />
+                        </div>
+
+                        {/* Categoria CNH */}
+                        <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Categoria CNH</label>
+                            <select value={form.cnhCategoria} onChange={e => setField('cnhCategoria', e.target.value)} className={inputCls2}>
+                                {CNH_CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+
+                        {/* Vencimento CNH */}
+                        <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Vencimento da CNH</label>
+                            <input type="date" value={form.cnhVencimento} onChange={e => setField('cnhVencimento', e.target.value)}
+                                className={inputCls2} />
+                        </div>
+
+                        {/* Foto CNH */}
+                        <div className="sm:col-span-2">
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Anexo da CNH (imagem)</label>
+                            <input
+                                type="file"
+                                accept="image/*,.pdf"
+                                onChange={e => setCnhFile(e.target.files?.[0] || null)}
+                                className="w-full text-xs text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                            />
+                            {cnhFile && (
+                                <p className="mt-1 text-xs text-slate-500 flex items-center gap-1">
+                                    <Icon name="Paperclip" size={11} color="#64748B" />
+                                    {cnhFile.name}
+                                </p>
+                            )}
+                            <p className="text-xs text-slate-400 mt-1">
+                                Requer bucket "cnh-documents" criado no Supabase Storage.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-2 mt-4 justify-end">
+                        <Button variant="outline" onClick={() => { setShowForm(false); setForm(FORM_VAZIO); setCnhFile(null); }} disabled={saving}>
+                            Cancelar
+                        </Button>
+                        <Button variant="default" iconName="UserPlus" iconSize={14} onClick={handleSubmit} loading={saving}>
+                            Cadastrar Motorista
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            {/* Detalhe do motorista */}
+            {detalhe && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-slate-50">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                                style={{ backgroundColor: 'var(--color-primary)' }}>
+                                <Icon name="User" size={20} color="#fff" />
+                            </div>
+                            <div className="flex-1">
+                                <p className="font-semibold text-slate-800">{detalhe.name}</p>
+                                <p className="text-xs text-slate-500">{detalhe.email}</p>
+                            </div>
+                            <button onClick={() => setDetalhe(null)}
+                                className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors">
+                                <Icon name="X" size={16} color="#64748B" />
+                            </button>
+                        </div>
+                        <div className="p-5 grid grid-cols-2 gap-3 text-sm">
+                            {[
+                                ['Função',        DRIVER_ROLES.find(r => r.value === (detalhe.role === 'motorista' && detalhe.tipo_veiculo === 'carreta' ? 'motorista_carreta' : detalhe.role))?.label || detalhe.role],
+                                ['CNH N°',        detalhe.cnh_numero      || '—'],
+                                ['Categoria',     detalhe.cnh_categoria   || '—'],
+                                ['Vencimento CNH',detalhe.cnh_vencimento  ? new Date(detalhe.cnh_vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '—'],
+                                ['Nascimento',    detalhe.data_nascimento ? new Date(detalhe.data_nascimento + 'T12:00:00').toLocaleDateString('pt-BR') : '—'],
+                            ].map(([label, val]) => (
+                                <div key={label}>
+                                    <p className="text-xs text-slate-500 mb-0.5">{label}</p>
+                                    <p className="font-medium text-slate-800 text-sm">{val}</p>
+                                </div>
+                            ))}
+                            {detalhe.cnh_foto_url && (
+                                <div className="col-span-2">
+                                    <p className="text-xs text-slate-500 mb-1">Foto CNH</p>
+                                    <a href={detalhe.cnh_foto_url} target="_blank" rel="noopener noreferrer"
+                                        className="text-xs text-blue-600 underline flex items-center gap-1">
+                                        <Icon name="ExternalLink" size={11} color="#2563EB" />
+                                        Ver documento
+                                    </a>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Lista de motoristas */}
+            {motoristas.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                    <Icon name="Truck" size={36} color="#CBD5E1" />
+                    <p className="mt-2 text-sm">Nenhum motorista cadastrado</p>
+                    <p className="text-xs mt-1">Clique em "Novo Motorista" para começar</p>
+                </div>
+            ) : (
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
+                        <Icon name="Truck" size={18} color="var(--color-primary)" />
+                        <h2 className="text-base font-semibold text-slate-800">Motoristas e Mecânicos</h2>
+                        <span className="ml-auto text-xs text-slate-400">{motoristas.length} cadastrados</span>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50">
+                                <tr>
+                                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Nome</th>
+                                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Função</th>
+                                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">CNH</th>
+                                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Vencimento</th>
+                                    <th className="px-4 py-3"></th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {motoristas.map(m => {
+                                    const rkey = m.role === 'motorista' && m.tipo_veiculo === 'carreta' ? 'motorista_carreta' : m.role;
+                                    const rc   = ROLE_CONFIG[rkey] || ROLE_CONFIG['operador'];
+                                    const venc = m.cnh_vencimento ? new Date(m.cnh_vencimento + 'T12:00:00') : null;
+                                    const vencendo = venc && (venc - Date.now()) / 86400000 < 30;
+                                    return (
+                                        <tr key={m.id} className="hover:bg-slate-50">
+                                            <td className="px-4 py-3">
+                                                <p className="font-medium text-slate-800 text-xs">{m.name || '—'}</p>
+                                                <p className="text-slate-400 text-xs">{m.email || ''}</p>
+                                            </td>
+                                            <td className="px-4 py-3 hidden sm:table-cell">
+                                                <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
+                                                    style={{ color: rc.color, backgroundColor: rc.bg }}>
+                                                    {rc.label}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-600 text-xs hidden md:table-cell">
+                                                {m.cnh_numero ? (
+                                                    <span>{m.cnh_numero} <span className="text-slate-400">Cat. {m.cnh_categoria || '—'}</span></span>
+                                                ) : '—'}
+                                            </td>
+                                            <td className="px-4 py-3 text-xs hidden lg:table-cell">
+                                                {venc ? (
+                                                    <span className={vencendo ? 'text-red-600 font-semibold' : 'text-slate-600'}>
+                                                        {venc.toLocaleDateString('pt-BR')}
+                                                        {vencendo && ' ⚠'}
+                                                    </span>
+                                                ) : <span className="text-slate-400">—</span>}
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <button onClick={() => { setDetalhe(m); setShowForm(false); }}
+                                                    className="text-xs text-blue-600 hover:text-blue-800 underline">
+                                                    Ver
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             )}
