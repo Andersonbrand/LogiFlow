@@ -150,18 +150,21 @@ export async function deleteDriverUser(userId) {
     const { data, error } = await supabase.functions.invoke('delete-user', {
         body: { userId },
     });
-    // Extrai mensagem de erro do body (status 2xx com { error }) ou do erro HTTP
-    const bodyError = data?.error;
-    if (bodyError || error) {
-        // Tenta extrair detalhes do response body quando é FunctionsHttpError
-        if (error?.context) {
+
+    if (error) {
+        // Tenta ler o body real da resposta de erro
+        if (error?.context?.json) {
             try {
                 const body = await error.context.json();
-                throw new Error(body?.error || error.message);
-            } catch (parseErr) {
-                if (parseErr instanceof Error && parseErr.message !== error.message) throw parseErr;
+                throw new Error(body?.error || body?.message || error.message);
+            } catch (e) {
+                if (e.message !== error.message) throw e;
             }
         }
-        throw new Error(bodyError || error?.message || 'Erro ao excluir motorista');
+        throw new Error(error.message);
+    }
+
+    if (data?.error) {
+        throw new Error(data.error);
     }
 }

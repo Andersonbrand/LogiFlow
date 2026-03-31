@@ -5,6 +5,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+/** Extrai o user ID (sub) do JWT sem chamada de rede */
+function getUserIdFromJwt(authHeader: string): string | null {
+  try {
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.sub ?? null;
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -27,30 +38,25 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabaseUrl    = Deno.env.get('SUPABASE_URL')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const anonKey        = Deno.env.get('SUPABASE_ANON_KEY')!;
-
-    // Cliente service_role — bypassa RLS em todas as operações
-    const admin = createClient(supabaseUrl, serviceRoleKey);
-
-    // Obtém o ID do chamador a partir do JWT (via anon key + token do admin)
-    const caller = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user: callerUser }, error: callerErr } = await caller.auth.getUser();
-    if (callerErr || !callerUser) {
-      return new Response(JSON.stringify({ error: 'Token inválido ou expirado' }), {
+    const callerId = getUserIdFromJwt(authHeader);
+    if (!callerId) {
+      return new Response(JSON.stringify({ error: 'Token inválido' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Verifica papel usando service_role (sem depender de RLS de leitura)
+    const supabaseUrl    = Deno.env.get('SUPABASE_URL')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    // Cliente service_role — bypassa RLS em todas as operações
+    const admin = createClient(supabaseUrl, serviceRoleKey);
+
+    // Verifica se o chamador é admin
     const { data: callerProfile } = await admin
       .from('user_profiles')
       .select('role')
-      .eq('id', callerUser.id)
+      .eq('id', callerId)
       .single();
 
     if (callerProfile?.role !== 'admin') {
