@@ -5,11 +5,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-/** Extrai o user ID (sub) do JWT sem chamada de rede */
+/** Extrai o user ID (sub) do JWT sem chamada de rede.
+ *  JWT usa base64url — converte para base64 padrão antes do atob. */
 function getUserIdFromJwt(authHeader: string): string | null {
   try {
     const token = authHeader.replace(/^Bearer\s+/i, '');
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    const b64url = token.split('.')[1];
+    // base64url → base64 padrão
+    const b64 = b64url.replace(/-/g, '+').replace(/_/g, '/').padEnd(
+      b64url.length + (4 - b64url.length % 4) % 4, '='
+    );
+    const payload = JSON.parse(atob(b64));
     return payload.sub ?? null;
   } catch {
     return null;
