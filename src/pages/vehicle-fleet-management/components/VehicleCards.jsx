@@ -28,24 +28,18 @@ export default function VehicleCards({ vehicles, onEdit, onStatusChange, onViewH
                                 {v?.placa}
                             </span>
                             <div className="flex items-center gap-1.5 mt-0.5">
-                                <Icon name={v?.tipo === "Van" ? "Package" : "Truck"} size={13} color="var(--color-muted-foreground)" strokeWidth={2} />
+                                <Icon name="Truck" size={13} color="var(--color-muted-foreground)" strokeWidth={2} />
                                 <span className="text-sm" style={{ color: "var(--color-muted-foreground)" }}>{v?.tipo}</span>
                             </div>
                         </div>
                         <StatusBadge status={v?.status} />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="grid grid-cols-1 gap-3 mb-3">
                         <div className="rounded-lg p-2.5" style={{ backgroundColor: "var(--color-muted)" }}>
                             <p className="text-xs font-caption" style={{ color: "var(--color-muted-foreground)" }}>Cap. Peso</p>
                             <p className="font-data font-semibold text-sm mt-0.5" style={{ color: "var(--color-text-primary)" }}>
                                 {v?.capacidadePeso?.toLocaleString("pt-BR")} kg
-                            </p>
-                        </div>
-                        <div className="rounded-lg p-2.5" style={{ backgroundColor: "var(--color-muted)" }}>
-                            <p className="text-xs font-caption" style={{ color: "var(--color-muted-foreground)" }}>Cap. Volume</p>
-                            <p className="font-data font-semibold text-sm mt-0.5" style={{ color: "var(--color-text-primary)" }}>
-                                {v?.capacidadeVolume?.toLocaleString("pt-BR", { minimumFractionDigits: 1 })} m³
                             </p>
                         </div>
                     </div>

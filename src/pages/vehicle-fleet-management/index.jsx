@@ -189,28 +189,28 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0"
+                <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-3 px-4 sm:px-6 py-4 border-b flex-shrink-0"
                     style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg flex-shrink-0"
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white font-bold text-base sm:text-lg flex-shrink-0"
                             style={{ background: 'linear-gradient(135deg, #1D4ED8, #7C3AED)' }}>
                             {motorista.name[0]?.toUpperCase()}
                         </div>
                         <div>
-                            <h2 className="font-heading font-bold text-xl" style={{ color: 'var(--color-text-primary)' }}>{motorista.name}</h2>
+                            <h2 className="font-heading font-bold text-base sm:text-xl" style={{ color: 'var(--color-text-primary)' }}>{motorista.name}</h2>
                             <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Motorista · Caminhão</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap xs:flex-nowrap">
                         <input type="month" value={mes} onChange={e => setMes(e.target.value)}
-                            className="px-3 py-1.5 rounded-lg border text-sm" style={inputStyle} />
-                        <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                            className="px-3 py-1.5 rounded-lg border text-sm flex-1 xs:flex-none" style={inputStyle} />
+                        <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 flex-shrink-0" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                             <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                         </button>
-                        <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>
+                        <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50 flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                             <Icon name="FileDown" size={13} /> Exportar
                         </button>
-                        <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100">
+                        <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 flex-shrink-0 ml-auto xs:ml-0">
                             <Icon name="X" size={20} color="var(--color-muted-foreground)" />
                         </button>
                     </div>
@@ -726,13 +726,13 @@ export default function VehicleFleetManagement() {
                     </div>
 
                     {/* Tabs de página */}
-                    <div className="flex border-b mb-6" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="flex border-b mb-6 overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                         {[
                             { id: 'frota',       label: 'Frota de Veículos', icon: 'Truck' },
                             { id: 'motoristas',  label: 'Motoristas',        icon: 'Users' },
                         ].map(t => (
                             <button key={t.id} onClick={() => setActiveTab(t.id)}
-                                className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                                className={`flex items-center gap-2 px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${activeTab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                                 <Icon name={t.icon} size={16} color="currentColor" />
                                 {t.label}
                             </button>

@@ -318,11 +318,11 @@ export default function MainDashboard() {
 
                     {/* Main Grid */}
                     <div className="grid grid-cols-1 tab:grid-cols-3 gap-6">
-                        <div className="tab:col-span-2 flex flex-col gap-6">
+                        <div className="tab:col-span-2 flex flex-col gap-6 order-2 tab:order-1">
                             <RomaneiosTable romaneios={romaneios} />
                             <FleetUtilizationChart data={fleetData} />
                         </div>
-                        <div className="flex flex-col gap-6">
+                        <div className="flex flex-col gap-6 order-1 tab:order-2">
                             {maintenanceAlerts.length > 0 && (
                                 <MaintenanceCard alerts={maintenanceAlerts} onResolve={handleResolveAlert} />
                             )}

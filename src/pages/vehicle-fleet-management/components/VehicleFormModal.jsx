@@ -3,12 +3,12 @@ import Icon from "components/AppIcon";
 import Button from "components/ui/Button";
 import Input from "components/ui/Input";
 
-const TIPO_OPTIONS = ["Caminhão", "Van", "Carreta"];
+const TIPO_OPTIONS = ["Caminhão", "Carreta"];
 const STATUS_OPTIONS = ["Disponível", "Em Trânsito", "Manutenção"];
 
 const EMPTY_FORM = {
     placa: "", tipo: "Caminhão", capacidadePeso: "",
-    capacidadeVolume: "", consumo_km: "", status: "Disponível",
+    consumo_km: "", status: "Disponível",
 };
 
 const PLACA_REGEX = /^[A-Z]{3}-?\d{4}$|^[A-Z]{3}\d[A-Z]\d{2}$/i;
@@ -20,12 +20,11 @@ export default function VehicleFormModal({ isOpen, onClose, onSave, editVehicle 
     useEffect(() => {
         if (editVehicle) {
             setForm({
-                placa:            editVehicle?.placa || "",
-                tipo:             editVehicle?.tipo || "Caminhão",
-                capacidadePeso:   String(editVehicle?.capacidadePeso || ""),
-                capacidadeVolume: String(editVehicle?.capacidadeVolume || ""),
-                consumo_km:       editVehicle?.consumo_km ? String(editVehicle.consumo_km) : "",
-                status:           editVehicle?.status || "Disponível",
+                placa:          editVehicle?.placa || "",
+                tipo:           editVehicle?.tipo === "Van" ? "Caminhão" : (editVehicle?.tipo || "Caminhão"),
+                capacidadePeso: String(editVehicle?.capacidadePeso || ""),
+                consumo_km:     editVehicle?.consumo_km ? String(editVehicle.consumo_km) : "",
+                status:         editVehicle?.status || "Disponível",
             });
         } else {
             setForm(EMPTY_FORM);
@@ -39,8 +38,6 @@ export default function VehicleFormModal({ isOpen, onClose, onSave, editVehicle 
         else if (!PLACA_REGEX?.test(form?.placa?.trim())) e.placa = "Formato inválido. Ex: ABC-1234 ou ABC1D23";
         if (!form?.capacidadePeso || isNaN(Number(form?.capacidadePeso)) || Number(form?.capacidadePeso) <= 0)
             e.capacidadePeso = "Informe uma capacidade de peso válida";
-        if (!form?.capacidadeVolume || isNaN(Number(form?.capacidadeVolume)) || Number(form?.capacidadeVolume) <= 0)
-            e.capacidadeVolume = "Informe uma capacidade de volume válida";
         return e;
     };
 
@@ -50,10 +47,9 @@ export default function VehicleFormModal({ isOpen, onClose, onSave, editVehicle 
         if (Object.keys(errs)?.length > 0) { setErrors(errs); return; }
         onSave({
             ...form,
-            placa:            form?.placa?.toUpperCase(),
-            capacidadePeso:   Number(form?.capacidadePeso),
-            capacidadeVolume: Number(form?.capacidadeVolume),
-            consumo_km:       form?.consumo_km ? Number(form.consumo_km) : null,
+            placa:          form?.placa?.toUpperCase(),
+            capacidadePeso: Number(form?.capacidadePeso),
+            consumo_km:     form?.consumo_km ? Number(form.consumo_km) : null,
         });
     };
 
@@ -95,15 +91,11 @@ export default function VehicleFormModal({ isOpen, onClose, onSave, editVehicle 
                         </select>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div>
                         <Input label="Capacidade Peso (kg)" type="number" placeholder="Ex: 10000"
                             value={form?.capacidadePeso}
                             onChange={(e) => setForm({ ...form, capacidadePeso: e?.target?.value })}
                             error={errors?.capacidadePeso} required min="1" />
-                        <Input label="Capacidade Volume (m³)" type="number" placeholder="Ex: 40.5"
-                            value={form?.capacidadeVolume}
-                            onChange={(e) => setForm({ ...form, capacidadeVolume: e?.target?.value })}
-                            error={errors?.capacidadeVolume} required min="0.1" step="0.1" />
                     </div>
 
                     {/* Consumo km/l */}

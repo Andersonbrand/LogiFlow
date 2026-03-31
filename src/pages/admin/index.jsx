@@ -168,12 +168,12 @@ export default function AdminPanel() {
             <NavigationBar />
             <main className="main-content">
                 <div className="border-b border-slate-200 bg-white">
-                    <div className="max-w-screen-xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
+                    <div className="max-w-screen-xl mx-auto px-4 md:px-6 py-4 flex flex-col xs:flex-row xs:items-center xs:justify-between gap-3">
                         <div>
                             <BreadcrumbTrail items={[{ label: 'Dashboard', path: '/' }, { label: 'Administração' }]} />
                             <h1 className="text-xl font-bold text-slate-800 mt-1">Painel Administrativo</h1>
                         </div>
-                        <Button variant="outline" iconName="RefreshCw" iconSize={15} onClick={load}>
+                        <Button variant="outline" iconName="RefreshCw" iconSize={15} onClick={load} className="self-start xs:self-auto flex-shrink-0">
                             Atualizar
                         </Button>
                     </div>

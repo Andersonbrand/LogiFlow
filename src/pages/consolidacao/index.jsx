@@ -346,7 +346,7 @@ export default function Consolidacao() {
 
                             {/* Tabela principal */}
                             <div className="tab:col-span-2 flex flex-col gap-4">
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center justify-between flex-wrap gap-2">
                                     <p className="text-sm font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
                                         {selected.length} selecionado(s) de {romaneios.length} disponíveis
                                     </p>
@@ -367,6 +367,7 @@ export default function Consolidacao() {
                                     </div>
                                 ) : (
                                     <div className="bg-white rounded-xl border shadow-card overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                                        <div className="overflow-x-auto">
                                         <table className="w-full text-sm">
                                             <thead className="text-xs font-caption border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                                                 <tr>
@@ -428,8 +429,9 @@ export default function Consolidacao() {
                                                 })}
                                             </tbody>
                                         </table>
+                                        </div>
                                         {selected.length > 0 && (
-                                            <div className="px-4 py-3 border-t flex items-center justify-between bg-amber-50" style={{ borderColor: 'var(--color-border)' }}>
+                                            <div className="px-4 py-3 border-t flex items-center justify-between flex-wrap gap-2 bg-amber-50" style={{ borderColor: 'var(--color-border)' }}>
                                                 <span className="text-xs font-caption text-amber-700">
                                                     Peso combinado: <strong className="font-data">{Number(totalPeso).toLocaleString('pt-BR')} kg</strong>
                                                 </span>

@@ -30,7 +30,7 @@ export default function VehicleTable({ vehicles, onEdit, onStatusChange, onViewH
                 <table className="w-full min-w-[700px] border-collapse">
                     <thead>
                         <tr style={{ backgroundColor: "#404040" }}>
-                            {["Placa", "Tipo de Veículo", "Cap. Peso (kg)", "Cap. Volume (m³)", "Status", "Última Utilização", "Ações"]?.map(
+                            {["Placa", "Tipo de Veículo", "Cap. Peso (kg)", "Status", "Última Utilização", "Ações"]?.map(
                                 (col) => (
                                     <th
                                         key={col}
@@ -57,18 +57,13 @@ export default function VehicleTable({ vehicles, onEdit, onStatusChange, onViewH
                                 </td>
                                 <td className="px-4 py-3">
                                     <div className="flex items-center gap-2">
-                                        <Icon name={v?.tipo === "Van" ? "Package" : "Truck"} size={15} color="var(--color-muted-foreground)" strokeWidth={2} />
+                                        <Icon name="Truck" size={15} color="var(--color-muted-foreground)" strokeWidth={2} />
                                         <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>{v?.tipo}</span>
                                     </div>
                                 </td>
                                 <td className="px-4 py-3">
                                     <span className="font-data text-sm" style={{ color: "var(--color-text-primary)" }}>
                                         {v?.capacidadePeso?.toLocaleString("pt-BR")}
-                                    </span>
-                                </td>
-                                <td className="px-4 py-3">
-                                    <span className="font-data text-sm" style={{ color: "var(--color-text-primary)" }}>
-                                        {v?.capacidadeVolume?.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}
                                     </span>
                                 </td>
                                 <td className="px-4 py-3">

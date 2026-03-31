@@ -6,7 +6,6 @@ function toFront(v) {
     return {
         ...v,
         capacidadePeso: v.capacidade_peso,
-        capacidadeVolume: v.capacidade_volume,
         ultimaUtilizacao: v.ultima_utilizacao,
         historico: [],
     };
@@ -18,7 +17,6 @@ function toDb(v) {
     return {
         ...rest,
         ...(capacidadePeso !== undefined && { capacidade_peso: capacidadePeso }),
-        ...(capacidadeVolume !== undefined && { capacidade_volume: capacidadeVolume }),
         ...(ultimaUtilizacao !== undefined && { ultima_utilizacao: ultimaUtilizacao }),
     };
 }
