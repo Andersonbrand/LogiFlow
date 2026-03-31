@@ -12,9 +12,9 @@ async function getOrCreateProfile(user) {
         const name = user.user_metadata?.name || user.email?.split('@')[0] || 'Usuário';
         const { data: created } = await supabase
             .from('user_profiles')
-            .upsert({ id: user.id, name, role: 'operador' }, { onConflict: 'id' })
+            .upsert({ id: user.id, name, email: user.email, role: 'operador' }, { onConflict: 'id' })
             .select().single();
-        return created || { id: user.id, name, role: 'operador' };
+        return created || { id: user.id, name, email: user.email, role: 'operador' };
     } catch {
         return { id: user.id, name: user.email, role: 'operador' };
     }

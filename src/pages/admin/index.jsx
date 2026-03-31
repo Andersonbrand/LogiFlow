@@ -6,7 +6,7 @@ import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
-import { fetchAllUsers, updateUserProfile, fetchMaintenanceAlerts, resolveMaintenanceAlert, createDriverUser, fetchDriverProfiles } from 'utils/userService';
+import { fetchAllUsers, updateUserProfile, fetchMaintenanceAlerts, resolveMaintenanceAlert, createDriverUser, fetchDriverProfiles, deleteDriverUser } from 'utils/userService';
 import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { fetchRomaneios, aprovarRomaneio, reprovarRomaneio } from 'utils/romaneioService';
 import { fetchBonificacoesConsolidadas } from 'utils/bonificacaoService';
@@ -522,8 +522,10 @@ function MotoristasManager({ showToast }) {
     const [saving, setSaving]         = useState(false);
     const [form, setForm]             = useState(FORM_VAZIO);
     const [cnhFile, setCnhFile]       = useState(null);
-    const [showSenha, setShowSenha]   = useState(false);
-    const [detalhe, setDetalhe]       = useState(null); // motorista selecionado para ver detalhe
+    const [showSenha, setShowSenha]       = useState(false);
+    const [detalhe, setDetalhe]           = useState(null); // motorista selecionado para ver detalhe
+    const [confirmDelete, setConfirmDelete] = useState(null); // motorista a excluir
+    const [deleting, setDeleting]         = useState(false);
 
     const load = useCallback(async () => {
         try {
@@ -540,6 +542,21 @@ function MotoristasManager({ showToast }) {
     useEffect(() => { load(); }, []);
 
     const setField = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+    const handleDeleteDriver = async () => {
+        if (!confirmDelete) return;
+        setDeleting(true);
+        try {
+            await deleteDriverUser(confirmDelete.id);
+            showToast(`Motorista ${confirmDelete.name} removido com sucesso.`, 'success');
+            setConfirmDelete(null);
+            await load();
+        } catch (err) {
+            showToast('Erro ao excluir: ' + err.message, 'error');
+        } finally {
+            setDeleting(false);
+        }
+    };
 
     const handleSubmit = async () => {
         if (!form.nome.trim())  { showToast('Informe o nome do motorista.', 'error');  return; }
@@ -758,6 +775,46 @@ function MotoristasManager({ showToast }) {
                 </div>
             )}
 
+            {/* Modal de confirmação de exclusão */}
+            {confirmDelete && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+                        <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-red-50">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-red-100">
+                                <Icon name="Trash2" size={20} color="#DC2626" />
+                            </div>
+                            <div>
+                                <p className="font-semibold text-slate-800">Excluir motorista</p>
+                                <p className="text-xs text-slate-500">Esta ação não pode ser desfeita</p>
+                            </div>
+                        </div>
+                        <div className="p-5">
+                            <p className="text-sm text-slate-700 mb-1">
+                                Tem certeza que deseja excluir <strong>{confirmDelete.name}</strong>?
+                            </p>
+                            <p className="text-xs text-slate-500 mb-5">
+                                Todos os dados do motorista serão removidos permanentemente, incluindo bonificações e notificações.
+                            </p>
+                            <div className="flex gap-2 justify-end">
+                                <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={deleting}>
+                                    Cancelar
+                                </Button>
+                                <button
+                                    onClick={handleDeleteDriver}
+                                    disabled={deleting}
+                                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium disabled:opacity-60 transition-colors">
+                                    {deleting
+                                        ? <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                                        : <Icon name="Trash2" size={14} color="#fff" />}
+                                    Excluir
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Lista de motoristas */}
             {motoristas.length === 0 ? (
                 <div className="text-center py-12 text-slate-400">
@@ -815,10 +872,18 @@ function MotoristasManager({ showToast }) {
                                                 ) : <span className="text-slate-400">—</span>}
                                             </td>
                                             <td className="px-4 py-3 text-right">
+                                                <div className="flex items-center justify-end gap-2">
                                                 <button onClick={() => { setDetalhe(m); setShowForm(false); }}
                                                     className="text-xs text-blue-600 hover:text-blue-800 underline">
                                                     Ver
                                                 </button>
+                                                <button
+                                                    onClick={() => setConfirmDelete(m)}
+                                                    className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
+                                                    title="Excluir motorista">
+                                                    <Icon name="Trash2" size={14} color="currentColor" />
+                                                </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     );
