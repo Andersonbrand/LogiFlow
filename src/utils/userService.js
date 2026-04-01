@@ -125,33 +125,44 @@ export async function createDriverUser(supabaseClient, { nome, email, senha, rol
     // Aguarda o trigger do Supabase criar o perfil antes de tentar salvar
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    let saved = false;
-    for (let attempt = 0; attempt < 5; attempt++) {
-        await sleep(attempt === 0 ? 800 : 600); // aguarda trigger na 1ª tentativa
+    // Aguarda o trigger do Supabase criar o perfil (é assíncrono)
+    for (let attempt = 0; attempt < 6; attempt++) {
+        await sleep(attempt === 0 ? 1000 : 500);
 
-        // Tenta update primeiro (perfil já existe via trigger)
-        const { error: updateErr, count } = await supabaseClient
+        // Verifica se o perfil já existe
+        const { data: existing } = await supabaseClient
             .from('user_profiles')
-            .update(profilePayload)
+            .select('id')
             .eq('id', newUserId)
-            .select('id', { count: 'exact', head: true });
+            .maybeSingle();
 
-        if (!updateErr && count > 0) { saved = true; break; }
+        if (existing) {
+            // Perfil existe: faz update com os dados completos
+            const { error: updateErr } = await supabaseClient
+                .from('user_profiles')
+                .update(profilePayload)
+                .eq('id', newUserId);
+            if (updateErr) throw updateErr;
+            return newUserId;
+        }
 
-        // Se o perfil ainda não foi criado pelo trigger, faz insert
+        // Perfil ainda não existe: tenta insert direto
         const { error: insertErr } = await supabaseClient
             .from('user_profiles')
             .insert(profilePayload);
 
-        if (!insertErr) { saved = true; break; }
+        if (!insertErr) return newUserId;
 
-        // Se o insert falhou por conflito (trigger já criou entre as chamadas), tenta update de novo
-        if (insertErr.code === '23505') continue;
-
-        throw insertErr;
+        // Conflito: trigger criou entre o select e o insert — vai tentar update na próxima iteração
+        if (insertErr.code !== '23505') throw insertErr;
     }
 
-    if (!saved) throw new Error('Não foi possível salvar o perfil do motorista. Tente novamente.');
+    // Última tentativa: force update sem checar existência
+    const { error: finalErr } = await supabaseClient
+        .from('user_profiles')
+        .update(profilePayload)
+        .eq('id', newUserId);
+    if (finalErr) throw new Error('Não foi possível salvar o perfil do motorista. Tente novamente.');
 
     return newUserId;
 }

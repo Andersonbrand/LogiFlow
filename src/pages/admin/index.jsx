@@ -524,6 +524,7 @@ function MotoristasManager({ showToast }) {
     const [cnhFile, setCnhFile]       = useState(null);
     const [showSenha, setShowSenha]       = useState(false);
     const [detalhe, setDetalhe]           = useState(null); // motorista selecionado para ver detalhe
+    const [lightbox, setLightbox]         = useState(false); // lightbox da foto CNH
     const [confirmDelete, setConfirmDelete] = useState(null); // motorista a excluir
     const [deleting, setDeleting]         = useState(false);
 
@@ -742,11 +743,32 @@ function MotoristasManager({ showToast }) {
             )}
 
             {/* Detalhe do motorista */}
+            {/* Lightbox da foto CNH */}
+            {lightbox && detalhe?.cnh_foto_url && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.92)' }}
+                    onClick={() => setLightbox(false)}>
+                    <button
+                        onClick={() => setLightbox(false)}
+                        className="absolute top-4 right-4 flex items-center gap-2 px-3 py-2 rounded-xl text-white text-sm font-medium"
+                        style={{ backgroundColor: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(4px)' }}>
+                        <Icon name="ArrowLeft" size={16} color="#fff" />
+                        Voltar
+                    </button>
+                    <img
+                        src={detalhe.cnh_foto_url}
+                        alt="CNH"
+                        className="max-w-[92vw] max-h-[88vh] object-contain rounded-xl shadow-2xl"
+                        onClick={e => e.stopPropagation()}
+                    />
+                </div>
+            )}
+
             {detalhe && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pt-20"
                     style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}
                     onClick={e => { if (e.target === e.currentTarget) setDetalhe(null); }}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] flex flex-col">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[80vh] flex flex-col">
                         {/* Header */}
                         <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-slate-50 flex-shrink-0">
                             <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
@@ -790,11 +812,15 @@ function MotoristasManager({ showToast }) {
                                 {detalhe.cnh_foto_url ? (
                                     <div className="space-y-2">
                                         {/\.(jpe?g|png|gif|webp|bmp)$/i.test(detalhe.cnh_foto_url) ? (
-                                            <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                                            /* Thumbnail clicável — abre lightbox interno */
+                                            <button
+                                                onClick={() => setLightbox(true)}
+                                                className="w-full rounded-xl overflow-hidden border border-slate-200 bg-slate-100 block relative group"
+                                                title="Clique para ampliar">
                                                 <img
                                                     src={detalhe.cnh_foto_url}
                                                     alt="Foto da CNH"
-                                                    className="w-full object-contain max-h-64"
+                                                    className="w-full object-contain max-h-48"
                                                     onError={e => {
                                                         e.target.style.display = 'none';
                                                         e.target.nextElementSibling.style.display = 'flex';
@@ -805,23 +831,25 @@ function MotoristasManager({ showToast }) {
                                                     <Icon name="ImageOff" size={22} color="#CBD5E1" />
                                                     <span>Imagem não pôde ser carregada</span>
                                                 </div>
-                                            </div>
+                                                {/* Overlay de zoom ao hover */}
+                                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                                                    <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white text-xs px-2 py-1 rounded-lg flex items-center gap-1">
+                                                        <Icon name="ZoomIn" size={12} color="#fff" /> Ampliar
+                                                    </span>
+                                                </div>
+                                            </button>
                                         ) : (
                                             <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
                                                 <div className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center flex-shrink-0">
                                                     <Icon name="FileText" size={18} color="#DC2626" />
                                                 </div>
                                                 <p className="text-xs text-slate-600 flex-1">Documento PDF anexado</p>
+                                                <a href={detalhe.cnh_foto_url} target="_blank" rel="noopener noreferrer"
+                                                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 flex-shrink-0">
+                                                    <Icon name="ExternalLink" size={12} color="currentColor" /> Abrir
+                                                </a>
                                             </div>
                                         )}
-                                        <a
-                                            href={detalhe.cnh_foto_url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors text-xs font-medium text-blue-700">
-                                            <Icon name="ExternalLink" size={12} color="#1D4ED8" />
-                                            Abrir documento em nova aba
-                                        </a>
                                     </div>
                                 ) : (
                                     <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border border-dashed border-slate-200">
