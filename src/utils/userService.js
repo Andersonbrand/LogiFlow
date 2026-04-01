@@ -106,22 +106,36 @@ export async function createDriverUser(supabaseClient, { nome, email, senha, rol
 
     const realRole = role === 'motorista_carreta' ? 'motorista' : role;
     const extra = role === 'motorista_carreta' ? { tipo_veiculo: 'carreta' }
-                : role === 'motorista'          ? { tipo_veiculo: tipoVeiculo || 'caminhao' }
-                : {};
+        : role === 'motorista' ? { tipo_veiculo: tipoVeiculo || 'caminhao' }
+            : {};
 
-    await supabaseClient.from('user_profiles').upsert({
-        id: newUserId,
+    // Usa update (mais confiável quando o trigger já criou o perfil).
+    // Se o perfil ainda não existir, cai no insert via upsert com onConflict explícito.
+    const profilePayload = {
         name: nome.trim(),
         email: email.trim(),
         role: realRole,
         ...extra,
-        cnh_numero:      cnhNumero      || null,
-        cnh_categoria:   cnhCategoria   || null,
-        cnh_vencimento:  cnhVencimento  || null,
+        cnh_numero: cnhNumero || null,
+        cnh_categoria: cnhCategoria || null,
+        cnh_vencimento: cnhVencimento || null,
         data_nascimento: dataNascimento || null,
-        cnh_foto_url:    cnhFotoUrl     || null,
+        cnh_foto_url: cnhFotoUrl || null,
         updated_at: new Date().toISOString(),
-    });
+    };
+
+    const { error: updateErr } = await supabaseClient
+        .from('user_profiles')
+        .update(profilePayload)
+        .eq('id', newUserId);
+
+    if (updateErr) {
+        // Perfil ainda não existe (trigger não rodou): faz insert
+        const { error: insertErr } = await supabaseClient
+            .from('user_profiles')
+            .insert({ id: newUserId, ...profilePayload });
+        if (insertErr) throw insertErr;
+    }
 
     return newUserId;
 }
