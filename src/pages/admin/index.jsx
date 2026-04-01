@@ -587,7 +587,16 @@ function MotoristasManager({ showToast }) {
             setShowForm(false);
             await load();
         } catch (err) {
-            showToast('Erro ao cadastrar: ' + err.message, 'error');
+            const msg = err.message || '';
+            if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already been registered') || msg.toLowerCase().includes('user already')) {
+                showToast('Este e-mail já está cadastrado no sistema. Use outro e-mail ou exclua o usuário existente primeiro.', 'error');
+            } else if (msg.toLowerCase().includes('invalid email')) {
+                showToast('Endereço de e-mail inválido.', 'error');
+            } else if (msg.toLowerCase().includes('weak password') || msg.toLowerCase().includes('password')) {
+                showToast('Senha muito fraca. Use ao menos 6 caracteres.', 'error');
+            } else {
+                showToast('Erro ao cadastrar: ' + msg, 'error');
+            }
         } finally {
             setSaving(false);
         }
