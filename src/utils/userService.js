@@ -143,28 +143,10 @@ export async function fetchDriverProfiles() {
 }
 
 /**
- * Remove um motorista/mecânico e todo o seu histórico via Edge Function.
- * A Edge Function usa service_role para bypassa RLS e remove também de auth.users.
+ * Remove um motorista/mecânico e todo o seu histórico via função SQL (SECURITY DEFINER).
+ * Execute o script supabase/migrations/fn_delete_driver_user.sql no Supabase SQL Editor.
  */
 export async function deleteDriverUser(userId) {
-    const { data, error } = await supabase.functions.invoke('delete-user', {
-        body: { userId },
-    });
-
-    if (error) {
-        // Tenta ler o body real da resposta de erro
-        if (error?.context?.json) {
-            try {
-                const body = await error.context.json();
-                throw new Error(body?.error || body?.message || error.message);
-            } catch (e) {
-                if (e.message !== error.message) throw e;
-            }
-        }
-        throw new Error(error.message);
-    }
-
-    if (data?.error) {
-        throw new Error(data.error);
-    }
+    const { error } = await supabase.rpc('delete_driver_user', { target_user_id: userId });
+    if (error) throw new Error(error.message);
 }
