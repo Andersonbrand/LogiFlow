@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { createClient } from '@supabase/supabase-js';
 
 // Sprint 2 — User profiles & roles
 export async function fetchUserProfile(userId) {
@@ -80,13 +81,18 @@ export async function resolveMaintenanceAlert(id) {
 
 /**
  * Cria um novo usuário (motorista) via signUp e salva o perfil completo.
- * Retorna o userId criado.
+ * Usa cliente temporário isolado (persistSession: false) para não afetar
+ * a sessão do admin nem disparar redirecionamentos no app.
  */
 export async function createDriverUser(supabaseClient, { nome, email, senha, role, tipoVeiculo, cnhNumero, cnhCategoria, cnhVencimento, dataNascimento, cnhFotoUrl }) {
-    // Preserva sessão atual do admin
-    const { data: { session: adminSession } } = await supabaseClient.auth.getSession();
+    // Cliente temporário isolado — não compartilha sessão com o app
+    const tempClient = createClient(
+        import.meta.env.VITE_SUPABASE_URL,
+        import.meta.env.VITE_SUPABASE_ANON_KEY,
+        { auth: { persistSession: false, autoRefreshToken: false } }
+    );
 
-    const { data: signUpData, error: signUpError } = await supabaseClient.auth.signUp({
+    const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({
         email: email.trim(),
         password: senha,
         options: { data: { name: nome.trim() } },
@@ -95,17 +101,6 @@ export async function createDriverUser(supabaseClient, { nome, email, senha, rol
 
     const newUserId = signUpData.user?.id;
     if (!newUserId) throw new Error('Usuário não foi criado. Verifique se o e-mail já está em uso.');
-
-    // Restaura sessão do admin se o signUp a substituiu
-    if (adminSession) {
-        const { data: { session: current } } = await supabaseClient.auth.getSession();
-        if (!current || current.user?.id !== adminSession.user?.id) {
-            await supabaseClient.auth.setSession({
-                access_token: adminSession.access_token,
-                refresh_token: adminSession.refresh_token,
-            });
-        }
-    }
 
     const realRole = role === 'motorista_carreta' ? 'motorista' : role;
     const extra = role === 'motorista_carreta' ? { tipo_veiculo: 'carreta' }
