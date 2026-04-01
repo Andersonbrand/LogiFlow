@@ -21,7 +21,7 @@ BEGIN
     RAISE EXCEPTION 'Apenas administradores podem excluir usuários';
   END IF;
 
-  -- Tabelas com motorista_id (nomes reais do projeto)
+  -- Tabelas com motorista_id
   DELETE FROM carretas_abastecimentos WHERE motorista_id = target_user_id;
   DELETE FROM carretas_checklists     WHERE motorista_id = target_user_id;
   DELETE FROM carretas_diarias        WHERE motorista_id = target_user_id;
@@ -31,8 +31,10 @@ BEGIN
   SET motorista_id = NULL
   WHERE motorista_id = target_user_id;
 
-  -- Tabelas com user_id
-  DELETE FROM bonificacoes  WHERE user_id = target_user_id;
+  -- bonificacoes usa motorista_id (não user_id)
+  DELETE FROM bonificacoes  WHERE motorista_id = target_user_id;
+
+  -- notifications usa user_id
   DELETE FROM notifications WHERE user_id = target_user_id;
 
   -- Remove o perfil (SECURITY DEFINER bypassa RLS)
