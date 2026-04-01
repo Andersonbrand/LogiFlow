@@ -21,10 +21,10 @@ BEGIN
     RAISE EXCEPTION 'Apenas administradores podem excluir usuários';
   END IF;
 
-  -- Tabelas com motorista_id
-  DELETE FROM abastecimentos    WHERE motorista_id = target_user_id;
-  DELETE FROM checklists        WHERE motorista_id = target_user_id;
-  DELETE FROM diarias           WHERE motorista_id = target_user_id;
+  -- Tabelas com motorista_id (nomes reais do projeto)
+  DELETE FROM carretas_abastecimentos WHERE motorista_id = target_user_id;
+  DELETE FROM carretas_checklists     WHERE motorista_id = target_user_id;
+  DELETE FROM carretas_diarias        WHERE motorista_id = target_user_id;
 
   -- Romaneios: preserva histórico, apenas desvincula o motorista
   UPDATE carretas_romaneios
@@ -32,9 +32,8 @@ BEGIN
   WHERE motorista_id = target_user_id;
 
   -- Tabelas com user_id
-  DELETE FROM bonificacoes      WHERE user_id = target_user_id;
-  DELETE FROM notifications     WHERE user_id = target_user_id;
-  DELETE FROM vehicle_history   WHERE user_id = target_user_id;
+  DELETE FROM bonificacoes  WHERE user_id = target_user_id;
+  DELETE FROM notifications WHERE user_id = target_user_id;
 
   -- Remove o perfil (SECURITY DEFINER bypassa RLS)
   DELETE FROM user_profiles WHERE id = target_user_id;
