@@ -569,14 +569,18 @@ function MotoristasManager({ showToast }) {
             // Faz upload da CNH se houver arquivo
             let cnhFotoUrl = null;
             if (cnhFile) {
-                const ext = cnhFile.name.split('.').pop();
-                const path = `cnh_${Date.now()}.${ext}`;
+                // Sanitiza o nome do arquivo (remove espaços e caracteres especiais)
+                const ext = cnhFile.name.split('.').pop().toLowerCase();
+                const safeName = `cnh_${Date.now()}.${ext}`;
                 const { data: uploadData, error: uploadErr } = await supabase.storage
-                    .from('cnh-documents').upload(path, cnhFile, { upsert: true });
-                if (!uploadErr && uploadData) {
-                    const { data: { publicUrl } } = supabase.storage
+                    .from('cnh-documents').upload(safeName, cnhFile, { upsert: true });
+                if (uploadErr) {
+                    // Avisa mas não bloqueia o cadastro
+                    showToast(`Aviso: foto da CNH não foi salva (${uploadErr.message}). O motorista será cadastrado sem a imagem.`, 'error');
+                } else if (uploadData) {
+                    const { data: urlData } = supabase.storage
                         .from('cnh-documents').getPublicUrl(uploadData.path);
-                    cnhFotoUrl = publicUrl;
+                    cnhFotoUrl = urlData?.publicUrl || null;
                 }
             }
 

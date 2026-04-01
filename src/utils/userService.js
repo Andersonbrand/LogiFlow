@@ -109,32 +109,49 @@ export async function createDriverUser(supabaseClient, { nome, email, senha, rol
                 : role === 'motorista'          ? { tipo_veiculo: tipoVeiculo || 'caminhao' }
                 : {};
 
-    // Usa update (mais confiável quando o trigger já criou o perfil).
-    // Se o perfil ainda não existir, cai no insert via upsert com onConflict explícito.
     const profilePayload = {
-        name: nome.trim(),
-        role: realRole,
+        id:              newUserId,
+        name:            nome.trim(),
+        role:            realRole,
         ...extra,
         cnh_numero:      cnhNumero      || null,
         cnh_categoria:   cnhCategoria   || null,
         cnh_vencimento:  cnhVencimento  || null,
         data_nascimento: dataNascimento || null,
         cnh_foto_url:    cnhFotoUrl     || null,
-        updated_at: new Date().toISOString(),
+        updated_at:      new Date().toISOString(),
     };
 
-    const { error: updateErr } = await supabaseClient
-        .from('user_profiles')
-        .update(profilePayload)
-        .eq('id', newUserId);
+    // Aguarda o trigger do Supabase criar o perfil antes de tentar salvar
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-    if (updateErr) {
-        // Perfil ainda não existe (trigger não rodou): faz insert
+    let saved = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+        await sleep(attempt === 0 ? 800 : 600); // aguarda trigger na 1ª tentativa
+
+        // Tenta update primeiro (perfil já existe via trigger)
+        const { error: updateErr, count } = await supabaseClient
+            .from('user_profiles')
+            .update(profilePayload)
+            .eq('id', newUserId)
+            .select('id', { count: 'exact', head: true });
+
+        if (!updateErr && count > 0) { saved = true; break; }
+
+        // Se o perfil ainda não foi criado pelo trigger, faz insert
         const { error: insertErr } = await supabaseClient
             .from('user_profiles')
-            .insert({ id: newUserId, ...profilePayload });
-        if (insertErr) throw insertErr;
+            .insert(profilePayload);
+
+        if (!insertErr) { saved = true; break; }
+
+        // Se o insert falhou por conflito (trigger já criou entre as chamadas), tenta update de novo
+        if (insertErr.code === '23505') continue;
+
+        throw insertErr;
     }
+
+    if (!saved) throw new Error('Não foi possível salvar o perfil do motorista. Tente novamente.');
 
     return newUserId;
 }
