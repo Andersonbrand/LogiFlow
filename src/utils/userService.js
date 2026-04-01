@@ -92,10 +92,12 @@ export async function createDriverUser(supabaseClient, { nome, email, senha, rol
         { auth: { persistSession: false, autoRefreshToken: false } }
     );
 
+    const realRoleForMeta = role === 'motorista_carreta' ? 'motorista' : role;
+
     const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({
         email: email.trim(),
         password: senha,
-        options: { data: { name: nome.trim() } },
+        options: { data: { name: nome.trim(), role: realRoleForMeta } },
     });
     if (signUpError) throw signUpError;
 
