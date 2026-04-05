@@ -6,21 +6,21 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const TIMEOUT_MS = 8000; // 8s por chamada externa
-
-function fetchComTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
+function fetchComTimeout(url: string, opts: RequestInit = {}, ms = 10000): Promise<Response> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => ctrl.abort(), ms);
   return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
 }
 
+/** Geocodificação: Nominatim (OpenStreetMap) — sem API key, ótima cobertura no Brasil */
 async function geocodeCidade(cidade: string): Promise<[number, number] | null> {
   try {
-    const query = encodeURIComponent(cidade + ", Brasil");
-    const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&countrycodes=br&limit=1`;
-    const resp = await fetchComTimeout(url, {
-      headers: { "User-Agent": "LogiFlow/1.0 contact@logiflow.app" },
-    });
+    const q = encodeURIComponent(cidade + ", Brasil");
+    const resp = await fetchComTimeout(
+      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&countrycodes=br&limit=1`,
+      { headers: { "User-Agent": "LogiFlow/1.0 contact@logiflow.app" } },
+      8000
+    );
     if (!resp.ok) return null;
     const data = await resp.json();
     if (!data?.[0]?.lon || !data?.[0]?.lat) return null;
@@ -30,22 +30,38 @@ async function geocodeCidade(cidade: string): Promise<[number, number] | null> {
   }
 }
 
-async function calcularRotaOSRM(coords: [number, number][]): Promise<{ distance: number; duration: number } | null> {
+/** Roteamento: OpenRouteService — usa a ORS_API_KEY configurada no Supabase */
+async function rotaORS(
+  coords: [number, number][],
+  apiKey: string
+): Promise<{ distanceKm: number; durationSec: number } | null> {
   try {
-    const pontos = coords.map(([lon, lat]) => `${lon},${lat}`).join(";");
-    const url = `https://router.project-osrm.org/route/v1/driving/${pontos}?overview=false`;
-    const resp = await fetchComTimeout(url);
-    if (!resp.ok) return null;
+    const resp = await fetchComTimeout(
+      "https://api.openrouteservice.org/v2/directions/driving-hgv",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": apiKey },
+        body: JSON.stringify({ coordinates: coords, units: "km" }),
+      },
+      12000
+    );
+    if (!resp.ok) {
+      const txt = await resp.text();
+      console.error("ORS routing error:", resp.status, txt);
+      return null;
+    }
     const data = await resp.json();
-    if (data.code !== "Ok" || !data.routes?.[0]) return null;
-    return { distance: data.routes[0].distance, duration: data.routes[0].duration };
-  } catch {
+    const summary = data.routes?.[0]?.summary;
+    if (!summary) return null;
+    return { distanceKm: Math.round(summary.distance), durationSec: Math.round(summary.duration) };
+  } catch (e) {
+    console.error("ORS routing exception:", e);
     return null;
   }
 }
 
-/** Estimativa de distância por estrada usando distância haversine × fator 1.35 */
-function distanciaEstimada(coords: [number, number][]): number {
+/** Fallback: distância haversine × 1.35 (fator de tortuosidade de estrada) */
+function distanciaHaversine(coords: [number, number][]): number {
   let totalKm = 0;
   for (let i = 0; i < coords.length - 1; i++) {
     const [lon1, lat1] = coords[i];
@@ -53,11 +69,12 @@ function distanciaEstimada(coords: [number, number][]): number {
     const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
+    const a =
+      Math.sin(dLat / 2) ** 2 +
       Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
     totalKm += R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
-  return Math.round(totalKm * 1.35); // fator de tortuosidade de estrada
+  return Math.round(totalKm * 1.35);
 }
 
 serve(async (req) => {
@@ -77,38 +94,46 @@ serve(async (req) => {
       );
     }
 
-    // Geocodificar em paralelo (sem delay — server-side, sem rate limit de browser)
+    // ── Geocodificar em paralelo via Nominatim ────────────────────────────────
     const coordsResults = await Promise.all(cidades.map(geocodeCidade));
-
     const notFound = cidades.filter((_, i) => !coordsResults[i]);
     if (notFound.length > 0) {
       return new Response(
-        JSON.stringify({ error: `Cidade não encontrada: ${notFound.join(", ")}. Tente incluir o estado (ex: "Barreiras, BA").` }),
+        JSON.stringify({
+          error: `Cidade não encontrada: ${notFound.join(", ")}. Inclua o estado (ex: "Barreiras, BA").`,
+        }),
         { status: 422, headers: { ...CORS, "Content-Type": "application/json" } }
       );
     }
-
     const coords = coordsResults as [number, number][];
 
-    // Tenta OSRM; se falhar, usa estimativa por haversine
+    // ── Calcular rota via ORS (com chave configurada) ─────────────────────────
+    const orsKey = Deno.env.get("ORS_API_KEY") ?? "";
     let distanciaKm: number;
     let tempoEstimado: string;
     let fonte: string;
+    let rotaReal = false;
 
-    const rota = await calcularRotaOSRM(coords);
-    if (rota) {
-      distanciaKm = Math.round(rota.distance / 1000);
-      const h = Math.floor(rota.duration / 3600);
-      const m = Math.floor((rota.duration % 3600) / 60);
-      tempoEstimado = `${h}h${m > 0 ? m + "min" : ""}`;
-      fonte = "OpenStreetMap / OSRM";
+    if (orsKey) {
+      const rota = await rotaORS(coords, orsKey);
+      if (rota) {
+        distanciaKm = rota.distanceKm;
+        const h = Math.floor(rota.durationSec / 3600);
+        const m = Math.floor((rota.durationSec % 3600) / 60);
+        tempoEstimado = `${h}h${m > 0 ? m + "min" : ""}`;
+        fonte = "OpenRouteService (rota real)";
+        rotaReal = true;
+      } else {
+        // ORS falhou — usa fallback
+        distanciaKm = distanciaHaversine(coords);
+        const min = Math.round((distanciaKm / 80) * 60);
+        tempoEstimado = `${Math.floor(min / 60)}h${min % 60 > 0 ? (min % 60) + "min" : ""} (estimado)`;
+        fonte = "Estimativa por coordenadas";
+      }
     } else {
-      // Fallback: distância estimada por coordenadas
-      distanciaKm = distanciaEstimada(coords);
-      const minutos = Math.round((distanciaKm / 80) * 60); // velocidade média 80 km/h
-      const h = Math.floor(minutos / 60);
-      const m = minutos % 60;
-      tempoEstimado = `${h}h${m > 0 ? m + "min" : ""} (estimado)`;
+      distanciaKm = distanciaHaversine(coords);
+      const min = Math.round((distanciaKm / 80) * 60);
+      tempoEstimado = `${Math.floor(min / 60)}h${min % 60 > 0 ? (min % 60) + "min" : ""} (estimado)`;
       fonte = "Estimativa por coordenadas";
     }
 
@@ -121,7 +146,9 @@ serve(async (req) => {
       precoDieselS10: precoDiesel,
       pedagioEstimado,
       rodoviasPrincipais: fonte,
-      observacao: rota ? "Rota real calculada via OpenStreetMap" : "Distância estimada — verifique e ajuste se necessário",
+      observacao: rotaReal
+        ? "Rota real calculada via OpenRouteService"
+        : "Distância estimada — verifique e ajuste se necessário",
     };
 
     if (consumoKm && distanciaKm) {
@@ -135,7 +162,7 @@ serve(async (req) => {
     });
 
   } catch (err) {
-    console.error("Erro na Edge Function calcular-rota:", err);
+    console.error("Erro calcular-rota:", err);
     return new Response(
       JSON.stringify({ error: (err as Error).message || "Erro interno" }),
       { status: 500, headers: { ...CORS, "Content-Type": "application/json" } }

@@ -263,10 +263,10 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                         ))}
                                     </div>
                                     {abast.length === 0 ? (
-                                        <div className="text-center py-12 rounded-xl border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                        <div className="flex flex-col items-center justify-center py-12 rounded-xl border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                                             <Icon name="Fuel" size={32} color="var(--color-muted-foreground)" />
-                                            <p className="text-sm mt-2">Nenhum abastecimento registrado no período</p>
-                                            <p className="text-xs mt-1">Os lançamentos do motorista aparecerão aqui</p>
+                                            <p className="text-sm mt-2 text-center">Nenhum abastecimento registrado no período</p>
+                                            <p className="text-xs mt-1 text-center">Os lançamentos do motorista aparecerão aqui</p>
                                         </div>
                                     ) : (
                                         <div className="bg-white rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
@@ -310,10 +310,10 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                             {tab === 'checklist' && (
                                 <div className="space-y-4">
                                     {checklists.length === 0 ? (
-                                        <div className="text-center py-12 rounded-xl border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                        <div className="flex flex-col items-center justify-center py-12 rounded-xl border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                                             <Icon name="ClipboardCheck" size={32} color="var(--color-muted-foreground)" />
-                                            <p className="text-sm mt-2">Nenhum checklist enviado</p>
-                                            <p className="text-xs mt-1">O motorista envia pelo app e aparece aqui para aprovação</p>
+                                            <p className="text-sm mt-2 text-center">Nenhum checklist enviado</p>
+                                            <p className="text-xs mt-1 text-center">O motorista envia pelo app e aparece aqui para aprovação</p>
                                         </div>
                                     ) : checklists.map(c => {
                                         const itens = c.itens || {};
@@ -395,10 +395,10 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                         </button>
                                     </div>
                                     {diarias.length === 0 ? (
-                                        <div className="text-center py-12 rounded-xl border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                        <div className="flex flex-col items-center justify-center py-12 rounded-xl border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                                             <Icon name="CalendarDays" size={32} color="var(--color-muted-foreground)" />
-                                            <p className="text-sm mt-2">Nenhuma diária no período</p>
-                                            <p className="text-xs mt-1">Clique em "Nova Diária" para lançar</p>
+                                            <p className="text-sm mt-2 text-center">Nenhuma diária no período</p>
+                                            <p className="text-xs mt-1 text-center">Clique em "Nova Diária" para lançar</p>
                                         </div>
                                     ) : (
                                         <div className="bg-white rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
@@ -570,13 +570,13 @@ function TabMotoristas({ adminProfile }) {
             </div>
 
             {filtrados.length === 0 ? (
-                <div className="bg-white rounded-xl border p-12 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="bg-white rounded-xl border flex flex-col items-center justify-center py-16 px-6 text-center" style={{ borderColor: 'var(--color-border)' }}>
                     <Icon name="Users" size={40} color="var(--color-muted-foreground)" />
                     <p className="text-sm mt-3 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
                         {busca ? 'Nenhum motorista encontrado' : 'Nenhum motorista de caminhão cadastrado'}
                     </p>
                     <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>
-                        Motoristas com role "motorista" sem tipo_veiculo "carreta" aparecem aqui
+                        Cadastre motoristas no painel de Admin para visualizá-los aqui
                     </p>
                 </div>
             ) : (
