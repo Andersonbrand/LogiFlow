@@ -184,38 +184,50 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         if (!novoItem.material_id) return;
         const mat = materials.find(m => String(m.id) === String(novoItem.material_id));
         if (!mat) return;
-        const qty = Number(novoItem.quantidade) || 1;
+
+        const isTelha   = mat.is_telha_zinco;
+        const qty       = Number(novoItem.quantidade) || 1;
+        const compTelha = isTelha ? Number(novoItem.comprimento_telha) : null;
+
+        // Bloqueia telha sem comprimento informado
+        if (isTelha && (!compTelha || compTelha <= 0)) {
+            alert('Informe o comprimento de cada telha (em metros) antes de adicionar.');
+            return;
+        }
+
+        const pesoBase      = isTelha ? (Number(mat.peso_base_metro) || 3.80) : mat.peso;
+        // qty para telha = metros totais; convertemos para nº de telhas
+        const qtdTelhas     = isTelha ? Math.round(qty / compTelha) : qty;
+        const pesoUnit      = isTelha ? pesoBase * compTelha : mat.peso;
+        const pesoTotalItem = qtdTelhas * pesoUnit;
+
         setPedidos(prev => prev.map((p, i) => {
             if (i !== pedidoIdx) return p;
             const existing = p.itens.findIndex(it => String(it.material_id) === String(mat.id));
             if (existing >= 0) {
-                const newItens = p.itens.map((it, j) => j === existing
-                    ? { ...it, quantidade: it.quantidade + qty, peso_total: (it.quantidade + qty) * it.peso_unit }
-                    : it);
+                // Merge: soma telhas calculadas (não metros) para manter unidade coerente
+                const newItens = p.itens.map((it, j) => j !== existing ? it : {
+                    ...it,
+                    quantidade:  it.quantidade + qtdTelhas,
+                    peso_total:  (it.quantidade + qtdTelhas) * it.peso_unit,
+                    metros_totais: isTelha ? (it.metros_totais || 0) + qty : null,
+                });
                 return { ...p, itens: newItens };
             }
-            // Auto-detect categoria_frete from material
             const catFrete = mat.categoria_frete || detectarCategoriaFrete(mat.nome);
-            // Cálculo especial para telha de zinco
-            const isTelha = mat.is_telha_zinco;
-            const compTelha = isTelha ? (Number(novoItem.comprimento_telha) || 1) : null;
-            const pesoBase = isTelha ? (Number(mat.peso_base_metro) || 3.80) : mat.peso;
-            // Telha: qty = metros_totais ÷ comprimento; peso = pesoBase × comprimento × qtdTelhas
-            const qtdTelhas = isTelha ? Math.round(qty / compTelha) : qty;
-            const pesoTotalItem = isTelha ? (pesoBase * compTelha * qtdTelhas) : (qty * mat.peso);
             return { ...p,
                 categoria_frete: p.categoria_frete || catFrete,
                 itens: [...p.itens, {
-                    material_id: mat.id,
-                    quantidade: isTelha ? qtdTelhas : qty,
-                    peso_total: pesoTotalItem,
-                    nome: mat.nome,
-                    unidade: mat.unidade,
-                    peso_unit: isTelha ? (pesoBase * compTelha) : mat.peso,
-                    is_telha_zinco: isTelha || false,
+                    material_id:      mat.id,
+                    quantidade:       isTelha ? qtdTelhas : qty,
+                    peso_total:       pesoTotalItem,
+                    nome:             mat.nome,
+                    unidade:          mat.unidade,
+                    peso_unit:        pesoUnit,
+                    is_telha_zinco:   isTelha || false,
                     comprimento_telha: compTelha,
-                    metros_totais: isTelha ? qty : null,
-                }]
+                    metros_totais:    isTelha ? qty : null,
+                }],
             };
         }));
         setNovoItem({ material_id:'', quantidade:1, comprimento_telha:'' });
