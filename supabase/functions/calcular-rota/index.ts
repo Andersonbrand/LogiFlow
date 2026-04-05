@@ -6,16 +6,40 @@ const CORS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-async function geocodeCidade(cidade: string, apiKey: string): Promise<[number, number] | null> {
-  const url = "https://api.openrouteservice.org/geocode/search?api_key=" + apiKey +
-    "&text=" + encodeURIComponent(cidade + ", Brasil") +
-    "&boundary.country=BR&size=1";
+/**
+ * Geocodifica cidade usando Nominatim (OpenStreetMap) — gratuito, sem API key.
+ * Excelente cobertura no Brasil.
+ */
+async function geocodeCidade(cidade: string): Promise<[number, number] | null> {
+  const query = encodeURIComponent(cidade + ", Brasil");
+  const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&countrycodes=br&limit=1`;
+  const resp = await fetch(url, {
+    headers: { "User-Agent": "LogiFlow/1.0 (routing service)" },
+  });
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  if (!data?.[0]?.lon || !data?.[0]?.lat) return null;
+  return [parseFloat(data[0].lon), parseFloat(data[0].lat)]; // [lon, lat]
+}
+
+/**
+ * Calcula rota usando OSRM (OpenStreetMap Routing Machine) — gratuito, sem API key.
+ * Retorna distância em metros e duração em segundos.
+ */
+async function calcularRotaOSRM(
+  coords: [number, number][]
+): Promise<{ distance: number; duration: number } | null> {
+  // Monta string de coordenadas: lon,lat;lon,lat;...
+  const pontos = coords.map(([lon, lat]) => `${lon},${lat}`).join(";");
+  const url = `https://router.project-osrm.org/route/v1/driving/${pontos}?overview=false`;
   const resp = await fetch(url);
   if (!resp.ok) return null;
   const data = await resp.json();
-  const coords = data.features?.[0]?.geometry?.coordinates;
-  if (!coords) return null;
-  return [coords[0], coords[1]]; // [lon, lat]
+  if (data.code !== "Ok" || !data.routes?.[0]) return null;
+  return {
+    distance: data.routes[0].distance, // metros
+    duration: data.routes[0].duration, // segundos
+  };
 }
 
 serve(async (req) => {
@@ -37,70 +61,53 @@ serve(async (req) => {
       );
     }
 
-    const apiKey = Deno.env.get("ORS_API_KEY") ?? "";
+    // Geocodificar todas as cidades (sequencial para respeitar rate limit do Nominatim)
+    const coords: ([number, number] | null)[] = [];
+    for (const cidade of cidades) {
+      const c = await geocodeCidade(cidade);
+      coords.push(c);
+      // Pequena pausa para respeitar o rate limit do Nominatim (1 req/s)
+      await new Promise(r => setTimeout(r, 300));
+    }
 
-    // Geocodificar todas as cidades em paralelo
-    const coordsResults = await Promise.all(cidades.map(c => geocodeCidade(c, apiKey)));
-
-    // Verificar se todas foram encontradas
-    const notFound = cidades.filter((_, i) => !coordsResults[i]);
+    // Verificar cidades não encontradas
+    const notFound = cidades.filter((_, i) => !coords[i]);
     if (notFound.length > 0) {
-      throw new Error("Cidades nao encontradas: " + notFound.join(", "));
+      return new Response(
+        JSON.stringify({ error: `Cidade não encontrada no mapa: ${notFound.join(", ")}. Verifique o nome (ex: "Barreiras, BA").` }),
+        { status: 422, headers: { ...CORS, "Content-Type": "application/json" } }
+      );
     }
 
-    const coordinates = coordsResults as [number, number][];
-
-    // Chamar a API de direções para caminhão (driving-hgv)
-    const rotaResp = await fetch(
-      "https://api.openrouteservice.org/v2/directions/driving-hgv",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": apiKey,
-        },
-        body: JSON.stringify({
-          coordinates: coordinates,
-          units: "km",
-          language: "pt",
-        }),
-      }
-    );
-
-    if (!rotaResp.ok) {
-      const errText = await rotaResp.text();
-      throw new Error("ORS API error: " + errText);
+    // Calcular rota via OSRM
+    const rota = await calcularRotaOSRM(coords as [number, number][]);
+    if (!rota) {
+      return new Response(
+        JSON.stringify({ error: "Não foi possível calcular a rota entre as cidades informadas." }),
+        { status: 422, headers: { ...CORS, "Content-Type": "application/json" } }
+      );
     }
 
-    const rotaData = await rotaResp.json();
-    const summary = rotaData.routes?.[0]?.summary;
-
-    if (!summary) {
-      throw new Error("Rota nao encontrada entre as cidades informadas");
-    }
-
-    const distanciaTotal = Math.round(summary.distance);
-    const duracaoSegundos = Math.round(summary.duration);
+    const distanciaKm = Math.round(rota.distance / 1000);
+    const duracaoSegundos = Math.round(rota.duration);
     const horas = Math.floor(duracaoSegundos / 3600);
     const minutos = Math.floor((duracaoSegundos % 3600) / 60);
-    const tempoEstimado = horas + "h" + (minutos > 0 ? minutos + "min" : "");
+    const tempoEstimado = `${horas}h${minutos > 0 ? minutos + "min" : ""}`;
 
-    // Estimar pedágio baseado na distância
-    const pedagioEstimado = parseFloat(((distanciaTotal / 100) * pedagioPor100km).toFixed(2));
+    const pedagioEstimado = parseFloat(((distanciaKm / 100) * pedagioPor100km).toFixed(2));
 
     const info: Record<string, unknown> = {
-      distanciaTotal,
+      distanciaTotal: distanciaKm,
       tempoEstimado,
       rota: cidades,
       precoDieselS10: precoDiesel,
       pedagioEstimado,
-      rodoviasPrincipais: "Calculado via OpenRouteService",
-      observacao: "Rota real para caminhao via OpenStreetMap",
+      rodoviasPrincipais: "OpenStreetMap / OSRM",
+      observacao: "Rota real calculada via OpenStreetMap",
     };
 
-    // Calcular custo do combustível se consumo foi informado
-    if (consumoKm && distanciaTotal) {
-      const litros = distanciaTotal / consumoKm;
+    if (consumoKm && distanciaKm) {
+      const litros = distanciaKm / consumoKm;
       info.litrosEstimados = Math.round(litros);
       info.custoCombustivel = parseFloat((litros * precoDiesel).toFixed(2));
     }
@@ -110,7 +117,7 @@ serve(async (req) => {
     });
 
   } catch (err) {
-    console.error("Erro na Edge Function:", err);
+    console.error("Erro na Edge Function calcular-rota:", err);
     return new Response(
       JSON.stringify({ error: (err as Error).message || "Erro interno" }),
       { status: 500, headers: { ...CORS, "Content-Type": "application/json" } }
