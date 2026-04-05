@@ -355,12 +355,18 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
 
             setCustoStatus(statusMsgs);
         } catch (e) {
-            // CORS ou erro: abre Google Maps diretamente para o usuário verificar
+            // Erro na API: exibe mensagem e sugere preenchimento manual
+            const msgErro = e?.message?.includes('nao encontrada') || e?.message?.includes('não encontrada')
+                ? `Cidade não encontrada na rota. Verifique os nomes e tente novamente.`
+                : e?.message?.includes('ORS') || e?.message?.includes('HTTP 5')
+                    ? 'Serviço de rota indisponível. Preencha a distância manualmente.'
+                    : e?.message || 'Erro ao calcular rota.';
+            console.error('calcular-rota:', e);
             setRotaInfo({
                 distanciaTotal: null,
                 rota: todasCidades,
                 tempoEstimado: null,
-                observacao: 'Verifique a rota no Google Maps e preencha a distância manualmente.',
+                observacao: msgErro + ' Verifique a rota no Google Maps e preencha a distância manualmente.',
                 erro: true,
             });
             setCustoStatus(['Não foi possível buscar dados automáticos. Preencha os custos manualmente.']);
