@@ -175,20 +175,24 @@ export async function duplicateRomaneio(romaneio) {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 export async function updateRomaneio(id, romaneio, itens) {
-    const { error } = await supabase.from('romaneios').update(buildPayload(romaneio)).eq('id', id);
-    if (error) throw error;
+    // ── 1. Pedidos e itens ANTES de atualizar o romaneio ─────────────────────
+    // Assim quando o Realtime disparar (após o UPDATE abaixo), o fetch
+    // já encontra os dados de pedidos/itens consistentes e não duplica.
 
-    // Replace pedidos
+    // Substitui pedidos
     await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
     const pedidoIdMap = {};
     const pedidosMeta = romaneio._pedidos || [];
     if (pedidosMeta.length > 0) {
-        const { data: pd, error: pe } = await supabase.from('romaneio_pedidos')
-            .insert(pedidosMeta.map(p => ({ ...p, romaneio_id: id }))).select('id');
+        const { data: pd, error: pe } = await supabase
+            .from('romaneio_pedidos')
+            .insert(pedidosMeta.map(p => ({ ...p, romaneio_id: id })))
+            .select('id');
         if (pe) throw pe;
-        (pd||[]).forEach((p, i) => { pedidoIdMap[i] = p.id; });
+        (pd || []).forEach((p, i) => { pedidoIdMap[i] = p.id; });
     }
 
+    // Substitui itens
     if (itens !== undefined) {
         await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
         if (itens.length > 0) {
@@ -204,6 +208,11 @@ export async function updateRomaneio(id, romaneio, itens) {
             if (ie) throw ie;
         }
     }
+
+    // ── 2. Atualiza o romaneio por último — Realtime só dispara aqui ──────────
+    const { error } = await supabase.from('romaneios').update(buildPayload(romaneio)).eq('id', id);
+    if (error) throw error;
+
     return fetchRomaneioById(id);
 }
 
