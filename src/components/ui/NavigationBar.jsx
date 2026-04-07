@@ -15,7 +15,9 @@ const NAV_ITEMS = [
     { id: 'relatorios',   name: 'Relatórios',  path: '/relatorios',               icon: 'BarChart3',       roles: ['admin','operador'] },
     { id: 'admin',        name: 'Admin',       path: '/admin',                    icon: 'Shield',          roles: ['admin'] },
     // Carretas (admin/operador)
-    { id: 'carretas',     name: 'Carretas',    path: '/carretas',              icon: 'Truck',           roles: ['admin','operador'] },
+    { id: 'carretas',          name: 'Carretas',    path: '/carretas',              icon: 'Truck',    roles: ['admin','operador'] },
+    // Despesas Caminhões (admin/operador)
+    { id: 'despesas-caminhoes',name: 'Despesas',    path: '/despesas-caminhoes',    icon: 'Receipt',  roles: ['admin','operador'] },
     // Motorista caminhão
     { id: 'motorista',    name: 'Minhas Viagens', path: '/motorista',             icon: 'Truck',           roles: ['motorista'] },
     // Carreteiro
