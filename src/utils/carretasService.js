@@ -845,3 +845,41 @@ export const STATUS_ROMANEIO_COLORS = {
     'Entrega finalizada':  { bg: '#D1FAE5', text: '#065F46' },
     'Cancelado':           { bg: '#F3F4F6', text: '#6B7280' },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FORNECEDORES DE DESPESAS (Carretas)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchFornecedoresCarretas() {
+    const { data, error } = await supabase
+        .from('carretas_fornecedores')
+        .select('*')
+        .order('nome', { ascending: true });
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createFornecedorCarretas(fornecedor) {
+    const { data, error } = await supabase
+        .from('carretas_fornecedores')
+        .insert(fornecedor)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updateFornecedorCarretas(id, updates) {
+    const { data, error } = await supabase
+        .from('carretas_fornecedores')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deleteFornecedorCarretas(id) {
+    const { error } = await supabase.from('carretas_fornecedores').delete().eq('id', id);
+    if (error) throw error;
+}

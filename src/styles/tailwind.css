@@ -273,12 +273,14 @@
     }
 
     .nav-items {
-        @apply flex items-center gap-1 ml-8;
+        @apply flex items-center gap-0.5 ml-4;
+        overflow: visible;
     }
 
     .nav-item {
-        @apply relative flex items-center gap-2 px-3 py-2 rounded-[6px] text-sm font-medium transition-all cursor-pointer select-none;
+        @apply relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] font-medium transition-all cursor-pointer select-none whitespace-nowrap;
         font-family: 'Inter', sans-serif;
+        font-size: 0.8rem;
         color: var(--color-muted-foreground);
     }
 
@@ -416,15 +418,21 @@
         background-color: var(--color-background);
     }
 
-    /* Breakpoint MD→LG (768px–991px): nav compacto */
-    @media (min-width: 768px) and (max-width: 991px) {
+    /* Breakpoint MD→LG (768px–1199px): nav compacto */
+    @media (min-width: 768px) and (max-width: 1199px) {
         .nav-items {
             gap: 0;
+            margin-left: 0.5rem;
         }
         .nav-item {
-            padding-left: 0.4rem;
-            padding-right: 0.4rem;
-            font-size: 0.75rem;
+            padding-left: 0.35rem;
+            padding-right: 0.35rem;
+            font-size: 0.72rem;
+            gap: 0.25rem;
+        }
+        /* Esconde ícones no nav em telas médias para ganhar espaço */
+        .nav-item svg {
+            display: none;
         }
     }
 }

@@ -6,24 +6,23 @@ import { useAuth } from 'utils/AuthContext';
 import NotificationBell from 'components/ui/NotificationBell';
 
 const NAV_ITEMS = [
-    { id: 'dashboard',    name: 'Dashboard',   path: '/',                         icon: 'LayoutDashboard', roles: ['admin','operador'] },
-    { id: 'romaneios',    name: 'Romaneios',   path: '/romaneios',                icon: 'FileText',        roles: ['admin','operador'] },
-    { id: 'materiais',    name: 'Materiais',   path: '/material-catalog',         icon: 'Package',         roles: ['admin','operador'] },
-    { id: 'veiculos',     name: 'Veículos',    path: '/vehicle-fleet-management', icon: 'Truck',           roles: ['admin','operador'] },
-    { id: 'financeiro',   name: 'Financeiro',  path: '/financeiro',               icon: 'DollarSign',      roles: ['admin'] },
-    { id: 'consolidacao', name: 'Consolidação',path: '/consolidacao',             icon: 'GitMerge',        roles: ['admin','operador'] },
-    { id: 'relatorios',   name: 'Relatórios',  path: '/relatorios',               icon: 'BarChart3',       roles: ['admin','operador'] },
-    { id: 'admin',        name: 'Admin',       path: '/admin',                    icon: 'Shield',          roles: ['admin'] },
-    // Carretas (admin/operador)
-    { id: 'carretas',          name: 'Carretas',    path: '/carretas',              icon: 'Truck',    roles: ['admin','operador'] },
-    // Despesas Caminhões (admin/operador)
-    { id: 'despesas-caminhoes',name: 'Despesas',    path: '/despesas-caminhoes',    icon: 'Receipt',  roles: ['admin','operador'] },
+    { id: 'dashboard',    name: 'Dashboard',  path: '/',                         icon: 'LayoutDashboard', roles: ['admin','operador'] },
+    { id: 'romaneios',    name: 'Romaneios',  path: '/romaneios',                icon: 'FileText',        roles: ['admin','operador'] },
+    { id: 'materiais',    name: 'Materiais',  path: '/material-catalog',         icon: 'Package',         roles: ['admin','operador'] },
+    { id: 'veiculos',     name: 'Veículos',   path: '/vehicle-fleet-management', icon: 'Truck',           roles: ['admin','operador'] },
+    { id: 'financeiro',   name: 'Financeiro', path: '/financeiro',               icon: 'DollarSign',      roles: ['admin'] },
+    { id: 'consolidacao', name: 'Consolid.',  path: '/consolidacao',             icon: 'GitMerge',        roles: ['admin','operador'] },
+    { id: 'relatorios',   name: 'Relatórios', path: '/relatorios',               icon: 'BarChart3',       roles: ['admin','operador'] },
+    { id: 'despesas-cam', name: 'Despesas',   path: '/despesas-caminhoes',       icon: 'Receipt',         roles: ['admin','operador'] },
+    { id: 'admin',        name: 'Admin',      path: '/admin',                    icon: 'Shield',          roles: ['admin'] },
+    // Carretas (admin/operador) — botão destacado, fora do fluxo normal
+    { id: 'carretas',     name: 'Carretas',   path: '/carretas',                 icon: 'Truck',           roles: ['admin','operador'] },
     // Motorista caminhão
-    { id: 'motorista',    name: 'Minhas Viagens', path: '/motorista',             icon: 'Truck',           roles: ['motorista'] },
+    { id: 'motorista',    name: 'Minhas Viagens', path: '/motorista',            icon: 'Truck',           roles: ['motorista'] },
     // Carreteiro
-    { id: 'carreteiro',   name: 'Minhas Viagens', path: '/carreteiro',            icon: 'Truck',           roles: ['carreteiro'] },
+    { id: 'carreteiro',   name: 'Minhas Viagens', path: '/carreteiro',           icon: 'Truck',           roles: ['carreteiro'] },
     // Mecânico
-    { id: 'mecanico',     name: 'Ordens de Serviço', path: '/mecanico',           icon: 'Wrench',          roles: ['mecanico'] },
+    { id: 'mecanico',     name: 'Ordens de Serviço', path: '/mecanico',          icon: 'Wrench',          roles: ['mecanico'] },
 ];
 
 export default function NavigationBar() {
