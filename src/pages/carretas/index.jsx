@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import TabRomaneios from './TabRomaneios';
+import TabVolume from './TabVolume';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -4426,6 +4427,7 @@ const TABS = [
     { id: 'abastecimentos',label: 'Abastecimentos',    icon: 'Fuel',          group: 'Operação' },
     { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck',group: 'Operação' },
     { id: 'carregamentos', label: 'Carregamentos',     icon: 'Package',       group: 'Operação' },
+    { id: 'volume',        label: 'Volume',            icon: 'TrendingUp',    group: 'Operação' },
     { id: 'historico',     label: 'Histórico Rotas',   icon: 'MapPin',        group: 'Operação' },
     { id: 'bonificacoes',  label: 'Bonificações',      icon: 'Award',         group: 'Financeiro' },
     { id: 'despesas',      label: 'Despesas',          icon: 'Receipt',       group: 'Financeiro' },
@@ -4530,6 +4532,7 @@ export default function CarretasPage() {
                             {tab === 'abastecimentos' && <TabAbastecimentos  isAdmin={admin} profile={profile} />}
                             {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}
                             {tab === 'carregamentos'  && <TabCarregamentos   isAdmin={admin} />}
+                            {tab === 'volume'         && <TabVolume         isAdmin={admin} />}
                             {tab === 'historico'      && <TabHistoricoViagens isAdmin={admin} />}
                             {tab === 'bonificacoes'   && <TabBonificacoes   isAdmin={admin} />}
                             {tab === 'despesas'       && <TabDespesasExtras  isAdmin={admin} profile={profile} />}
