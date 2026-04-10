@@ -10,10 +10,12 @@ import {
     fetchEmpresas,
     fetchFornecedoresCarretas, createFornecedorCarretas, deleteFornecedorCarretas,
     fetchCarretasVeiculos, fetchTodosMotoristas,
+    calcularFrete, TIPOS_CALCULO_FRETE,
 } from 'utils/carretasService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtMes = m => {
     if (!m) return '';
     const [y, mo] = m.split('-');
@@ -188,12 +190,17 @@ export default function TabVolume({ isAdmin }) {
     const emptyForm = () => ({
         tipo: '', data_carregamento: new Date().toISOString().slice(0, 10),
         quantidade: '', unidade_quantidade: 'saco', empresa_origem: '',
-        veiculo_id: '', motorista_id: '', numero_pedido: '', numero_nota_fiscal: '',
+        veiculo_id: '', motorista_id: '', empresa_id: '', numero_pedido: '', numero_nota_fiscal: '',
         destino: '', observacoes: '',
+        tipo_calculo_frete: 'por_saco', valor_base_frete: '',
     });
     const [modal, setModal] = useState(null); // null | { mode: 'create'|'edit', id?: string }
     const [form, setForm] = useState(emptyForm());
     const [saving, setSaving] = useState(false);
+
+    // Frete preview
+    const veiculoSelecionado = veiculos.find(v => v.id === form.veiculo_id);
+    const previewFrete = calcularFrete(form.tipo_calculo_frete, form.quantidade, form.valor_base_frete, veiculoSelecionado?.media_consumo);
 
     // Modal fornecedor
     const [modalFornec, setModalFornec] = useState(false);
@@ -252,12 +259,15 @@ export default function TabVolume({ isAdmin }) {
             quantidade: r.quantidade || '',
             unidade_quantidade: r.unidade_quantidade || 'saco',
             empresa_origem: nome || '',
+            empresa_id: r.empresa_id || '',
             veiculo_id: r.veiculo_id || '',
             motorista_id: r.motorista_id || '',
             numero_pedido: r.numero_pedido || '',
             numero_nota_fiscal: r.numero_nota_fiscal || '',
             destino: r.destino || '',
             observacoes: r.observacoes || '',
+            tipo_calculo_frete: r.tipo_calculo_frete || 'por_saco',
+            valor_base_frete: r.valor_base_frete || '',
         });
         setModal({ mode: 'edit', id: r.id });
     };
@@ -273,7 +283,10 @@ export default function TabVolume({ isAdmin }) {
             data_carregamento: form.data_carregamento,
             quantidade: Number(form.quantidade),
             unidade_quantidade: form.unidade_quantidade || 'saco',
-            tipo_calculo_frete: 'por_saco',
+            empresa_id: form.empresa_id || null,
+            tipo_calculo_frete: form.tipo_calculo_frete || 'por_saco',
+            valor_base_frete: form.valor_base_frete ? Number(form.valor_base_frete) : null,
+            _consumoVeiculo: veiculoSelecionado?.media_consumo,
             veiculo_id: form.veiculo_id || null,
             motorista_id: form.motorista_id || null,
             numero_pedido: form.numero_pedido || null,
@@ -341,6 +354,9 @@ export default function TabVolume({ isAdmin }) {
                 'Destino': r.destino || '—',
                 'Quantidade': Number(r.quantidade) || 0,
                 'Unidade': r.unidade_quantidade || 'saco',
+                'Tipo Frete': r.tipo_calculo_frete || '',
+                'Valor Base Frete': Number(r.valor_base_frete || 0),
+                'Frete Calculado (R$)': Number(r.valor_frete_calculado || 0),
             };
         });
         const ws = XLSX.utils.json_to_sheet(rows);
@@ -487,6 +503,42 @@ export default function TabVolume({ isAdmin }) {
                         <Field label="Destino">
                             <input value={form.destino} onChange={e => setForm(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Cidade ou estoque" />
                         </Field>
+                        <Field label="Empresa (frete)">
+                            <select value={form.empresa_id} onChange={e => setForm(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <option value="">Selecione...</option>
+                                {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                            </select>
+                        </Field>
+                        {/* ── Bloco de Frete ── */}
+                        <div className="col-span-full p-4 rounded-xl border" style={{ borderColor: '#C4B5FD', backgroundColor: '#FAF5FF' }}>
+                            <p className="text-xs font-semibold text-purple-700 mb-3">💰 Cálculo de Frete</p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <Field label="Tipo de cálculo">
+                                    <select value={form.tipo_calculo_frete} onChange={e => setForm(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        {TIPOS_CALCULO_FRETE.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                    </select>
+                                </Field>
+                                <Field label={
+                                    form.tipo_calculo_frete === 'percentual' ? 'Percentual (%)' :
+                                    form.tipo_calculo_frete === 'por_km' ? 'Preço diesel (R$/L)' : 'Valor base (R$)'
+                                }>
+                                    <input type="number" step="0.01" value={form.valor_base_frete} onChange={e => setForm(f => ({ ...f, valor_base_frete: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                </Field>
+                            </div>
+                            {form.tipo_calculo_frete === 'por_km' && (
+                                <p className="text-xs text-purple-600 mt-2">
+                                    {veiculoSelecionado?.media_consumo
+                                        ? `Consumo do veículo: ${veiculoSelecionado.media_consumo} km/L — informe a distância em km no campo Quantidade`
+                                        : '⚠️ Veículo sem consumo cadastrado. Cadastre o consumo em Veículos para usar este cálculo.'}
+                                </p>
+                            )}
+                            {previewFrete > 0 && (
+                                <div className="mt-3 p-2.5 rounded-lg bg-purple-600 text-white text-sm font-semibold flex items-center justify-between">
+                                    <span>Frete calculado:</span>
+                                    <span className="font-mono">{BRL(previewFrete)}</span>
+                                </div>
+                            )}
+                        </div>
                         <Field label="Observações">
                             <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Observações gerais..." />
                         </Field>
@@ -535,6 +587,8 @@ function DashboardVolume({ totais, carregamentos, mes }) {
         key, t, v: totais[key] || 0, p: totais.total > 0 ? (totais[key] / totais.total) * 100 : 0,
     }));
 
+    const freteTotal = carregamentos.reduce((s, r) => s + Number(r.valor_frete_calculado || 0), 0);
+
     return (
         <div className="flex flex-col gap-6">
             {/* Cards de resumo */}
@@ -577,6 +631,18 @@ function DashboardVolume({ totais, carregamentos, mes }) {
                             {t.label} · {fmtNum(totais[key] || 0)} sacos
                         </div>
                     ))}
+                </div>
+            </div>
+
+            {/* Card de Frete Total */}
+            <div className="bg-white rounded-xl border p-4 shadow-sm flex items-center gap-4" style={{ borderColor: '#C4B5FD' }}>
+                <div className="rounded-xl flex items-center justify-center flex-shrink-0" style={{ width: 44, height: 44, background: '#EDE9FE' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+                <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>Frete Total do Período</p>
+                    <p className="text-2xl font-black font-mono" style={{ color: '#7C3AED' }}>{BRL(freteTotal)}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>soma de valor_frete_calculado · alimenta o Rel. Financeiro</p>
                 </div>
             </div>
 
@@ -638,7 +704,7 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete }) {
             <table className="w-full text-sm min-w-[800px]">
                 <thead className="text-xs border-b" style={{ background: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                     <tr>
-                        {['Data', 'Tipo', 'Fornecedor/Origem', 'Placa', 'Motorista', 'Pedido', 'NF', 'Destino', 'Qtd', ''].map(h => (
+                        {['Data', 'Tipo', 'Fornecedor/Origem', 'Placa', 'Motorista', 'Pedido', 'NF', 'Destino', 'Qtd', 'Frete', ''].map(h => (
                             <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                         ))}
                     </tr>
@@ -657,6 +723,7 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete }) {
                                 <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>
                                 <td className="px-3 py-2.5 text-xs max-w-[120px] truncate">{r.destino || '—'}</td>
                                 <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap">{fmtNum(r.quantidade)}</td>
+                                <td className="px-3 py-2.5 font-mono font-semibold whitespace-nowrap" style={{ color: '#7C3AED' }}>{BRL(r.valor_frete_calculado)}</td>
                                 {isAdmin && (
                                     <td className="px-3 py-2.5">
                                         <div className="flex items-center gap-1">

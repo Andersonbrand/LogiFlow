@@ -4426,8 +4426,7 @@ const TABS = [
     { id: 'veiculos',      label: 'Veículos',          icon: 'Truck',         group: 'Operação' },
     { id: 'abastecimentos',label: 'Abastecimentos',    icon: 'Fuel',          group: 'Operação' },
     { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck',group: 'Operação' },
-    { id: 'carregamentos', label: 'Carregamentos',     icon: 'Package',       group: 'Operação' },
-    { id: 'volume',        label: 'Volume',            icon: 'TrendingUp',    group: 'Operação' },
+    { id: 'volume',        label: 'Volume de carregamento', icon: 'TrendingUp',    group: 'Operação' },
     { id: 'historico',     label: 'Histórico Rotas',   icon: 'MapPin',        group: 'Operação' },
     { id: 'bonificacoes',  label: 'Bonificações',      icon: 'Award',         group: 'Financeiro' },
     { id: 'despesas',      label: 'Despesas',          icon: 'Receipt',       group: 'Financeiro' },
@@ -4531,7 +4530,6 @@ export default function CarretasPage() {
                             {tab === 'veiculos'       && <TabVeiculos       isAdmin={admin} />}
                             {tab === 'abastecimentos' && <TabAbastecimentos  isAdmin={admin} profile={profile} />}
                             {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}
-                            {tab === 'carregamentos'  && <TabCarregamentos   isAdmin={admin} />}
                             {tab === 'volume'         && <TabVolume         isAdmin={admin} />}
                             {tab === 'historico'      && <TabHistoricoViagens isAdmin={admin} />}
                             {tab === 'bonificacoes'   && <TabBonificacoes   isAdmin={admin} />}
