@@ -18,6 +18,7 @@ import {
     fetchCarregamentos, createCarregamento, updateCarregamento, deleteCarregamento,
     fetchEmpresas, createEmpresa, deleteEmpresa,
     fetchCarreteiros, fetchTodosMotoristas,
+    fetchAllRegistrosViagem,
     fetchConfigAbastecimento, saveConfigAbastecimento,
     CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
     aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
@@ -109,11 +110,13 @@ function TabViagens({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
     const [viagens, setViagens] = useState([]);
+    const [registrosMotoristas, setRegistrosMotoristas] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(null); // null | {mode:'create'|'edit', data?}
     const [filterStatus, setFilterStatus] = useState('');
+    const [abaViagens, setAbaViagens] = useState('admin'); // 'admin' | 'motoristas'
     const [form, setForm] = useState({
         status: 'Agendado', motorista_id: '', veiculo_id: '',
         data_saida: '', destino: '', toneladas: '', responsavel_cadastro: '', observacoes: '',
@@ -127,12 +130,14 @@ function TabViagens({ isAdmin, profile }) {
             if (filterStatus) filtros.status = filterStatus;
             if (!isAdmin && profile?.id) filtros.motoristaId = profile.id;
 
-            const [v, ve, m] = await Promise.all([
+            const [v, ve, m, regs] = await Promise.all([
                 fetchViagens(filtros),
                 fetchCarretasVeiculos(),
                 isAdmin ? fetchTodosMotoristas() : Promise.resolve([]),
+                isAdmin ? fetchAllRegistrosViagem() : Promise.resolve([]),
             ]);
             setViagens(v); setVeiculos(ve); setMotoristas(m);
+            setRegistrosMotoristas(regs);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filterStatus, isAdmin, profile?.id]); // eslint-disable-line
@@ -163,16 +168,25 @@ function TabViagens({ isAdmin, profile }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const exportar = () => {
-        if (!viagens.length) { showToast('Nenhum dado encontrado para exportar no período selecionado.', 'error'); return; }
-        const rows = viagens.map(v => ({
-            'Número': v.numero, 'Status': v.status,
-            'Motorista': v.motorista?.name || '', 'Placa': v.veiculo?.placa || '',
-            'Data Saída': FMT_DATE(v.data_saida), 'Destino': v.destino || '',
-            'Responsável': v.responsavel_cadastro || '', 'Obs': v.observacoes || '',
-        }));
-        const ws = XLSX.utils.json_to_sheet(rows);
+        if (!viagens.length && !registrosMotoristas.length) { showToast('Nenhum dado encontrado para exportar.', 'error'); return; }
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Viagens');
+        if (viagens.length) {
+            const rows = viagens.map(v => ({
+                'Número': v.numero, 'Status': v.status,
+                'Motorista': v.motorista?.name || '', 'Placa': v.veiculo?.placa || '',
+                'Data Saída': FMT_DATE(v.data_saida), 'Destino': v.destino || '',
+                'Responsável': v.responsavel_cadastro || '', 'Obs': v.observacoes || '',
+            }));
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Viagens Admin');
+        }
+        if (registrosMotoristas.length) {
+            const rows2 = registrosMotoristas.map(r => ({
+                'Motorista': r.motorista?.name || '', 'Placa': r.veiculo?.placa || '',
+                'Data Carregamento': FMT_DATE(r.data_carregamento), 'NF': r.numero_nota_fiscal || '',
+                'Destino': r.destino || '', 'Data Descarga': FMT_DATE(r.data_descarga), 'Obs': r.observacoes || '',
+            }));
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows2), 'Registros Motoristas');
+        }
         XLSX.writeFile(wb, `viagens_carretas_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`);
     };
 
@@ -214,39 +228,117 @@ function TabViagens({ isAdmin, profile }) {
                     <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                 </div>
             ) : isAdmin ? (
-                /* ── Visão admin: tabela completa ── */
-                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-                    <table className="w-full text-sm min-w-[700px]">
-                        <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>
-                                {['Nº Viagem','Status','Motorista','Placa','Data Saída','Destino','Ton.','Responsável',''].map(h => (
-                                    <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {viagens.length === 0 ? (
-                                <tr><td colSpan={9} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem cadastrada</td></tr>
-                            ) : viagens.map((v, i) => (
-                                <tr key={v.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                    <td className="px-3 py-3 font-medium text-blue-700 font-data whitespace-nowrap">{v.numero}</td>
-                                    <td className="px-3 py-3 whitespace-nowrap"><StatusBadge status={v.status} /></td>
-                                    <td className="px-3 py-3 whitespace-nowrap">{v.motorista?.name || '—'}</td>
-                                    <td className="px-3 py-3 font-data whitespace-nowrap">{v.veiculo?.placa || '—'}</td>
-                                    <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(v.data_saida)}</td>
-                                    <td className="px-3 py-3 max-w-[140px] truncate">{v.destino || '—'}</td>
-                                    <td className="px-3 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-muted-foreground)' }}>{v.toneladas || '—'}</td>
-                                    <td className="px-3 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-muted-foreground)' }}>{v.responsavel_cadastro || '—'}</td>
-                                    <td className="px-3 py-3">
-                                        <div className="flex items-center gap-1">
-                                            <button onClick={() => openEdit(v)} className="p-1.5 rounded hover:bg-blue-50 transition-colors"><Icon name="Pencil" size={14} color="#1D4ED8" /></button>
-                                            <button onClick={() => handleDelete(v.id)} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={14} color="#DC2626" /></button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                /* ── Visão admin: abas Viagens Admin + Registros Motoristas ── */
+                <div>
+                    {/* Sub-abas */}
+                    <div className="flex gap-1 mb-4 p-1 rounded-xl" style={{ backgroundColor: 'var(--color-muted)', width: 'fit-content' }}>
+                        <button
+                            onClick={() => setAbaViagens('admin')}
+                            className="px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
+                            style={abaViagens === 'admin'
+                                ? { backgroundColor: '#fff', color: 'var(--color-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }
+                                : { color: 'var(--color-muted-foreground)' }}>
+                            <span className="flex items-center gap-1.5">
+                                <Icon name="ClipboardList" size={13} />
+                                Viagens Cadastradas
+                                <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>{viagens.length}</span>
+                            </span>
+                        </button>
+                        <button
+                            onClick={() => setAbaViagens('motoristas')}
+                            className="px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
+                            style={abaViagens === 'motoristas'
+                                ? { backgroundColor: '#fff', color: 'var(--color-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }
+                                : { color: 'var(--color-muted-foreground)' }}>
+                            <span className="flex items-center gap-1.5">
+                                <Icon name="Truck" size={13} />
+                                Lançados pelos Motoristas
+                                {registrosMotoristas.length > 0 && (
+                                    <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>{registrosMotoristas.length}</span>
+                                )}
+                            </span>
+                        </button>
+                    </div>
+
+                    {abaViagens === 'admin' ? (
+                        /* ── Tabela de viagens cadastradas pelo admin ── */
+                        <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                            <table className="w-full text-sm min-w-[700px]">
+                                <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                    <tr>
+                                        {['Nº Viagem','Status','Motorista','Placa','Data Saída','Destino','Ton.','Responsável',''].map(h => (
+                                            <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {viagens.length === 0 ? (
+                                        <tr><td colSpan={9} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem cadastrada</td></tr>
+                                    ) : viagens.map((v, i) => (
+                                        <tr key={v.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                            <td className="px-3 py-3 font-medium text-blue-700 font-data whitespace-nowrap">{v.numero}</td>
+                                            <td className="px-3 py-3 whitespace-nowrap"><StatusBadge status={v.status} /></td>
+                                            <td className="px-3 py-3 whitespace-nowrap">{v.motorista?.name || '—'}</td>
+                                            <td className="px-3 py-3 font-data whitespace-nowrap">{v.veiculo?.placa || '—'}</td>
+                                            <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(v.data_saida)}</td>
+                                            <td className="px-3 py-3 max-w-[140px] truncate">{v.destino || '—'}</td>
+                                            <td className="px-3 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-muted-foreground)' }}>{v.toneladas || '—'}</td>
+                                            <td className="px-3 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-muted-foreground)' }}>{v.responsavel_cadastro || '—'}</td>
+                                            <td className="px-3 py-3">
+                                                <div className="flex items-center gap-1">
+                                                    <button onClick={() => openEdit(v)} className="p-1.5 rounded hover:bg-blue-50 transition-colors"><Icon name="Pencil" size={14} color="#1D4ED8" /></button>
+                                                    <button onClick={() => handleDelete(v.id)} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={14} color="#DC2626" /></button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        /* ── Tabela de registros lançados pelos motoristas de carreta ── */
+                        <div>
+                            <div className="flex items-center gap-2 mb-3 p-3 rounded-xl" style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
+                                <Icon name="Info" size={14} color="#15803D" />
+                                <p className="text-xs" style={{ color: '#15803D' }}>
+                                    Registros lançados diretamente pelos motoristas de carreta na página deles. Use esses dados para confirmar destinos e atualizar o status das viagens cadastradas.
+                                </p>
+                            </div>
+                            <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                                <table className="w-full text-sm min-w-[750px]">
+                                    <thead className="text-xs border-b" style={{ backgroundColor: '#F0FDF4', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                        <tr>
+                                            {['Motorista','Placa','Data Carregamento','Nota Fiscal','Destino','Data Descarga','Observações'].map(h => (
+                                                <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {registrosMotoristas.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <Icon name="Truck" size={28} color="var(--color-muted-foreground)" />
+                                                        <span className="text-sm">Nenhum registro lançado pelos motoristas ainda</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ) : registrosMotoristas.map((r, i) => (
+                                            <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                                <td className="px-3 py-3 font-medium whitespace-nowrap">{r.motorista?.name || '—'}</td>
+                                                <td className="px-3 py-3 font-data whitespace-nowrap">{r.veiculo?.placa || '—'}</td>
+                                                <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(r.data_carregamento)}</td>
+                                                <td className="px-3 py-3 font-data whitespace-nowrap text-blue-700">{r.numero_nota_fiscal || '—'}</td>
+                                                <td className="px-3 py-3 max-w-[160px] truncate font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</td>
+                                                <td className="px-3 py-3 whitespace-nowrap">{r.data_descarga ? FMT_DATE(r.data_descarga) : <span style={{ color: 'var(--color-muted-foreground)' }}>Em trânsito</span>}</td>
+                                                <td className="px-3 py-3 max-w-[180px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{r.observacoes || '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
             ) : (
                 /* ── Visão motorista: cards com suas próprias viagens ── */
