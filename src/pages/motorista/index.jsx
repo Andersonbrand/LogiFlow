@@ -585,9 +585,9 @@ export default function MotoristaDashboard() {
                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
                     style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                     onClick={e => e.target === e.currentTarget && setModalAbast(false)}>
-                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
-                        <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
-                        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '92dvh' }}>
+                        <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
+                        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-50">
                                     <Icon name="Fuel" size={18} color="#059669" />
@@ -598,7 +598,7 @@ export default function MotoristaDashboard() {
                                 <Icon name="X" size={18} color="var(--color-muted-foreground)" />
                             </button>
                         </div>
-                        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                             <Field label="Veículo" required>
                                 <select value={formAbast.veiculo_id} onChange={e => setFormAbast(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
@@ -668,7 +668,7 @@ export default function MotoristaDashboard() {
                                 </Field>
                             </div>
                         </div>
-                        <div className="flex gap-3 p-5 pt-0 justify-end">
+                        <div className="flex gap-3 p-5 border-t flex-shrink-0 justify-end" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => setModalAbast(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <button onClick={handleAbast} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: 'var(--color-primary)' }}>
                                 <Icon name="Check" size={15} color="white" /> Salvar
@@ -683,11 +683,10 @@ export default function MotoristaDashboard() {
                 <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
                     style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
                     onClick={e => e.target === e.currentTarget && setModalCheck(false)}>
-                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl"
-                        style={{ maxHeight: '95dvh', overflowY: 'auto' }}>
-                        <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
+                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '95dvh' }}>
+                        <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
                         {/* Header fixo no topo */}
-                        <div className="flex items-center justify-between p-5 border-b sticky top-0 bg-white z-10" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50">
                                     <Icon name="ClipboardCheck" size={18} color="#1D4ED8" />
@@ -698,7 +697,7 @@ export default function MotoristaDashboard() {
                                 <Icon name="X" size={18} color="var(--color-muted-foreground)" />
                             </button>
                         </div>
-                        <div className="p-5 space-y-4">
+                        <div className="p-5 space-y-4 overflow-y-auto flex-1">
                             <Field label="Veículo" required>
                                 <select value={formCheck.veiculo_id} onChange={e => setFormCheck(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
@@ -762,7 +761,7 @@ export default function MotoristaDashboard() {
                                 <textarea value={formCheck.observacoes_livres} onChange={e => setFormCheck(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
                             </Field>
                         </div>
-                        <div className="flex gap-3 p-5 pt-0 justify-end">
+                        <div className="flex gap-3 p-5 border-t flex-shrink-0 justify-end" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => setModalCheck(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <button onClick={handleCheck} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: 'var(--color-primary)' }}>
                                 <Icon name="Send" size={15} color="white" /> Enviar

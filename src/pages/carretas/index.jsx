@@ -3744,46 +3744,6 @@ function TabConfiguracoes({ isAdmin }) {
     return (
         <div className="flex flex-col gap-5 max-w-2xl">
 
-            {/* Preços de combustível */}
-            <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#FEF3C7' }}>
-                        <Icon name="Fuel" size={18} color="#B45309" />
-                    </div>
-                    <div>
-                        <h3 className="font-heading font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Preços de Combustível</h3>
-                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Usados no cálculo automático dos abastecimentos</p>
-                    </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 mb-4">
-                    <Field label="Preço do Diesel (R$/L)" required>
-                        <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium" style={{ color: 'var(--color-muted-foreground)' }}>R$</span>
-                            <input type="number" step="0.001" min="0" value={config.preco_diesel}
-                                onChange={e => setConfig(c => ({ ...c, preco_diesel: e.target.value }))}
-                                disabled={!isAdmin} className={inputCls + " pl-9"} style={inputStyle} placeholder="6,80" />
-                        </div>
-                    </Field>
-                    <Field label="Preço do Arla (R$/L)" required>
-                        <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium" style={{ color: 'var(--color-muted-foreground)' }}>R$</span>
-                            <input type="number" step="0.001" min="0" value={config.preco_arla}
-                                onChange={e => setConfig(c => ({ ...c, preco_arla: e.target.value }))}
-                                disabled={!isAdmin} className={inputCls + " pl-9"} style={inputStyle} placeholder="3,20" />
-                        </div>
-                    </Field>
-                </div>
-                <div className="p-3 rounded-xl mb-4 text-xs" style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
-                    <p className="text-green-600">
-                        Cálculo: <strong>(Diesel L × R$ {Number(config.preco_diesel || 0).toFixed(3)})</strong> + <strong>(Arla L × R$ {Number(config.preco_arla || 0).toFixed(3)})</strong>
-                    </p>
-                </div>
-                {isAdmin
-                    ? <Button onClick={handleSaveConfig} iconName={saving ? 'Loader' : 'Save'} size="sm" disabled={saving}>{saving ? 'Salvando...' : 'Salvar preços'}</Button>
-                    : <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Apenas administradores podem alterar.</p>
-                }
-            </div>
-
             {/* Exportar relatório por motorista / placa */}
             <div className="bg-white rounded-xl border p-5 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                 <div className="flex items-center gap-3 mb-4">

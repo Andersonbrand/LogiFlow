@@ -204,7 +204,7 @@ export default function TabVolume({ isAdmin }) {
 
     // Modal fornecedor
     const [modalFornec, setModalFornec] = useState(false);
-    const [formFornec, setFormFornec] = useState({ nome: '', cnpj: '', obs: '' });
+    const [formFornec, setFormFornec] = useState({ nome: '', cnpj: '', observacoes: '' });
     const [savingFornec, setSavingFornec] = useState(false);
 
     // ── Load ─────────────────────────────────────────────────────────────────
@@ -322,10 +322,10 @@ export default function TabVolume({ isAdmin }) {
         if (!formFornec.nome.trim()) { showToast('Nome é obrigatório.', 'error'); return; }
         setSavingFornec(true);
         try {
-            await createFornecedorCarretas({ nome: formFornec.nome.trim(), cnpj: formFornec.cnpj.trim() || null, obs: formFornec.obs.trim() || null });
+            await createFornecedorCarretas({ nome: formFornec.nome.trim(), cnpj: formFornec.cnpj.trim() || null, observacoes: formFornec.observacoes.trim() || null });
             showToast('Fornecedor salvo!', 'success');
             setModalFornec(false);
-            setFormFornec({ nome: '', cnpj: '', obs: '' });
+            setFormFornec({ nome: '', cnpj: '', observacoes: '' });
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setSavingFornec(false); }
@@ -447,7 +447,7 @@ export default function TabVolume({ isAdmin }) {
                 <PainelFornecedores
                     fornecedores={fornecedores}
                     isAdmin={isAdmin}
-                    onNovo={() => { setFormFornec({ nome: '', cnpj: '', obs: '' }); setModalFornec(true); }}
+                    onNovo={() => { setFormFornec({ nome: '', cnpj: '', observacoes: '' }); setModalFornec(true); }}
                     onDelete={handleDeleteFornec}
                 />
             )}
@@ -565,7 +565,7 @@ export default function TabVolume({ isAdmin }) {
                             <input value={formFornec.cnpj} onChange={e => setFormFornec(f => ({ ...f, cnpj: e.target.value }))} className={inputCls} style={inputStyle} placeholder="XX.XXX.XXX/XXXX-XX" />
                         </Field>
                         <Field label="Observações">
-                            <textarea value={formFornec.obs} onChange={e => setFormFornec(f => ({ ...f, obs: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
+                            <textarea value={formFornec.observacoes} onChange={e => setFormFornec(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
                         </Field>
                     </div>
                 </Modal>
@@ -769,7 +769,7 @@ function PainelFornecedores({ fornecedores, isAdmin, onNovo, onDelete }) {
                                 )}
                             </div>
                             {f.cnpj && <p className="text-xs font-mono" style={{ color: 'var(--color-muted-foreground)' }}>📄 {f.cnpj}</p>}
-                            {f.obs && <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>{f.obs}</p>}
+                            {f.observacoes && <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>{f.observacoes}</p>}
                         </div>
                     ))}
                 </div>
