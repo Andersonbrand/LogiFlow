@@ -32,6 +32,7 @@ import {
     fetchPostos, createPosto, updatePosto, deletePosto,
     STATUS_ROMANEIO_COLORS,
     fetchRomaneios,
+    fetchBonificacoesExtras, createBonificacaoExtra, updateBonificacaoExtra, deleteBonificacaoExtra,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
 
@@ -107,78 +108,55 @@ const inputCls = "w-full px-3 py-2 rounded-lg border text-sm outline-none transi
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
 
 // ─── TAB: Viagens ────────────────────────────────────────────────────────────
-function TabViagens({ isAdmin, profile }) {
+// ─── TAB: Viagens (Resumo de Carregamentos + Registros Motoristas) ────────────
+// Fonte principal: carretas_carregamentos (lançados via aba Volume)
+// Sem formulário de criação manual — o admin é direcionado para a aba Volume.
+function TabViagens({ isAdmin }) {
     const { toast, showToast } = useToast();
-    const { confirm, ConfirmDialog } = useConfirm();
-    const [viagens, setViagens] = useState([]);
+    const [carregamentos, setCarregamentos] = useState([]);
     const [registrosMotoristas, setRegistrosMotoristas] = useState([]);
-    const [veiculos, setVeiculos] = useState([]);
-    const [motoristas, setMotoristas] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [modal, setModal] = useState(null); // null | {mode:'create'|'edit', data?}
-    const [filterStatus, setFilterStatus] = useState('');
-    const [abaViagens, setAbaViagens] = useState('admin'); // 'admin' | 'motoristas'
-    const [form, setForm] = useState({
-        status: 'Agendado', motorista_id: '', veiculo_id: '',
-        data_saida: '', destino: '', toneladas: '', responsavel_cadastro: '', observacoes: '',
-    });
+    const [abaViagens, setAbaViagens] = useState('carregamentos'); // 'carregamentos' | 'motoristas'
+    const [filtroMes, setFiltroMes] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            // Se não for admin, filtra apenas as viagens deste motorista
-            const filtros = {};
-            if (filterStatus) filtros.status = filterStatus;
-            if (!isAdmin && profile?.id) filtros.motoristaId = profile.id;
-
-            const [v, ve, m, regs] = await Promise.all([
-                fetchViagens(filtros),
-                fetchCarretasVeiculos(),
-                isAdmin ? fetchTodosMotoristas() : Promise.resolve([]),
+            const f = {};
+            if (filtroMes) {
+                const [yr, mo] = filtroMes.split('-');
+                const lastDay = new Date(+yr, +mo, 0).getDate();
+                f.dataInicio = `${filtroMes}-01`;
+                f.dataFim    = `${filtroMes}-${String(lastDay).padStart(2, '0')}`;
+            }
+            const [c, regs] = await Promise.all([
+                fetchCarregamentos(f),
                 isAdmin ? fetchAllRegistrosViagem() : Promise.resolve([]),
             ]);
-            setViagens(v); setVeiculos(ve); setMotoristas(m);
+            setCarregamentos(c);
             setRegistrosMotoristas(regs);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filterStatus, isAdmin, profile?.id]); // eslint-disable-line
+    }, [filtroMes, isAdmin]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
 
-    const openCreate = () => {
-        setForm({ status: 'Agendado', motorista_id: '', veiculo_id: '', data_saida: '', destino: '', toneladas: '', responsavel_cadastro: '', observacoes: '' });
-        setModal({ mode: 'create' });
-    };
-    const openEdit = (v) => {
-        setForm({ status: v.status, motorista_id: v.motorista_id || '', veiculo_id: v.veiculo_id || '', data_saida: v.data_saida || '', destino: v.destino || '', toneladas: v.toneladas || '', responsavel_cadastro: v.responsavel_cadastro || '', observacoes: v.observacoes || '' });
-        setModal({ mode: 'edit', data: v });
-    };
-    const handleSubmit = async () => {
-        if (!form.destino) { showToast('Destino é obrigatório', 'error'); return; }
-        try {
-            if (modal.mode === 'create') await createViagem(form);
-            else await updateViagem(modal.data.id, form);
-            showToast(modal.mode === 'create' ? 'Viagem cadastrada!' : 'Viagem atualizada!', 'success');
-            setModal(null); load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-    };
-    const handleDelete = async (id) => {
-        const ok = await confirm({ title: 'Excluir viagem?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
-        if (!ok) return;
-        try { await deleteViagem(id); showToast('Excluída!', 'success'); load(); }
-        catch (e) { showToast('Erro: ' + e.message, 'error'); }
-    };
     const exportar = () => {
-        if (!viagens.length && !registrosMotoristas.length) { showToast('Nenhum dado encontrado para exportar.', 'error'); return; }
         const wb = XLSX.utils.book_new();
-        if (viagens.length) {
-            const rows = viagens.map(v => ({
-                'Número': v.numero, 'Status': v.status,
-                'Motorista': v.motorista?.name || '', 'Placa': v.veiculo?.placa || '',
-                'Data Saída': FMT_DATE(v.data_saida), 'Destino': v.destino || '',
-                'Responsável': v.responsavel_cadastro || '', 'Obs': v.observacoes || '',
+        if (carregamentos.length) {
+            const rows = carregamentos.map(c => ({
+                'Data': FMT_DATE(c.data_carregamento),
+                'Motorista': c.motorista?.name || '',
+                'Placa': c.veiculo?.placa || '',
+                'Empresa': c.empresa?.nome || '',
+                'Destino': c.destino || '',
+                'Qtd (sacos)': c.quantidade || 0,
+                'Frete (R$)': Number(c.valor_frete_calculado || 0),
+                'Bônus (R$)': calcularBonusCarreteiro(c.destino),
+                'Pedido': c.numero_pedido || '',
+                'NF': c.numero_nota_fiscal || '',
             }));
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Viagens Admin');
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Carregamentos');
         }
         if (registrosMotoristas.length) {
             const rows2 = registrosMotoristas.map(r => ({
@@ -188,144 +166,125 @@ function TabViagens({ isAdmin, profile }) {
             }));
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows2), 'Registros Motoristas');
         }
+        if (!carregamentos.length && !registrosMotoristas.length) { showToast('Nenhum dado para exportar.', 'error'); return; }
         XLSX.writeFile(wb, `viagens_carretas_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`);
+        showToast('Exportado!', 'success');
     };
 
     return (
         <div>
+            {/* ── Toolbar ── */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-                <div className="flex items-center gap-2 flex-wrap">
-                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
-                        <option value="">Todos os status</option>
-                        {STATUS_VIAGEM.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                <div className="flex flex-wrap gap-2 items-center">
+                    {/* Sub-abas */}
+                    <div className="flex gap-1 p-1 rounded-xl" style={{ backgroundColor: 'var(--color-muted)' }}>
+                        {[
+                            { id: 'carregamentos', label: 'Carregamentos', count: carregamentos.length },
+                            { id: 'motoristas',    label: 'Lançados pelos Motoristas', count: registrosMotoristas.length },
+                        ].map(s => (
+                            <button key={s.id} onClick={() => setAbaViagens(s.id)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                                style={abaViagens === s.id
+                                    ? { backgroundColor: '#fff', color: 'var(--color-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }
+                                    : { color: 'var(--color-muted-foreground)' }}>
+                                {s.label}
+                                <span className="px-1.5 py-0.5 rounded-full text-xs font-bold"
+                                    style={{ backgroundColor: abaViagens === s.id ? '#DBEAFE' : 'transparent', color: abaViagens === s.id ? '#1D4ED8' : 'var(--color-muted-foreground)' }}>
+                                    {s.count}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                    <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar em tempo real">
+                    <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
+                    <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
+                        <Icon name="FileDown" size={14} /> Exportar
+                    </button>
+                    {/* Direciona para aba Volume em vez de abrir formulário */}
                     {isAdmin && (
-                        <>
-                            <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
-                                <Icon name="FileDown" size={14} /> Exportar
-                            </button>
-                            <Button onClick={openCreate} iconName="Plus" size="sm">Nova Viagem</Button>
-                        </>
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium"
+                            style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1D4ED8' }}>
+                            <Icon name="Info" size={13} color="#1D4ED8" />
+                            Para lançar, use a aba <strong>Volume por Tipo</strong>
+                        </div>
                     )}
                 </div>
             </div>
-
-            {/* Cabeçalho informativo para o motorista */}
-            {!isAdmin && (
-                <div className="flex items-center gap-2 mb-4 p-3 rounded-xl" style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
-                    <Icon name="Info" size={15} color="#1D4ED8" />
-                    <p className="text-xs text-blue-700">Exibindo suas viagens lançadas pela administração. Entre em contato com o admin para atualizações.</p>
-                </div>
-            )}
 
             {loading ? (
                 <div className="flex justify-center py-16">
                     <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                 </div>
-            ) : isAdmin ? (
-                /* ── Visão admin: abas Viagens Admin + Registros Motoristas ── */
-                <div>
-                    {/* Sub-abas */}
-                    <div className="flex gap-1 mb-4 p-1 rounded-xl" style={{ backgroundColor: 'var(--color-muted)', width: 'fit-content' }}>
-                        <button
-                            onClick={() => setAbaViagens('admin')}
-                            className="px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
-                            style={abaViagens === 'admin'
-                                ? { backgroundColor: '#fff', color: 'var(--color-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }
-                                : { color: 'var(--color-muted-foreground)' }}>
-                            <span className="flex items-center gap-1.5">
-                                <Icon name="ClipboardList" size={13} />
-                                Viagens Cadastradas
-                                <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>{viagens.length}</span>
-                            </span>
-                        </button>
-                        <button
-                            onClick={() => setAbaViagens('motoristas')}
-                            className="px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
-                            style={abaViagens === 'motoristas'
-                                ? { backgroundColor: '#fff', color: 'var(--color-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }
-                                : { color: 'var(--color-muted-foreground)' }}>
-                            <span className="flex items-center gap-1.5">
-                                <Icon name="Truck" size={13} />
-                                Lançados pelos Motoristas
-                                {registrosMotoristas.length > 0 && (
-                                    <span className="ml-1 px-1.5 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>{registrosMotoristas.length}</span>
-                                )}
-                            </span>
-                        </button>
-                    </div>
-
-                    {abaViagens === 'admin' ? (
-                        /* ── Tabela de viagens cadastradas pelo admin ── */
+            ) : (
+                <>
+                    {/* ── Sub-aba: Resumo de Carregamentos ── */}
+                    {abaViagens === 'carregamentos' && (
                         <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                             <table className="w-full text-sm min-w-[700px]">
                                 <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                    <tr>
-                                        {['Nº Viagem','Status','Motorista','Placa','Data Saída','Destino','Ton.','Responsável',''].map(h => (
-                                            <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
-                                        ))}
-                                    </tr>
+                                    <tr>{['Data','Motorista','Placa','Empresa','Destino','Qtd (sacos)','Frete','Bônus'].map(h => (
+                                        <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                                    ))}</tr>
                                 </thead>
                                 <tbody>
-                                    {viagens.length === 0 ? (
-                                        <tr><td colSpan={9} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem cadastrada</td></tr>
-                                    ) : viagens.map((v, i) => (
-                                        <tr key={v.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                            <td className="px-3 py-3 font-medium text-blue-700 font-data whitespace-nowrap">{v.numero}</td>
-                                            <td className="px-3 py-3 whitespace-nowrap"><StatusBadge status={v.status} /></td>
-                                            <td className="px-3 py-3 whitespace-nowrap">{v.motorista?.name || '—'}</td>
-                                            <td className="px-3 py-3 font-data whitespace-nowrap">{v.veiculo?.placa || '—'}</td>
-                                            <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(v.data_saida)}</td>
-                                            <td className="px-3 py-3 max-w-[140px] truncate">{v.destino || '—'}</td>
-                                            <td className="px-3 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-muted-foreground)' }}>{v.toneladas || '—'}</td>
-                                            <td className="px-3 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-muted-foreground)' }}>{v.responsavel_cadastro || '—'}</td>
-                                            <td className="px-3 py-3">
-                                                <div className="flex items-center gap-1">
-                                                    <button onClick={() => openEdit(v)} className="p-1.5 rounded hover:bg-blue-50 transition-colors"><Icon name="Pencil" size={14} color="#1D4ED8" /></button>
-                                                    <button onClick={() => handleDelete(v.id)} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={14} color="#DC2626" /></button>
-                                                </div>
+                                    {carregamentos.length === 0 ? (
+                                        <tr><td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            Nenhum carregamento no período. Lance pela aba <strong>Volume por Tipo</strong>.
+                                        </td></tr>
+                                    ) : carregamentos.map((c, i) => (
+                                        <tr key={c.id} className="border-t hover:bg-gray-50 transition-colors"
+                                            style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                            <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(c.data_carregamento)}</td>
+                                            <td className="px-3 py-3 font-medium whitespace-nowrap">{c.motorista?.name || '—'}</td>
+                                            <td className="px-3 py-3 font-data whitespace-nowrap">{c.veiculo?.placa || '—'}</td>
+                                            <td className="px-3 py-3 text-xs">{c.empresa?.nome || '—'}</td>
+                                            <td className="px-3 py-3 max-w-[140px] truncate">{c.destino || '—'}</td>
+                                            <td className="px-3 py-3 font-data text-right font-semibold" style={{ color: 'var(--color-primary)' }}>
+                                                {(Number(c.quantidade) || 0).toLocaleString('pt-BR')}
+                                            </td>
+                                            <td className="px-3 py-3 font-data text-right text-purple-600 font-semibold">{BRL(c.valor_frete_calculado)}</td>
+                                            <td className="px-3 py-3 font-data text-right font-semibold" style={{ color: '#059669' }}>
+                                                {c.destino ? BRL(calcularBonusCarreteiro(c.destino)) : '—'}
                                             </td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
-                    ) : (
-                        /* ── Tabela de registros lançados pelos motoristas de carreta ── */
+                    )}
+
+                    {/* ── Sub-aba: Lançados pelos Motoristas ── */}
+                    {abaViagens === 'motoristas' && (
                         <div>
                             <div className="flex items-center gap-2 mb-3 p-3 rounded-xl" style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0' }}>
                                 <Icon name="Info" size={14} color="#15803D" />
                                 <p className="text-xs" style={{ color: '#15803D' }}>
-                                    Registros lançados diretamente pelos motoristas de carreta na página deles. Use esses dados para confirmar destinos e atualizar o status das viagens cadastradas.
+                                    Registros auto-reportados pelos motoristas de carreta. Use para confirmar destinos e notas fiscais.
                                 </p>
                             </div>
                             <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                                 <table className="w-full text-sm min-w-[750px]">
                                     <thead className="text-xs border-b" style={{ backgroundColor: '#F0FDF4', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                        <tr>
-                                            {['Motorista','Placa','Data Carregamento','Nota Fiscal','Destino','Data Descarga','Observações'].map(h => (
-                                                <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
-                                            ))}
-                                        </tr>
+                                        <tr>{['Motorista','Placa','Data Carregamento','Nota Fiscal','Destino','Data Descarga','Observações'].map(h => (
+                                            <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                                        ))}</tr>
                                     </thead>
                                     <tbody>
                                         {registrosMotoristas.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                    <div className="flex flex-col items-center gap-2">
-                                                        <Icon name="Truck" size={28} color="var(--color-muted-foreground)" />
-                                                        <span className="text-sm">Nenhum registro lançado pelos motoristas ainda</span>
-                                                    </div>
-                                                </td>
-                                            </tr>
+                                            <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <Icon name="Truck" size={28} color="var(--color-muted-foreground)" />
+                                                    <span className="text-sm">Nenhum registro lançado pelos motoristas ainda</span>
+                                                </div>
+                                            </td></tr>
                                         ) : registrosMotoristas.map((r, i) => (
-                                            <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                            <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors"
+                                                style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                 <td className="px-3 py-3 font-medium whitespace-nowrap">{r.motorista?.name || '—'}</td>
                                                 <td className="px-3 py-3 font-data whitespace-nowrap">{r.veiculo?.placa || '—'}</td>
                                                 <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(r.data_carregamento)}</td>
@@ -340,102 +299,9 @@ function TabViagens({ isAdmin, profile }) {
                             </div>
                         </div>
                     )}
-                </div>
-            ) : (
-                /* ── Visão motorista: cards com suas próprias viagens ── */
-                <div className="flex flex-col gap-3">
-                    {viagens.length === 0 ? (
-                        <div className="bg-white rounded-xl border p-10 text-center" style={{ borderColor: 'var(--color-border)' }}>
-                            <Icon name="Truck" size={36} color="var(--color-muted-foreground)" />
-                            <p className="text-sm mt-3 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem encontrada para você</p>
-                            <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>As viagens lançadas pelo admin aparecerão aqui</p>
-                        </div>
-                    ) : viagens.map(v => (
-                        <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="flex items-start justify-between mb-3 gap-2">
-                                <div>
-                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                        <span className="font-bold font-data text-blue-700">{v.numero}</span>
-                                        <StatusBadge status={v.status} />
-                                    </div>
-                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{v.destino || '—'}</p>
-                                </div>
-                                <div className="text-right flex-shrink-0">
-                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{FMT_DATE(v.data_saida)}</p>
-                                    {v.veiculo?.placa && <p className="text-xs font-data font-medium mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>{v.veiculo.placa}</p>}
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                                {v.toneladas && (
-                                    <div className="flex items-center gap-1.5 p-2 rounded-lg" style={{ backgroundColor: '#F8FAFC' }}>
-                                        <Icon name="Weight" size={12} color="var(--color-muted-foreground)" />
-                                        <span style={{ color: 'var(--color-muted-foreground)' }}>{v.toneladas} ton</span>
-                                    </div>
-                                )}
-                                {v.responsavel_cadastro && (
-                                    <div className="flex items-center gap-1.5 p-2 rounded-lg" style={{ backgroundColor: '#F8FAFC' }}>
-                                        <Icon name="User" size={12} color="var(--color-muted-foreground)" />
-                                        <span style={{ color: 'var(--color-muted-foreground)' }}>Resp: {v.responsavel_cadastro}</span>
-                                    </div>
-                                )}
-                            </div>
-                            {v.observacoes && (
-                                <p className="text-xs mt-2 p-2 rounded-lg bg-amber-50 text-amber-700">{v.observacoes}</p>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            {/* Modal novo/editar viagem — apenas admin */}
-            {modal && isAdmin && (
-                <ModalOverlay onClose={() => setModal(null)}>
-                    <ModalHeader title={modal.mode === 'create' ? 'Nova Viagem' : 'Editar Viagem'} icon="Navigation" onClose={() => setModal(null)} />
-                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
-                        <Field label="Status" required>
-                            <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={inputCls} style={inputStyle}>
-                                {STATUS_VIAGEM.map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                        </Field>
-                        <Field label="Responsável pelo cadastro">
-                            <select value={form.responsavel_cadastro} onChange={e => setForm(f => ({ ...f, responsavel_cadastro: e.target.value }))} className={inputCls} style={inputStyle}>
-                                <option value="">Selecione...</option>
-                                {RESPONSAVEIS.map(r => <option key={r} value={r}>{r}</option>)}
-                            </select>
-                        </Field>
-                        <Field label="Motorista">
-                            <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                <option value="">Selecione...</option>
-                                {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            </select>
-                        </Field>
-                        <Field label="Veículo (placa)">
-                            <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                <option value="">Selecione...</option>
-                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                            </select>
-                        </Field>
-                        <Field label="Data de saída">
-                            <input type="date" value={form.data_saida} onChange={e => setForm(f => ({ ...f, data_saida: e.target.value }))} className={inputCls} style={inputStyle} />
-                        </Field>
-                        <Field label="Destino" required>
-                            <input value={form.destino} onChange={e => setForm(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Cidade de destino" />
-                        </Field>
-                        <Field label="Toneladas transportadas">
-                            <input type="number" step="0.001" value={form.toneladas} onChange={e => setForm(f => ({ ...f, toneladas: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 28.5" />
-                        </Field>
-                        <Field label="Observações">
-                            <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={3} placeholder="Observações gerais..." />
-                        </Field>
-                    </div>
-                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
-                        <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
-                    </div>
-                </ModalOverlay>
+                </>
             )}
             <Toast toast={toast} />
-            {ConfirmDialog}
         </div>
     );
 }
@@ -1470,71 +1336,136 @@ function TabEmpresas({ isAdmin }) {
 // ─── TAB: Bonificações (visão admin) ─────────────────────────────────────────
 function TabBonificacoes({ isAdmin }) {
     const { toast, showToast } = useToast();
-    const [viagens, setViagens] = useState([]);
-    const [motoristas, setMotoristas] = useState([]);
-    const [filtroMotorista, setFiltroMotorista] = useState('');
-    const [filtroMes, setFiltroMes] = useState('');
-    const [loading, setLoading] = useState(true);
+    const { confirm, ConfirmDialog } = useConfirm();
 
+    // ── Estado ──────────────────────────────────────────────────────────────────
+    const [carregamentos, setCarregamentos] = useState([]);
+    const [extras,        setExtras]        = useState([]);
+    const [motoristas,    setMotoristas]    = useState([]);
+    const [filtroMotorista, setFiltroMotorista] = useState('');
+    const [filtroMes,       setFiltroMes]       = useState('');
+    const [loading,  setLoading]  = useState(true);
+    const [subTab,   setSubTab]   = useState('viagens'); // 'viagens' | 'extras'
+    const [modalExtra, setModalExtra] = useState(null);  // null | {mode, data?}
+    const [formExtra, setFormExtra] = useState({ motorista_id: '', valor: '', data: new Date().toISOString().split('T')[0], observacao: '' });
+
+    // ── Carregar dados ───────────────────────────────────────────────────────────
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const f = { status: 'Entrega finalizada' };
-            if (filtroMotorista) f.motoristaId = filtroMotorista;
-            if (filtroMes) { f.dataInicio = filtroMes + '-01'; f.dataFim = filtroMes + '-' + String(new Date(Number(filtroMes.split('-')[0]), Number(filtroMes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
-            const [v, m] = await Promise.all([fetchViagens(f), fetchTodosMotoristas()]);
-            setViagens(v); setMotoristas(m);
+            const f = {};
+            if (filtroMotorista) f.motorista_id = filtroMotorista;
+            if (filtroMes) {
+                f.dataInicio = filtroMes + '-01';
+                f.dataFim    = filtroMes + '-' + String(new Date(+filtroMes.split('-')[0], +filtroMes.split('-')[1], 0).getDate()).padStart(2,'0');
+            }
+            const fCarr = {};
+            if (filtroMotorista) fCarr.motoristaId = filtroMotorista;
+            if (filtroMes) { fCarr.dataInicio = f.dataInicio; fCarr.dataFim = f.dataFim; }
+
+            const [c, e, m] = await Promise.all([
+                fetchCarregamentos(fCarr),
+                fetchBonificacoesExtras(f),
+                fetchTodosMotoristas(),
+            ]);
+            setCarregamentos(c); setExtras(e); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtroMotorista, filtroMes]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
-    const viagensComBonus = useMemo(() =>
-        viagens.map(v => ({ ...v, bonus: calcularBonusCarreteiro(v.destino) }))
-    , [viagens]);
+    // ── Cálculos ─────────────────────────────────────────────────────────────────
+    const carregamentosComBonus = useMemo(() =>
+        carregamentos.map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }))
+    , [carregamentos]);
 
     const totais = useMemo(() => {
         const porMotorista = {};
-        viagensComBonus.forEach(v => {
-            const id = v.motorista_id || 'sem_motorista';
-            const nome = v.motorista?.name || 'Sem motorista';
-            if (!porMotorista[id]) porMotorista[id] = { nome, viagens: 0, bonus: 0 };
-            porMotorista[id].viagens++;
-            porMotorista[id].bonus += v.bonus;
+        carregamentosComBonus.forEach(c => {
+            const id   = c.motorista_id || 'sem';
+            const nome = c.motorista?.name || 'Sem motorista';
+            if (!porMotorista[id]) porMotorista[id] = { nome, carregamentos: 0, bonusViagens: 0, bonusExtras: 0 };
+            porMotorista[id].carregamentos++;
+            porMotorista[id].bonusViagens += c.bonus;
         });
+        extras.forEach(e => {
+            const id   = e.motorista_id || 'sem';
+            const nome = e.motorista?.name || 'Sem motorista';
+            if (!porMotorista[id]) porMotorista[id] = { nome, carregamentos: 0, bonusViagens: 0, bonusExtras: 0 };
+            porMotorista[id].bonusExtras += Number(e.valor || 0);
+        });
+        const lista = Object.values(porMotorista).map(m => ({ ...m, bonusTotal: m.bonusViagens + m.bonusExtras }));
         return {
-            totalBonus: viagensComBonus.reduce((s, v) => s + v.bonus, 0),
-            totalViagens: viagensComBonus.length,
-            porMotorista: Object.values(porMotorista).sort((a, b) => b.bonus - a.bonus),
+            totalViagens:   carregamentosComBonus.length,
+            totalBonusViag: carregamentosComBonus.reduce((s, c) => s + c.bonus, 0),
+            totalExtras:    extras.reduce((s, e) => s + Number(e.valor || 0), 0),
+            porMotorista:   lista.sort((a, b) => b.bonusTotal - a.bonusTotal),
         };
-    }, [viagensComBonus]);
+    }, [carregamentosComBonus, extras]);
 
+    // ── CRUD Extras ───────────────────────────────────────────────────────────────
+    const abrirNovaExtra = () => {
+        setFormExtra({ motorista_id: '', valor: '', data: new Date().toISOString().split('T')[0], observacao: '' });
+        setModalExtra({ mode: 'create' });
+    };
+    const abrirEditExtra = e => {
+        setFormExtra({ motorista_id: e.motorista_id, valor: String(e.valor), data: e.data, observacao: e.observacao || '' });
+        setModalExtra({ mode: 'edit', data: e });
+    };
+    const salvarExtra = async () => {
+        if (!formExtra.motorista_id)       { showToast('Selecione o motorista', 'error'); return; }
+        if (!formExtra.valor || isNaN(+formExtra.valor)) { showToast('Informe um valor válido', 'error'); return; }
+        if (!formExtra.observacao?.trim()) { showToast('Observação é obrigatória', 'error'); return; }
+        try {
+            const payload = { ...formExtra, valor: Number(formExtra.valor) };
+            if (modalExtra.mode === 'create') await createBonificacaoExtra(payload);
+            else await updateBonificacaoExtra(modalExtra.data.id, payload);
+            showToast('Bonificação salva!', 'success');
+            setModalExtra(null); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+    const excluirExtra = async id => {
+        const ok = await confirm({ title: 'Excluir bonificação extra?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deleteBonificacaoExtra(id); showToast('Excluída!', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    // ── Exportar ──────────────────────────────────────────────────────────────────
     const exportar = () => {
-        if (!viagensComBonus.length) { showToast('Nenhuma viagem encontrada para exportar no período selecionado.', 'error'); return; }
-        const rows = viagensComBonus.map(v => ({
-            'Motorista': v.motorista?.name || '', 'Nº Viagem': v.numero,
-            'Destino': v.destino || '', 'Data': FMT_DATE(v.data_saida),
-            'Placa': v.veiculo?.placa || '', 'Toneladas': v.toneladas || '',
-            'Bônus (R$)': v.bonus,
-        }));
-        const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [18,12,20,12,10,10,12].map(w => ({ wch: w }));
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Bonificações');
+        if (carregamentosComBonus.length) {
+            const rows = carregamentosComBonus.map(c => ({
+                'Motorista': c.motorista?.name || '', 'Placa': c.veiculo?.placa || '',
+                'Destino': c.destino || '', 'Data': FMT_DATE(c.data_carregamento),
+                'Qtd (sacos)': c.quantidade || 0, 'Bônus (R$)': c.bonus,
+            }));
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Bônus por Carregamento');
+        }
+        if (extras.length) {
+            const rows2 = extras.map(e => ({
+                'Motorista': e.motorista?.name || '', 'Data': e.data,
+                'Valor (R$)': Number(e.valor || 0), 'Observação': e.observacao || '',
+                'Criado por': e.criador?.name || '',
+            }));
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows2), 'Bônus Extras');
+        }
+        if (!carregamentosComBonus.length && !extras.length) { showToast('Nenhum dado no período.', 'error'); return; }
         XLSX.writeFile(wb, `bonificacoes_carretas_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
         showToast('Exportado!', 'success');
     };
 
+    const carreteiros = motoristas.filter(m => m.tipo_veiculo === 'carreta' || m.role === 'carreteiro');
+
     return (
         <div>
+            {/* ── Toolbar ── */}
             <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
                 <div className="flex flex-wrap gap-2">
                     <select value={filtroMotorista} onChange={e => setFiltroMotorista(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todos motoristas</option>
-                        {motoristas.filter(m => m.tipo_veiculo === 'carreta' || m.role === 'carreteiro').map(m =>
-                            <option key={m.id} value={m.id}>{m.name}</option>
-                        )}
+                        {carreteiros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
                     <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
@@ -1549,19 +1480,27 @@ function TabBonificacoes({ isAdmin }) {
                 </div>
             </div>
 
-            {/* KPIs */}
-            <div className="grid grid-cols-2 gap-4 mb-5">
-                <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                    <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Viagens Finalizadas</p>
-                    <p className="text-2xl font-bold font-data text-blue-600">{totais.totalViagens}</p>
-                </div>
-                <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                    <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Total Bônus</p>
-                    <p className="text-2xl font-bold font-data text-purple-600">{BRL(totais.totalBonus)}</p>
-                </div>
+            {/* ── KPIs ── */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                {[
+                    { l: 'Carregamentos',   v: totais.totalViagens,                       c: '#1D4ED8', bg: '#EFF6FF', i: 'Package' },
+                    { l: 'Bônus Viagens',   v: BRL(totais.totalBonusViag),                c: '#7C3AED', bg: '#EDE9FE', i: 'Award' },
+                    { l: 'Bônus Extras',    v: BRL(totais.totalExtras),                   c: '#D97706', bg: '#FFFBEB', i: 'PlusCircle' },
+                    { l: 'Total a Receber', v: BRL(totais.totalBonusViag + totais.totalExtras), c: '#059669', bg: '#ECFDF5', i: 'DollarSign' },
+                ].map(k => (
+                    <div key={k.l} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="flex items-center gap-2 mb-1">
+                            <div className="rounded-lg flex items-center justify-center" style={{ width: 28, height: 28, backgroundColor: k.bg }}>
+                                <Icon name={k.i} size={14} color={k.c} />
+                            </div>
+                            <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{k.l}</span>
+                        </div>
+                        <p className="text-xl font-bold font-data" style={{ color: k.c }}>{k.v}</p>
+                    </div>
+                ))}
             </div>
 
-            {/* Resumo por motorista */}
+            {/* ── Cards por motorista ── */}
             {totais.porMotorista.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
                     {totais.porMotorista.map(m => (
@@ -1571,41 +1510,162 @@ function TabBonificacoes({ isAdmin }) {
                                     style={{ backgroundColor: 'var(--color-primary)' }}>
                                     {m.nome[0]?.toUpperCase()}
                                 </div>
-                                <span className="text-xs font-medium" style={{ color: 'var(--color-muted-foreground)' }}>{m.viagens} viagem{m.viagens !== 1 ? 's' : ''}</span>
+                                <span className="text-xs font-medium" style={{ color: 'var(--color-muted-foreground)' }}>{m.carregamentos} carreg.</span>
                             </div>
                             <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{m.nome}</p>
-                            <p className="text-lg font-bold font-data text-purple-600">{BRL(m.bonus)}</p>
+                            <p className="text-xl font-bold font-data text-emerald-600">{BRL(m.bonusTotal)}</p>
+                            <div className="flex gap-3 mt-1 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                <span>Viagens: <strong className="text-purple-600">{BRL(m.bonusViagens)}</strong></span>
+                                {m.bonusExtras > 0 && <span>Extras: <strong className="text-amber-600">{BRL(m.bonusExtras)}</strong></span>}
+                            </div>
                         </div>
                     ))}
                 </div>
             )}
 
-            {/* Tabela detalhada */}
-            {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
-                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-                    <table className="w-full text-sm min-w-[640px]">
-                        <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Motorista','Nº Viagem','Destino','Data','Placa','Bônus'].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
-                        </thead>
-                        <tbody>
-                            {viagensComBonus.length === 0
-                                ? <tr><td colSpan={6} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem finalizada no período</td></tr>
-                                : viagensComBonus.map((v, i) => (
-                                    <tr key={v.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                        <td className="px-4 py-3 font-medium">{v.motorista?.name || '—'}</td>
-                                        <td className="px-4 py-3 font-data text-blue-700">{v.numero}</td>
-                                        <td className="px-4 py-3">{v.destino || '—'}</td>
-                                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{FMT_DATE(v.data_saida)}</td>
-                                        <td className="px-4 py-3 font-data">{v.veiculo?.placa || '—'}</td>
-                                        <td className="px-4 py-3 font-data font-semibold text-purple-600">{BRL(v.bonus)}</td>
-                                    </tr>
-                                ))
-                            }
-                        </tbody>
-                    </table>
+            {/* ── Sub-abas ── */}
+            <div className="flex gap-1 mb-4 p-1 rounded-xl w-fit" style={{ backgroundColor: 'var(--color-muted)' }}>
+                {[
+                    { id: 'viagens', label: 'Bônus por Viagens', icon: 'Truck' },
+                    { id: 'extras',  label: 'Bonificações Extras', icon: 'PlusCircle' },
+                ].map(s => (
+                    <button key={s.id} onClick={() => setSubTab(s.id)}
+                        className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
+                        style={subTab === s.id
+                            ? { backgroundColor: '#fff', color: 'var(--color-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }
+                            : { color: 'var(--color-muted-foreground)' }}>
+                        <Icon name={s.icon} size={13} />
+                        {s.label}
+                    </button>
+                ))}
+            </div>
+
+            {loading ? (
+                <div className="flex justify-center py-12">
+                    <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                 </div>
+            ) : (
+                <>
+                    {/* ── Sub-aba: Bônus por Viagens (carregamentos) ── */}
+                    {subTab === 'viagens' && (
+                        <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                            <table className="w-full text-sm min-w-[640px]">
+                                <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                    <tr>{['Motorista','Placa','Destino','Data','Qtd (sacos)','Bônus'].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                                </thead>
+                                <tbody>
+                                    {carregamentosComBonus.length === 0
+                                        ? <tr><td colSpan={6} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento no período</td></tr>
+                                        : carregamentosComBonus.map((c, i) => (
+                                            <tr key={c.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                                <td className="px-4 py-3 font-medium">{c.motorista?.name || '—'}</td>
+                                                <td className="px-4 py-3 font-data text-xs">{c.veiculo?.placa || '—'}</td>
+                                                <td className="px-4 py-3">{c.destino || '—'}</td>
+                                                <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{FMT_DATE(c.data_carregamento)}</td>
+                                                <td className="px-4 py-3 font-data text-right">{Number(c.quantidade || 0).toLocaleString('pt-BR')}</td>
+                                                <td className="px-4 py-3 font-data font-semibold text-purple-600">{BRL(c.bonus)}</td>
+                                            </tr>
+                                        ))
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {/* ── Sub-aba: Bonificações Extras ── */}
+                    {subTab === 'extras' && (
+                        <div>
+                            <div className="flex justify-between items-center mb-4">
+                                <p className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                    Bonificações avulsas lançadas pelo gestor para cada motorista
+                                </p>
+                                {isAdmin && (
+                                    <Button onClick={abrirNovaExtra} iconName="Plus" size="sm">Nova Bonificação Extra</Button>
+                                )}
+                            </div>
+                            <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                                <table className="w-full text-sm min-w-[600px]">
+                                    <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                        <tr>{['Motorista','Data','Valor','Observação','Criado por',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                                    </thead>
+                                    <tbody>
+                                        {extras.length === 0
+                                            ? <tr><td colSpan={6} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma bonificação extra no período</td></tr>
+                                            : extras.map((e, i) => (
+                                                <tr key={e.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                                    <td className="px-4 py-3 font-medium">{e.motorista?.name || '—'}</td>
+                                                    <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(e.data)}</td>
+                                                    <td className="px-4 py-3 font-data font-bold text-amber-600">{BRL(e.valor)}</td>
+                                                    <td className="px-4 py-3 max-w-[220px]">
+                                                        <p className="text-sm line-clamp-2" style={{ color: 'var(--color-text-primary)' }}>{e.observacao || '—'}</p>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{e.criador?.name || '—'}</td>
+                                                    <td className="px-4 py-3">
+                                                        {isAdmin && (
+                                                            <div className="flex gap-1">
+                                                                <button onClick={() => abrirEditExtra(e)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
+                                                                <button onClick={() => excluirExtra(e.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
+
+            {/* ── Modal Bonificação Extra ── */}
+            {modalExtra && isAdmin && (
+                <ModalOverlay onClose={() => setModalExtra(null)}>
+                    <ModalHeader
+                        title={modalExtra.mode === 'create' ? 'Nova Bonificação Extra' : 'Editar Bonificação Extra'}
+                        icon="PlusCircle"
+                        onClose={() => setModalExtra(null)}
+                    />
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
+                        <Field label="Motorista" required>
+                            <select value={formExtra.motorista_id}
+                                onChange={e => setFormExtra(f => ({ ...f, motorista_id: e.target.value }))}
+                                className={inputCls} style={inputStyle}>
+                                <option value="">Selecione...</option>
+                                {carreteiros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Data" required>
+                            <input type="date" value={formExtra.data}
+                                onChange={e => setFormExtra(f => ({ ...f, data: e.target.value }))}
+                                className={inputCls} style={inputStyle} />
+                        </Field>
+                        <Field label="Valor (R$)" required>
+                            <input type="number" step="0.01" min="0" value={formExtra.valor}
+                                onChange={e => setFormExtra(f => ({ ...f, valor: e.target.value }))}
+                                className={inputCls} style={inputStyle} placeholder="Ex: 150,00" />
+                        </Field>
+                        <div className="sm:col-span-2">
+                            <Field label="Observação" required>
+                                <textarea value={formExtra.observacao}
+                                    onChange={e => setFormExtra(f => ({ ...f, observacao: e.target.value }))}
+                                    className={inputCls} style={inputStyle} rows={3}
+                                    placeholder="Descreva o motivo da bonificação (ex: Viagem extra em feriado, desempenho excepcional...)" />
+                            </Field>
+                        </div>
+                    </div>
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                        <button onClick={() => setModalExtra(null)}
+                            className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50"
+                            style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <Button onClick={salvarExtra} size="sm" iconName="Check">Salvar</Button>
+                    </div>
+                </ModalOverlay>
+            )}
+
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }
@@ -4525,7 +4585,7 @@ export default function CarretasPage() {
                             </div>
 
                             {/* Conteúdo da aba */}
-                            {tab === 'viagens'        && <TabViagens        isAdmin={admin} profile={profile} />}
+                            {tab === 'viagens'        && <TabViagens        isAdmin={admin} />}
                             {tab === 'romaneios'      && <TabRomaneios      isAdmin={admin} />}
                             {tab === 'veiculos'       && <TabVeiculos       isAdmin={admin} />}
                             {tab === 'abastecimentos' && <TabAbastecimentos  isAdmin={admin} profile={profile} />}

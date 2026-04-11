@@ -883,3 +883,52 @@ export async function deleteFornecedorCarretas(id) {
     const { error } = await supabase.from('carretas_fornecedores').delete().eq('id', id);
     if (error) throw error;
 }
+
+// ─── BONIFICAÇÕES EXTRAS ──────────────────────────────────────────────────────
+export async function fetchBonificacoesExtras(filters = {}) {
+    let q = supabase
+        .from('carretas_bonificacoes_extras')
+        .select(`
+            *,
+            motorista:motorista_id(id, name),
+            criador:criado_por(id, name)
+        `)
+        .order('data', { ascending: false });
+
+    if (filters.motorista_id) q = q.eq('motorista_id', filters.motorista_id);
+    if (filters.dataInicio)   q = q.gte('data', filters.dataInicio);
+    if (filters.dataFim)      q = q.lte('data', filters.dataFim);
+
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createBonificacaoExtra(extra) {
+    const { data, error } = await supabase
+        .from('carretas_bonificacoes_extras')
+        .insert(extra)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updateBonificacaoExtra(id, updates) {
+    const { data, error } = await supabase
+        .from('carretas_bonificacoes_extras')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deleteBonificacaoExtra(id) {
+    const { error } = await supabase
+        .from('carretas_bonificacoes_extras')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+}

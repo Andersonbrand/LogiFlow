@@ -15,6 +15,7 @@ import {
     fetchNotificacoesCarreteiro, marcarNotificacaoLida,
     calcularBonusCarreteiro, BONUS_BAIXO, BONUS_ALTO, CIDADES_BONUS_BAIXO,
     CHECKLIST_ITENS,
+    fetchCarregamentos, fetchBonificacoesExtras,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
 
@@ -84,6 +85,8 @@ export default function CarreteiroDashboard() {
     const [tab, setTab]           = useState('viagens');
     const [period, setPeriod]     = useState(30);
     const [viagens, setViagens]   = useState([]);
+    const [carregamentos, setCarregamentos] = useState([]);
+    const [bonusExtras, setBonusExtras]     = useState([]);
     const [abast, setAbast]       = useState([]);
     const [checklists, setChecklists] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
@@ -129,6 +132,17 @@ export default function CarreteiroDashboard() {
             ]);
             setViagens(v); setAbast(a); setChecklists(c); setVeiculos(ve);
             setConfigAbast(cfg || { preco_diesel: 0, preco_arla: 0 });
+
+            // Carregamentos do motorista (nova fonte de dados para viagens e bônus)
+            try {
+                const [carreg, extras] = await Promise.all([
+                    fetchCarregamentos({ motoristaId: user.id, dataInicio: dateStr }),
+                    fetchBonificacoesExtras({ motorista_id: user.id, dataInicio: dateStr }),
+                ]);
+                setCarregamentos(carreg || []);
+                setBonusExtras(extras || []);
+            } catch { setCarregamentos([]); setBonusExtras([]); }
+
             // Carrega registros de viagem do motorista
             try {
                 const regs = await fetchRegistrosViagem(user.id);
@@ -145,7 +159,12 @@ export default function CarreteiroDashboard() {
 
     useEffect(() => { load(); }, [load]);
 
-    // Calcula bônus por viagem (destino)
+    // Bônus por carregamentos (nova fonte)
+    const carregamentosComBonus = useMemo(() =>
+        carregamentos.map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }))
+    , [carregamentos]);
+
+    // Manter compatibilidade com viagens para checklist e registros
     const viagensComBonus = useMemo(() =>
         viagens.map(v => ({
             ...v,
@@ -153,15 +172,24 @@ export default function CarreteiroDashboard() {
         }))
     , [viagens]);
 
+    const totalBonusViagens = useMemo(() =>
+        carregamentosComBonus.reduce((s, c) => s + c.bonus, 0)
+    , [carregamentosComBonus]);
+
+    const totalBonusExtras = useMemo(() =>
+        bonusExtras.reduce((s, e) => s + Number(e.valor || 0), 0)
+    , [bonusExtras]);
 
     const totais = useMemo(() => ({
-        viagens: viagens.length,
-        finalizadas: viagens.filter(v => v.status === 'Entrega finalizada').length,
-        emTransito: viagens.filter(v => v.status === 'Em trânsito').length,
-        totalBonus: viagensComBonus.filter(v => v.status === 'Entrega finalizada').reduce((s, v) => s + v.bonus, 0),
+        viagens:     carregamentos.length,
+        finalizadas: carregamentos.length, // todos os carregamentos são considerados finalizados
+        emTransito:  viagens.filter(v => v.status === 'Em trânsito').length,
+        totalBonus:  totalBonusViagens + totalBonusExtras,
+        totalBonusViagens,
+        totalBonusExtras,
         litrosDiesel: abast.reduce((s, a) => s + Number(a.litros_diesel || 0), 0),
-        gastoTotal: abast.reduce((s, a) => s + Number(a.valor_total || 0), 0),
-    }), [viagens, viagensComBonus, abast]);
+        gastoTotal:   abast.reduce((s, a) => s + Number(a.valor_total || 0), 0),
+    }), [carregamentos, viagens, totalBonusViagens, totalBonusExtras, abast]);
 
     const handleAbast = async () => {
         if (!formAbast.veiculo_id || !formAbast.data_abastecimento) { showToast('Veículo e data são obrigatórios', 'error'); return; }
@@ -348,10 +376,11 @@ export default function CarreteiroDashboard() {
                             {/* KPIs */}
                             <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-5">
                                 {[
-                                    { l: 'Total de Viagens',  v: totais.viagens,     i: 'Navigation', c: '#1D4ED8', bg: '#EFF6FF' },
-                                    { l: 'Finalizadas',       v: totais.finalizadas, i: 'CheckCircle2', c: '#059669', bg: '#D1FAE5' },
-                                    { l: 'Em Trânsito',       v: totais.emTransito,  i: 'Truck', c: '#D97706', bg: '#FEF9C3' },
-                                    { l: 'Bônus no Período',  v: BRL(totais.totalBonus), i: 'DollarSign', c: '#7C3AED', bg: '#EDE9FE' },
+                                    { l: 'Carregamentos',    v: totais.viagens,            i: 'Package',      c: '#1D4ED8', bg: '#EFF6FF' },
+                                    { l: 'Em Trânsito',      v: totais.emTransito,          i: 'Truck',        c: '#D97706', bg: '#FEF9C3' },
+                                    { l: 'Bônus Viagens',    v: BRL(totais.totalBonusViagens), i: 'Award',     c: '#7C3AED', bg: '#EDE9FE' },
+                                    { l: 'Bônus Extras',     v: BRL(totais.totalBonusExtras),  i: 'PlusCircle',c: '#D97706', bg: '#FFFBEB' },
+                                    { l: 'Total a Receber',  v: BRL(totais.totalBonus),    i: 'DollarSign',   c: '#059669', bg: '#D1FAE5' },
                                 ].map(k => (
                                     <div key={k.l} className="bg-white rounded-xl border p-3 sm:p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                         <div className="flex items-center justify-between mb-2">
@@ -400,61 +429,95 @@ export default function CarreteiroDashboard() {
                                 <>
                                     {tab === 'viagens' && (
                                         <div className="flex flex-col gap-2">
-                                            {viagensComBonus.length === 0
-                                                ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</div>
-                                                : viagensComBonus.map(v => {
-                                                    const sc = STATUS_COLORS[v.status] || STATUS_COLORS['Agendado'];
-                                                    return (
-                                                        <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                            <div className="flex items-start justify-between mb-2">
-                                                                <span className="font-data font-bold text-blue-700">{v.numero}</span>
-                                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{v.status}</span>
-                                                            </div>
-                                                            <p className="text-sm mb-2" style={{ color: 'var(--color-text-primary)' }}>{v.destino || '—'}</p>
-                                                            <div className="flex items-center justify-between text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                <div className="flex items-center gap-3">
-                                                                    {v.data_saida && <span>{new Date(v.data_saida + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
-                                                                    {v.veiculo?.placa && <span className="font-data">{v.veiculo.placa}</span>}
-                                                                </div>
-                                                            </div>
+                                            {carregamentosComBonus.length === 0
+                                                ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhum carregamento no período</div>
+                                                : carregamentosComBonus.map(c => (
+                                                    <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                        <div className="flex items-start justify-between mb-2">
+                                                            <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{c.destino || '—'}</p>
+                                                            <span className="font-data font-bold text-purple-600 text-sm">{BRL(c.bonus)}</span>
                                                         </div>
-                                                    );
-                                                })
+                                                        <div className="flex items-center justify-between text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                            <div className="flex items-center gap-3">
+                                                                {c.data_carregamento && <span>{new Date(c.data_carregamento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
+                                                                {c.veiculo?.placa && <span className="font-data">{c.veiculo.placa}</span>}
+                                                                {c.empresa?.nome && <span className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">{c.empresa.nome}</span>}
+                                                            </div>
+                                                            <span className="font-data font-medium" style={{ color: 'var(--color-primary)' }}>
+                                                                {(Number(c.quantidade) || 0).toLocaleString('pt-BR')} sacos
+                                                            </span>
+                                                        </div>
+                                                        {c.numero_nota_fiscal && (
+                                                            <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>NF: {c.numero_nota_fiscal}</p>
+                                                        )}
+                                                    </div>
+                                                ))
                                             }
                                         </div>
                                     )}
 
                                     {tab === 'bonificacoes' && (
                                         <div className="flex flex-col gap-4">
+                                            {/* Resumo */}
                                             <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                 <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: 'var(--color-text-primary)' }}>Resumo do Período</h3>
-                                                <div className="grid grid-cols-2 gap-3">
+                                                <div className="grid grid-cols-3 gap-3">
                                                     <div>
-                                                        <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Total Bônus</p>
-                                                        <p className="text-2xl font-bold font-data text-purple-600">{BRL(totais.totalBonus)}</p>
+                                                        <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Bônus Viagens</p>
+                                                        <p className="text-xl font-bold font-data text-purple-600">{BRL(totais.totalBonusViagens)}</p>
                                                     </div>
                                                     <div>
-                                                        <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Viagens Finalizadas</p>
-                                                        <p className="text-2xl font-bold font-data" style={{ color: 'var(--color-text-primary)' }}>{totais.finalizadas}</p>
+                                                        <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Bônus Extras</p>
+                                                        <p className="text-xl font-bold font-data text-amber-600">{BRL(totais.totalBonusExtras)}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Total a Receber</p>
+                                                        <p className="text-xl font-bold font-data text-emerald-600">{BRL(totais.totalBonus)}</p>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="flex flex-col gap-2">
-                                                <p className="text-sm font-semibold px-1" style={{ color: 'var(--color-text-secondary)' }}>Detalhamento por viagem finalizada</p>
-                                                {viagensComBonus.filter(v => v.status === 'Entrega finalizada').length === 0
-                                                    ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem finalizada no período</div>
-                                                    : viagensComBonus.filter(v => v.status === 'Entrega finalizada').map(v => (
-                                                        <div key={v.id} className="bg-white rounded-xl border p-3 flex items-center justify-between shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                            <div>
-                                                                <span className="font-data font-bold text-blue-700 text-sm">{v.numero}</span>
-                                                                <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                    {v.destino || '—'} · {v.data_saida ? new Date(v.data_saida + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
-                                                                </p>
+
+                                            {/* Bônus por carregamentos */}
+                                            <div>
+                                                <p className="text-sm font-semibold px-1 mb-2" style={{ color: 'var(--color-text-secondary)' }}>Bônus por carregamento</p>
+                                                <div className="flex flex-col gap-2">
+                                                    {carregamentosComBonus.length === 0
+                                                        ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhum carregamento no período</div>
+                                                        : carregamentosComBonus.map(c => (
+                                                            <div key={c.id} className="bg-white rounded-xl border p-3 flex items-center justify-between shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                                <div>
+                                                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{c.destino || '—'}</p>
+                                                                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                        {c.data_carregamento ? new Date(c.data_carregamento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                                                                        {c.veiculo?.placa ? ` · ${c.veiculo.placa}` : ''}
+                                                                    </p>
+                                                                </div>
+                                                                <span className="font-data font-bold text-purple-600">{BRL(c.bonus)}</span>
                                                             </div>
-                                                            <span className="font-data font-bold text-purple-600">{BRL(v.bonus)}</span>
-                                                        </div>
-                                                    ))
-                                                }
+                                                        ))
+                                                    }
+                                                </div>
+                                            </div>
+
+                                            {/* Bonificações extras */}
+                                            <div>
+                                                <p className="text-sm font-semibold px-1 mb-2" style={{ color: 'var(--color-text-secondary)' }}>Bonificações extras</p>
+                                                <div className="flex flex-col gap-2">
+                                                    {bonusExtras.length === 0
+                                                        ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma bonificação extra no período</div>
+                                                        : bonusExtras.map(e => (
+                                                            <div key={e.id} className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}>
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <span className="text-xs font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                        {e.data ? new Date(e.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                                                                    </span>
+                                                                    <span className="font-data font-bold text-amber-600">{BRL(e.valor)}</span>
+                                                                </div>
+                                                                <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{e.observacao || '—'}</p>
+                                                            </div>
+                                                        ))
+                                                    }
+                                                </div>
                                             </div>
                                         </div>
                                     )}
