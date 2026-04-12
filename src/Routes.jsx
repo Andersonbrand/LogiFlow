@@ -13,7 +13,6 @@ import VehicleFleet          from "pages/vehicle-fleet-management";
 import Romaneios             from "pages/romaneios";
 import Relatorios            from "pages/relatorios";
 import AdminPanel            from "pages/admin";
-import Financeiro            from "pages/financeiro";
 import Consolidacao          from "pages/consolidacao";
 import MotoristaDashboard    from "pages/motorista";
 import ResetPassword         from "pages/reset-password";
@@ -49,7 +48,6 @@ const Routes = () => (
                     <Route path="/consolidacao"             element={<StaffRoute><Consolidacao /></StaffRoute>} />
 
                     {/* Rotas exclusivas do admin */}
-                    <Route path="/financeiro"               element={<AdminRoute><Financeiro /></AdminRoute>} />
                     <Route path="/admin"                    element={<AdminRoute><AdminPanel /></AdminRoute>} />
 
                     {/* Rota do motorista (caminhão) */}

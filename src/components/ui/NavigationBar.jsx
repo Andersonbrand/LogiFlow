@@ -10,7 +10,6 @@ const NAV_ITEMS = [
     { id: 'romaneios',    name: 'Romaneios',  path: '/romaneios',                icon: 'FileText',        roles: ['admin','operador'] },
     { id: 'materiais',    name: 'Materiais',  path: '/material-catalog',         icon: 'Package',         roles: ['admin','operador'] },
     { id: 'veiculos',     name: 'Veículos',   path: '/vehicle-fleet-management', icon: 'Truck',           roles: ['admin','operador'] },
-    { id: 'financeiro',   name: 'Financeiro', path: '/financeiro',               icon: 'DollarSign',      roles: ['admin'] },
     { id: 'consolidacao', name: 'Consolid.',  path: '/consolidacao',             icon: 'GitMerge',        roles: ['admin','operador'] },
     { id: 'relatorios',   name: 'Relatórios', path: '/relatorios',               icon: 'BarChart3',       roles: ['admin','operador'] },
     { id: 'despesas-cam', name: 'Despesas',   path: '/despesas-caminhoes',       icon: 'Receipt',         roles: ['admin','operador'] },

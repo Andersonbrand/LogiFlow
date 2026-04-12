@@ -179,13 +179,13 @@ export default function Relatorios() {
         return despesasCaminhoes.filter(d => d.data_despesa && new Date(d.data_despesa) >= cutoffDesp);
     }, [despesasCaminhoes, periodo]);
 
-    const totalDespesasCaminhoes = despesasFiltradas.reduce((s, d) => s + (d.valor_total || 0), 0);
+    const totalDespesasCaminhoes = despesasFiltradas.reduce((s, d) => s + Number(d.valor || 0), 0);
 
     const despesasPorCategoria = useMemo(() => {
         const map = {};
         despesasFiltradas.forEach(d => {
             const cat = d.categoria || 'Outros';
-            map[cat] = (map[cat] || 0) + (d.valor_total || 0);
+            map[cat] = (map[cat] || 0) + Number(d.valor || 0);
         });
         return Object.entries(map).sort(([,a],[,b]) => b - a).map(([name, value]) => ({ name, value }));
     }, [despesasFiltradas]);
@@ -196,7 +196,7 @@ export default function Relatorios() {
             const m = d.data_despesa?.slice(0, 7);
             if (!m) return;
             if (!map[m]) map[m] = { mes: m.slice(5), total: 0 };
-            map[m].total += d.valor_total || 0;
+            map[m].total += Number(d.valor || 0);
         });
         return Object.values(map).sort((a, b) => a.mes.localeCompare(b.mes));
     }, [despesasFiltradas]);
@@ -238,7 +238,7 @@ export default function Relatorios() {
                 despesasCaminhoes: 0,
                 viagens: 0,
             };
-            map[m].despesasCaminhoes += d.valor_total || 0;
+            map[m].despesasCaminhoes += Number(d.valor || 0);
         });
 
         return Object.values(map)
