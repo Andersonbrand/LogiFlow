@@ -2980,13 +2980,14 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const filtros = { dataInicio, dataFim };
             if (empresa) filtros.empresaId = empresa;
 
-            const [carregamentos, abastecimentos, viagens, despesasExtras, diariasLancadas, romaneiosCarga] = await Promise.all([
+            const [carregamentos, abastecimentos, viagens, despesasExtras, diariasLancadas, romaneiosCarga, bonificacoesExtras] = await Promise.all([
                 fetchCarregamentos(filtros),
                 fetchAbastecimentos({ dataInicio, dataFim }),
                 fetchViagens({ dataInicio, dataFim }),
                 fetchDespesasExtras({ dataInicio, dataFim }),
                 fetchDiarias({ dataInicio, dataFim }),
                 fetchRomaneios({ dataInicio, dataFim }),
+                fetchBonificacoesExtras({ dataInicio, dataFim }),
             ]);
 
             // ── Receitas (fretes de carregamentos) ────────────────────────
@@ -3028,21 +3029,34 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const totalDiariasLancadas = diariasLancadas.reduce((s, d) => s + Number(d.valor_total || 0), 0);
 
             // ── Bônus por motorista ────────────────────────────────────────
-            const bonusPorMotorista = {};
             const viagensFinalizadas = viagens.filter(v => v.status === 'Entrega finalizada');
-            viagensFinalizadas.forEach(v => {
-                const id   = v.motorista_id || 'sem_id';
-                const nome = v.motorista?.name || 'Sem motorista';
-                if (!bonusPorMotorista[id]) bonusPorMotorista[id] = { nome, viagens: 0, bonus: 0 };
+            const bonusPorMotorista = {};
+
+            // Bônus de viagens: calculado por carregamento (igual à aba Bonificações)
+            carregamentos.forEach(c => {
+                const id   = c.motorista_id || 'sem_id';
+                const nome = c.motorista?.name || 'Sem motorista';
+                if (!bonusPorMotorista[id]) bonusPorMotorista[id] = { nome, viagens: 0, bonusViagens: 0, bonusExtras: 0 };
                 bonusPorMotorista[id].viagens++;
-                bonusPorMotorista[id].bonus += calcularBonusCarreteiro(v.destino);
+                bonusPorMotorista[id].bonusViagens += calcularBonusCarreteiro(c.destino);
             });
-            const bonusTotal = Object.values(bonusPorMotorista).reduce((s, m) => s + m.bonus, 0);
+
+            // Bônus extras registrados manualmente
+            bonificacoesExtras.forEach(e => {
+                const id   = e.motorista_id || 'sem_id';
+                const nome = e.motorista?.name || 'Sem motorista';
+                if (!bonusPorMotorista[id]) bonusPorMotorista[id] = { nome, viagens: 0, bonusViagens: 0, bonusExtras: 0 };
+                bonusPorMotorista[id].bonusExtras += Number(e.valor || 0);
+            });
+
+            const bonusTotalViagens = Object.values(bonusPorMotorista).reduce((s, m) => s + m.bonusViagens, 0);
+            const bonusTotalExtras  = Object.values(bonusPorMotorista).reduce((s, m) => s + m.bonusExtras, 0);
+            const bonusTotal        = bonusTotalViagens + bonusTotalExtras;
 
             // ── Margens ───────────────────────────────────────────────────
-            const despesaTotal  = despesaCombustivel + bonusTotal;
+            const despesaTotal  = despesaCombustivel + bonusTotal + totalDiariasLancadas + totalDespesasExtras;
             const margemBruta   = receitaTotal - despesaCombustivel;          // receita − combustível
-            const margemLiquida = receitaTotal - despesaTotal;                // receita − combustível − bônus
+            const margemLiquida = receitaTotal - despesaTotal;                // receita − combustível − bônus − diárias − despesas extras
             const margemPct     = receitaTotal > 0 ? (margemLiquida / receitaTotal) * 100 : 0;
 
             // ── Por motorista (frete + bônus) ─────────────────────────────
@@ -3063,7 +3077,9 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const consolidadoMotoristas = Array.from(todosIds).map(id => ({
                 nome:          bonusPorMotorista[id]?.nome  || fretePorMotorista[id]?.nome || '—',
                 viagens:       bonusPorMotorista[id]?.viagens || 0,
-                bonus:         bonusPorMotorista[id]?.bonus   || 0,
+                bonus:         (bonusPorMotorista[id]?.bonusViagens || 0) + (bonusPorMotorista[id]?.bonusExtras || 0),
+                bonusViagens:  bonusPorMotorista[id]?.bonusViagens || 0,
+                bonusExtras:   bonusPorMotorista[id]?.bonusExtras  || 0,
                 carregamentos: fretePorMotorista[id]?.carregamentos || 0,
                 frete:         fretePorMotorista[id]?.frete   || 0,
             })).sort((a, b) => b.frete - a.frete);
@@ -3075,7 +3091,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 receitaPorEmpresa,
                 _romaneios: romaneiosCarga,
                 despesaCombustivel, litrosDiesel, litrosArla, valorDiesel, valorArla,
-                bonusTotal, despesaTotal,
+                bonusTotal, bonusTotalViagens, bonusTotalExtras, despesaTotal,
                 margemBruta, margemLiquida, margemPct,
                 consolidadoMotoristas,
                 totalCarregamentos: carregamentos.length,
@@ -3460,6 +3476,18 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                                 <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Bônus Motoristas</span>
                                 <span className="font-data font-semibold text-purple-600">({BRL(dados.bonusTotal)})</span>
                             </div>
+                            {dados.bonusTotalViagens > 0 && (
+                                <div className="flex justify-between py-1 pl-6">
+                                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ Bônus por viagens</span>
+                                    <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(dados.bonusTotalViagens)}</span>
+                                </div>
+                            )}
+                            {dados.bonusTotalExtras > 0 && (
+                                <div className="flex justify-between py-1 pl-6">
+                                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ Bonificações extras</span>
+                                    <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(dados.bonusTotalExtras)}</span>
+                                </div>
+                            )}
                             {dados.totalDiariasLancadas > 0 && (
                                 <div className="flex justify-between py-1.5 pl-3">
                                     <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>Diárias de Motoristas</span>
