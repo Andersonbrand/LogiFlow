@@ -332,12 +332,12 @@ export default function Consolidacao() {
                                 )}
 
                                 {grupos.length === 0 && gruposDestino.length === 0 && (
-                                    <div className="bg-white rounded-xl border shadow-card p-4 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                                    <div className="bg-white rounded-xl border shadow-card p-4 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                                         <Icon name="MapPin" size={28} color="var(--color-muted-foreground)" />
-                                        <p className="text-xs font-caption mt-2" style={{ color: 'var(--color-muted-foreground)' }}>
+                                        <p className="text-xs font-caption text-center" style={{ color: 'var(--color-muted-foreground)' }}>
                                             Nenhuma sugestão de consolidação identificada
                                         </p>
-                                        <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)', opacity: 0.7 }}>
+                                        <p className="text-xs text-center" style={{ color: 'var(--color-muted-foreground)', opacity: 0.7 }}>
                                             Sugestões aparecem quando há romaneios na mesma rota com veículo abaixo de 40% de capacidade
                                         </p>
                                     </div>
@@ -358,10 +358,10 @@ export default function Consolidacao() {
                                 </div>
 
                                 {romaneios.length === 0 ? (
-                                    <div className="bg-white rounded-xl border shadow-card p-12 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                                    <div className="bg-white rounded-xl border shadow-card p-12 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                                         <Icon name="FileSearch" size={40} color="var(--color-muted-foreground)" />
-                                        <p className="mt-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>Nenhum romaneio disponível</p>
-                                        <p className="text-sm mt-1" style={{ color: 'var(--color-muted-foreground)' }}>
+                                        <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>Nenhum romaneio disponível</p>
+                                        <p className="text-sm text-center" style={{ color: 'var(--color-muted-foreground)' }}>
                                             Apenas romaneios "Aguardando" ou "Carregando" podem ser consolidados
                                         </p>
                                     </div>

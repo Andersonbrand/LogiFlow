@@ -476,7 +476,7 @@ export default function CarreteiroDashboard() {
                                     {tab === 'viagens' && (
                                         <div className="flex flex-col gap-2">
                                             {carregamentosComBonus.length === 0
-                                                ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhum carregamento no período</div>
+                                                ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Package" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento no período</span></div>
                                                 : carregamentosComBonus.map(c => (
                                                     <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                         <div className="flex items-start justify-between mb-2">
@@ -528,7 +528,7 @@ export default function CarreteiroDashboard() {
                                                 <p className="text-sm font-semibold px-1 mb-2" style={{ color: 'var(--color-text-secondary)' }}>Bônus por carregamento</p>
                                                 <div className="flex flex-col gap-2">
                                                     {carregamentosComBonus.length === 0
-                                                        ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhum carregamento no período</div>
+                                                        ? <div className="bg-white rounded-xl border p-6 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Package" size={24} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento no período</span></div>
                                                         : carregamentosComBonus.map(c => (
                                                             <div key={c.id} className="bg-white rounded-xl border p-3 flex items-center justify-between shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                                 <div>
@@ -550,7 +550,7 @@ export default function CarreteiroDashboard() {
                                                 <p className="text-sm font-semibold px-1 mb-2" style={{ color: 'var(--color-text-secondary)' }}>Bonificações extras</p>
                                                 <div className="flex flex-col gap-2">
                                                     {bonusExtras.length === 0
-                                                        ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma bonificação extra no período</div>
+                                                        ? <div className="bg-white rounded-xl border p-6 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Award" size={24} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma bonificação extra no período</span></div>
                                                         : bonusExtras.map(e => (
                                                             <div key={e.id} className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}>
                                                                 <div className="flex items-center justify-between mb-1">
@@ -577,7 +577,7 @@ export default function CarreteiroDashboard() {
                                             </div>
                                             <div className="flex flex-col gap-2">
                                                 {registros.length === 0
-                                                    ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem registrada</div>
+                                                    ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Navigation" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem registrada</span></div>
                                                     : registros.map(r => (
                                                         <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                             <div className="flex items-start justify-between mb-2">
@@ -615,7 +615,7 @@ export default function CarreteiroDashboard() {
                                             </div>
                                             <div className="flex flex-col gap-2">
                                                 {abast.length === 0
-                                                    ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento no período</div>
+                                                    ? <div className="bg-white rounded-xl border p-6 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Fuel" size={24} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento no período</span></div>
                                                     : abast.map(a => (
                                                         <div key={a.id} className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                             <div className="flex items-center justify-between mb-1">
@@ -637,7 +637,12 @@ export default function CarreteiroDashboard() {
 
                                     {tab === 'checklist' && (
                                         <div className="flex flex-col gap-4">
-                                            {checklists.length === 0 && <div className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum checklist enviado ainda</div>}
+                                            {checklists.length === 0 && (
+                                                <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                    <Icon name="ClipboardCheck" size={32} color="var(--color-muted-foreground)" />
+                                                    <span className="text-sm">Nenhum checklist enviado ainda</span>
+                                                </div>
+                                            )}
                                             {checklists.map(c => {
                                                 const itens = c.itens || {};
                                                 const ok = Object.values(itens).filter(Boolean).length;

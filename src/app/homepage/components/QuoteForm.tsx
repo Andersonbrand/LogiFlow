@@ -81,7 +81,7 @@ export default function QuoteForm() {
                                     { label: 'Nome Completo *',        name: 'name',    type: 'text',  required: true,  placeholder: 'João da Silva' },
                                     { label: 'Empresa / Obra',         name: 'company', type: 'text',  required: false, placeholder: 'Construtora Exemplo Ltda' },
                                     { label: 'E-mail *',               name: 'email',   type: 'email', required: true,  placeholder: 'joao@empresa.com.br' },
-                                    { label: 'Telefone / WhatsApp *',  name: 'phone',   type: 'tel',   required: true,  placeholder: '(77) 9 8104-6133' },
+                                    { label: 'Telefone / WhatsApp *',  name: 'phone',   type: 'tel',   required: true,  placeholder: '(77) 3451-2175' },
                                 ].map((field) => (
                                     <div key={field.name}>
                                         <label className="text-[10px] uppercase tracking-[0.25em] font-bold text-muted block mb-3">{field.label}</label>
@@ -123,9 +123,9 @@ export default function QuoteForm() {
                 {/* Contact cards */}
                 <div className="mt-12 grid sm:grid-cols-3 gap-6">
                     {[
-                        { icon: 'ChatBubbleLeftRightIcon', label: 'WhatsApp', value: '(77) 9 8104-6133',                   sub: 'Resposta imediata', href: 'https://wa.me/5577981046133' },
-                        { icon: 'EnvelopeIcon',            label: 'E-mail',   value: 'comercialaraguaia2018@outlook.com',  sub: 'Resposta em 24h',    href: 'mailto:comercialaraguaia2018@outlook.com' },
-                        { icon: 'MapPinIcon',              label: 'Endereço', value: 'Guanambi / Bahia',                  sub: 'Seg–Sex 8h–18h · Sáb 8h–12h', href: '#' },
+                        { icon: 'ChatBubbleLeftRightIcon', label: 'WhatsApp', value: '(77) 3451-2175',                   sub: 'Retorno assim que possivel', href: 'https://wa.me/557734512175' },
+                        { icon: 'EnvelopeIcon',            label: 'E-mail',   value: 'comercialaraguaia2018@outlook.com',  sub: 'Retorno em 24h',    href: 'mailto:comercialaraguaia2018@outlook.com' },
+                        { icon: 'MapPinIcon',              label: 'Endereço', value: 'Guanambi / Bahia',                  sub: 'Seg–Sex 7h–17h · Sáb 8h–12h', href: '#' },
                     ].map((item) => (
                         <a key={item.label} href={item.href} target={item.href.startsWith('http') ? '_blank' : undefined}
                             rel="noopener noreferrer"

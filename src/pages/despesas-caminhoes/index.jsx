@@ -1043,12 +1043,12 @@ export default function DespesasCaminhoes() {
                             <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                         </div>
                     ) : despesas.length === 0 ? (
-                        <div className="bg-white rounded-2xl border p-16 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="bg-white rounded-2xl border p-16 flex flex-col items-center justify-center gap-3" style={{ borderColor: 'var(--color-border)' }}>
                             <Icon name="Receipt" size={40} color="var(--color-muted-foreground)" />
-                            <p className="text-base font-medium mt-4" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma despesa registrada</p>
+                            <p className="text-base font-medium" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma despesa registrada</p>
                             {admin && (
                                 <button onClick={() => setModal({ mode: 'create' })}
-                                    className="mt-4 flex items-center gap-2 mx-auto px-4 py-2 rounded-xl text-sm font-medium text-white"
+                                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white"
                                     style={{ backgroundColor: 'var(--color-primary)' }}>
                                     <Icon name="Plus" size={14} color="white" /> Registrar primeira despesa
                                 </button>

@@ -789,14 +789,14 @@ export default function TabRomaneios({ isAdmin }) {
                         style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                 </div>
             ) : romaneios.length === 0 ? (
-                <div className="bg-white rounded-xl border p-12 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                     <Icon name="FileText" size={40} color="var(--color-muted-foreground)" />
-                    <p className="text-sm mt-3 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
+                    <p className="text-sm font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
                         Nenhum romaneio cadastrado
                     </p>
                     {isAdmin && (
                         <button onClick={() => setModal({ mode: 'create' })}
-                            className="mt-4 flex items-center gap-2 mx-auto px-4 py-2 rounded-lg text-sm font-medium text-white"
+                            className="mt-2 flex items-center gap-2 mx-auto px-4 py-2 rounded-lg text-sm font-medium text-white"
                             style={{ backgroundColor: 'var(--color-primary)' }}>
                             <Icon name="Plus" size={14} color="white" /> Criar primeiro romaneio
                         </button>

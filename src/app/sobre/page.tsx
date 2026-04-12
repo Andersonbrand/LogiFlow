@@ -377,7 +377,7 @@ export default function SobrePage() {
             Fale com nossa equipe e receba um orçamento personalizado para seu projeto.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            <a href="https://wa.me/5577981046133" target="_blank" rel="noopener noreferrer"
+            <a href="https://wa.me/557734512175" target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-2 px-8 py-4 rounded-xl text-white font-bold text-sm transition-all hover:-translate-y-0.5 shadow-lg"
               style={{ backgroundColor: '#af1518' }}>
               <AppIcon name="ChatBubbleLeftRightIcon" size={18} />

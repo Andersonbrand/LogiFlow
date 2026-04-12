@@ -233,8 +233,11 @@ function TabViagens({ isAdmin }) {
                                 </thead>
                                 <tbody>
                                     {carregamentos.length === 0 ? (
-                                        <tr><td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                                            Nenhum carregamento no período. Lance pela aba <strong>Volume por Tipo</strong>.
+                                        <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            <div className="flex flex-col items-center gap-2">
+                                                <Icon name="Package" size={28} color="var(--color-muted-foreground)" />
+                                                <span className="text-sm">Nenhum carregamento no período. Lance pela aba <strong>Volume por Tipo</strong>.</span>
+                                            </div>
                                         </td></tr>
                                     ) : carregamentos.map((c, i) => (
                                         <tr key={c.id} className="border-t hover:bg-gray-50 transition-colors"
@@ -354,7 +357,10 @@ function TabVeiculos({ isAdmin }) {
             {loading ? <div className="flex justify-center py-16"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {veiculos.length === 0 ? (
-                        <div className="col-span-3 text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum veículo cadastrado</div>
+                        <div className="col-span-3 flex flex-col items-center justify-center py-12 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
+                            <Icon name="Truck" size={32} color="var(--color-muted-foreground)" />
+                            <span className="text-sm">Nenhum veículo cadastrado</span>
+                        </div>
                     ) : veiculos.map(v => (
                         <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm hover:shadow-md transition-shadow" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-start justify-between mb-3">
@@ -589,7 +595,12 @@ function TabAbastecimentos({ isAdmin, profile }) {
                             <tr>{['Data','Motorista','Placa','Posto','Diesel (L)','R$ Diesel','Arla (L)','R$ Arla','Total',''].map(h => <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {abast.length === 0 ? <tr><td colSpan={10} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento registrado</td></tr>
+                            {abast.length === 0 ? <tr><td colSpan={10} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                <div className="flex flex-col items-center gap-2">
+                                    <Icon name="Fuel" size={28} color="var(--color-muted-foreground)" />
+                                    <span className="text-sm">Nenhum abastecimento registrado</span>
+                                </div>
+                            </td></tr>
                             : abast.map((a, i) => (
                                 <tr key={a.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(a.data_abastecimento)}</td>
@@ -765,7 +776,12 @@ function TabAbastecimentos({ isAdmin, profile }) {
                         {/* Lista de postos */}
                         <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>Postos cadastrados ({postos.length})</p>
                         <div className="space-y-2 max-h-72 overflow-y-auto">
-                            {postos.length === 0 && <p className="text-sm text-center py-6" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum posto cadastrado</p>}
+                            {postos.length === 0 && (
+                                <div className="flex flex-col items-center justify-center py-6 gap-1.5" style={{ color: 'var(--color-muted-foreground)' }}>
+                                    <Icon name="MapPin" size={24} color="var(--color-muted-foreground)" />
+                                    <p className="text-sm">Nenhum posto cadastrado</p>
+                                </div>
+                            )}
                             {postos.map(p => (
                                 <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border" style={{ borderColor: 'var(--color-border)' }}>
                                     <div className="min-w-0 flex-1">
@@ -898,7 +914,12 @@ function TabChecklist({ isAdmin, profile }) {
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
                 <div className="flex flex-col gap-4">
-                    {checklists.length === 0 && <div className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum checklist encontrado</div>}
+                    {checklists.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-12 gap-2 bg-white rounded-xl border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                            <Icon name="ClipboardCheck" size={32} color="var(--color-muted-foreground)" />
+                            <span className="text-sm">Nenhum checklist encontrado</span>
+                        </div>
+                    )}
                     {checklists.map(c => {
                         const itens = c.itens || {};
                         const ok = Object.values(itens).filter(Boolean).length;
@@ -1174,7 +1195,12 @@ function TabCarregamentos({ isAdmin }) {
                             <tr>{['Data','Pedido/NF','Motorista','Placa','Empresa','Destino','Qtd','Frete',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {carregamentos.length === 0 ? <tr><td colSpan={8} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento registrado</td></tr>
+                            {carregamentos.length === 0 ? <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                <div className="flex flex-col items-center gap-2">
+                                    <Icon name="Truck" size={28} color="var(--color-muted-foreground)" />
+                                    <span className="text-sm">Nenhum carregamento registrado</span>
+                                </div>
+                            </td></tr>
                             : carregamentos.map((c, i) => (
                                 <tr key={c.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-4 py-3">{FMT_DATE(c.data_carregamento)}</td>
@@ -1300,7 +1326,12 @@ function TabEmpresas({ isAdmin }) {
                             <tr>{['Empresa','CNPJ','Observações',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {empresas.length === 0 ? <tr><td colSpan={4} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma empresa cadastrada</td></tr>
+                            {empresas.length === 0 ? <tr><td colSpan={4} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                <div className="flex flex-col items-center gap-2">
+                                    <Icon name="Building2" size={28} color="var(--color-muted-foreground)" />
+                                    <span className="text-sm">Nenhuma empresa cadastrada</span>
+                                </div>
+                            </td></tr>
                             : empresas.map((e, i) => (
                                 <tr key={e.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{e.nome}</td>
@@ -1555,7 +1586,12 @@ function TabBonificacoes({ isAdmin }) {
                                 </thead>
                                 <tbody>
                                     {carregamentosComBonus.length === 0
-                                        ? <tr><td colSpan={6} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento no período</td></tr>
+                                        ? <tr><td colSpan={6} className="text-center py-10" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            <div className="flex flex-col items-center gap-2">
+                                                <Icon name="Package" size={24} color="var(--color-muted-foreground)" />
+                                                <span className="text-sm">Nenhum carregamento no período</span>
+                                            </div>
+                                          </td></tr>
                                         : carregamentosComBonus.map((c, i) => (
                                             <tr key={c.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                 <td className="px-4 py-3 font-medium">{c.motorista?.name || '—'}</td>
@@ -1590,7 +1626,12 @@ function TabBonificacoes({ isAdmin }) {
                                     </thead>
                                     <tbody>
                                         {extras.length === 0
-                                            ? <tr><td colSpan={6} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma bonificação extra no período</td></tr>
+                                            ? <tr><td colSpan={6} className="text-center py-10" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <Icon name="Award" size={24} color="var(--color-muted-foreground)" />
+                                                    <span className="text-sm">Nenhuma bonificação extra no período</span>
+                                                </div>
+                                              </td></tr>
                                             : extras.map((e, i) => (
                                                 <tr key={e.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                     <td className="px-4 py-3 font-medium">{e.motorista?.name || '—'}</td>
@@ -1747,8 +1788,9 @@ function ModalFornecedoresCarretas({ onClose, onSelect }) {
                     {loading ? (
                         <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div>
                     ) : filtrados.length === 0 ? (
-                        <div className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                            {busca ? 'Nenhum fornecedor encontrado' : 'Nenhum fornecedor cadastrado ainda'}
+                        <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
+                            <Icon name="Building2" size={32} color="var(--color-muted-foreground)" />
+                            <span className="text-sm">{busca ? 'Nenhum fornecedor encontrado' : 'Nenhum fornecedor cadastrado ainda'}</span>
                         </div>
                     ) : (
                         <div className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
@@ -2223,7 +2265,12 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             <tr>{['Data','Placa','Categoria','Fornecedor','Descrição','NF','Pagamento','Valor',''].map(h => <th key={h} className="px-3 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {despesas.length === 0 ? <tr><td colSpan={9} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma despesa registrada</td></tr>
+                            {despesas.length === 0 ? <tr><td colSpan={9} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                <div className="flex flex-col items-center gap-2">
+                                    <Icon name="Receipt" size={28} color="var(--color-muted-foreground)" />
+                                    <span className="text-sm">Nenhuma despesa registrada</span>
+                                </div>
+                            </td></tr>
                             : despesas.map((d, i) => (
                                 <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(d.data_despesa)}</td>
@@ -2811,7 +2858,12 @@ function TabDiarias({ isAdmin, profile }) {
                             <tr>{['Data','Motorista','Viagem','Dias','Valor/Dia','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {diarias.length === 0 ? <tr><td colSpan={7} className="text-center py-12 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma diária registrada</td></tr>
+                            {diarias.length === 0 ? <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                <div className="flex flex-col items-center gap-2">
+                                    <Icon name="CalendarDays" size={28} color="var(--color-muted-foreground)" />
+                                    <span className="text-sm">Nenhuma diária registrada</span>
+                                </div>
+                            </td></tr>
                             : diarias.map((d, i) => (
                                 <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(d.data_inicio)}</td>
@@ -3510,7 +3562,10 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                                 Selecione uma placa para ver o relatório detalhado
                             </div>
                         ) : !dadosPorPlaca ? (
-                            <div className="p-8 text-center text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum dado encontrado para esta placa no período</div>
+                            <div className="flex flex-col items-center justify-center p-8 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
+                                <Icon name="FileSearch" size={32} color="var(--color-muted-foreground)" />
+                                <span className="text-sm">Nenhum dado encontrado para esta placa no período</span>
+                            </div>
                         ) : (
                             <div className="p-5 space-y-4 overflow-y-auto flex-1">
                                 {/* KPI cards */}
@@ -3889,7 +3944,12 @@ function TabOrdensServico({ isAdmin, profile }) {
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
                 <div className="flex flex-col gap-3">
-                    {ordens.length === 0 && <div className="bg-white rounded-xl border p-10 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma ordem de serviço</div>}
+                    {ordens.length === 0 && (
+                        <div className="bg-white rounded-xl border flex flex-col items-center justify-center p-10 gap-2" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                            <Icon name="Wrench" size={32} color="var(--color-muted-foreground)" />
+                            <span className="text-sm">Nenhuma ordem de serviço</span>
+                        </div>
+                    )}
                     {ordens.map(o => {
                         const sc = STATUS_COLORS_OS[o.status] || STATUS_COLORS_OS['Pendente'];
                         return (

@@ -170,9 +170,9 @@ export default function MecanicoPage() {
                             <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: '#059669', borderTopColor: 'transparent' }} />
                         </div>
                     ) : ordens.length === 0 ? (
-                        <div className="bg-white rounded-xl border p-8 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                             <Icon name="Wrench" size={32} color="var(--color-muted-foreground)" />
-                            <p className="text-sm mt-3" style={{ color: 'var(--color-muted-foreground)' }}>
+                            <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
                                 Nenhuma ordem{filtro ? ` com status "${filtro}"` : ' de serviço encontrada'}
                             </p>
                         </div>

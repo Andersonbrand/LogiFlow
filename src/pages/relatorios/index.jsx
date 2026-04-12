@@ -9,6 +9,7 @@ import Button from 'components/ui/Button';
 import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { fetchRomaneios } from 'utils/romaneioService';
+import { fetchDespesasCaminhoes } from 'utils/caminhoesDespesasService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { fetchMaterials } from 'utils/materialService';
 import { useToast } from 'utils/useToast';
@@ -69,6 +70,7 @@ function fmtKg(n) { return Number(n || 0).toLocaleString('pt-BR') + ' kg'; }
 export default function Relatorios() {
     const [romaneios, setRomaneios] = useState([]);
     const [vehicles, setVehicles] = useState([]);
+    const [despesasCaminhoes, setDespesasCaminhoes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [periodo, setPeriodo] = useState('30');
     const [tab, setTab] = useState('operacional');
@@ -80,8 +82,8 @@ export default function Relatorios() {
         (async () => {
             try {
                 setLoading(true);
-                const [rom, veh] = await Promise.all([fetchRomaneios(), fetchVehicles()]);
-                setRomaneios(rom); setVehicles(veh);
+                const [rom, veh, desp] = await Promise.all([fetchRomaneios(), fetchVehicles(), fetchDespesasCaminhoes()]);
+                setRomaneios(rom); setVehicles(veh); setDespesasCaminhoes(desp);
             } catch (err) { showToast('Erro: ' + err.message, 'error'); }
             finally { setLoading(false); }
         })();
@@ -170,6 +172,103 @@ export default function Relatorios() {
         });
         return Object.values(map).sort((a, b) => b.receita - a.receita).slice(0, 6);
     }, [romFinalizados]);
+
+    // ─── Despesas Caminhões KPIs ─────────────────────────────
+    const despesasFiltradas = useMemo(() => {
+        const cutoffDesp = new Date(); cutoffDesp.setDate(cutoffDesp.getDate() - Number(periodo));
+        return despesasCaminhoes.filter(d => d.data_despesa && new Date(d.data_despesa) >= cutoffDesp);
+    }, [despesasCaminhoes, periodo]);
+
+    const totalDespesasCaminhoes = despesasFiltradas.reduce((s, d) => s + (d.valor_total || 0), 0);
+
+    const despesasPorCategoria = useMemo(() => {
+        const map = {};
+        despesasFiltradas.forEach(d => {
+            const cat = d.categoria || 'Outros';
+            map[cat] = (map[cat] || 0) + (d.valor_total || 0);
+        });
+        return Object.entries(map).sort(([,a],[,b]) => b - a).map(([name, value]) => ({ name, value }));
+    }, [despesasFiltradas]);
+
+    const despesasPorMes = useMemo(() => {
+        const map = {};
+        despesasFiltradas.forEach(d => {
+            const m = d.data_despesa?.slice(0, 7);
+            if (!m) return;
+            if (!map[m]) map[m] = { mes: m.slice(5), total: 0 };
+            map[m].total += d.valor_total || 0;
+        });
+        return Object.values(map).sort((a, b) => a.mes.localeCompare(b.mes));
+    }, [despesasFiltradas]);
+
+    // ─── DRE Mensal Caminhões ─────────────────────────────────
+    const dreMensal = useMemo(() => {
+        // Consolida receitas dos romaneios finalizados por mês
+        const map = {};
+
+        romFinalizados.forEach(r => {
+            const m = r.saida?.slice(0, 7);
+            if (!m) return;
+            if (!map[m]) map[m] = {
+                mes: m, mesLabel: m.slice(5),
+                receita: 0,
+                custoCombustivel: 0,
+                custoPedagio: 0,
+                custoMotorista: 0,
+                despesasCaminhoes: 0,
+                viagens: 0,
+            };
+            map[m].receita          += r.valor_frete          || 0;
+            map[m].custoCombustivel += r.custo_combustivel     || 0;
+            map[m].custoPedagio     += r.custo_pedagio         || 0;
+            map[m].custoMotorista   += r.custo_motorista       || 0;
+            map[m].viagens++;
+        });
+
+        // Soma despesas de caminhões (manutenção, pneus, etc.) por mês
+        despesasCaminhoes.forEach(d => {
+            const m = d.data_despesa?.slice(0, 7);
+            if (!m) return;
+            if (!map[m]) map[m] = {
+                mes: m, mesLabel: m.slice(5),
+                receita: 0,
+                custoCombustivel: 0,
+                custoPedagio: 0,
+                custoMotorista: 0,
+                despesasCaminhoes: 0,
+                viagens: 0,
+            };
+            map[m].despesasCaminhoes += d.valor_total || 0;
+        });
+
+        return Object.values(map)
+            .sort((a, b) => a.mes.localeCompare(b.mes))
+            .map(m => {
+                const custoOperacional = m.custoCombustivel + m.custoPedagio + m.custoMotorista;
+                const totalDespesas    = custoOperacional + m.despesasCaminhoes;
+                const margemBruta      = m.receita - m.custoCombustivel;
+                const resultadoLiquido = m.receita - totalDespesas;
+                const margemPct        = m.receita > 0 ? (resultadoLiquido / m.receita) * 100 : 0;
+                return { ...m, custoOperacional, totalDespesas, margemBruta, resultadoLiquido, margemPct };
+            });
+    }, [romFinalizados, despesasCaminhoes]);
+
+    // Totais consolidados da DRE
+    const dreTotais = useMemo(() => {
+        const t = dreMensal.reduce((acc, m) => ({
+            receita:          acc.receita          + m.receita,
+            custoCombustivel: acc.custoCombustivel + m.custoCombustivel,
+            custoPedagio:     acc.custoPedagio     + m.custoPedagio,
+            custoMotorista:   acc.custoMotorista   + m.custoMotorista,
+            despesasCaminhoes:acc.despesasCaminhoes+ m.despesasCaminhoes,
+            totalDespesas:    acc.totalDespesas    + m.totalDespesas,
+            margemBruta:      acc.margemBruta      + m.margemBruta,
+            resultadoLiquido: acc.resultadoLiquido + m.resultadoLiquido,
+            viagens:          acc.viagens          + m.viagens,
+        }), { receita:0, custoCombustivel:0, custoPedagio:0, custoMotorista:0, despesasCaminhoes:0, totalDespesas:0, margemBruta:0, resultadoLiquido:0, viagens:0 });
+        t.margemPct = t.receita > 0 ? (t.resultadoLiquido / t.receita) * 100 : 0;
+        return t;
+    }, [dreMensal]);
 
     // ─── Frota KPIs ──────────────────────────────────────────
     const frota = vehicles.length;
@@ -441,10 +540,10 @@ export default function Relatorios() {
                                     </ResponsiveContainer>
                                 </ChartCard>
                             ) : (
-                                <div className="bg-white rounded-xl border border-slate-200 p-10 text-center text-slate-400">
+                                <div className="bg-white rounded-xl border border-slate-200 p-10 flex flex-col items-center justify-center gap-2">
                                     <Icon name="DollarSign" size={40} color="#CBD5E1" />
-                                    <p className="mt-3 text-sm font-medium">Nenhum dado financeiro no período</p>
-                                    <p className="text-xs mt-1">Cadastre valores de frete e custos nos romaneios finalizados</p>
+                                    <p className="text-sm font-medium text-slate-400">Nenhum dado financeiro no período</p>
+                                    <p className="text-xs text-center text-slate-400">Cadastre valores de frete e custos nos romaneios finalizados</p>
                                 </div>
                             )}
 
@@ -526,6 +625,267 @@ export default function Relatorios() {
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {/* ── TAB: DESPESAS CAMINHÕES (dentro de Financeiro) ── */}
+                    {tab === 'financeiro' && (
+                        <div className="flex flex-col gap-6 mt-2">
+                            <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
+                                <Icon name="Truck" size={16} color="#1E3A5F" />
+                                <p className="text-sm font-semibold text-slate-700">Despesas de Caminhões</p>
+                                <span className="ml-auto text-xs text-slate-400">{despesasFiltradas.length} registros no período</span>
+                            </div>
+
+                            <div className="grid grid-cols-2 tab:grid-cols-3 gap-4">
+                                <KpiCard label="Total de Despesas" value={fmtBRL(totalDespesasCaminhoes)} icon="Receipt" color="#DC2626" sub="Caminhões no período" />
+                                <KpiCard label="Categorias" value={despesasPorCategoria.length} icon="Tag" color="#7C3AED" sub="Tipos de despesa" />
+                                <KpiCard label="Média por Despesa" value={despesasFiltradas.length > 0 ? fmtBRL(totalDespesasCaminhoes / despesasFiltradas.length) : 'R$ 0,00'} icon="Calculator" color="#D97706" sub="Custo médio por registro" />
+                            </div>
+
+                            {despesasPorMes.length > 0 && (
+                                <ChartCard title="Despesas por Mês" height={220}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={despesasPorMes}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                                            <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                                            <YAxis tick={{ fontSize: 11 }} tickFormatter={v => 'R$' + (v/1000).toFixed(0) + 'k'} />
+                                            <Tooltip formatter={(v) => fmtBRL(v)} />
+                                            <Bar dataKey="total" name="Despesas" fill="#DC2626" radius={[4,4,0,0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </ChartCard>
+                            )}
+
+                            {despesasPorCategoria.length > 0 && (
+                                <div className="grid grid-cols-1 tab:grid-cols-2 gap-5">
+                                    <ChartCard title="Despesas por Categoria" height={200}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie data={despesasPorCategoria.filter(d => d.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75}
+                                                    label={({ name, percent }) => `${name.length > 10 ? name.slice(0,10)+'…' : name} ${(percent*100).toFixed(0)}%`}>
+                                                    {despesasPorCategoria.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                                                </Pie>
+                                                <Tooltip formatter={v => fmtBRL(v)} />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </ChartCard>
+
+                                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                        <div className="px-4 py-3 border-b border-slate-100">
+                                            <p className="text-sm font-semibold text-slate-700">Top Categorias</p>
+                                        </div>
+                                        <div className="divide-y divide-slate-50">
+                                            {despesasPorCategoria.slice(0, 6).map((c, i) => (
+                                                <div key={i} className="px-4 py-2.5 flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                                                        <span className="text-xs text-slate-700">{c.name}</span>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-xs font-semibold text-slate-800">{fmtBRL(c.value)}</p>
+                                                        <p className="text-xs text-slate-400">{totalDespesasCaminhoes > 0 ? ((c.value/totalDespesasCaminhoes)*100).toFixed(1) : 0}%</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {despesasFiltradas.length === 0 && (
+                                <div className="bg-white rounded-xl border border-slate-200 p-10 flex flex-col items-center justify-center gap-2">
+                                    <Icon name="Truck" size={40} color="#CBD5E1" />
+                                    <p className="text-sm font-medium text-slate-400">Nenhuma despesa de caminhão no período</p>
+                                    <p className="text-xs text-center text-slate-400">Cadastre despesas no módulo de Despesas Caminhões</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── DRE MENSAL CAMINHÕES (dentro de Financeiro) ── */}
+                    {tab === 'financeiro' && dreMensal.length > 0 && (
+                        <div className="flex flex-col gap-4 mt-2">
+                            {/* Header */}
+                            <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
+                                <Icon name="FileText" size={16} color="#1E3A5F" />
+                                <p className="text-sm font-semibold text-slate-700">DRE — Resultado Mensal de Transporte (Caminhões)</p>
+                            </div>
+
+                            {/* KPIs consolidados do período */}
+                            <div className="grid grid-cols-2 tab:grid-cols-4 gap-4">
+                                <KpiCard label="Receita Total" value={fmtBRL(dreTotais.receita)} icon="TrendingUp" color="#059669" sub={`${dreTotais.viagens} viagens finalizadas`} />
+                                <KpiCard label="Custo Operacional" value={fmtBRL(dreTotais.totalDespesas - dreTotais.despesasCaminhoes)} icon="Fuel" color="#D97706" sub="Combustível + Pedágio + Motoristas" />
+                                <KpiCard label="Despesas Caminhões" value={fmtBRL(dreTotais.despesasCaminhoes)} icon="Wrench" color="#7C3AED" sub="Manutenção e demais despesas" />
+                                <KpiCard
+                                    label="Resultado Líquido"
+                                    value={fmtBRL(dreTotais.resultadoLiquido)}
+                                    icon={dreTotais.resultadoLiquido >= 0 ? "TrendingUp" : "TrendingDown"}
+                                    color={dreTotais.resultadoLiquido >= 0 ? "#059669" : "#DC2626"}
+                                    sub={`Margem: ${dreTotais.margemPct.toFixed(1)}%`}
+                                />
+                            </div>
+
+                            {/* Gráfico Resultado Mensal */}
+                            <ChartCard title="Resultado Líquido por Mês" height={220}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={dreMensal}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                                        <XAxis dataKey="mesLabel" tick={{ fontSize: 11 }} />
+                                        <YAxis tick={{ fontSize: 11 }} tickFormatter={v => 'R$' + (v/1000).toFixed(0) + 'k'} />
+                                        <Tooltip formatter={(v) => fmtBRL(v)} />
+                                        <Legend />
+                                        <Bar dataKey="receita" name="Receita" fill="#059669" radius={[4,4,0,0]} />
+                                        <Bar dataKey="totalDespesas" name="Total Despesas" fill="#DC2626" radius={[4,4,0,0]} />
+                                        <Bar dataKey="resultadoLiquido" name="Resultado Líquido" fill="#1E3A5F" radius={[4,4,0,0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </ChartCard>
+
+                            {/* Tabela DRE Mensal */}
+                            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="px-5 py-4 border-b border-slate-100 bg-slate-50">
+                                    <p className="text-sm font-semibold text-slate-700">Demonstrativo de Resultado — Detalhe Mensal</p>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-50 border-b border-slate-200">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Mês</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-green-700 uppercase tracking-wide">Receita</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-amber-600 uppercase tracking-wide hidden md:table-cell">Combustível</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-amber-600 uppercase tracking-wide hidden lg:table-cell">Pedágio</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-amber-600 uppercase tracking-wide hidden lg:table-cell">Motoristas</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-purple-600 uppercase tracking-wide hidden md:table-cell">Desp. Caminhões</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-red-600 uppercase tracking-wide hidden sm:table-cell">Total Desp.</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-700 uppercase tracking-wide">Resultado</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Margem</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {dreMensal.map((m, i) => (
+                                                <tr key={i} className="hover:bg-slate-50">
+                                                    <td className="px-4 py-3 font-medium text-slate-800 text-xs">{m.mesLabel}</td>
+                                                    <td className="px-4 py-3 text-right text-xs font-semibold text-green-700">{fmtBRL(m.receita)}</td>
+                                                    <td className="px-4 py-3 text-right text-xs text-amber-600 hidden md:table-cell">({fmtBRL(m.custoCombustivel)})</td>
+                                                    <td className="px-4 py-3 text-right text-xs text-amber-600 hidden lg:table-cell">({fmtBRL(m.custoPedagio)})</td>
+                                                    <td className="px-4 py-3 text-right text-xs text-amber-600 hidden lg:table-cell">({fmtBRL(m.custoMotorista)})</td>
+                                                    <td className="px-4 py-3 text-right text-xs text-purple-600 hidden md:table-cell">({fmtBRL(m.despesasCaminhoes)})</td>
+                                                    <td className="px-4 py-3 text-right text-xs text-red-600 hidden sm:table-cell">({fmtBRL(m.totalDespesas)})</td>
+                                                    <td className="px-4 py-3 text-right text-xs font-bold" style={{ color: m.resultadoLiquido >= 0 ? '#059669' : '#DC2626' }}>
+                                                        {fmtBRL(m.resultadoLiquido)}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right text-xs font-medium hidden sm:table-cell">
+                                                        <span className={"px-2 py-0.5 rounded-full text-xs font-semibold " + (m.margemPct >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600')}>
+                                                            {m.margemPct.toFixed(1)}%
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {/* Linha de totais */}
+                                            <tr className="bg-slate-100 font-semibold border-t-2 border-slate-300">
+                                                <td className="px-4 py-3 text-xs font-bold text-slate-800">TOTAL</td>
+                                                <td className="px-4 py-3 text-right text-xs font-bold text-green-700">{fmtBRL(dreTotais.receita)}</td>
+                                                <td className="px-4 py-3 text-right text-xs font-bold text-amber-600 hidden md:table-cell">({fmtBRL(dreTotais.custoCombustivel)})</td>
+                                                <td className="px-4 py-3 text-right text-xs font-bold text-amber-600 hidden lg:table-cell">({fmtBRL(dreTotais.custoPedagio)})</td>
+                                                <td className="px-4 py-3 text-right text-xs font-bold text-amber-600 hidden lg:table-cell">({fmtBRL(dreTotais.custoMotorista)})</td>
+                                                <td className="px-4 py-3 text-right text-xs font-bold text-purple-600 hidden md:table-cell">({fmtBRL(dreTotais.despesasCaminhoes)})</td>
+                                                <td className="px-4 py-3 text-right text-xs font-bold text-red-600 hidden sm:table-cell">({fmtBRL(dreTotais.totalDespesas)})</td>
+                                                <td className="px-4 py-3 text-right text-xs font-bold" style={{ color: dreTotais.resultadoLiquido >= 0 ? '#059669' : '#DC2626' }}>
+                                                    {fmtBRL(dreTotais.resultadoLiquido)}
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-xs font-bold hidden sm:table-cell">
+                                                    <span className={"px-2 py-0.5 rounded-full text-xs font-bold " + (dreTotais.margemPct >= 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-700')}>
+                                                        {dreTotais.margemPct.toFixed(1)}%
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* DRE Narrativa consolidada (estilo carretas) */}
+                            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2" style={{ backgroundColor: '#F8FAFC' }}>
+                                    <Icon name="FileText" size={16} color="#64748B" />
+                                    <p className="text-sm font-semibold text-slate-700">Demonstrativo de Resultado (DRE) — Consolidado do Período</p>
+                                </div>
+                                <div className="p-5 space-y-1">
+                                    {/* Receitas */}
+                                    <div className="flex justify-between py-2 border-b border-slate-100">
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-green-700">Receitas</span>
+                                    </div>
+                                    <div className="flex justify-between py-1.5 pl-3">
+                                        <span className="text-sm text-slate-800">Receita de Fretes (Caminhões)</span>
+                                        <span className="font-semibold text-green-700">{fmtBRL(dreTotais.receita)}</span>
+                                    </div>
+                                    <div className="flex justify-between py-1 pl-6">
+                                        <span className="text-xs text-slate-400">↳ {dreTotais.viagens} viagens finalizadas</span>
+                                        <span className="text-xs text-slate-400">{dreTotais.viagens > 0 ? fmtBRL(dreTotais.receita / dreTotais.viagens) + '/viagem' : '—'}</span>
+                                    </div>
+
+                                    {/* Custos operacionais */}
+                                    <div className="flex justify-between py-2 border-b border-slate-100 mt-2">
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-amber-700">Custos Operacionais</span>
+                                    </div>
+                                    <div className="flex justify-between py-1.5 pl-3">
+                                        <span className="text-sm text-slate-800">Combustível</span>
+                                        <span className="font-semibold text-amber-700">({fmtBRL(dreTotais.custoCombustivel)})</span>
+                                    </div>
+                                    {dreTotais.custoPedagio > 0 && (
+                                        <div className="flex justify-between py-1.5 pl-3">
+                                            <span className="text-sm text-slate-800">Pedágio</span>
+                                            <span className="font-semibold text-amber-700">({fmtBRL(dreTotais.custoPedagio)})</span>
+                                        </div>
+                                    )}
+                                    {dreTotais.custoMotorista > 0 && (
+                                        <div className="flex justify-between py-1.5 pl-3">
+                                            <span className="text-sm text-slate-800">Diárias / Motoristas</span>
+                                            <span className="font-semibold text-amber-700">({fmtBRL(dreTotais.custoMotorista)})</span>
+                                        </div>
+                                    )}
+
+                                    {/* Margem bruta */}
+                                    <div className="flex justify-between py-2.5 px-3 rounded-lg mt-2" style={{ backgroundColor: '#F0FDF4' }}>
+                                        <span className="text-sm font-semibold text-green-800">Margem Bruta (−Custos Operacionais)</span>
+                                        <span className="font-bold text-green-700">{fmtBRL(dreTotais.margemBruta)}</span>
+                                    </div>
+
+                                    {/* Despesas caminhões */}
+                                    <div className="flex justify-between py-2 border-b border-slate-100 mt-2">
+                                        <span className="text-xs font-semibold uppercase tracking-wide text-purple-700">Despesas Caminhões (Manutenção e Outros)</span>
+                                    </div>
+                                    <div className="flex justify-between py-1.5 pl-3">
+                                        <span className="text-sm text-slate-800">Despesas diversas</span>
+                                        <span className="font-semibold text-purple-700">({fmtBRL(dreTotais.despesasCaminhoes)})</span>
+                                    </div>
+                                    {despesasPorCategoria.slice(0, 5).map(c => (
+                                        <div key={c.name} className="flex justify-between py-0.5 pl-6">
+                                            <span className="text-xs text-slate-400">↳ {c.name}</span>
+                                            <span className="text-xs text-slate-400">{fmtBRL(c.value)}</span>
+                                        </div>
+                                    ))}
+
+                                    {/* Resultado Líquido */}
+                                    <div className="flex justify-between py-3 px-3 rounded-lg mt-2" style={{
+                                        backgroundColor: dreTotais.resultadoLiquido >= 0 ? '#EFF6FF' : '#FEF2F2',
+                                        border: `1px solid ${dreTotais.resultadoLiquido >= 0 ? '#BFDBFE' : '#FECACA'}`,
+                                    }}>
+                                        <div>
+                                            <p className="text-sm font-bold" style={{ color: dreTotais.resultadoLiquido >= 0 ? '#1D4ED8' : '#DC2626' }}>
+                                                Resultado Líquido do Transporte
+                                            </p>
+                                            <p className="text-xs mt-0.5" style={{ color: dreTotais.resultadoLiquido >= 0 ? '#3B82F6' : '#EF4444' }}>
+                                                Margem líquida: {dreTotais.margemPct.toFixed(1)}%
+                                            </p>
+                                        </div>
+                                        <span className="font-bold text-lg" style={{ color: dreTotais.resultadoLiquido >= 0 ? '#1D4ED8' : '#DC2626' }}>
+                                            {fmtBRL(dreTotais.resultadoLiquido)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -742,10 +1102,10 @@ export default function Relatorios() {
 
                                 {/* Lista de pedidos agrupados por romaneio */}
                                 {pedidosPorRomaneio.length === 0 ? (
-                                    <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+                                    <div className="bg-white rounded-xl border border-slate-200 p-12 flex flex-col items-center justify-center gap-2">
                                         <Icon name="Building2" size={40} color="#CBD5E1" />
-                                        <p className="mt-3 text-sm font-medium text-slate-500">Nenhum pedido encontrado</p>
-                                        <p className="text-xs mt-1 text-slate-400">Selecione outro mês ou verifique se os pedidos têm a empresa associada</p>
+                                        <p className="text-sm font-medium text-slate-500">Nenhum pedido encontrado</p>
+                                        <p className="text-xs text-center text-slate-400">Selecione outro mês ou verifique se os pedidos têm a empresa associada</p>
                                     </div>
                                 ) : (
                                     <div className="flex flex-col gap-4">

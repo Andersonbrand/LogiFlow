@@ -183,7 +183,7 @@ export default function ProductDetailPage() {
 
               {/* WhatsApp */}
               <a
-                href={`https://wa.me/5577981046133?text=Olá! Tenho interesse no produto: ${encodeURIComponent(product.name)}${qty > 1 ? `, quantidade: ${qty}` : ''}`}
+                href={`https://wa.me/557734512175?text=Olá! Tenho interesse no produto: ${encodeURIComponent(product.name)}${qty > 1 ? `, quantidade: ${qty}` : ''}`}
                 target="_blank" rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-all text-sm font-bold text-muted hover:text-primary"
               >

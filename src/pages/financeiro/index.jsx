@@ -264,7 +264,10 @@ export default function Financeiro() {
                                 <div className="tab:col-span-2 bg-white rounded-xl border shadow-card p-5" style={{ borderColor: 'var(--color-border)' }}>
                                     <h3 className="font-heading font-semibold text-sm mb-4" style={{ color: 'var(--color-text-primary)' }}>Receita vs Custo por Rota</h3>
                                     {byRota.length === 0 ? (
-                                        <div className="flex items-center justify-center h-48 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem finalizada no período com dados financeiros</div>
+                                        <div className="flex flex-col items-center justify-center h-48 gap-2 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            <Icon name="BarChart2" size={32} color="var(--color-muted-foreground)" />
+                                            <span>Nenhuma viagem finalizada no período com dados financeiros</span>
+                                        </div>
                                     ) : (
                                         <ResponsiveContainer width="100%" height={230}>
                                             <BarChart data={byRota} margin={{ left: 10, right: 10, top: 5, bottom: 45 }}>
@@ -318,8 +321,11 @@ export default function Financeiro() {
                                         </thead>
                                         <tbody>
                                             {filtered.length === 0 ? (
-                                                <tr><td colSpan={7} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                    Nenhuma viagem encontrada com os filtros selecionados
+                                                <tr><td colSpan={7} className="text-center py-10" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <Icon name="FileSearch" size={28} color="var(--color-muted-foreground)" />
+                                                        <span className="text-sm">Nenhuma viagem encontrada com os filtros selecionados</span>
+                                                    </div>
                                                 </td></tr>
                                             ) : filtered.map(r => {
                                                 const custo = r.custo_combustivel + r.custo_pedagio + r.custo_motorista;

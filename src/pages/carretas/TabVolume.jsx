@@ -693,9 +693,9 @@ function DashboardVolume({ totais, carregamentos, mes }) {
 function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete }) {
     if (carregamentos.length === 0) {
         return (
-            <div className="bg-white rounded-xl border p-12 text-center" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                 <Icon name="Package" size={36} color="var(--color-muted-foreground)" />
-                <p className="text-sm mt-3" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento encontrado para o período</p>
+                <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento encontrado para o período</p>
             </div>
         );
     }
@@ -751,10 +751,10 @@ function PainelFornecedores({ fornecedores, isAdmin, onNovo, onDelete }) {
                 </div>
             )}
             {fornecedores.length === 0 ? (
-                <div className="bg-white rounded-xl border p-12 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                     <Icon name="Building" size={36} color="var(--color-muted-foreground)" />
-                    <p className="text-sm mt-3" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum fornecedor cadastrado</p>
-                    {isAdmin && <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>Clique em "Novo Fornecedor" para adicionar</p>}
+                    <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum fornecedor cadastrado</p>
+                    {isAdmin && <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Clique em "Novo Fornecedor" para adicionar</p>}
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

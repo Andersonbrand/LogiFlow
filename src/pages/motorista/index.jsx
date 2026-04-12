@@ -386,7 +386,7 @@ export default function MotoristaDashboard() {
                                     {tab === 'viagens' && (
                                         <div className="flex flex-col gap-2">
                                             {romaneios.length === 0
-                                                ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</div>
+                                                ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="FileText" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</span></div>
                                                 : romaneios.map(r => {
                                                     const sc = STATUS_ROM[r.status] || STATUS_ROM['Finalizado'];
                                                     return (
@@ -431,7 +431,7 @@ export default function MotoristaDashboard() {
                                                 ))}
                                             </div>
                                             {abast.length === 0
-                                                ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento no período</div>
+                                                ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Fuel" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento no período</span></div>
                                                 : abast.map(a => (
                                                     <div key={a.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                         <div className="flex items-start justify-between mb-2 gap-2">
@@ -463,7 +463,7 @@ export default function MotoristaDashboard() {
                                     {tab === 'checklist' && (
                                         <div className="flex flex-col gap-4">
                                             {checklists.length === 0
-                                                ? <div className="bg-white rounded-xl border p-8 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhum checklist enviado</div>
+                                                ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="ClipboardCheck" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum checklist enviado</span></div>
                                                 : checklists.map(c => {
                                                     const itens = c.itens || {};
                                                     const ok = Object.values(itens).filter(Boolean).length;
@@ -514,7 +514,7 @@ export default function MotoristaDashboard() {
                                             </div>
                                             <div className="flex flex-col gap-2">
                                                 {bonificacoes.filter(r => r.bonif?.valorTotal > 0).length === 0
-                                                    ? <div className="bg-white rounded-xl border p-6 text-center text-sm" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>Nenhuma bonificação no período</div>
+                                                    ? <div className="bg-white rounded-xl border p-6 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="DollarSign" size={24} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma bonificação no período</span></div>
                                                     : bonificacoes.filter(r => r.bonif?.valorTotal > 0).map(r => (
                                                         <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                             <div className="flex items-start justify-between mb-2">

@@ -51,7 +51,7 @@ export default function HeroSection() {
           </p>
 
           <div className="flex flex-wrap gap-4">
-            <a href="https://wa.me/5577981046133" target="_blank" rel="noopener noreferrer"
+            <a href="https://wa.me/557734512175" target="_blank" rel="noopener noreferrer"
               className="px-8 py-4 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary-dark transition-all shadow-red-lg hover:shadow-red-xl hover:-translate-y-0.5 flex items-center gap-2">
               <AppIcon name="ChatBubbleLeftRightIcon" size={18} />
               Falar no WhatsApp
