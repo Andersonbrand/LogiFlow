@@ -32,6 +32,7 @@ import {
     STATUS_ROMANEIO_COLORS,
     fetchRomaneios,
     fetchBonificacoesExtras, createBonificacaoExtra, updateBonificacaoExtra, deleteBonificacaoExtra,
+    pagarBoletoCarreta, pagarParcelaCartaoCarreta,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
 
@@ -62,12 +63,12 @@ function StatusBadge({ status }) {
     );
 }
 
-function ModalOverlay({ children, onClose }) {
+function ModalOverlay({ children, onClose, wide, sm }) {
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
             onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col"
+            <div className={`bg-white rounded-2xl shadow-2xl flex flex-col ${wide ? 'w-full max-w-4xl' : sm ? 'w-full max-w-md' : 'w-full max-w-2xl'}`}
                 style={{ maxHeight: 'calc(100vh - 32px)' }}>
                 {children}
             </div>
@@ -1753,22 +1754,8 @@ function ModalFornecedoresCarretas({ onClose, onSelect }) {
     );
 
     return (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
-            onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-2xl"
-                style={{ maxHeight: 'calc(100vh - 48px)' }}>
-
-                {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                    <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                            <Icon name="Building2" size={18} color="#1D4ED8" />
-                        </div>
-                        <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>Fornecedores</h2>
-                    </div>
-                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
-                </div>
+        <ModalOverlay onClose={onClose} wide>
+            <ModalHeader title="Fornecedores" icon="Building2" onClose={onClose} />
 
                 {/* Search + New */}
                 <div className="flex items-center gap-3 px-5 py-3 border-b shrink-0" style={{ borderColor: 'var(--color-border)' }}>
@@ -1869,8 +1856,118 @@ function ModalFornecedoresCarretas({ onClose, onSelect }) {
 
                 <Toast toast={toast} />
                 {ConfirmDialog}
+            </ModalOverlay>
+    );
+}
+
+// ─── Modal de Baixa de Boletos — Carretas ─────────────────────────────────────
+function ModalBaixaCarretas({ despesa, onClose, onBaixado }) {
+    const { toast, showToast } = useToast();
+    const [loading, setLoading] = useState(false);
+
+    const handlePagarBoleto = async (idx) => {
+        setLoading(true);
+        try {
+            await pagarBoletoCarreta(despesa.id, idx);
+            showToast('Boleto baixado!', 'success');
+            onBaixado();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    };
+
+    const handlePagarParcela = async (idx) => {
+        setLoading(true);
+        try {
+            await pagarParcelaCartaoCarreta(despesa.id, idx);
+            showToast('Parcela baixada!', 'success');
+            onBaixado();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    };
+
+    const boletos  = despesa.boletos        || [];
+    const parcelas = despesa.parcelas_cartao || [];
+
+    return (
+        <ModalOverlay onClose={onClose} sm>
+            <ModalHeader title="Dar Baixa em Pagamentos" icon="CheckCircle2" onClose={onClose} />
+            <div className="p-5 overflow-y-auto flex-1 space-y-5">
+                {boletos.length > 0 && (
+                    <div>
+                        <p className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text-primary)' }}>Boletos</p>
+                        <div className="space-y-2">
+                            {boletos.map((b, idx) => (
+                                <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border"
+                                    style={{ borderColor: 'var(--color-border)', backgroundColor: b.pago ? '#F0FDF4' : '#FFFBEB' }}>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-medium font-data" style={{ color: 'var(--color-text-primary)' }}>
+                                            Parcela {idx + 1} — {BRL(b.valor)}
+                                        </p>
+                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            Vencimento: {b.vencimento ? new Date(b.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                                        </p>
+                                        {b.pago && (
+                                            <p className="text-xs text-green-600 font-medium">
+                                                ✓ Pago em {b.pago_em ? new Date(b.pago_em).toLocaleDateString('pt-BR') : '—'}
+                                            </p>
+                                        )}
+                                    </div>
+                                    {!b.pago ? (
+                                        <button onClick={() => handlePagarBoleto(idx)} disabled={loading}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-60">
+                                            <Icon name="Check" size={13} /> Dar baixa
+                                        </button>
+                                    ) : (
+                                        <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-100 text-green-700">Pago</span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {parcelas.length > 0 && (
+                    <div>
+                        <p className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text-primary)' }}>Parcelas do Cartão</p>
+                        <div className="space-y-2">
+                            {parcelas.map((p, idx) => (
+                                <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border"
+                                    style={{ borderColor: 'var(--color-border)', backgroundColor: p.pago ? '#F0FDF4' : '#FAF5FF' }}>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-medium font-data" style={{ color: 'var(--color-text-primary)' }}>
+                                            Parcela {idx + 1} — {BRL(p.valor)}
+                                        </p>
+                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            Vencimento: {p.vencimento ? new Date(p.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                                            {p.cartao ? ` · ${p.cartao}` : ''}
+                                        </p>
+                                        {p.pago && (
+                                            <p className="text-xs text-purple-600 font-medium">
+                                                ✓ Pago em {p.pago_em ? new Date(p.pago_em).toLocaleDateString('pt-BR') : '—'}
+                                            </p>
+                                        )}
+                                    </div>
+                                    {!p.pago ? (
+                                        <button onClick={() => handlePagarParcela(idx)} disabled={loading}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-60">
+                                            <Icon name="Check" size={13} /> Dar baixa
+                                        </button>
+                                    ) : (
+                                        <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-100 text-purple-700">Pago</span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {boletos.length === 0 && parcelas.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-8 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
+                        <Icon name="CheckCircle2" size={28} color="var(--color-muted-foreground)" />
+                        <p className="text-sm">Nenhum boleto ou parcela encontrado</p>
+                    </div>
+                )}
             </div>
-        </div>
+            <Toast toast={toast} />
+        </ModalOverlay>
     );
 }
 
@@ -1882,6 +1979,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const [loading, setLoading]     = useState(true);
     const [modal, setModal]         = useState(null);
     const [showFornecedores, setShowFornecedores] = useState(false);
+    const [modalBaixa, setModalBaixa] = useState(null);
     const [filtro, setFiltro]       = useState({ veiculoId: '', categoria: '', mes: '' });
     const [categoriasExtras, setCategoriasExtras] = useState(() => {
         try { return JSON.parse(localStorage.getItem('carretas_categorias_extras') || '[]'); } catch { return []; }
@@ -2281,7 +2379,14 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                     <td className="px-3 py-3">{pgBadge(d)}</td>
                                     <td className="px-3 py-3 font-data font-semibold text-red-600">{BRL(d.valor)}</td>
                                     <td className="px-3 py-3">
-                                        <div className="flex gap-1">
+                                        <div className="flex gap-1 items-center">
+                                            {d.forma_pagamento === 'a_prazo' && (d.boletos?.length > 0 || d.parcelas_cartao?.length > 0) && (
+                                                <button onClick={() => setModalBaixa(d)}
+                                                    className="p-1.5 rounded hover:bg-green-50"
+                                                    title="Dar baixa em pagamentos">
+                                                    <Icon name="CheckCircle2" size={13} color="#059669" />
+                                                </button>
+                                            )}
                                             {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
                                             {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
                                         </div>
@@ -2717,6 +2822,13 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             ...(f.categoria && !prev.categoria ? { categoria: f.categoria } : {}),
                         }));
                     }}
+                />
+            )}
+            {modalBaixa && (
+                <ModalBaixaCarretas
+                    despesa={modalBaixa}
+                    onClose={() => setModalBaixa(null)}
+                    onBaixado={() => { load(); setModalBaixa(null); }}
                 />
             )}
         </div>

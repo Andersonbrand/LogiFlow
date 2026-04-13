@@ -673,6 +673,40 @@ export async function deleteDespesaExtra(id) {
     if (error) throw error;
 }
 
+// Dar baixa em boleto de despesa extra de carretas
+export async function pagarBoletoCarreta(despesaId, boletoIdx) {
+    const { data: current } = await supabase
+        .from('carretas_despesas_extras')
+        .select('boletos')
+        .eq('id', despesaId)
+        .single();
+    const boletos = [...(current?.boletos || [])];
+    if (boletos[boletoIdx]) boletos[boletoIdx] = { ...boletos[boletoIdx], pago: true, pago_em: new Date().toISOString() };
+    const { data, error } = await supabase
+        .from('carretas_despesas_extras')
+        .update({ boletos, updated_at: new Date().toISOString() })
+        .eq('id', despesaId).select().single();
+    if (error) throw error;
+    return data;
+}
+
+// Dar baixa em parcela de cartão de despesa extra de carretas
+export async function pagarParcelaCartaoCarreta(despesaId, parcelaIdx) {
+    const { data: current } = await supabase
+        .from('carretas_despesas_extras')
+        .select('parcelas_cartao')
+        .eq('id', despesaId)
+        .single();
+    const parcelas = [...(current?.parcelas_cartao || [])];
+    if (parcelas[parcelaIdx]) parcelas[parcelaIdx] = { ...parcelas[parcelaIdx], pago: true, pago_em: new Date().toISOString() };
+    const { data, error } = await supabase
+        .from('carretas_despesas_extras')
+        .update({ parcelas_cartao: parcelas, updated_at: new Date().toISOString() })
+        .eq('id', despesaId).select().single();
+    if (error) throw error;
+    return data;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DIÁRIAS DE MOTORISTAS
 // ─────────────────────────────────────────────────────────────────────────────
