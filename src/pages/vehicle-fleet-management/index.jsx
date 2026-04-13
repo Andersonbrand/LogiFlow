@@ -75,15 +75,27 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                 dataInicio: mes + '-01',
                 dataFim: mes + '-' + String(new Date(ano, m, 0).getDate()).padStart(2, '0'),
             };
-            const [a, c, d] = await Promise.all([
+            // Busca romaneios do período com diária (custo_motorista > 0)
+            // cruzando por motorista_id OU nome do motorista (campo texto livre)
+            const romaneioRes = await supabase
+                .from('romaneios')
+                .select('id, numero, motorista, motorista_id, destino, status, saida, created_at, custo_motorista')
+                .or(`motorista_id.eq.${motorista.id},motorista.ilike.${motorista.name}`)
+                .gt('custo_motorista', 0)
+                .gte('created_at', f.dataInicio)
+                .lte('created_at', f.dataFim + 'T23:59:59')
+                .order('created_at', { ascending: false });
+
+            const [a, ch, d] = await Promise.all([
                 fetchAbastecimentos(f),
                 fetchChecklists({ motoristaId: motorista.id }),
                 fetchDiarias({ motoristaId: motorista.id, dataInicio: f.dataInicio, dataFim: f.dataFim }),
             ]);
-            setAbast(a); setChecklists(c); setDiarias(d);
+            setAbast(a); setChecklists(ch); setDiarias(d);
+            setRomaneiosDiarias(romaneioRes.data || []);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [motorista.id, mes]); // eslint-disable-line
+    }, [motorista.id, motorista.name, mes]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
 

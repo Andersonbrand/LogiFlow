@@ -3,6 +3,7 @@ import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 import Autocomplete from 'components/ui/Autocomplete';
 import { fetchMotoristas, fetchDestinos } from 'utils/romaneioService';
+import { fetchPostos } from 'utils/carretasService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { fetchMaterials } from 'utils/materialService';
 import { FRETE_CATEGORIAS, detectarCategoriaFrete, calcularFretePedido, getCategoriaConfig, fmtPct } from 'utils/freteConfig';
@@ -68,6 +69,8 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     const [calcRota, setCalcRota]       = useState(false);
     const [calcCustos, setCalcCustos]   = useState(false); // loading custos IA (diesel + pedágio)
     const [custoStatus, setCustoStatus] = useState(null);  // mensagem sobre preenchimento dos custos
+    const [postos, setPostos]           = useState([]);            // postos cadastrados pelo admin
+    const [postoSelecionado, setPostoSelecionado] = useState(''); // posto selecionado para cálculo
     const [precoDiesel, setPrecoDiesel] = useState('6.50');    // R$/litro configurável pelo usuário
     const [usarPedagio, setUsarPedagio] = useState(true);      // toggle pedágio na rota
     const [pedagioPor100km, setPedagioPor100km] = useState('8.00'); // R$/100km configurável
@@ -75,6 +78,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     useEffect(() => {
         fetchMotoristas().then(setMotoristas);
         fetchDestinos().then(setDestinos);
+        fetchPostos().then(p => setPostos(p)).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -141,6 +145,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         setRotaInfo(null);
         setParadas([]);
         setCustoStatus(null);
+        setPostoSelecionado('');
         setPrecoDiesel('6.50');
         setUsarPedagio(true);
         setPedagioPor100km('8.00');
@@ -530,16 +535,55 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                         Configurações para cálculo automático
                                     </p>
                                     <div className="grid grid-cols-2 gap-2">
-                                        <div>
+                                        {/* Seleção de posto — substitui input manual de preço */}
+                                        <div className="col-span-2">
                                             <label className="block text-xs font-caption mb-1" style={{ color: 'var(--color-text-secondary)' }}>
-                                                Preço Diesel S10 (R$/l)
+                                                Posto de Combustível
                                             </label>
-                                            <div className="relative">
-                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>R$</span>
-                                                <input type="number" min="0" step="0.01" value={precoDiesel}
-                                                    onChange={e => setPrecoDiesel(e.target.value)}
-                                                    className="w-full h-8 pl-7 pr-2 rounded border border-gray-200 text-xs font-data bg-white" />
-                                            </div>
+                                            {postos.length > 0 ? (
+                                                <select
+                                                    value={postoSelecionado}
+                                                    onChange={e => {
+                                                        const posto = postos.find(p => String(p.id) === e.target.value);
+                                                        setPostoSelecionado(e.target.value);
+                                                        if (posto?.preco_diesel) {
+                                                            const novoPreco = String(posto.preco_diesel);
+                                                            setPrecoDiesel(novoPreco);
+                                                            // Recalcular custo se já tem veículo e distância
+                                                            setForm(prev => {
+                                                                const veh = vehicles.find(v => String(v.id) === String(prev.vehicle_id));
+                                                                const dist = Number(prev.distancia_km);
+                                                                if (veh?.consumo_km && dist > 0) {
+                                                                    const litros = dist / Number(veh.consumo_km);
+                                                                    return {
+                                                                        ...prev,
+                                                                        _litros_estimados: Math.round(litros),
+                                                                        custo_combustivel: (litros * Number(posto.preco_diesel)).toFixed(2),
+                                                                    };
+                                                                }
+                                                                return prev;
+                                                            });
+                                                        }
+                                                    }}
+                                                    className="w-full h-8 px-2 rounded border border-gray-200 text-xs bg-white">
+                                                    <option value="">Selecione o posto...</option>
+                                                    {postos.map(p => (
+                                                        <option key={p.id} value={p.id}>
+                                                            {p.nome}{p.cidade ? ` — ${p.cidade}` : ''} · R$ {Number(p.preco_diesel||0).toFixed(3)}/L
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            ) : (
+                                                <div className="flex items-center gap-2 h-8 px-2 rounded border border-dashed border-gray-200 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                    <Icon name="AlertCircle" size={12} color="#D97706" />
+                                                    Nenhum posto cadastrado — cadastre em Veículos &gt; Carretas
+                                                </div>
+                                            )}
+                                            {postoSelecionado && (
+                                                <p className="text-xs mt-1 font-medium" style={{ color: '#059669' }}>
+                                                    ✓ Diesel: R$ {Number(precoDiesel).toFixed(3)}/L · Cálculo automático ativo
+                                                </p>
+                                            )}
                                         </div>
                                         <div>
                                             <label className="block text-xs font-caption mb-1" style={{ color: 'var(--color-text-secondary)' }}>
@@ -554,18 +598,20 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                     className="w-full h-8 px-2 rounded border border-gray-200 text-xs font-data bg-white disabled:opacity-40 disabled:bg-gray-50" />
                                             </div>
                                         </div>
-                                    </div>
-                                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                                        <div onClick={() => setUsarPedagio(p => !p)}
-                                            className="relative w-8 h-4 rounded-full transition-colors flex-shrink-0"
-                                            style={{ backgroundColor: usarPedagio ? 'var(--color-primary)' : '#D1D5DB' }}>
-                                            <div className="absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all"
-                                                style={{ left: usarPedagio ? '17px' : '2px' }} />
+                                        <div className="flex items-end pb-1">
+                                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                                <div onClick={() => setUsarPedagio(p => !p)}
+                                                    className="relative w-8 h-4 rounded-full transition-colors flex-shrink-0"
+                                                    style={{ backgroundColor: usarPedagio ? 'var(--color-primary)' : '#D1D5DB' }}>
+                                                    <div className="absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all"
+                                                        style={{ left: usarPedagio ? '17px' : '2px' }} />
+                                                </div>
+                                                <span className="text-xs font-caption" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    {usarPedagio ? 'Rota com pedágios' : 'Rota sem pedágios'}
+                                                </span>
+                                            </label>
                                         </div>
-                                        <span className="text-xs font-caption" style={{ color: 'var(--color-text-secondary)' }}>
-                                            {usarPedagio ? 'Rota com pedágios' : 'Rota sem pedágios'}
-                                        </span>
-                                    </label>
+                                    </div>
                                 </div>
 
                                 <button type="button" onClick={calcularRotaIA} disabled={calcRota || (!form.destino)}

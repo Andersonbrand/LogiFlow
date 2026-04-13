@@ -309,8 +309,9 @@ export default function AdminPanel() {
                                                                 ✕ Reprovar
                                                             </button>
                                                             <button onClick={() => navigate('/romaneios')}
-                                                                className="text-xs text-blue-600 underline hover:text-blue-800 hidden sm:inline">
-                                                                Ver
+                                                                className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors hidden sm:inline-flex items-center justify-center"
+                                                                title="Ver romaneio">
+                                                                <Icon name="Eye" size={14} color="currentColor" />
                                                             </button>
                                                         </div>
                                                     </td>
@@ -962,8 +963,9 @@ function MotoristasManager({ showToast }) {
                                             <td className="px-4 py-3 text-right">
                                                 <div className="flex items-center justify-end gap-2">
                                                 <button onClick={() => { setDetalhe(m); setShowForm(false); }}
-                                                    className="text-xs text-blue-600 hover:text-blue-800 underline">
-                                                    Ver
+                                                    className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
+                                                    title="Ver motorista">
+                                                    <Icon name="Eye" size={14} color="currentColor" />
                                                 </button>
                                                 <button
                                                     onClick={() => setConfirmDelete(m)}
