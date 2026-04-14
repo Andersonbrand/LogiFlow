@@ -449,7 +449,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center sm:p-4" style={ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' } onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center sm:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={e => e.target === e.currentTarget && onClose()}>
             <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[95vh] sm:max-h-[92vh] flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b" style={{ borderColor:'var(--color-border)' }}>

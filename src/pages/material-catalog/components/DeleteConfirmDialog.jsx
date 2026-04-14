@@ -5,7 +5,7 @@ import Button from 'components/ui/Button';
 export default function DeleteConfirmDialog({ material, onConfirm, onCancel }) {
     if (!material) return null;
     return (
-        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4" style={ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' } onClick={e => e.target === e.currentTarget && onCancel()}>
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={e => e.target === e.currentTarget && onCancel()}>
             <div className="bg-[var(--color-card)] rounded-xl shadow-2xl w-full max-w-sm p-6">
                 <div className="flex flex-col items-center text-center gap-3">
                     <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
