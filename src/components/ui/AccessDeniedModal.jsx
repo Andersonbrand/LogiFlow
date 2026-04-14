@@ -8,9 +8,8 @@ import Icon from 'components/AppIcon';
 export default function AccessDeniedModal({ show, onClose }) {
     if (!show) return null;
     return (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
+        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={onClose}>
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center" onClick={e => e.stopPropagation()}>
                 <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
                     <Icon name="ShieldOff" size={28} color="#DC2626" />
                 </div>

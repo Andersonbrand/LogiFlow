@@ -413,7 +413,7 @@ export default function AdminPanel() {
 
             {/* ── MODAL DE REPROVAÇÃO ──────────────────────────────────────── */}
             {modalReprovar.open && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
                     style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
                         style={{ border: '1px solid #FEE2E2' }}>
@@ -746,7 +746,7 @@ function MotoristasManager({ showToast }) {
             {/* Detalhe do motorista */}
             {/* Lightbox da foto CNH */}
             {lightbox && detalhe?.cnh_foto_url && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center"
+                <div className="fixed inset-0 z-[400] flex items-center justify-center"
                     style={{ backgroundColor: 'rgba(0,0,0,0.92)' }}
                     onClick={() => setLightbox(false)}>
                     <button
@@ -766,7 +766,7 @@ function MotoristasManager({ showToast }) {
             )}
 
             {detalhe && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pt-20"
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 pt-20"
                     style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}
                     onClick={e => { if (e.target === e.currentTarget) setDetalhe(null); }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[80vh] flex flex-col">
@@ -866,7 +866,7 @@ function MotoristasManager({ showToast }) {
 
             {/* Modal de confirmação de exclusão */}
             {confirmDelete && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
                     style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
                         <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-red-50">

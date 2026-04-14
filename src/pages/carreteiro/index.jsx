@@ -48,8 +48,8 @@ function Field({ label, children, required }) {
 
 function ModalOverlay({ children, onClose }) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
             onClick={e => e.target === e.currentTarget && onClose()}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
                 {children}
@@ -721,8 +721,8 @@ export default function CarreteiroDashboard() {
 
             {/* Modais */}
             {modalAbast && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
                     onClick={e => e.target === e.currentTarget && setModalAbast(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '92dvh' }}>
                         <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
@@ -813,8 +813,8 @@ export default function CarreteiroDashboard() {
             )}
 
             {modalCheck && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
                     onClick={e => e.target === e.currentTarget && setModalCheck(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '95dvh' }}>
                         <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
@@ -894,8 +894,8 @@ export default function CarreteiroDashboard() {
             )}
 
             {modalRegistro && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
                     onClick={e => e.target === e.currentTarget && setModalRegistro(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '92dvh' }}>
                         <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>

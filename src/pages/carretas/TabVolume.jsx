@@ -57,7 +57,7 @@ function TipoBadge({ tipo }) {
 // ─── Modal genérico ───────────────────────────────────────────────────────────
 function Modal({ title, icon, onClose, children, footer }) {
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden" style={{ animation: 'slideUp .2s ease' }}>
                 <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                     <div className="flex items-center gap-2">

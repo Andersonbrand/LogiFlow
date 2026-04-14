@@ -582,8 +582,8 @@ export default function MotoristaDashboard() {
 
             {/* Modal Abastecimento */}
             {modalAbast && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
                     onClick={e => e.target === e.currentTarget && setModalAbast(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '92dvh' }}>
                         <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
@@ -680,8 +680,8 @@ export default function MotoristaDashboard() {
 
             {/* Modal Checklist */}
             {modalCheck && (
-                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
                     onClick={e => e.target === e.currentTarget && setModalCheck(false)}>
                     <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '95dvh' }}>
                         <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
