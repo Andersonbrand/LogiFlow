@@ -16,15 +16,10 @@ export default function StatusUpdateModal({ isOpen, vehicle, onClose, onUpdate }
     };
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' } onClick={e => e.target === e.currentTarget && onClose()}>
             <div
-                className="absolute inset-0"
-                style={{ backgroundColor: "rgba(15,23,42,0.5)" }}
-                onClick={onClose}
-            />
-            <div
-                className="relative w-full max-w-sm rounded-2xl shadow-modal overflow-hidden"
-                style={{ backgroundColor: "var(--color-card)" }}
+                className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden"
+                style={ backgroundColor: "var(--color-card)" }
             >
                 <div
                     className="flex items-center justify-between px-5 py-4 border-b border-border"

@@ -19,12 +19,12 @@ const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none transi
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
 
 // ─── Sub-componentes reutilizáveis ────────────────────────────────────────────
-function ModalOverlay({ children, onClose }) {
+function ModalOverlay({ children, onClose, wide, sm }) {
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
             onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col"
+            <div className={`bg-white rounded-2xl shadow-2xl flex flex-col ${wide ? 'w-full max-w-4xl' : sm ? 'w-full max-w-md' : 'w-full max-w-3xl'}`}
                 style={{ maxHeight: 'calc(100vh - 32px)' }}>
                 {children}
             </div>
