@@ -22,15 +22,17 @@ export default function StatusUpdateModal({ isOpen, vehicle, onClose, onUpdate }
                 style={{ backgroundColor: "var(--color-card)" }}
             >
                 <div
-                    className="flex items-center justify-between px-5 py-4 border-b border-border"
-                    style={{ backgroundColor: "#404040" }}
+                    className="flex items-center justify-between px-5 py-4 border-b"
+                    style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}
                 >
-                    <div className="flex items-center gap-2">
-                        <Icon name="RefreshCw" size={18} color="#FFFFFF" strokeWidth={2} />
-                        <h3 className="text-sm font-heading font-semibold text-white">Atualizar Status</h3>
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
+                            <Icon name="RefreshCw" size={16} color="#1D4ED8" strokeWidth={2} />
+                        </div>
+                        <h3 className="text-sm font-heading font-semibold" style={{ color: 'var(--color-text-primary)' }}>Atualizar Status</h3>
                     </div>
-                    <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-white/20">
-                        <Icon name="X" size={16} color="#FFFFFF" strokeWidth={2} />
+                    <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-gray-100">
+                        <Icon name="X" size={16} color="var(--color-muted-foreground)" strokeWidth={2} />
                     </button>
                 </div>
 

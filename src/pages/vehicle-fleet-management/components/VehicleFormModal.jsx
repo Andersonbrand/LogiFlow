@@ -60,15 +60,17 @@ export default function VehicleFormModal({ isOpen, onClose, onSave, editVehicle 
             <div className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden" style={{ backgroundColor: "var(--color-card)" }}>
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border" style={{ backgroundColor: "#404040" }}>
+                <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
                     <div className="flex items-center gap-3">
-                        <Icon name="Truck" size={20} color="#FFFFFF" strokeWidth={2} />
-                        <h2 className="text-base font-heading font-semibold text-white">
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
+                            <Icon name="Truck" size={18} color="#1D4ED8" strokeWidth={2} />
+                        </div>
+                        <h2 className="text-base font-heading font-semibold" style={{ color: 'var(--color-text-primary)' }}>
                             {editVehicle ? "Editar Veículo" : "Cadastrar Veículo"}
                         </h2>
                     </div>
-                    <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/20">
-                        <Icon name="X" size={18} color="#FFFFFF" strokeWidth={2} />
+                    <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-gray-100">
+                        <Icon name="X" size={18} color="var(--color-muted-foreground)" strokeWidth={2} />
                     </button>
                 </div>
 
