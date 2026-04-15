@@ -33,6 +33,7 @@ import {
     fetchRomaneios,
     fetchBonificacoesExtras, createBonificacaoExtra, updateBonificacaoExtra, deleteBonificacaoExtra,
     pagarBoletoCarreta, pagarParcelaCartaoCarreta,
+    revogarBoletoCarreta, revogarParcelaCartaoCarreta,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
 
@@ -1861,7 +1862,7 @@ function ModalFornecedoresCarretas({ onClose, onSelect }) {
 }
 
 // ─── Modal de Baixa de Boletos — Carretas ─────────────────────────────────────
-function ModalBaixaCarretas({ despesa, onClose, onBaixado }) {
+function ModalBaixaCarretas({ despesa, onClose, onBaixado, isAdmin }) {
     const { toast, showToast } = useToast();
     const [loading, setLoading] = useState(false);
 
@@ -1875,11 +1876,31 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado }) {
         finally { setLoading(false); }
     };
 
+    const handleRevogarBoleto = async (idx) => {
+        setLoading(true);
+        try {
+            await revogarBoletoCarreta(despesa.id, idx);
+            showToast('Baixa revogada!', 'warning');
+            onBaixado();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    };
+
     const handlePagarParcela = async (idx) => {
         setLoading(true);
         try {
             await pagarParcelaCartaoCarreta(despesa.id, idx);
             showToast('Parcela baixada!', 'success');
+            onBaixado();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    };
+
+    const handleRevogarParcela = async (idx) => {
+        setLoading(true);
+        try {
+            await revogarParcelaCartaoCarreta(despesa.id, idx);
+            showToast('Baixa revogada!', 'warning');
             onBaixado();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -1912,14 +1933,24 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado }) {
                                             </p>
                                         )}
                                     </div>
-                                    {!b.pago ? (
-                                        <button onClick={() => handlePagarBoleto(idx)} disabled={loading}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-60">
-                                            <Icon name="Check" size={13} /> Dar baixa
-                                        </button>
-                                    ) : (
-                                        <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-100 text-green-700">Pago</span>
-                                    )}
+                                    <div className="flex items-center gap-1.5">
+                                        {!b.pago ? (
+                                            <button onClick={() => handlePagarBoleto(idx)} disabled={loading}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-60">
+                                                <Icon name="Check" size={13} /> Dar baixa
+                                            </button>
+                                        ) : (
+                                            <>
+                                                <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-100 text-green-700">Pago</span>
+                                                {isAdmin && (
+                                                    <button onClick={() => handleRevogarBoleto(idx)} disabled={loading}
+                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-60">
+                                                        <Icon name="RotateCcw" size={12} /> Revogar
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -1946,14 +1977,24 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado }) {
                                             </p>
                                         )}
                                     </div>
-                                    {!p.pago ? (
-                                        <button onClick={() => handlePagarParcela(idx)} disabled={loading}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-60">
-                                            <Icon name="Check" size={13} /> Dar baixa
-                                        </button>
-                                    ) : (
-                                        <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-100 text-purple-700">Pago</span>
-                                    )}
+                                    <div className="flex items-center gap-1.5">
+                                        {!p.pago ? (
+                                            <button onClick={() => handlePagarParcela(idx)} disabled={loading}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-60">
+                                                <Icon name="Check" size={13} /> Dar baixa
+                                            </button>
+                                        ) : (
+                                            <>
+                                                <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-100 text-purple-700">Pago</span>
+                                                {isAdmin && (
+                                                    <button onClick={() => handleRevogarParcela(idx)} disabled={loading}
+                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-60">
+                                                        <Icon name="RotateCcw" size={12} /> Revogar
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -2829,6 +2870,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                     despesa={modalBaixa}
                     onClose={() => setModalBaixa(null)}
                     onBaixado={() => { load(); setModalBaixa(null); }}
+                    isAdmin={isAdmin}
                 />
             )}
         </div>
@@ -3167,7 +3209,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 
             // ── Margens ───────────────────────────────────────────────────
             const despesaTotal  = despesaCombustivel + bonusTotal + totalDiariasLancadas + totalDespesasExtras;
-            const margemBruta   = receitaTotal - despesaCombustivel;          // receita − combustível
+            const margemBruta   = receitaTotal - (despesaCombustivel + bonusTotal + totalDiariasLancadas); // receita − custos operacionais
             const margemLiquida = receitaTotal - despesaTotal;                // receita − combustível − bônus − diárias − despesas extras
             const margemPct     = receitaTotal > 0 ? (margemLiquida / receitaTotal) * 100 : 0;
 
@@ -3251,7 +3293,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             ['Total Despesas', dados.despesaTotal, ''],
             ['', '', ''],
             ['MARGENS', '', ''],
-            ['Margem Bruta (Receita − Combustível)', dados.margemBruta, ''],
+            ['Margem Bruta (Receita − Custos Operacionais)', dados.margemBruta, ''],
             ['Margem Líquida (Receita − Todas Despesas)', dados.margemLiquida, ''],
             ['Margem Líquida %', `${dados.margemPct.toFixed(2)}%`, ''],
             ['', '', ''],
@@ -3621,7 +3663,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 
                             {/* Separador margem bruta */}
                             <div className="flex justify-between py-2.5 px-3 rounded-lg mt-2" style={{ backgroundColor: '#F0FDF4' }}>
-                                <span className="text-sm font-semibold text-green-800">Margem Bruta (−Combustível)</span>
+                                <span className="text-sm font-semibold text-green-800">Margem Bruta (−Custos Operacionais)</span>
                                 <span className="font-data font-bold text-green-700">{BRL(dados.margemBruta)}</span>
                             </div>
 

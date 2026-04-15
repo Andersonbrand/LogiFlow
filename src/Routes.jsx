@@ -22,6 +22,7 @@ import MecanicoPage          from "pages/mecanico";
 import PerfilUsuario         from "pages/perfil-usuario";
 import EmailConfirmado       from "pages/email-confirmado";
 import DespesasCaminhoes    from "pages/despesas-caminhoes";
+import DespesasAdmTransporte from "pages/despesas-adm-transporte";
 
 const Routes = () => (
     <BrowserRouter>
@@ -58,6 +59,9 @@ const Routes = () => (
 
                     {/* Módulo Despesas — Caminhões (admin/operador) */}
                     <Route path="/despesas-caminhoes"       element={<StaffRoute><DespesasCaminhoes /></StaffRoute>} />
+
+                    {/* Módulo Despesas Administrativas — Transporte (admin/operador) */}
+                    <Route path="/despesas-adm-transporte"  element={<StaffRoute><DespesasAdmTransporte /></StaffRoute>} />
 
                     {/* Rota do carreteiro */}
                     <Route path="/carreteiro"               element={<CarreteiroRoute><CarreteiroDashboard /></CarreteiroRoute>} />

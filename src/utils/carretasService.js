@@ -690,6 +690,26 @@ export async function pagarBoletoCarreta(despesaId, boletoIdx) {
     return data;
 }
 
+// Revogar baixa de boleto de despesa extra de carretas
+export async function revogarBoletoCarreta(despesaId, boletoIdx) {
+    const { data: current } = await supabase
+        .from('carretas_despesas_extras')
+        .select('boletos')
+        .eq('id', despesaId)
+        .single();
+    const boletos = [...(current?.boletos || [])];
+    if (boletos[boletoIdx]) {
+        const { pago_em, ...rest } = boletos[boletoIdx];
+        boletos[boletoIdx] = { ...rest, pago: false };
+    }
+    const { data, error } = await supabase
+        .from('carretas_despesas_extras')
+        .update({ boletos, updated_at: new Date().toISOString() })
+        .eq('id', despesaId).select().single();
+    if (error) throw error;
+    return data;
+}
+
 // Dar baixa em parcela de cartão de despesa extra de carretas
 export async function pagarParcelaCartaoCarreta(despesaId, parcelaIdx) {
     const { data: current } = await supabase
@@ -699,6 +719,26 @@ export async function pagarParcelaCartaoCarreta(despesaId, parcelaIdx) {
         .single();
     const parcelas = [...(current?.parcelas_cartao || [])];
     if (parcelas[parcelaIdx]) parcelas[parcelaIdx] = { ...parcelas[parcelaIdx], pago: true, pago_em: new Date().toISOString() };
+    const { data, error } = await supabase
+        .from('carretas_despesas_extras')
+        .update({ parcelas_cartao: parcelas, updated_at: new Date().toISOString() })
+        .eq('id', despesaId).select().single();
+    if (error) throw error;
+    return data;
+}
+
+// Revogar baixa de parcela de cartão de despesa extra de carretas
+export async function revogarParcelaCartaoCarreta(despesaId, parcelaIdx) {
+    const { data: current } = await supabase
+        .from('carretas_despesas_extras')
+        .select('parcelas_cartao')
+        .eq('id', despesaId)
+        .single();
+    const parcelas = [...(current?.parcelas_cartao || [])];
+    if (parcelas[parcelaIdx]) {
+        const { pago_em, ...rest } = parcelas[parcelaIdx];
+        parcelas[parcelaIdx] = { ...rest, pago: false };
+    }
     const { data, error } = await supabase
         .from('carretas_despesas_extras')
         .update({ parcelas_cartao: parcelas, updated_at: new Date().toISOString() })

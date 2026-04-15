@@ -12,6 +12,7 @@ import {
     CATEGORIAS_DESPESA_CAMINHOES,
     fetchDespesasCaminhoes, createDespesaCaminhao, updateDespesaCaminhao, deleteDespesaCaminhao,
     pagarBoletoCaminhao, pagarParcelaCartaoCaminhao,
+    revogarBoletoCaminhao, revogarParcelaCartaoCaminhao,
     fetchFornecedoresCaminhoes, createFornecedorCaminhao, updateFornecedorCaminhao, deleteFornecedorCaminhao,
 } from 'utils/caminhoesDespesasService';
 import * as XLSX from 'xlsx';
@@ -101,7 +102,7 @@ function BoletosPendentes({ despesa, onPagar }) {
 }
 
 // ─── Modal de Baixa de Boletos ────────────────────────────────────────────────
-function ModalBaixa({ despesa, onClose, onBaixado }) {
+function ModalBaixa({ despesa, onClose, onBaixado, isAdmin }) {
     const { toast, showToast } = useToast();
     const [loading, setLoading] = useState(false);
 
@@ -115,11 +116,31 @@ function ModalBaixa({ despesa, onClose, onBaixado }) {
         finally { setLoading(false); }
     };
 
+    const handleRevogarBoleto = async (idx) => {
+        setLoading(true);
+        try {
+            await revogarBoletoCaminhao(despesa.id, idx);
+            showToast('Baixa revogada!', 'warning');
+            onBaixado();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    };
+
     const handlePagarParcela = async (idx) => {
         setLoading(true);
         try {
             await pagarParcelaCartaoCaminhao(despesa.id, idx);
             showToast('Parcela baixada!', 'success');
+            onBaixado();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    };
+
+    const handleRevogarParcela = async (idx) => {
+        setLoading(true);
+        try {
+            await revogarParcelaCartaoCaminhao(despesa.id, idx);
+            showToast('Baixa revogada!', 'warning');
             onBaixado();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -143,14 +164,24 @@ function ModalBaixa({ despesa, onClose, onBaixado }) {
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Vencimento: {FMT(b.vencimento)}</p>
                                         {b.pago && <p className="text-xs text-green-600 font-medium">✓ Pago em {b.pago_em ? new Date(b.pago_em).toLocaleDateString('pt-BR') : '—'}</p>}
                                     </div>
-                                    {!b.pago ? (
-                                        <button onClick={() => handlePagarBoleto(idx)} disabled={loading}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-60">
-                                            <Icon name="Check" size={13} />Dar baixa
-                                        </button>
-                                    ) : (
-                                        <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-100 text-green-700">Pago</span>
-                                    )}
+                                    <div className="flex items-center gap-1.5">
+                                        {!b.pago ? (
+                                            <button onClick={() => handlePagarBoleto(idx)} disabled={loading}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-60">
+                                                <Icon name="Check" size={13} />Dar baixa
+                                            </button>
+                                        ) : (
+                                            <>
+                                                <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-100 text-green-700">Pago</span>
+                                                {isAdmin && (
+                                                    <button onClick={() => handleRevogarBoleto(idx)} disabled={loading}
+                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-60">
+                                                        <Icon name="RotateCcw" size={12} />Revogar
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -167,14 +198,24 @@ function ModalBaixa({ despesa, onClose, onBaixado }) {
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Vencimento: {FMT(p.vencimento)}{p.cartao ? ` · ${p.cartao}` : ''}</p>
                                         {p.pago && <p className="text-xs text-green-600 font-medium">✓ Pago em {p.pago_em ? new Date(p.pago_em).toLocaleDateString('pt-BR') : '—'}</p>}
                                     </div>
-                                    {!p.pago ? (
-                                        <button onClick={() => handlePagarParcela(idx)} disabled={loading}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-60">
-                                            <Icon name="Check" size={13} />Dar baixa
-                                        </button>
-                                    ) : (
-                                        <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-100 text-purple-700">Pago</span>
-                                    )}
+                                    <div className="flex items-center gap-1.5">
+                                        {!p.pago ? (
+                                            <button onClick={() => handlePagarParcela(idx)} disabled={loading}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 transition-colors disabled:opacity-60">
+                                                <Icon name="Check" size={13} />Dar baixa
+                                            </button>
+                                        ) : (
+                                            <>
+                                                <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-100 text-purple-700">Pago</span>
+                                                {isAdmin && (
+                                                    <button onClick={() => handleRevogarParcela(idx)} disabled={loading}
+                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors disabled:opacity-60">
+                                                        <Icon name="RotateCcw" size={12} />Revogar
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -1134,6 +1175,7 @@ export default function DespesasCaminhoes() {
                     despesa={modalBaixa}
                     onClose={() => setModalBaixa(null)}
                     onBaixado={() => { load(); setModalBaixa(null); }}
+                    isAdmin={admin}
                 />
             )}
 

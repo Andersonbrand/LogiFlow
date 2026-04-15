@@ -246,7 +246,7 @@ export default function Relatorios() {
             .map(m => {
                 const custoOperacional = m.custoCombustivel + m.custoPedagio + m.custoMotorista;
                 const totalDespesas    = custoOperacional + m.despesasCaminhoes;
-                const margemBruta      = m.receita - m.custoCombustivel;
+                const margemBruta      = m.receita - custoOperacional;
                 const resultadoLiquido = m.receita - totalDespesas;
                 const margemPct        = m.receita > 0 ? (resultadoLiquido / m.receita) * 100 : 0;
                 return { ...m, custoOperacional, totalDespesas, margemBruta, resultadoLiquido, margemPct };
