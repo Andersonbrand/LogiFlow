@@ -10,6 +10,24 @@ export async function fetchUserProfile(userId) {
 }
 
 export async function fetchAllUsers() {
+    // Tenta buscar via RPC que une user_profiles + auth.users (retorna email)
+    // Só funciona para admins — SECURITY DEFINER verifica o role internamente.
+    try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_users_with_email');
+        if (!rpcError && rpcData && rpcData.length > 0) {
+            // Complementa com todos os campos de user_profiles mesclando pelo id
+            const { data: profiles } = await supabase.from('user_profiles').select('*').order('name');
+            if (profiles) {
+                const emailMap = Object.fromEntries((rpcData).map(r => [r.id, r.email]));
+                return profiles.map(p => ({ ...p, email: emailMap[p.id] || null }));
+            }
+            return rpcData;
+        }
+    } catch {
+        // silencioso — cai no fallback
+    }
+
+    // Fallback: busca sem email (migration ainda nao executada)
     const { data, error } = await supabase
         .from('user_profiles').select('*').order('name');
     if (error) throw error;

@@ -217,9 +217,16 @@ export default function AdminPanel() {
                                             <tr key={u.id} className="hover:bg-slate-50">
                                                 <td className="px-4 py-3">
                                                     <p className="font-medium text-slate-800 text-xs">{u.name || '—'}</p>
-                                                    <p className="text-slate-400 text-xs sm:hidden truncate max-w-[120px]">{u.email || ''}</p>
+                                                    {u.email && <p className="text-slate-400 text-xs sm:hidden truncate max-w-[160px]">{u.email}</p>}
                                                 </td>
-                                                <td className="px-4 py-3 text-slate-500 text-xs hidden sm:table-cell">{u.email || '—'}</td>
+                                                <td className="px-4 py-3 hidden sm:table-cell">
+                                                    {u.email
+                                                        ? <span className="text-slate-600 text-xs">{u.email}</span>
+                                                        : <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                                            ⚠ Execute a migration SQL
+                                                          </span>
+                                                    }
+                                                </td>
                                                 <td className="px-4 py-3">
                                                     {(() => {
                                                         const key = getRoleKey(u);

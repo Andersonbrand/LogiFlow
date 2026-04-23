@@ -78,23 +78,28 @@ export default function NotificationBell() {
                 title="Notificações"
                 aria-label={`Notificações${unread > 0 ? ` — ${unread} não lidas` : ''}`}
                 style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: '10px',
-                    backgroundColor: 'var(--color-primary)',
-                    border: '2px solid rgba(255,255,255,0.25)',
+                    width: 32,
+                    height: 32,
+                    borderRadius: '8px',
+                    backgroundColor: open ? 'var(--color-muted)' : 'transparent',
+                    border: '1px solid transparent',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    boxShadow: '0 2px 8px rgba(30,58,95,0.35)',
                 }}
-                onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
-                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                onMouseEnter={e => {
+                    e.currentTarget.style.backgroundColor = 'var(--color-muted)';
+                    e.currentTarget.style.borderColor = 'var(--color-border)';
+                }}
+                onMouseLeave={e => {
+                    e.currentTarget.style.backgroundColor = open ? 'var(--color-muted)' : 'transparent';
+                    e.currentTarget.style.borderColor = 'transparent';
+                }}
             >
-                <Icon name="Bell" size={18} color="#FFFFFF" />
+                <Icon name="Bell" size={16} color="var(--color-text-secondary, #64748B)" />
                 {unread > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse">
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                         {unread > 9 ? '9+' : unread}
                     </span>
                 )}
