@@ -98,7 +98,7 @@ export default function CarreteiroDashboard() {
     const [registros, setRegistros] = useState([]);
     const [notificacoes, setNotificacoes] = useState([]);
     const [modalRegistro, setModalRegistro] = useState(false);
-    const [formRegistro, setFormRegistro] = useState({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' });
+    const [formRegistro, setFormRegistro] = useState({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', local_carregamento: '', destino: '', data_descarga: '', observacoes: '' });
     const [modalAbast, setModalAbast]   = useState(false);
     const [modalCheck, setModalCheck]   = useState(false);
     const [formAbast, setFormAbast]     = useState({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' });
@@ -571,7 +571,7 @@ export default function CarreteiroDashboard() {
                                     {tab === 'registros' && (
                                         <div>
                                             <div className="flex justify-end mb-4">
-                                                <Button onClick={() => { setFormRegistro({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' }); setModalRegistro(true); }} iconName="Plus" size="sm">
+                                                <Button onClick={() => { setFormRegistro({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', local_carregamento: '', destino: '', data_descarga: '', observacoes: '' }); setModalRegistro(true); }} iconName="Plus" size="sm">
                                                     Nova Entrada
                                                 </Button>
                                             </div>
@@ -924,6 +924,25 @@ export default function CarreteiroDashboard() {
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </select>
                             </div>
+                            <div className="sm:col-span-2">
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Local de carregamento <span className="text-red-500">*</span></label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {[
+                                        { value: 'CSN Cimentos', label: 'CSN Cimentos', icon: '🏭' },
+                                        { value: 'Estoque (Loja)', label: 'Estoque (Loja)', icon: '🏪' },
+                                    ].map(op => (
+                                        <button key={op.value} type="button"
+                                            onClick={() => setFormRegistro(f => ({ ...f, local_carregamento: op.value }))}
+                                            className="flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-all"
+                                            style={formRegistro.local_carregamento === op.value
+                                                ? { backgroundColor: '#EFF6FF', borderColor: '#3B82F6', color: '#1D4ED8', boxShadow: '0 0 0 2px rgba(59,130,246,0.2)' }
+                                                : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', backgroundColor: 'transparent' }}>
+                                            <span className="text-base">{op.icon}</span>
+                                            {op.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Destino da carga <span className="text-red-500">*</span></label>
                                 <input value={formRegistro.destino} onChange={e => setFormRegistro(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Estoque ou cidade" />
@@ -941,6 +960,7 @@ export default function CarreteiroDashboard() {
                             <button onClick={() => setModalRegistro(false)} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <Button onClick={async () => {
                                 if (!formRegistro.data_carregamento || !formRegistro.destino) { showToast('Data e destino são obrigatórios', 'error'); return; }
+                                if (!formRegistro.local_carregamento) { showToast('Selecione o local de carregamento', 'error'); return; }
                                 try {
                                     await createRegistroViagem({ ...formRegistro, motorista_id: user.id });
                                     showToast('Viagem registrada!', 'success');

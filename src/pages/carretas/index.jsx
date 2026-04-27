@@ -274,13 +274,13 @@ function TabViagens({ isAdmin }) {
                             <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                                 <table className="w-full text-sm min-w-[750px]">
                                     <thead className="text-xs border-b" style={{ backgroundColor: '#F0FDF4', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                        <tr>{['Motorista','Placa','Data Carregamento','Nota Fiscal','Destino','Data Descarga','Observações'].map(h => (
+                                        <tr>{['Motorista','Placa','Data Carregamento','Nota Fiscal','Local Carregamento','Destino','Data Descarga','Observações'].map(h => (
                                             <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                         ))}</tr>
                                     </thead>
                                     <tbody>
                                         {registrosMotoristas.length === 0 ? (
-                                            <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                                 <div className="flex flex-col items-center gap-2">
                                                     <Icon name="Truck" size={28} color="var(--color-muted-foreground)" />
                                                     <span className="text-sm">Nenhum registro lançado pelos motoristas ainda</span>
@@ -293,6 +293,16 @@ function TabViagens({ isAdmin }) {
                                                 <td className="px-3 py-3 font-data whitespace-nowrap">{r.veiculo?.placa || '—'}</td>
                                                 <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(r.data_carregamento)}</td>
                                                 <td className="px-3 py-3 font-data whitespace-nowrap text-blue-700">{r.numero_nota_fiscal || '—'}</td>
+                                                <td className="px-3 py-3 whitespace-nowrap">
+                                                    {r.local_carregamento ? (
+                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                                                            style={r.local_carregamento === 'CSN Cimentos'
+                                                                ? { backgroundColor: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }
+                                                                : { backgroundColor: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0' }}>
+                                                            {r.local_carregamento === 'CSN Cimentos' ? '🏭' : '🏪'} {r.local_carregamento}
+                                                        </span>
+                                                    ) : <span style={{ color: 'var(--color-muted-foreground)' }}>—</span>}
+                                                </td>
                                                 <td className="px-3 py-3 max-w-[160px] truncate font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</td>
                                                 <td className="px-3 py-3 whitespace-nowrap">{r.data_descarga ? FMT_DATE(r.data_descarga) : <span style={{ color: 'var(--color-muted-foreground)' }}>Em trânsito</span>}</td>
                                                 <td className="px-3 py-3 max-w-[180px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{r.observacoes || '—'}</td>
