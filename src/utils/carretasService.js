@@ -488,6 +488,25 @@ export async function createRegistroViagem(registro) {
     return data;
 }
 
+export async function updateRegistroViagem(id, updates) {
+    const { data, error } = await supabase
+        .from('carretas_registros_viagem')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select('*, motorista:motorista_id(id, name), veiculo:veiculo_id(id, placa, modelo)')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deleteRegistroViagem(id) {
+    const { error } = await supabase
+        .from('carretas_registros_viagem')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+}
+
 export async function fetchAllRegistrosViagem(filters = {}) {
     let q = supabase
         .from('carretas_registros_viagem')
