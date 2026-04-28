@@ -9,33 +9,33 @@ import { fetchMaterials } from 'utils/materialService';
 import { FRETE_CATEGORIAS, detectarCategoriaFrete, calcularFretePedido, getCategoriaConfig, fmtPct } from 'utils/freteConfig';
 
 const STATUS_OPTIONS = ['Aguardando', 'Carregando', 'Em Trânsito', 'Finalizado', 'Cancelado'];
-const brl = v => Number(v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
-const n   = v => Number(v||0);
+const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const n = v => Number(v || 0);
 
 export const EMPRESAS = [
     { value: 'Comercial Araguaia', label: 'Comercial Araguaia', color: '#1E3A5F', bg: '#DBEAFE' },
-    { value: 'Aços Confiance',     label: 'Aços Confiance',     color: '#065F46', bg: '#D1FAE5' },
-    { value: 'Confiance',          label: 'Confiance',          color: '#92400E', bg: '#FEF3C7' },
+    { value: 'Aços Confiance', label: 'Aços Confiance', color: '#065F46', bg: '#D1FAE5' },
+    { value: 'Confiance', label: 'Confiance', color: '#92400E', bg: '#FEF3C7' },
 ];
 
 const EMPTY_FORM = {
-    motorista:'', placa:'', destino:'', status:'Aguardando', saida:'', observacoes:'',
-    vehicle_id:'', distancia_km:'', custo_combustivel:'', custo_pedagio:'', custo_motorista:'',
+    motorista: '', placa: '', destino: '', status: 'Aguardando', saida: '', observacoes: '',
+    vehicle_id: '', distancia_km: '', custo_combustivel: '', custo_pedagio: '', custo_motorista: '',
 };
-const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', empresa:'Comercial Araguaia', itens:[] };
+const EMPTY_PEDIDO = { numero_pedido: '', cidade_destino: '', valor_pedido: '', categoria_frete: 'Ferragens', empresa: 'Comercial Araguaia', itens: [] };
 
-export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRomaneio, vehicles: vehiclesProp=[], materials: materialsProp=[] }) {
-    const [form, setForm]           = useState(EMPTY_FORM);
-    const [pedidos, setPedidos]     = useState([]);
-    const [tab, setTab]             = useState('dados');
-    const [errors, setErrors]       = useState({});
-    const [loading, setLoading]     = useState(false);
+export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRomaneio, vehicles: vehiclesProp = [], materials: materialsProp = [] }) {
+    const [form, setForm] = useState(EMPTY_FORM);
+    const [pedidos, setPedidos] = useState([]);
+    const [tab, setTab] = useState('dados');
+    const [errors, setErrors] = useState({});
+    const [loading, setLoading] = useState(false);
     const [motoristas, setMotoristas] = useState([]);
-    const [destinos, setDestinos]   = useState([]);
+    const [destinos, setDestinos] = useState([]);
 
     // Estado interno de vehicles/materials — usa props quando disponíveis,
     // mas busca do banco se as props chegarem vazias (Supabase acordando lento)
-    const [vehicles, setVehicles]   = useState(vehiclesProp);
+    const [vehicles, setVehicles] = useState(vehiclesProp);
     const [materials, setMaterials] = useState(materialsProp);
     const [loadingRefs, setLoadingRefs] = useState(false);
 
@@ -61,15 +61,15 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     }, [isOpen]); // eslint-disable-line
 
     // Novo pedido sendo montado
-    const [novoPedido, setNovoPedido]   = useState(EMPTY_PEDIDO);
-    const [novoItem, setNovoItem]       = useState({ material_id:'', quantidade:1, comprimento_telha:'' });
+    const [novoPedido, setNovoPedido] = useState(EMPTY_PEDIDO);
+    const [novoItem, setNovoItem] = useState({ material_id: '', quantidade: 1, comprimento_telha: '' });
     const [expandedPedido, setExpanded] = useState(null); // índice do pedido expandido
-    const [paradas, setParadas]         = useState([]);   // cidades intermediárias
-    const [rotaInfo, setRotaInfo]       = useState(null); // resultado do cálculo de rota
-    const [calcRota, setCalcRota]       = useState(false);
-    const [calcCustos, setCalcCustos]   = useState(false); // loading custos IA (diesel + pedágio)
+    const [paradas, setParadas] = useState([]);   // cidades intermediárias
+    const [rotaInfo, setRotaInfo] = useState(null); // resultado do cálculo de rota
+    const [calcRota, setCalcRota] = useState(false);
+    const [calcCustos, setCalcCustos] = useState(false); // loading custos IA (diesel + pedágio)
     const [custoStatus, setCustoStatus] = useState(null);  // mensagem sobre preenchimento dos custos
-    const [postos, setPostos]           = useState([]);            // postos cadastrados pelo admin
+    const [postos, setPostos] = useState([]);            // postos cadastrados pelo admin
     const [postoSelecionado, setPostoSelecionado] = useState(''); // posto selecionado para cálculo
     const [precoDiesel, setPrecoDiesel] = useState('6.50');    // R$/litro configurável pelo usuário
     const [usarPedagio, setUsarPedagio] = useState(true);      // toggle pedágio na rota
@@ -78,41 +78,41 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     useEffect(() => {
         fetchMotoristas().then(setMotoristas);
         fetchDestinos().then(setDestinos);
-        fetchPostos().then(p => setPostos(p)).catch(() => {});
+        fetchPostos().then(p => setPostos(p)).catch(() => { });
     }, []);
 
     useEffect(() => {
         if (!isOpen) return;
         if (editingRomaneio) {
             setForm({
-                motorista:         editingRomaneio.motorista         || '',
-                placa:             editingRomaneio.placa             || '',
-                destino:           editingRomaneio.destino           || '',
-                status:            editingRomaneio.status            || 'Aguardando',
-                saida:             editingRomaneio.saida ? (() => {
+                motorista: editingRomaneio.motorista || '',
+                placa: editingRomaneio.placa || '',
+                destino: editingRomaneio.destino || '',
+                status: editingRomaneio.status || 'Aguardando',
+                saida: editingRomaneio.saida ? (() => {
                     // Converte UTC do banco para horário local (Brasília UTC-3) para exibir corretamente no input
                     const d = new Date(editingRomaneio.saida);
                     const offset = d.getTimezoneOffset(); // minutos de diferença
                     const local = new Date(d.getTime() - offset * 60000);
                     return local.toISOString().slice(0, 16);
                 })() : '',
-                observacoes:       editingRomaneio.observacoes       || '',
-                vehicle_id:        editingRomaneio.vehicle_id        || '',
-                distancia_km:      editingRomaneio.distancia_km      || '',
+                observacoes: editingRomaneio.observacoes || '',
+                vehicle_id: editingRomaneio.vehicle_id || '',
+                distancia_km: editingRomaneio.distancia_km || '',
                 custo_combustivel: editingRomaneio.custo_combustivel || '',
-                custo_pedagio:     editingRomaneio.custo_pedagio     || '',
-                custo_motorista:   editingRomaneio.custo_motorista   || '',
+                custo_pedagio: editingRomaneio.custo_pedagio || '',
+                custo_motorista: editingRomaneio.custo_motorista || '',
             });
             // Rebuild pedidos from romaneio_pedidos if editing
             const pedidosExistentes = editingRomaneio.romaneio_pedidos || [];
             if (pedidosExistentes.length > 0) {
                 setPedidos(pedidosExistentes.map(p => ({
                     id: p.id,
-                    numero_pedido:   p.numero_pedido,
-                    cidade_destino:  p.cidade_destino || '',
-                    valor_pedido:    String(p.valor_pedido || ''),
+                    numero_pedido: p.numero_pedido,
+                    cidade_destino: p.cidade_destino || '',
+                    valor_pedido: String(p.valor_pedido || ''),
                     categoria_frete: p.categoria_frete || 'Ferragens',
-                    empresa:         p.empresa || 'Comercial Araguaia',
+                    empresa: p.empresa || 'Comercial Araguaia',
                     itens: (editingRomaneio.romaneio_itens || [])
                         .filter(i => i.pedido_id === p.id)
                         .map(i => ({
@@ -130,7 +130,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     peso_unit: i.materials?.peso || 0,
                 }));
                 setPedidos(itensHerdados.length > 0 ? [{
-                    numero_pedido:'', valor_pedido:'', categoria_frete:'Ferragens', itens: itensHerdados
+                    numero_pedido: '', valor_pedido: '', categoria_frete: 'Ferragens', itens: itensHerdados
                 }] : []);
             }
         } else {
@@ -138,7 +138,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             setPedidos([]);
         }
         setNovoPedido(EMPTY_PEDIDO);
-        setNovoItem({ material_id:'', quantidade:1, comprimento_telha:'' });
+        setNovoItem({ material_id: '', quantidade: 1, comprimento_telha: '' });
         setErrors({});
         setTab('dados');
         setExpanded(null);
@@ -167,21 +167,21 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             }
             // Recalcular litros e custo combustível ao mudar veículo ou distância
             if (k === 'vehicle_id' || k === 'distancia_km') {
-                const vid  = k === 'vehicle_id'  ? v : prev.vehicle_id;
+                const vid = k === 'vehicle_id' ? v : prev.vehicle_id;
                 const dist = k === 'distancia_km' ? v : prev.distancia_km;
-                const veh  = vehicles.find(vx => String(vx.id) === String(vid));
+                const veh = vehicles.find(vx => String(vx.id) === String(vid));
                 const consumo = veh?.consumo_km ? Number(veh.consumo_km) : null;
                 const distNum = Number(dist);
                 if (consumo && consumo > 0 && distNum > 0) {
-                    const litros  = distNum / consumo;
-                    const diesel  = Number(precoDiesel) || 6.50;
+                    const litros = distNum / consumo;
+                    const diesel = Number(precoDiesel) || 6.50;
                     next._litros_estimados = Math.round(litros);
                     next.custo_combustivel = (litros * diesel).toFixed(2);
                 }
             }
             return next;
         });
-        setErrors(prev => ({ ...prev, [k]:'' }));
+        setErrors(prev => ({ ...prev, [k]: '' }));
     };
 
     // ── Pedido helpers ──────────────────────────────────────────
@@ -190,8 +190,8 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         const mat = materials.find(m => String(m.id) === String(novoItem.material_id));
         if (!mat) return;
 
-        const isTelha   = mat.is_telha_zinco;
-        const qty       = Number(novoItem.quantidade) || 1;
+        const isTelha = mat.is_telha_zinco;
+        const qty = Number(novoItem.quantidade) || 1;
         const compTelha = isTelha ? Number(novoItem.comprimento_telha) : null;
 
         // Bloqueia telha sem comprimento informado
@@ -200,10 +200,10 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             return;
         }
 
-        const pesoBase      = isTelha ? (Number(mat.peso_base_metro) || 3.80) : mat.peso;
+        const pesoBase = isTelha ? (Number(mat.peso_base_metro) || 3.80) : mat.peso;
         // qty para telha = metros totais; convertemos para nº de telhas
-        const qtdTelhas     = isTelha ? Math.round(qty / compTelha) : qty;
-        const pesoUnit      = isTelha ? pesoBase * compTelha : mat.peso;
+        const qtdTelhas = isTelha ? Math.round(qty / compTelha) : qty;
+        const pesoUnit = isTelha ? pesoBase * compTelha : mat.peso;
         const pesoTotalItem = qtdTelhas * pesoUnit;
 
         setPedidos(prev => prev.map((p, i) => {
@@ -213,29 +213,30 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 // Merge: soma telhas calculadas (não metros) para manter unidade coerente
                 const newItens = p.itens.map((it, j) => j !== existing ? it : {
                     ...it,
-                    quantidade:  it.quantidade + qtdTelhas,
-                    peso_total:  (it.quantidade + qtdTelhas) * it.peso_unit,
+                    quantidade: it.quantidade + qtdTelhas,
+                    peso_total: (it.quantidade + qtdTelhas) * it.peso_unit,
                     metros_totais: isTelha ? (it.metros_totais || 0) + qty : null,
                 });
                 return { ...p, itens: newItens };
             }
             const catFrete = mat.categoria_frete || detectarCategoriaFrete(mat.nome);
-            return { ...p,
+            return {
+                ...p,
                 categoria_frete: p.categoria_frete || catFrete,
                 itens: [...p.itens, {
-                    material_id:      mat.id,
-                    quantidade:       isTelha ? qtdTelhas : qty,
-                    peso_total:       pesoTotalItem,
-                    nome:             mat.nome,
-                    unidade:          mat.unidade,
-                    peso_unit:        pesoUnit,
-                    is_telha_zinco:   isTelha || false,
+                    material_id: mat.id,
+                    quantidade: isTelha ? qtdTelhas : qty,
+                    peso_total: pesoTotalItem,
+                    nome: mat.nome,
+                    unidade: mat.unidade,
+                    peso_unit: pesoUnit,
+                    is_telha_zinco: isTelha || false,
                     comprimento_telha: compTelha,
-                    metros_totais:    isTelha ? qty : null,
+                    metros_totais: isTelha ? qty : null,
                 }],
             };
         }));
-        setNovoItem({ material_id:'', quantidade:1, comprimento_telha:'' });
+        setNovoItem({ material_id: '', quantidade: 1, comprimento_telha: '' });
     };
 
     const removeItemFromPedido = (pedidoIdx, itemIdx) => {
@@ -245,7 +246,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     };
 
     const addPedido = () => {
-        setPedidos(prev => [...prev, { ...EMPTY_PEDIDO, itens:[] }]);
+        setPedidos(prev => [...prev, { ...EMPTY_PEDIDO, itens: [] }]);
         setExpanded(pedidos.length);
     };
 
@@ -260,15 +261,15 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
 
     // ── Totais calculados ──────────────────────────────────────
     const totais = useMemo(() => {
-        const valorTotalCarga    = pedidos.reduce((a, p) => a + n(p.valor_pedido), 0);
-        const freteCalculado     = pedidos.reduce((a, p) => {
+        const valorTotalCarga = pedidos.reduce((a, p) => a + n(p.valor_pedido), 0);
+        const freteCalculado = pedidos.reduce((a, p) => {
             const pct = FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05;
             return a + n(p.valor_pedido) * pct;
         }, 0);
-        const pesoTotal          = pedidos.flatMap(p => p.itens).reduce((a, i) => a + n(i.peso_total), 0);
-        const totalItens         = pedidos.flatMap(p => p.itens).length;
-        const custoOperacional   = n(form.custo_combustivel) + n(form.custo_pedagio) + n(form.custo_motorista);
-        const margem             = freteCalculado - custoOperacional;
+        const pesoTotal = pedidos.flatMap(p => p.itens).reduce((a, i) => a + n(i.peso_total), 0);
+        const totalItens = pedidos.flatMap(p => p.itens).length;
+        const custoOperacional = n(form.custo_combustivel) + n(form.custo_pedagio) + n(form.custo_motorista);
+        const margem = freteCalculado - custoOperacional;
         return { valorTotalCarga, freteCalculado, pesoTotal, totalItens, custoOperacional, margem };
     }, [pedidos, form.custo_combustivel, form.custo_pedagio, form.custo_motorista]);
 
@@ -278,7 +279,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         pedidos.forEach(p => {
             const pct = FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05;
             const frete = n(p.valor_pedido) * pct;
-            if (!map[p.categoria_frete]) map[p.categoria_frete] = { valor:0, pedidos:0 };
+            if (!map[p.categoria_frete]) map[p.categoria_frete] = { valor: 0, pedidos: 0 };
             map[p.categoria_frete].valor += frete;
             map[p.categoria_frete].pedidos++;
         });
@@ -343,8 +344,8 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 // Combustível
                 if (consumoKm && consumoKm > 0 && distKm) {
                     const litros = distKm / consumoKm;
-                    next.custo_combustivel  = (litros * dieselUsado).toFixed(2);
-                    next._litros_estimados  = Math.round(litros);
+                    next.custo_combustivel = (litros * dieselUsado).toFixed(2);
+                    next._litros_estimados = Math.round(litros);
                 }
 
                 // Pedágio — só preenche se toggle estiver ativo
@@ -395,7 +396,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     const validate = () => {
         const e = {};
         if (!form.motorista.trim()) e.motorista = 'Motorista é obrigatório';
-        if (!form.destino.trim())   e.destino   = 'Destino é obrigatório';
+        if (!form.destino.trim()) e.destino = 'Destino é obrigatório';
         setErrors(e);
         return Object.keys(e).length === 0;
     };
@@ -410,30 +411,30 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         try {
             const allItens = pedidos.flatMap((p, pIdx) =>
                 p.itens.map(i => ({
-                    material_id:    i.material_id,
-                    quantidade:     i.quantidade,
-                    peso_total:     i.peso_total,
-                    pedido_index:   pIdx,
+                    material_id: i.material_id,
+                    quantidade: i.quantidade,
+                    peso_total: i.peso_total,
+                    pedido_index: pIdx,
                 }))
             );
             await onSave({
                 ...form,
-                peso_total:             totais.pesoTotal,
-                vehicle_id:             form.vehicle_id || null,
-                distancia_km:           rotaInfo?.distanciaTotal || n(form.distancia_km),
-                paradas:                JSON.stringify(paradas),
-                custo_combustivel:      n(form.custo_combustivel),
-                custo_pedagio:          n(form.custo_pedagio),
-                custo_motorista:        n(form.custo_motorista),
-                valor_frete:            totais.freteCalculado,
-                valor_frete_calculado:  totais.freteCalculado,
-                valor_total_carga:      totais.valorTotalCarga,
+                peso_total: totais.pesoTotal,
+                vehicle_id: form.vehicle_id || null,
+                distancia_km: rotaInfo?.distanciaTotal || n(form.distancia_km),
+                paradas: JSON.stringify(paradas),
+                custo_combustivel: n(form.custo_combustivel),
+                custo_pedagio: n(form.custo_pedagio),
+                custo_motorista: n(form.custo_motorista),
+                valor_frete: totais.freteCalculado,
+                valor_frete_calculado: totais.freteCalculado,
+                valor_total_carga: totais.valorTotalCarga,
                 _pedidos: pedidos.map(p => ({
-                    numero_pedido:   p.numero_pedido || '',
-                    cidade_destino:  p.cidade_destino || '',
-                    valor_pedido:    n(p.valor_pedido),
+                    numero_pedido: p.numero_pedido || '',
+                    cidade_destino: p.cidade_destino || '',
+                    valor_pedido: n(p.valor_pedido),
                     categoria_frete: p.categoria_frete || 'Outros',
-                    empresa:         p.empresa || 'Comercial Araguaia',
+                    empresa: p.empresa || 'Comercial Araguaia',
                     percentual_frete: FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05,
                 })),
             }, allItens);
@@ -452,16 +453,16 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center sm:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={e => e.target === e.currentTarget && onClose()}>
             <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[95vh] sm:max-h-[92vh] flex flex-col">
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b" style={{ borderColor:'var(--color-border)' }}>
+                <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
                     <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center rounded-lg flex-shrink-0" style={{ width:36, height:36, backgroundColor:'var(--color-primary)' }}>
+                        <div className="flex items-center justify-center rounded-lg flex-shrink-0" style={{ width: 36, height: 36, backgroundColor: 'var(--color-primary)' }}>
                             <Icon name="FileText" size={18} color="#fff" />
                         </div>
                         <div>
-                            <h2 className="font-heading font-bold text-base sm:text-lg" style={{ color:'var(--color-text-primary)' }}>
+                            <h2 className="font-heading font-bold text-base sm:text-lg" style={{ color: 'var(--color-text-primary)' }}>
                                 {editingRomaneio ? 'Editar Romaneio' : 'Novo Romaneio'}
                             </h2>
-                            <p className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
+                            <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
                                 {editingRomaneio?.numero || 'Preencha os dados da viagem'}
                             </p>
                         </div>
@@ -472,10 +473,10 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 </div>
 
                 {/* Tabs — scroll horizontal no mobile */}
-                <div className="flex border-b overflow-x-auto" style={{ borderColor:'var(--color-border)', scrollbarWidth:'none' }}>
+                <div className="flex border-b overflow-x-auto" style={{ borderColor: 'var(--color-border)', scrollbarWidth: 'none' }}>
                     {[
-                        ['dados',      'Viagem', 'Truck'],
-                        ['pedidos',    `Pedidos (${pedidos.length})`, 'ShoppingCart'],
+                        ['dados', 'Viagem', 'Truck'],
+                        ['pedidos', `Pedidos (${pedidos.length})`, 'ShoppingCart'],
                         ['financeiro', 'Financeiro', 'DollarSign'],
                     ].map(([key, label, icon]) => (
                         <button key={key} onClick={() => setTab(key)}
@@ -568,7 +569,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                     <option value="">Selecione o posto...</option>
                                                     {postos.map(p => (
                                                         <option key={p.id} value={p.id}>
-                                                            {p.nome}{p.cidade ? ` — ${p.cidade}` : ''} · R$ {Number(p.preco_diesel||0).toFixed(3)}/L
+                                                            {p.nome}{p.cidade ? ` — ${p.cidade}` : ''} · R$ {Number(p.preco_diesel || 0).toFixed(3)}/L
                                                         </option>
                                                     ))}
                                                 </select>
@@ -672,30 +673,30 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                 )}
                             </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Veículo</label>
-                                        <select value={form.vehicle_id} onChange={e => setF('vehicle_id', e.target.value)}
-                                            disabled={loadingRefs}
-                                            className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60">
-                                            <option value="">{loadingRefs ? '⏳ Carregando veículos...' : vehicles.length === 0 ? 'Nenhum veículo cadastrado' : 'Selecione um veículo'}</option>
-                                            {vehicles.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.tipo}</option>)}
-                                        </select>
-                                    </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Placa</label>
+                                    <label className="block text-xs font-medium font-caption mb-1.5" style={{ color: 'var(--color-text-primary)' }}>Veículo</label>
+                                    <select value={form.vehicle_id} onChange={e => setF('vehicle_id', e.target.value)}
+                                        disabled={loadingRefs}
+                                        className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60">
+                                        <option value="">{loadingRefs ? '⏳ Carregando veículos...' : vehicles.length === 0 ? 'Nenhum veículo cadastrado' : 'Selecione um veículo'}</option>
+                                        {vehicles.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.tipo}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium font-caption mb-1.5" style={{ color: 'var(--color-text-primary)' }}>Placa</label>
                                     <input value={form.placa} onChange={e => setF('placa', e.target.value)} placeholder="ABC-1234"
                                         className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data uppercase" />
                                 </div>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Data/Hora de Saída</label>
+                                    <label className="block text-xs font-medium font-caption mb-1.5" style={{ color: 'var(--color-text-primary)' }}>Data/Hora de Saída</label>
                                     <input type="datetime-local" value={form.saida} onChange={e => setF('saida', e.target.value)}
                                         className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white" />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Status</label>
+                                    <label className="block text-xs font-medium font-caption mb-1.5" style={{ color: 'var(--color-text-primary)' }}>Status</label>
                                     <select value={form.status} onChange={e => setF('status', e.target.value)}
                                         className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white">
                                         {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
@@ -703,7 +704,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Observações</label>
+                                <label className="block text-xs font-medium font-caption mb-1.5" style={{ color: 'var(--color-text-primary)' }}>Observações</label>
                                 <textarea value={form.observacoes} onChange={e => setF('observacoes', e.target.value)} rows={3}
                                     placeholder="Instruções especiais, restrições..."
                                     className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white resize-none" />
@@ -715,12 +716,12 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     {tab === 'pedidos' && (
                         <div className="flex flex-col gap-4">
                             {pedidos.length === 0 && (
-                                <div className="text-center py-8 rounded-xl border-2 border-dashed" style={{ borderColor:'var(--color-border)' }}>
+                                <div className="text-center flex flex-col items-center py-8 rounded-xl border-2 border-dashed" style={{ borderColor: 'var(--color-border)' }}>
                                     <Icon name="ShoppingCart" size={36} color="var(--color-muted-foreground)" />
-                                    <p className="text-sm mt-2 font-caption" style={{ color:'var(--color-muted-foreground)' }}>
+                                    <p className="text-sm mt-2 font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
                                         Nenhum pedido adicionado
                                     </p>
-                                    <p className="text-xs mt-1 font-caption" style={{ color:'var(--color-muted-foreground)' }}>
+                                    <p className="text-xs mt-1 font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
                                         Adicione pedidos para calcular o frete automaticamente
                                     </p>
                                 </div>
@@ -744,7 +745,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                             </div>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="text-sm font-medium font-caption" style={{ color:'var(--color-text-primary)' }}>
+                                                    <span className="text-sm font-medium font-caption" style={{ color: 'var(--color-text-primary)' }}>
                                                         {pedido.numero_pedido ? `Pedido ${pedido.numero_pedido}` : `Pedido ${pIdx + 1}`}
                                                     </span>
                                                     {(() => {
@@ -760,16 +761,16 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                         style={{ backgroundColor: cfg.bg, color: cfg.cor }}>
                                                         {pedido.categoria_frete}
                                                     </span>
-                                                    <span className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
-                                                        {pedido.itens.length} item(s) · {pesoPedido.toLocaleString('pt-BR', { maximumFractionDigits:0 })} kg
+                                                    <span className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                        {pedido.itens.length} item(s) · {pesoPedido.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-0.5">
-                                                    <span className="text-xs font-data" style={{ color:'var(--color-muted-foreground)' }}>
+                                                    <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>
                                                         Valor: {brl(pedido.valor_pedido)}
                                                     </span>
                                                     <span className="text-xs font-data font-semibold" style={{ color: cfg.cor }}>
-                                                        Frete: {brl(pedidoFrete)} ({fmtPct(FRETE_CATEGORIAS.find(f=>f.categoria===pedido.categoria_frete)?.percentual||0)})
+                                                        Frete: {brl(pedidoFrete)} ({fmtPct(FRETE_CATEGORIAS.find(f => f.categoria === pedido.categoria_frete)?.percentual || 0)})
                                                     </span>
                                                 </div>
                                             </div>
@@ -784,26 +785,26 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
 
                                         {/* Pedido body */}
                                         {isExpanded && (
-                                            <div className="px-4 py-4 flex flex-col gap-4 border-t" style={{ borderColor:'var(--color-border)' }}>
+                                            <div className="px-4 py-4 flex flex-col gap-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                                 {/* Fields row */}
                                                 <div className="grid grid-cols-2 gap-3">
                                                     <div>
-                                                        <label className="block text-xs font-caption mb-1" style={{ color:'var(--color-text-secondary)' }}>Nº do Pedido</label>
+                                                        <label className="block text-xs font-caption mb-1" style={{ color: 'var(--color-text-secondary)' }}>Nº do Pedido</label>
                                                         <input value={pedido.numero_pedido}
-                                                            onChange={e => updatePedidoField(pIdx,'numero_pedido',e.target.value)}
+                                                            onChange={e => updatePedidoField(pIdx, 'numero_pedido', e.target.value)}
                                                             placeholder="Ex: 37443"
                                                             className="w-full h-9 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data" />
                                                     </div>
                                                     <div>
-                                                        <label className="block text-xs font-caption mb-1" style={{ color:'var(--color-text-secondary)' }}>Cidade de Destino</label>
+                                                        <label className="block text-xs font-caption mb-1" style={{ color: 'var(--color-text-secondary)' }}>Cidade de Destino</label>
                                                         <input value={pedido.cidade_destino}
-                                                            onChange={e => updatePedidoField(pIdx,'cidade_destino',e.target.value)}
+                                                            onChange={e => updatePedidoField(pIdx, 'cidade_destino', e.target.value)}
                                                             placeholder="Ex: Paratinga"
                                                             className="w-full h-9 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data" />
                                                     </div>
                                                     {/* Empresa — seleção visual por botões */}
                                                     <div className="col-span-2">
-                                                        <label className="block text-xs font-caption mb-1.5" style={{ color:'var(--color-text-secondary)' }}>Empresa</label>
+                                                        <label className="block text-xs font-caption mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Empresa</label>
                                                         <div className="grid grid-cols-1 xs:grid-cols-3 gap-2">
                                                             {EMPRESAS.map(emp => (
                                                                 <button key={emp.value} type="button"
@@ -821,16 +822,16 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        <label className="block text-xs font-caption mb-1" style={{ color:'var(--color-text-secondary)' }}>Valor do Pedido (R$)</label>
+                                                        <label className="block text-xs font-caption mb-1" style={{ color: 'var(--color-text-secondary)' }}>Valor do Pedido (R$)</label>
                                                         <input type="number" min="0" step="0.01" value={pedido.valor_pedido}
-                                                            onChange={e => updatePedidoField(pIdx,'valor_pedido',e.target.value)}
+                                                            onChange={e => updatePedidoField(pIdx, 'valor_pedido', e.target.value)}
                                                             placeholder="0,00"
                                                             className="w-full h-9 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data" />
                                                     </div>
                                                     <div>
-                                                        <label className="block text-xs font-caption mb-1" style={{ color:'var(--color-text-secondary)' }}>Categoria de Frete</label>
+                                                        <label className="block text-xs font-caption mb-1" style={{ color: 'var(--color-text-secondary)' }}>Categoria de Frete</label>
                                                         <select value={pedido.categoria_frete}
-                                                            onChange={e => updatePedidoField(pIdx,'categoria_frete',e.target.value)}
+                                                            onChange={e => updatePedidoField(pIdx, 'categoria_frete', e.target.value)}
                                                             className="w-full h-9 px-2 rounded-lg border border-gray-200 text-xs bg-white">
                                                             {FRETE_CATEGORIAS.map(f => (
                                                                 <option key={f.categoria} value={f.categoria}>{f.label} – {fmtPct(f.percentual)}</option>
@@ -841,12 +842,12 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
 
                                                 {/* Add material to pedido */}
                                                 <div>
-                                                    <label className="block text-xs font-caption mb-1.5" style={{ color:'var(--color-text-secondary)' }}>
+                                                    <label className="block text-xs font-caption mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
                                                         Adicionar material a este pedido
                                                     </label>
                                                     <div className="flex gap-2">
                                                         <select value={novoItem.material_id}
-                                                            onChange={e => setNovoItem(p => ({...p, material_id:e.target.value}))}
+                                                            onChange={e => setNovoItem(p => ({ ...p, material_id: e.target.value }))}
                                                             disabled={loadingRefs}
                                                             className="flex-1 h-9 px-3 rounded-lg border border-gray-200 text-xs bg-white disabled:opacity-60">
                                                             <option value="">{loadingRefs ? '⏳ Carregando materiais...' : materials.length === 0 ? 'Nenhum material cadastrado' : 'Selecionar material...'}</option>
@@ -859,19 +860,19 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                             const selMat = materials.find(m => String(m.id) === String(novoItem.material_id));
                                                             return selMat?.is_telha_zinco ? (
                                                                 <input type="number" min="0.5" step="0.5" value={novoItem.comprimento_telha}
-                                                                    onChange={e => setNovoItem(p => ({...p, comprimento_telha: e.target.value}))}
+                                                                    onChange={e => setNovoItem(p => ({ ...p, comprimento_telha: e.target.value }))}
                                                                     placeholder="Comp. (m)"
                                                                     title="Comprimento de cada telha em metros"
                                                                     className="w-24 h-9 px-2 rounded-lg border border-blue-300 text-sm font-data text-center bg-blue-50" />
                                                             ) : null;
                                                         })()}
                                                         <input type="number" min="0.001" step="0.001" value={novoItem.quantidade}
-                                                            onChange={e => setNovoItem(p => ({...p, quantidade:e.target.value}))}
+                                                            onChange={e => setNovoItem(p => ({ ...p, quantidade: e.target.value }))}
                                                             placeholder={(() => { const m = materials.find(m2 => String(m2.id) === String(novoItem.material_id)); return m?.is_telha_zinco ? 'Metros totais' : 'Qtd'; })()}
                                                             className="w-20 h-9 px-2 rounded-lg border border-gray-200 text-sm font-data text-center bg-white" />
                                                         <button onClick={() => addItemToPedido(pIdx)}
                                                             className="h-9 px-3 rounded-lg text-white text-xs font-medium flex items-center gap-1 transition-colors"
-                                                            style={{ backgroundColor:'var(--color-primary)' }}>
+                                                            style={{ backgroundColor: 'var(--color-primary)' }}>
                                                             <Icon name="Plus" size={13} color="#fff" />
                                                             Add
                                                         </button>
@@ -880,9 +881,9 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
 
                                                 {/* Items table */}
                                                 {pedido.itens.length > 0 && (
-                                                    <div className="rounded-lg border overflow-hidden" style={{ borderColor:'var(--color-border)' }}>
+                                                    <div className="rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
                                                         <table className="w-full text-xs">
-                                                            <thead style={{ backgroundColor:'var(--color-muted)', color:'var(--color-muted-foreground)' }}>
+                                                            <thead style={{ backgroundColor: 'var(--color-muted)', color: 'var(--color-muted-foreground)' }}>
                                                                 <tr>
                                                                     <th className="px-3 py-2 text-left font-caption font-medium">Material</th>
                                                                     <th className="px-3 py-2 text-center font-caption font-medium">Qtd</th>
@@ -892,16 +893,16 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                             </thead>
                                                             <tbody>
                                                                 {pedido.itens.map((item, iIdx) => (
-                                                                    <tr key={iIdx} className="border-t" style={{ borderColor:'var(--color-border)' }}>
+                                                                    <tr key={iIdx} className="border-t" style={{ borderColor: 'var(--color-border)' }}>
                                                                         <td className="px-3 py-2 font-caption">{item.nome}</td>
                                                                         <td className="px-3 py-2 text-center">
                                                                             <input type="number" min="0.001" step="0.001" value={item.quantidade}
                                                                                 onChange={e => {
-                                                                                    const qty = Number(e.target.value)||0;
+                                                                                    const qty = Number(e.target.value) || 0;
                                                                                     setPedidos(prev => prev.map((p, pi) =>
                                                                                         pi !== pIdx ? p : {
                                                                                             ...p, itens: p.itens.map((it, ii) =>
-                                                                                                ii !== iIdx ? it : { ...it, quantidade:qty, peso_total:qty*it.peso_unit }
+                                                                                                ii !== iIdx ? it : { ...it, quantidade: qty, peso_total: qty * it.peso_unit }
                                                                                             )
                                                                                         }
                                                                                     ));
@@ -909,7 +910,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                                                 className="w-16 text-center px-2 py-1 rounded border border-gray-200 font-data focus:outline-none" />
                                                                         </td>
                                                                         <td className="px-3 py-2 text-right font-data">
-                                                                            {n(item.peso_total).toLocaleString('pt-BR',{minimumFractionDigits:2})} kg
+                                                                            {n(item.peso_total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg
                                                                         </td>
                                                                         <td className="px-2 py-2">
                                                                             <button onClick={() => removeItemFromPedido(pIdx, iIdx)}
@@ -922,9 +923,9 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                             </tbody>
                                                         </table>
                                                         <div className="px-3 py-2 border-t flex justify-between text-xs font-data font-semibold"
-                                                            style={{ borderColor:'var(--color-border)', color:'var(--color-text-primary)' }}>
+                                                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
                                                             <span>Peso total</span>
-                                                            <span>{pesoPedido.toLocaleString('pt-BR',{minimumFractionDigits:2})} kg</span>
+                                                            <span>{pesoPedido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} kg</span>
                                                         </div>
                                                     </div>
                                                 )}
@@ -936,25 +937,25 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
 
                             <button onClick={addPedido}
                                 className="w-full py-3 rounded-xl border-2 border-dashed text-sm font-caption flex items-center justify-center gap-2 transition-colors hover:bg-blue-50 hover:border-blue-400"
-                                style={{ borderColor:'var(--color-border)', color:'var(--color-primary)' }}>
+                                style={{ borderColor: 'var(--color-border)', color: 'var(--color-primary)' }}>
                                 <Icon name="Plus" size={16} color="currentColor" />
                                 Adicionar Pedido
                             </button>
 
                             {/* Resumo carga */}
                             {pedidos.length > 0 && (
-                                <div className="rounded-xl border p-4" style={{ backgroundColor:'var(--color-muted)', borderColor:'var(--color-border)' }}>
-                                    <p className="text-xs font-caption font-semibold mb-2" style={{ color:'var(--color-text-secondary)' }}>RESUMO DA CARGA</p>
+                                <div className="rounded-xl border p-4" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)' }}>
+                                    <p className="text-xs font-caption font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>RESUMO DA CARGA</p>
                                     <div className="grid grid-cols-3 gap-3">
                                         {[
-                                            ['Pedidos',       String(pedidos.length),                                    'ShoppingCart'],
-                                            ['Peso Total',    totais.pesoTotal.toLocaleString('pt-BR',{maximumFractionDigits:0})+' kg', 'Weight'],
-                                            ['Valor da Carga',brl(totais.valorTotalCarga),                               'DollarSign'],
+                                            ['Pedidos', String(pedidos.length), 'ShoppingCart'],
+                                            ['Peso Total', totais.pesoTotal.toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' kg', 'Weight'],
+                                            ['Valor da Carga', brl(totais.valorTotalCarga), 'DollarSign'],
                                         ].map(([label, val, icon]) => (
                                             <div key={label} className="text-center">
                                                 <Icon name={icon} size={16} color="var(--color-primary)" className="mx-auto mb-1" />
-                                                <p className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>{label}</p>
-                                                <p className="text-sm font-data font-bold" style={{ color:'var(--color-text-primary)' }}>{val}</p>
+                                                <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>{label}</p>
+                                                <p className="text-sm font-data font-bold" style={{ color: 'var(--color-text-primary)' }}>{val}</p>
                                             </div>
                                         ))}
                                     </div>
@@ -967,13 +968,13 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     {tab === 'financeiro' && (
                         <div className="flex flex-col gap-4">
                             {/* Frete calculado */}
-                            <div className="rounded-xl border-2 p-4" style={{ borderColor:'#059669', backgroundColor:'#F0FDF4' }}>
+                            <div className="rounded-xl border-2 p-4" style={{ borderColor: '#059669', backgroundColor: '#F0FDF4' }}>
                                 <div className="flex items-center gap-2 mb-3">
                                     <Icon name="Calculator" size={16} color="#059669" />
-                                    <span className="text-sm font-semibold" style={{ color:'#065F46' }}>Frete Calculado Automaticamente</span>
+                                    <span className="text-sm font-semibold" style={{ color: '#065F46' }}>Frete Calculado Automaticamente</span>
                                 </div>
                                 {freteBreakdown.length === 0 ? (
-                                    <p className="text-xs font-caption" style={{ color:'#065F46' }}>
+                                    <p className="text-xs font-caption" style={{ color: '#065F46' }}>
                                         Adicione pedidos com valor para calcular o frete automaticamente.
                                     </p>
                                 ) : (
@@ -982,19 +983,19 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                             <div key={cat} className="flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-xs px-2 py-0.5 rounded font-caption"
-                                                        style={{ backgroundColor:cfg.bg, color:cfg.cor }}>
+                                                        style={{ backgroundColor: cfg.bg, color: cfg.cor }}>
                                                         {cat}
                                                     </span>
-                                                    <span className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
+                                                    <span className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
                                                         {qtd} pedido(s) · {fmtPct(cfg.percentual)}
                                                     </span>
                                                 </div>
-                                                <span className="text-sm font-data font-semibold" style={{ color:cfg.cor }}>{brl(valor)}</span>
+                                                <span className="text-sm font-data font-semibold" style={{ color: cfg.cor }}>{brl(valor)}</span>
                                             </div>
                                         ))}
-                                        <div className="border-t pt-2 flex justify-between items-center" style={{ borderColor:'#BBF7D0' }}>
-                                            <span className="text-sm font-semibold" style={{ color:'#065F46' }}>Total Frete</span>
-                                            <span className="text-lg font-bold font-data" style={{ color:'#059669' }}>{brl(totais.freteCalculado)}</span>
+                                        <div className="border-t pt-2 flex justify-between items-center" style={{ borderColor: '#BBF7D0' }}>
+                                            <span className="text-sm font-semibold" style={{ color: '#065F46' }}>Total Frete</span>
+                                            <span className="text-lg font-bold font-data" style={{ color: '#059669' }}>{brl(totais.freteCalculado)}</span>
                                         </div>
                                     </div>
                                 )}
@@ -1002,7 +1003,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
 
                             {/* Custo operacional */}
                             <div>
-                                <p className="text-xs font-caption font-semibold uppercase tracking-wider mb-3" style={{ color:'var(--color-muted-foreground)' }}>
+                                <p className="text-xs font-caption font-semibold uppercase tracking-wider mb-3" style={{ color: 'var(--color-muted-foreground)' }}>
                                     Custos Operacionais da Viagem
                                 </p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1026,7 +1027,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                     {/* Combustível — badge "auto" se foi preenchido pela IA */}
                                     <div>
                                         <div className="flex items-center justify-between mb-1.5">
-                                            <label className="text-xs font-medium font-caption" style={{ color:'var(--color-text-primary)' }}>Combustível (R$)</label>
+                                            <label className="text-xs font-medium font-caption" style={{ color: 'var(--color-text-primary)' }}>Combustível (R$)</label>
                                             {form._litros_estimados > 0 && form.custo_combustivel && (
                                                 <span className="text-xs px-1.5 py-0.5 rounded font-caption" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
                                                     ✓ Auto
@@ -1034,7 +1035,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                             )}
                                         </div>
                                         <div className="relative">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>R$</span>
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>R$</span>
                                             <input type="number" name="custo_combustivel" value={form.custo_combustivel}
                                                 onChange={e => setF(e.target.name, e.target.value)} min="0" step="0.01" placeholder="0,00"
                                                 className="w-full h-10 pl-8 pr-3 rounded-lg border text-sm font-data focus:outline-none bg-white"
@@ -1045,7 +1046,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                     {/* Pedágio — badge "auto" se foi preenchido pela IA */}
                                     <div>
                                         <div className="flex items-center justify-between mb-1.5">
-                                            <label className="text-xs font-medium font-caption" style={{ color:'var(--color-text-primary)' }}>Pedágios (R$)</label>
+                                            <label className="text-xs font-medium font-caption" style={{ color: 'var(--color-text-primary)' }}>Pedágios (R$)</label>
                                             {rotaInfo?.pedagioEstimado > 0 && form.custo_pedagio && (
                                                 <span className="text-xs px-1.5 py-0.5 rounded font-caption" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
                                                     ✓ Auto
@@ -1053,7 +1054,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                             )}
                                         </div>
                                         <div className="relative">
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>R$</span>
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>R$</span>
                                             <input type="number" name="custo_pedagio" value={form.custo_pedagio}
                                                 onChange={e => setF(e.target.name, e.target.value)} min="0" step="0.01" placeholder="0,00"
                                                 className="w-full h-10 pl-8 pr-3 rounded-lg border text-sm font-data focus:outline-none bg-white"
@@ -1079,23 +1080,23 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                             </div>
 
                             {/* Resumo final */}
-                            <div className="rounded-xl border p-4" style={{ backgroundColor:'var(--color-muted)', borderColor:'var(--color-border)' }}>
-                                <p className="text-xs font-caption font-semibold mb-3" style={{ color:'var(--color-muted-foreground)' }}>RESULTADO DA VIAGEM</p>
+                            <div className="rounded-xl border p-4" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)' }}>
+                                <p className="text-xs font-caption font-semibold mb-3" style={{ color: 'var(--color-muted-foreground)' }}>RESULTADO DA VIAGEM</p>
                                 <div className="space-y-2">
-                                    <FinRow label="Valor Total da Carga"    value={totais.valorTotalCarga}  icon="Package" />
-                                    <FinRow label="(+) Frete Calculado"     value={totais.freteCalculado}   icon="TrendingUp" green />
-                                    <FinRow label="(-) Combustível"         value={-n(form.custo_combustivel)} icon="Fuel" />
-                                    <FinRow label="(-) Pedágios"            value={-n(form.custo_pedagio)}  icon="Navigation" />
-                                    <FinRow label="(-) Motorista"           value={-n(form.custo_motorista)}icon="User" />
-                                    <div className="border-t pt-2 flex justify-between items-center" style={{ borderColor:'var(--color-border)' }}>
-                                        <span className="font-semibold text-sm" style={{ color:'var(--color-text-primary)' }}>Margem da Viagem</span>
+                                    <FinRow label="Valor Total da Carga" value={totais.valorTotalCarga} icon="Package" />
+                                    <FinRow label="(+) Frete Calculado" value={totais.freteCalculado} icon="TrendingUp" green />
+                                    <FinRow label="(-) Combustível" value={-n(form.custo_combustivel)} icon="Fuel" />
+                                    <FinRow label="(-) Pedágios" value={-n(form.custo_pedagio)} icon="Navigation" />
+                                    <FinRow label="(-) Motorista" value={-n(form.custo_motorista)} icon="User" />
+                                    <div className="border-t pt-2 flex justify-between items-center" style={{ borderColor: 'var(--color-border)' }}>
+                                        <span className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Margem da Viagem</span>
                                         <div className="text-right">
-                                            <span className={`text-lg font-bold font-data ${totais.margem >= 0 ? 'text-green-600':'text-red-500'}`}>
-                                                {totais.margem >= 0 ? '+':''}{brl(totais.margem)}
+                                            <span className={`text-lg font-bold font-data ${totais.margem >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                {totais.margem >= 0 ? '+' : ''}{brl(totais.margem)}
                                             </span>
                                             {totais.freteCalculado > 0 && (
-                                                <p className={`text-xs font-caption ${totais.margem >= 0 ? 'text-green-600':'text-red-500'}`}>
-                                                    {((totais.margem / totais.freteCalculado)*100).toFixed(1)}% sobre o frete
+                                                <p className={`text-xs font-caption ${totais.margem >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                    {((totais.margem / totais.freteCalculado) * 100).toFixed(1)}% sobre o frete
                                                 </p>
                                             )}
                                         </div>
@@ -1107,10 +1108,10 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 </div>
 
                 {/* Footer */}
-                <div className="px-4 sm:px-6 py-3 sm:py-4 border-t flex flex-col xs:flex-row justify-between items-start xs:items-center gap-2" style={{ borderColor:'var(--color-border)' }}>
+                <div className="px-4 sm:px-6 py-3 sm:py-4 border-t flex flex-col xs:flex-row justify-between items-start xs:items-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                     <div className="flex items-center gap-3 flex-wrap">
-                        <span className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
-                            {pedidos.length} pedido(s) · {totais.pesoTotal.toLocaleString('pt-BR',{maximumFractionDigits:0})} kg
+                        <span className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
+                            {pedidos.length} pedido(s) · {totais.pesoTotal.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} kg
                         </span>
                         {totais.freteCalculado > 0 && (
                             <span className="text-xs font-data font-semibold text-green-600">
@@ -1130,12 +1131,12 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     );
 }
 
-function MoneyInput({ label, name, value, onChange, prefix='R$' }) {
+function MoneyInput({ label, name, value, onChange, prefix = 'R$' }) {
     return (
         <div>
-            <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>{label}</label>
+            <label className="block text-xs font-medium font-caption mb-1.5" style={{ color: 'var(--color-text-primary)' }}>{label}</label>
             <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>{prefix}</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>{prefix}</span>
                 <input type="number" name={name} value={value} onChange={onChange} min="0" step="0.01" placeholder="0,00"
                     className="w-full h-10 pl-8 pr-3 rounded-lg border border-gray-200 text-sm font-data focus:outline-none bg-white" />
             </div>
@@ -1146,11 +1147,11 @@ function MoneyInput({ label, name, value, onChange, prefix='R$' }) {
 function FinRow({ label, value, icon, green }) {
     return (
         <div className="flex justify-between items-center">
-            <span className="text-xs font-caption flex items-center gap-1.5" style={{ color:'var(--color-muted-foreground)' }}>
+            <span className="text-xs font-caption flex items-center gap-1.5" style={{ color: 'var(--color-muted-foreground)' }}>
                 <Icon name={icon} size={12} color="currentColor" />{label}
             </span>
             <span className={`text-xs font-data font-medium ${value < 0 ? 'text-red-500' : green ? 'text-green-600' : 'text-gray-700'}`}>
-                {value < 0 ? '-':''}{Math.abs(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+                {value < 0 ? '-' : ''}{Math.abs(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
             </span>
         </div>
     );
