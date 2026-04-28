@@ -11,15 +11,7 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 const readonlyCls = 'w-full text-sm px-3 py-2.5 rounded-lg border';
 const readonlyStyle = { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: 'var(--color-muted)' };
 
-const AUTH_TIMEOUT_MS = 20_000;
-function withTimeout(promise, ms = AUTH_TIMEOUT_MS) {
-    return Promise.race([
-        promise,
-        new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Tempo limite excedido. Verifique sua conexão e tente novamente.')), ms)
-        ),
-    ]);
-}
+// Timeout removido — supabase.auth.updateUser pode demorar sem ser erro
 
 function SectionCard({ title, icon, children }) {
     return (
@@ -120,9 +112,7 @@ export default function PerfilUsuario() {
             if (!sessionData?.session) {
                 throw new Error('Sessão expirada. Faça logout e login novamente.');
             }
-            const { error } = await withTimeout(
-                supabase.auth.updateUser({ password: novaSenha })
-            );
+            const { error } = await supabase.auth.updateUser({ password: novaSenha });
             if (error) throw error;
             setFeedbackSenha({ status: 'success', message: 'Senha alterada com sucesso! Use a nova senha no próximo login.' });
             setNovaSenha('');

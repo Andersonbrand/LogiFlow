@@ -285,6 +285,7 @@ export default function MaterialCatalog() {
                                     onEdit={openEdit}
                                     onDelete={setDeletingMaterial}
                                     loading={false}
+                                    isAdmin={isAdmin()}
                                 />
                             </div>
 
@@ -303,6 +304,7 @@ export default function MaterialCatalog() {
                                             material={m}
                                             onEdit={openEdit}
                                             onDelete={setDeletingMaterial}
+                                            isAdmin={isAdmin()}
                                         />
                                     ))
                                 )}

@@ -2,7 +2,7 @@ import React from 'react';
 import Icon from 'components/AppIcon';
 
 
-export default function MaterialTable({ materials, sortConfig, onSort, onEdit, onDelete, loading }) {
+export default function MaterialTable({ materials, sortConfig, onSort, onEdit, onDelete, loading, isAdmin }) {
     const getSortIcon = (col) => {
         if (sortConfig?.key !== col) return <Icon name="ChevronsUpDown" size={14} color="currentColor" />;
         return sortConfig?.dir === 'asc'
@@ -91,14 +91,16 @@ export default function MaterialTable({ materials, sortConfig, onSort, onEdit, o
                                         >
                                             <Icon name="Pencil" size={15} color="currentColor" />
                                         </button>
-                                        <button
-                                            onClick={() => onDelete(m)}
-                                            className="p-1.5 rounded-md hover:bg-red-50 text-red-500 transition-colors"
-                                            title="Excluir material"
-                                            aria-label={`Excluir ${m?.nome}`}
-                                        >
-                                            <Icon name="Trash2" size={15} color="currentColor" />
-                                        </button>
+                                        {isAdmin && (
+                                            <button
+                                                onClick={() => onDelete(m)}
+                                                className="p-1.5 rounded-md hover:bg-red-50 text-red-500 transition-colors"
+                                                title="Excluir material"
+                                                aria-label={`Excluir ${m?.nome}`}
+                                            >
+                                                <Icon name="Trash2" size={15} color="currentColor" />
+                                            </button>
+                                        )}
                                     </div>
                                 </td>
                             </tr>
