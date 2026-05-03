@@ -765,9 +765,12 @@ export async function fetchDiarias(filters = {}) {
 
 function sanitizeDiaria(obj) {
     // Campos UUID não podem ser string vazia — converte para null
-    const uuidFields = ['motorista_id', 'viagem_id', 'veiculo_id'];
+    // NOTA: carretas_diarias NÃO tem coluna veiculo_id
+    const uuidFields = ['motorista_id', 'viagem_id'];
     const out = { ...obj };
     uuidFields.forEach(f => { if (out[f] === '' || out[f] === undefined) out[f] = null; });
+    // Remove campos que não existem na tabela
+    delete out.veiculo_id;
     return out;
 }
 
