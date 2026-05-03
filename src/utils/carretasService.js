@@ -763,12 +763,20 @@ export async function fetchDiarias(filters = {}) {
     return data || [];
 }
 
+function sanitizeDiaria(obj) {
+    // Campos UUID não podem ser string vazia — converte para null
+    const uuidFields = ['motorista_id', 'viagem_id', 'veiculo_id'];
+    const out = { ...obj };
+    uuidFields.forEach(f => { if (out[f] === '' || out[f] === undefined) out[f] = null; });
+    return out;
+}
+
 export async function createDiaria(diaria) {
-    // Calcula valor total: quantidade_dias × valor_dia
-    const valorTotal = Number(diaria.quantidade_dias || 1) * Number(diaria.valor_dia || 0);
+    const payload = sanitizeDiaria(diaria);
+    const valorTotal = Number(payload.quantidade_dias || 1) * Number(payload.valor_dia || 0);
     const { data, error } = await supabase
         .from('carretas_diarias')
-        .insert({ ...diaria, valor_total: valorTotal })
+        .insert({ ...payload, valor_total: valorTotal })
         .select('*, motorista:motorista_id(id, name)')
         .single();
     if (error) throw error;
@@ -776,10 +784,11 @@ export async function createDiaria(diaria) {
 }
 
 export async function updateDiaria(id, updates) {
-    const valorTotal = Number(updates.quantidade_dias || 1) * Number(updates.valor_dia || 0);
+    const payload = sanitizeDiaria(updates);
+    const valorTotal = Number(payload.quantidade_dias || 1) * Number(payload.valor_dia || 0);
     const { data, error } = await supabase
         .from('carretas_diarias')
-        .update({ ...updates, valor_total: valorTotal, updated_at: new Date().toISOString() })
+        .update({ ...payload, valor_total: valorTotal, updated_at: new Date().toISOString() })
         .eq('id', id).select().single();
     if (error) throw error;
     return data;

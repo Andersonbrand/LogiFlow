@@ -2429,11 +2429,6 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                                     <Icon name="CheckCircle2" size={13} color="#059669" />
                                                 </button>
                                             )}
-                                            <button onClick={() => exportarDiariaIndividual(d)}
-                                                className="p-1.5 rounded hover:bg-emerald-50"
-                                                title="Exportar modelo Excel">
-                                                <Icon name="FileDown" size={13} color="#059669" />
-                                            </button>
                                             {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
                                             {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
                                         </div>
@@ -3032,6 +3027,11 @@ function TabDiarias({ isAdmin, profile }) {
                                     <td className="px-4 py-3 font-data font-semibold text-indigo-600">{BRL(d.valor_total)}</td>
                                     <td className="px-4 py-3">
                                         <div className="flex gap-1">
+                                            <button onClick={() => exportarDiariaIndividual(d)}
+                                                className="p-1.5 rounded hover:bg-emerald-50"
+                                                title="Exportar modelo Excel">
+                                                <Icon name="FileDown" size={13} color="#059669" />
+                                            </button>
                                             {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
                                             {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
                                         </div>
