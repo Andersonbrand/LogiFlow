@@ -19,8 +19,8 @@ import {
     fetchCarregamentos, createCarregamento, updateCarregamento, deleteCarregamento,
     fetchEmpresas, createEmpresa, deleteEmpresa,
     fetchCarreteiros, fetchTodosMotoristas,
-    fetchAllRegistrosViagem, updateRegistroViagem, deleteRegistroViagem,
-    CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
+    fetchAllRegistrosViagem,
+        CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
     aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
     fetchOrdensServico, createOrdemServico, updateOrdemServico, deleteOrdemServico,
     fetchMecanicos,
@@ -36,18 +36,19 @@ import {
     revogarBoletoCarreta, revogarParcelaCartaoCarreta,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
+import { exportDiariaModelo, exportDiariasRomaneiosModelo } from 'utils/excelUtils';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT_DATE = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
 
 const STATUS_VIAGEM = ['Agendado', 'Em processamento', 'Aguardando no pátio', 'Em trânsito', 'Entrega finalizada', 'Cancelado'];
 const STATUS_COLORS = {
-    'Agendado': { bg: '#EFF6FF', text: '#1D4ED8' },
-    'Em processamento': { bg: '#FEF9C3', text: '#B45309' },
+    'Agendado':            { bg: '#EFF6FF', text: '#1D4ED8' },
+    'Em processamento':    { bg: '#FEF9C3', text: '#B45309' },
     'Aguardando no pátio': { bg: '#FEE2E2', text: '#B91C1C' },
-    'Em trânsito': { bg: '#D1FAE5', text: '#065F46' },
-    'Entrega finalizada': { bg: '#F0FDF4', text: '#15803D' },
-    'Cancelado': { bg: '#F3F4F6', text: '#6B7280' },
+    'Em trânsito':         { bg: '#D1FAE5', text: '#065F46' },
+    'Entrega finalizada':  { bg: '#F0FDF4', text: '#15803D' },
+    'Cancelado':           { bg: '#F3F4F6', text: '#6B7280' },
 };
 const TIPO_COMPOSICAO = ['Cavalo + Carreta', 'Truck', 'Toco', 'Bitrem', 'Outro'];
 const RESPONSAVEIS = ['Juliana', 'Anderson'];
@@ -114,57 +115,11 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 // Sem formulário de criação manual — o admin é direcionado para a aba Volume.
 function TabViagens({ isAdmin }) {
     const { toast, showToast } = useToast();
-    const { confirm, ConfirmDialog } = useConfirm();
     const [carregamentos, setCarregamentos] = useState([]);
     const [registrosMotoristas, setRegistrosMotoristas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [abaViagens, setAbaViagens] = useState('carregamentos'); // 'carregamentos' | 'motoristas'
     const [filtroMes, setFiltroMes] = useState('');
-    const [modalEditRegistro, setModalEditRegistro] = useState(null); // registro em edição
-    const [editForm, setEditForm] = useState({});
-    const [savingEdit, setSavingEdit] = useState(false);
-
-    const openEdit = (r) => {
-        setEditForm({
-            data_carregamento: r.data_carregamento || '',
-            numero_nota_fiscal: r.numero_nota_fiscal || '',
-            veiculo_id: r.veiculo_id || '',
-            local_carregamento: r.local_carregamento || '',
-            destino: r.destino || '',
-            data_descarga: r.data_descarga || '',
-            observacoes: r.observacoes || '',
-        });
-        setModalEditRegistro(r);
-    };
-
-    const handleSaveEdit = async () => {
-        if (!editForm.data_carregamento || !editForm.destino) {
-            showToast('Data e destino são obrigatórios', 'error'); return;
-        }
-        setSavingEdit(true);
-        try {
-            await updateRegistroViagem(modalEditRegistro.id, editForm);
-            showToast('Viagem atualizada!', 'success');
-            setModalEditRegistro(null);
-            load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-        finally { setSavingEdit(false); }
-    };
-
-    const handleDeleteRegistro = async (r) => {
-        const ok = await confirm({
-            title: 'Excluir registro?',
-            message: `Viagem de ${r.motorista?.name || 'motorista'} em ${FMT_DATE(r.data_carregamento)} será removida permanentemente.`,
-            confirmLabel: 'Excluir',
-            variant: 'danger',
-        });
-        if (!ok) return;
-        try {
-            await deleteRegistroViagem(r.id);
-            showToast('Registro excluído!', 'warning');
-            load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-    };
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -174,7 +129,7 @@ function TabViagens({ isAdmin }) {
                 const [yr, mo] = filtroMes.split('-');
                 const lastDay = new Date(+yr, +mo, 0).getDate();
                 f.dataInicio = `${filtroMes}-01`;
-                f.dataFim = `${filtroMes}-${String(lastDay).padStart(2, '0')}`;
+                f.dataFim    = `${filtroMes}-${String(lastDay).padStart(2, '0')}`;
             }
             const [c, regs] = await Promise.all([
                 fetchCarregamentos(f),
@@ -227,7 +182,7 @@ function TabViagens({ isAdmin }) {
                     <div className="flex gap-1 p-1 rounded-xl" style={{ backgroundColor: 'var(--color-muted)' }}>
                         {[
                             { id: 'carregamentos', label: 'Carregamentos', count: carregamentos.length },
-                            { id: 'motoristas', label: 'Lançados pelos Motoristas', count: registrosMotoristas.length },
+                            { id: 'motoristas',    label: 'Lançados pelos Motoristas', count: registrosMotoristas.length },
                         ].map(s => (
                             <button key={s.id} onClick={() => setAbaViagens(s.id)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
@@ -274,7 +229,7 @@ function TabViagens({ isAdmin }) {
                         <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                             <table className="w-full text-sm min-w-[700px]">
                                 <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                    <tr>{['Data', 'Motorista', 'Placa', 'Empresa', 'Destino', 'Qtd (sacos)', 'Frete', 'Bônus'].map(h => (
+                                    <tr>{['Data','Motorista','Placa','Empresa','Destino','Qtd (sacos)','Frete','Bônus'].map(h => (
                                         <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                     ))}</tr>
                                 </thead>
@@ -320,13 +275,13 @@ function TabViagens({ isAdmin }) {
                             <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                                 <table className="w-full text-sm min-w-[750px]">
                                     <thead className="text-xs border-b" style={{ backgroundColor: '#F0FDF4', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                        <tr>{['Motorista', 'Placa', 'Data Carregamento', 'Nota Fiscal', 'Local Carregamento', 'Destino', 'Data Descarga', 'Observações', ...(isAdmin ? ['Ações'] : [])].map(h => (
+                                        <tr>{['Motorista','Placa','Data Carregamento','Nota Fiscal','Destino','Data Descarga','Observações'].map(h => (
                                             <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                         ))}</tr>
                                     </thead>
                                     <tbody>
                                         {registrosMotoristas.length === 0 ? (
-                                            <tr><td colSpan={isAdmin ? 9 : 8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                                 <div className="flex flex-col items-center gap-2">
                                                     <Icon name="Truck" size={28} color="var(--color-muted-foreground)" />
                                                     <span className="text-sm">Nenhum registro lançado pelos motoristas ainda</span>
@@ -339,33 +294,9 @@ function TabViagens({ isAdmin }) {
                                                 <td className="px-3 py-3 font-data whitespace-nowrap">{r.veiculo?.placa || '—'}</td>
                                                 <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(r.data_carregamento)}</td>
                                                 <td className="px-3 py-3 font-data whitespace-nowrap text-blue-700">{r.numero_nota_fiscal || '—'}</td>
-                                                <td className="px-3 py-3 whitespace-nowrap">
-                                                    {r.local_carregamento ? (
-                                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                                                            style={r.local_carregamento === 'CSN Cimentos'
-                                                                ? { backgroundColor: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE' }
-                                                                : { backgroundColor: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0' }}>
-                                                            {r.local_carregamento === 'CSN Cimentos' ? '🏭' : '🏪'} {r.local_carregamento}
-                                                        </span>
-                                                    ) : <span style={{ color: 'var(--color-muted-foreground)' }}>—</span>}
-                                                </td>
                                                 <td className="px-3 py-3 max-w-[160px] truncate font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</td>
                                                 <td className="px-3 py-3 whitespace-nowrap">{r.data_descarga ? FMT_DATE(r.data_descarga) : <span style={{ color: 'var(--color-muted-foreground)' }}>Em trânsito</span>}</td>
                                                 <td className="px-3 py-3 max-w-[180px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{r.observacoes || '—'}</td>
-                                                {isAdmin && (
-                                                    <td className="px-3 py-3 whitespace-nowrap">
-                                                        <div className="flex items-center gap-1">
-                                                            <button onClick={() => openEdit(r)} title="Editar"
-                                                                className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors">
-                                                                <Icon name="Pencil" size={13} color="#1D4ED8" />
-                                                            </button>
-                                                            <button onClick={() => handleDeleteRegistro(r)} title="Excluir"
-                                                                className="p-1.5 rounded-lg hover:bg-red-50 transition-colors">
-                                                                <Icon name="Trash2" size={13} color="#DC2626" />
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                )}
                                             </tr>
                                         ))}
                                     </tbody>
@@ -375,98 +306,6 @@ function TabViagens({ isAdmin }) {
                     )}
                 </>
             )}
-
-            {/* ── Modal Edição Registro Motorista (Admin) ── */}
-            {modalEditRegistro && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)' }}
-                    onClick={e => e.target === e.currentTarget && setModalEditRegistro(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col" style={{ maxHeight: 'calc(100vh - 40px)' }}>
-                        {/* Header */}
-                        <div className="flex items-center justify-between p-5 border-b shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                                    <Icon name="Pencil" size={18} color="#1D4ED8" />
-                                </div>
-                                <div>
-                                    <h2 className="font-heading font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Editar Registro de Viagem</h2>
-                                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
-                                        {modalEditRegistro.motorista?.name || 'Motorista'}
-                                    </p>
-                                </div>
-                            </div>
-                            <button onClick={() => setModalEditRegistro(null)} className="p-1.5 rounded-lg hover:bg-gray-100">
-                                <Icon name="X" size={18} color="var(--color-muted-foreground)" />
-                            </button>
-                        </div>
-                        {/* Body */}
-                        <div className="p-5 overflow-y-auto flex-1 grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de carregamento <span className="text-red-500">*</span></label>
-                                <input type="date" value={editForm.data_carregamento}
-                                    onChange={e => setEditForm(f => ({ ...f, data_carregamento: e.target.value }))}
-                                    className={inputCls} style={inputStyle} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Nº da Nota Fiscal</label>
-                                <input value={editForm.numero_nota_fiscal}
-                                    onChange={e => setEditForm(f => ({ ...f, numero_nota_fiscal: e.target.value }))}
-                                    className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
-                            </div>
-                            <div className="col-span-2">
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Local de carregamento</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {[
-                                        { value: 'CSN Cimentos', label: 'CSN Cimentos', icon: '🏭' },
-                                        { value: 'Estoque (Loja)', label: 'Estoque (Loja)', icon: '🏪' },
-                                    ].map(op => (
-                                        <button key={op.value} type="button"
-                                            onClick={() => setEditForm(f => ({ ...f, local_carregamento: op.value }))}
-                                            className="flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-all"
-                                            style={editForm.local_carregamento === op.value
-                                                ? { backgroundColor: '#EFF6FF', borderColor: '#3B82F6', color: '#1D4ED8', boxShadow: '0 0 0 2px rgba(59,130,246,0.2)' }
-                                                : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)', backgroundColor: 'transparent' }}>
-                                            <span className="text-base">{op.icon}</span>{op.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Destino da carga <span className="text-red-500">*</span></label>
-                                <input value={editForm.destino}
-                                    onChange={e => setEditForm(f => ({ ...f, destino: e.target.value }))}
-                                    className={inputCls} style={inputStyle} placeholder="Cidade ou local" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de descarga</label>
-                                <input type="date" value={editForm.data_descarga}
-                                    onChange={e => setEditForm(f => ({ ...f, data_descarga: e.target.value }))}
-                                    className={inputCls} style={inputStyle} />
-                            </div>
-                            <div className="col-span-2">
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Observações</label>
-                                <textarea value={editForm.observacoes}
-                                    onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))}
-                                    className={inputCls} style={inputStyle} rows={2} />
-                            </div>
-                        </div>
-                        {/* Footer */}
-                        <div className="flex gap-3 justify-end p-5 border-t shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => setModalEditRegistro(null)}
-                                className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50"
-                                style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <button onClick={handleSaveEdit} disabled={savingEdit}
-                                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors disabled:opacity-60"
-                                style={{ backgroundColor: '#1D4ED8' }}>
-                                <Icon name={savingEdit ? 'Loader' : 'Check'} size={15} color="white" />
-                                {savingEdit ? 'Salvando...' : 'Salvar alterações'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {ConfirmDialog}
             <Toast toast={toast} />
         </div>
     );
@@ -601,8 +440,8 @@ function TabAbastecimentos({ isAdmin, profile }) {
         try {
             const f = {};
             if (filtro.motoristaId) f.motoristaId = filtro.motoristaId;
-            if (filtro.veiculoId) f.veiculoId = filtro.veiculoId;
-            if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2, '0'); }
+            if (filtro.veiculoId)   f.veiculoId   = filtro.veiculoId;
+            if (filtro.mes)         { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
             const [a, v, m, p] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchTodosMotoristas(), fetchPostos().catch(() => [])]);
             setAbast(a); setVeiculos(v); setMotoristas(m); setPostos(p);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -612,10 +451,10 @@ function TabAbastecimentos({ isAdmin, profile }) {
 
     const totais = useMemo(() => ({
         litrosDiesel: abast.reduce((s, a) => s + Number(a.litros_diesel || 0), 0),
-        litrosArla: abast.reduce((s, a) => s + Number(a.litros_arla || 0), 0),
-        valorDiesel: abast.reduce((s, a) => s + Number(a.valor_diesel || 0), 0),
-        valorArla: abast.reduce((s, a) => s + Number(a.valor_arla || 0), 0),
-        valorTotal: abast.reduce((s, a) => s + Number(a.valor_total || 0), 0),
+        litrosArla:   abast.reduce((s, a) => s + Number(a.litros_arla   || 0), 0),
+        valorDiesel:  abast.reduce((s, a) => s + Number(a.valor_diesel  || 0), 0),
+        valorArla:    abast.reduce((s, a) => s + Number(a.valor_arla    || 0), 0),
+        valorTotal:   abast.reduce((s, a) => s + Number(a.valor_total   || 0), 0),
     }), [abast]);
 
     const handleSubmit = async () => {
@@ -693,7 +532,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
         // linha totais
         rows.push({ 'Data': 'TOTAL', 'L. Diesel': totais.litrosDiesel, 'R$ Diesel': totais.valorDiesel, 'L. Arla': totais.litrosArla, 'R$ Arla': totais.valorArla, 'Total R$': totais.valorTotal });
         const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [12, 8, 20, 12, 18, 10, 12, 10, 12, 12, 25].map(w => ({ wch: w }));
+        ws['!cols'] = [12,8,20,12,18,10,12,10,12,12,25].map(w => ({ wch: w }));
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Abastecimentos');
         XLSX.writeFile(wb, `abastecimentos_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`);
@@ -755,7 +594,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                     <table className="w-full text-sm min-w-[700px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Data', 'Motorista', 'Placa', 'Posto', 'Diesel (L)', 'R$ Diesel', 'Arla (L)', 'R$ Arla', 'Total', ''].map(h => <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>)}</tr>
+                            <tr>{['Data','Motorista','Placa','Posto','Diesel (L)','R$ Diesel','Arla (L)','R$ Arla','Total',''].map(h => <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>)}</tr>
                         </thead>
                         <tbody>
                             {abast.length === 0 ? <tr><td colSpan={10} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
@@ -764,20 +603,20 @@ function TabAbastecimentos({ isAdmin, profile }) {
                                     <span className="text-sm">Nenhum abastecimento registrado</span>
                                 </div>
                             </td></tr>
-                                : abast.map((a, i) => (
-                                    <tr key={a.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                        <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(a.data_abastecimento)}</td>
-                                        <td className="px-3 py-3 whitespace-nowrap">{a.motorista?.name || '—'}</td>
-                                        <td className="px-3 py-3 font-data whitespace-nowrap">{a.veiculo?.placa || '—'}</td>
-                                        <td className="px-3 py-3 text-xs max-w-[120px] truncate">{postoNome(a)}</td>
-                                        <td className="px-3 py-3 font-data text-right text-blue-700">{Number(a.litros_diesel || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
-                                        <td className="px-3 py-3 font-data text-right">{BRL(a.valor_diesel)}</td>
-                                        <td className="px-3 py-3 font-data text-right text-emerald-600">{Number(a.litros_arla || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
-                                        <td className="px-3 py-3 font-data text-right text-emerald-700">{BRL(a.valor_arla)}</td>
-                                        <td className="px-3 py-3 font-data text-right font-semibold text-purple-600">{BRL(a.valor_total)}</td>
-                                        <td className="px-3 py-3">{isAdmin && <button onClick={() => handleDelete(a.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}</td>
-                                    </tr>
-                                ))}
+                            : abast.map((a, i) => (
+                                <tr key={a.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                    <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(a.data_abastecimento)}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap">{a.motorista?.name || '—'}</td>
+                                    <td className="px-3 py-3 font-data whitespace-nowrap">{a.veiculo?.placa || '—'}</td>
+                                    <td className="px-3 py-3 text-xs max-w-[120px] truncate">{postoNome(a)}</td>
+                                    <td className="px-3 py-3 font-data text-right text-blue-700">{Number(a.litros_diesel || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                                    <td className="px-3 py-3 font-data text-right">{BRL(a.valor_diesel)}</td>
+                                    <td className="px-3 py-3 font-data text-right text-emerald-600">{Number(a.litros_arla || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
+                                    <td className="px-3 py-3 font-data text-right text-emerald-700">{BRL(a.valor_arla)}</td>
+                                    <td className="px-3 py-3 font-data text-right font-semibold text-purple-600">{BRL(a.valor_total)}</td>
+                                    <td className="px-3 py-3">{isAdmin && <button onClick={() => handleDelete(a.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}</td>
+                                </tr>
+                            ))}
                         </tbody>
                         {abast.length > 0 && (
                             <tfoot>
@@ -1062,7 +901,7 @@ function TabChecklist({ isAdmin, profile }) {
             <div className="flex flex-wrap gap-2 items-center justify-between mb-5">
                 <div className="flex items-center gap-2">
                     <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                        {[['pendentes', 'Pendentes'], ['todos', 'Todos']].map(([v, l]) => (
+                        {[['pendentes','Pendentes'], ['todos','Todos']].map(([v, l]) => (
                             <button key={v} onClick={() => setFiltro(v)} className="px-4 py-2 text-xs font-medium transition-colors"
                                 style={filtro === v ? { backgroundColor: 'var(--color-primary)', color: '#fff' } : { backgroundColor: 'white', color: 'var(--color-muted-foreground)' }}>{l}</button>
                         ))}
@@ -1266,7 +1105,7 @@ function TabCarregamentos({ isAdmin }) {
         try {
             const f = {};
             if (filtro.empresaId) f.empresaId = filtro.empresaId;
-            if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2, '0'); }
+            if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
             const [c, v, m, e] = await Promise.all([fetchCarregamentos(f), fetchCarretasVeiculos(), fetchTodosMotoristas(), fetchEmpresas()]);
             setCarregamentos(c); setVeiculos(v); setMotoristas(m); setEmpresas(e);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -1339,7 +1178,7 @@ function TabCarregamentos({ isAdmin }) {
             <div className="grid grid-cols-2 gap-4 mb-5">
                 {[
                     { l: 'Carregamentos', v: totais.carregamentos, c: '#1D4ED8', bg: '#EFF6FF', i: 'Package' },
-                    { l: 'Frete Total', v: BRL(totais.freteTotal), c: '#7C3AED', bg: '#EDE9FE', i: 'DollarSign' },
+                    { l: 'Frete Total',   v: BRL(totais.freteTotal), c: '#7C3AED', bg: '#EDE9FE', i: 'DollarSign' },
                 ].map(k => (
                     <div key={k.l} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                         <div className="flex items-center gap-2 mb-1">
@@ -1355,7 +1194,7 @@ function TabCarregamentos({ isAdmin }) {
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                     <table className="w-full text-sm min-w-[640px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Data', 'Pedido/NF', 'Motorista', 'Placa', 'Empresa', 'Destino', 'Qtd', 'Frete', ''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                            <tr>{['Data','Pedido/NF','Motorista','Placa','Empresa','Destino','Qtd','Frete',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
                             {carregamentos.length === 0 ? <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
@@ -1364,26 +1203,26 @@ function TabCarregamentos({ isAdmin }) {
                                     <span className="text-sm">Nenhum carregamento registrado</span>
                                 </div>
                             </td></tr>
-                                : carregamentos.map((c, i) => (
-                                    <tr key={c.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                        <td className="px-4 py-3">{FMT_DATE(c.data_carregamento)}</td>
-                                        <td className="px-4 py-3 text-xs">
-                                            {c.numero_pedido ? <span className="font-data">{c.numero_pedido}</span> : '—'}
-                                            {c.numero_nota_fiscal && <span className="block text-gray-400">NF: {c.numero_nota_fiscal}</span>}
-                                        </td>
-                                        <td className="px-4 py-3">{c.motorista?.name || '—'}</td>
-                                        <td className="px-4 py-3 font-data">{c.veiculo?.placa || '—'}</td>
-                                        <td className="px-4 py-3 text-xs">{c.empresa?.nome || '—'}</td>
-                                        <td className="px-4 py-3">{c.destino}</td>
-                                        <td className="px-4 py-3 font-data text-right">{c.quantidade} {c.unidade_quantidade}</td>
-                                        <td className="px-4 py-3 font-data text-right font-semibold text-purple-600">{BRL(c.valor_frete_calculado)}</td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1">
-                                                {isAdmin && <button onClick={() => handleDelete(c.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                            : carregamentos.map((c, i) => (
+                                <tr key={c.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                    <td className="px-4 py-3">{FMT_DATE(c.data_carregamento)}</td>
+                                    <td className="px-4 py-3 text-xs">
+                                        {c.numero_pedido ? <span className="font-data">{c.numero_pedido}</span> : '—'}
+                                        {c.numero_nota_fiscal && <span className="block text-gray-400">NF: {c.numero_nota_fiscal}</span>}
+                                    </td>
+                                    <td className="px-4 py-3">{c.motorista?.name || '—'}</td>
+                                    <td className="px-4 py-3 font-data">{c.veiculo?.placa || '—'}</td>
+                                    <td className="px-4 py-3 text-xs">{c.empresa?.nome || '—'}</td>
+                                    <td className="px-4 py-3">{c.destino}</td>
+                                    <td className="px-4 py-3 font-data text-right">{c.quantidade} {c.unidade_quantidade}</td>
+                                    <td className="px-4 py-3 font-data text-right font-semibold text-purple-600">{BRL(c.valor_frete_calculado)}</td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex items-center gap-1">
+                                            {isAdmin && <button onClick={() => handleDelete(c.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
@@ -1415,7 +1254,7 @@ function TabCarregamentos({ isAdmin }) {
                                 </Field>
                                 <Field label={
                                     form.tipo_calculo_frete === 'percentual' ? 'Percentual (%)' :
-                                        form.tipo_calculo_frete === 'por_km' ? 'Preço diesel (R$/L)' : 'Valor base (R$)'
+                                    form.tipo_calculo_frete === 'por_km' ? 'Preço diesel (R$/L)' : 'Valor base (R$)'
                                 }>
                                     <input type="number" step="0.01" value={form.valor_base_frete} onChange={e => setForm(f => ({ ...f, valor_base_frete: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
                                 </Field>
@@ -1486,7 +1325,7 @@ function TabEmpresas({ isAdmin }) {
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                     <table className="w-full text-sm min-w-[640px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Empresa', 'CNPJ', 'Observações', ''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                            <tr>{['Empresa','CNPJ','Observações',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
                             {empresas.length === 0 ? <tr><td colSpan={4} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
@@ -1495,14 +1334,14 @@ function TabEmpresas({ isAdmin }) {
                                     <span className="text-sm">Nenhuma empresa cadastrada</span>
                                 </div>
                             </td></tr>
-                                : empresas.map((e, i) => (
-                                    <tr key={e.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                        <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{e.nome}</td>
-                                        <td className="px-4 py-3 font-data text-sm" style={{ color: 'var(--color-muted-foreground)' }}>{e.cnpj || '—'}</td>
-                                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{e.observacoes || '—'}</td>
-                                        <td className="px-4 py-3">{isAdmin && <button onClick={() => handleDelete(e.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}</td>
-                                    </tr>
-                                ))}
+                            : empresas.map((e, i) => (
+                                <tr key={e.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                    <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{e.nome}</td>
+                                    <td className="px-4 py-3 font-data text-sm" style={{ color: 'var(--color-muted-foreground)' }}>{e.cnpj || '—'}</td>
+                                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{e.observacoes || '—'}</td>
+                                    <td className="px-4 py-3">{isAdmin && <button onClick={() => handleDelete(e.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}</td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
@@ -1534,12 +1373,12 @@ function TabBonificacoes({ isAdmin }) {
 
     // ── Estado ──────────────────────────────────────────────────────────────────
     const [carregamentos, setCarregamentos] = useState([]);
-    const [extras, setExtras] = useState([]);
-    const [motoristas, setMotoristas] = useState([]);
+    const [extras,        setExtras]        = useState([]);
+    const [motoristas,    setMotoristas]    = useState([]);
     const [filtroMotorista, setFiltroMotorista] = useState('');
-    const [filtroMes, setFiltroMes] = useState('');
-    const [loading, setLoading] = useState(true);
-    const [subTab, setSubTab] = useState('viagens'); // 'viagens' | 'extras'
+    const [filtroMes,       setFiltroMes]       = useState('');
+    const [loading,  setLoading]  = useState(true);
+    const [subTab,   setSubTab]   = useState('viagens'); // 'viagens' | 'extras'
     const [modalExtra, setModalExtra] = useState(null);  // null | {mode, data?}
     const [formExtra, setFormExtra] = useState({ motorista_id: '', valor: '', data: new Date().toISOString().split('T')[0], observacao: '' });
 
@@ -1551,7 +1390,7 @@ function TabBonificacoes({ isAdmin }) {
             if (filtroMotorista) f.motorista_id = filtroMotorista;
             if (filtroMes) {
                 f.dataInicio = filtroMes + '-01';
-                f.dataFim = filtroMes + '-' + String(new Date(+filtroMes.split('-')[0], +filtroMes.split('-')[1], 0).getDate()).padStart(2, '0');
+                f.dataFim    = filtroMes + '-' + String(new Date(+filtroMes.split('-')[0], +filtroMes.split('-')[1], 0).getDate()).padStart(2,'0');
             }
             const fCarr = {};
             if (filtroMotorista) fCarr.motoristaId = filtroMotorista;
@@ -1571,29 +1410,29 @@ function TabBonificacoes({ isAdmin }) {
     // ── Cálculos ─────────────────────────────────────────────────────────────────
     const carregamentosComBonus = useMemo(() =>
         carregamentos.map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }))
-        , [carregamentos]);
+    , [carregamentos]);
 
     const totais = useMemo(() => {
         const porMotorista = {};
         carregamentosComBonus.forEach(c => {
-            const id = c.motorista_id || 'sem';
+            const id   = c.motorista_id || 'sem';
             const nome = c.motorista?.name || 'Sem motorista';
             if (!porMotorista[id]) porMotorista[id] = { nome, carregamentos: 0, bonusViagens: 0, bonusExtras: 0 };
             porMotorista[id].carregamentos++;
             porMotorista[id].bonusViagens += c.bonus;
         });
         extras.forEach(e => {
-            const id = e.motorista_id || 'sem';
+            const id   = e.motorista_id || 'sem';
             const nome = e.motorista?.name || 'Sem motorista';
             if (!porMotorista[id]) porMotorista[id] = { nome, carregamentos: 0, bonusViagens: 0, bonusExtras: 0 };
             porMotorista[id].bonusExtras += Number(e.valor || 0);
         });
         const lista = Object.values(porMotorista).map(m => ({ ...m, bonusTotal: m.bonusViagens + m.bonusExtras }));
         return {
-            totalViagens: carregamentosComBonus.length,
+            totalViagens:   carregamentosComBonus.length,
             totalBonusViag: carregamentosComBonus.reduce((s, c) => s + c.bonus, 0),
-            totalExtras: extras.reduce((s, e) => s + Number(e.valor || 0), 0),
-            porMotorista: lista.sort((a, b) => b.bonusTotal - a.bonusTotal),
+            totalExtras:    extras.reduce((s, e) => s + Number(e.valor || 0), 0),
+            porMotorista:   lista.sort((a, b) => b.bonusTotal - a.bonusTotal),
         };
     }, [carregamentosComBonus, extras]);
 
@@ -1607,7 +1446,7 @@ function TabBonificacoes({ isAdmin }) {
         setModalExtra({ mode: 'edit', data: e });
     };
     const salvarExtra = async () => {
-        if (!formExtra.motorista_id) { showToast('Selecione o motorista', 'error'); return; }
+        if (!formExtra.motorista_id)       { showToast('Selecione o motorista', 'error'); return; }
         if (!formExtra.valor || isNaN(+formExtra.valor)) { showToast('Informe um valor válido', 'error'); return; }
         if (!formExtra.observacao?.trim()) { showToast('Observação é obrigatória', 'error'); return; }
         try {
@@ -1645,7 +1484,7 @@ function TabBonificacoes({ isAdmin }) {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows2), 'Bônus Extras');
         }
         if (!carregamentosComBonus.length && !extras.length) { showToast('Nenhum dado no período.', 'error'); return; }
-        XLSX.writeFile(wb, `bonificacoes_carretas_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`);
+        XLSX.writeFile(wb, `bonificacoes_carretas_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
         showToast('Exportado!', 'success');
     };
 
@@ -1677,9 +1516,9 @@ function TabBonificacoes({ isAdmin }) {
             {/* ── KPIs ── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
                 {[
-                    { l: 'Carregamentos', v: totais.totalViagens, c: '#1D4ED8', bg: '#EFF6FF', i: 'Package' },
-                    { l: 'Bônus Viagens', v: BRL(totais.totalBonusViag), c: '#7C3AED', bg: '#EDE9FE', i: 'Award' },
-                    { l: 'Bônus Extras', v: BRL(totais.totalExtras), c: '#D97706', bg: '#FFFBEB', i: 'PlusCircle' },
+                    { l: 'Carregamentos',   v: totais.totalViagens,                       c: '#1D4ED8', bg: '#EFF6FF', i: 'Package' },
+                    { l: 'Bônus Viagens',   v: BRL(totais.totalBonusViag),                c: '#7C3AED', bg: '#EDE9FE', i: 'Award' },
+                    { l: 'Bônus Extras',    v: BRL(totais.totalExtras),                   c: '#D97706', bg: '#FFFBEB', i: 'PlusCircle' },
                     { l: 'Total a Receber', v: BRL(totais.totalBonusViag + totais.totalExtras), c: '#059669', bg: '#ECFDF5', i: 'DollarSign' },
                 ].map(k => (
                     <div key={k.l} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
@@ -1721,7 +1560,7 @@ function TabBonificacoes({ isAdmin }) {
             <div className="flex gap-1 mb-4 p-1 rounded-xl w-fit" style={{ backgroundColor: 'var(--color-muted)' }}>
                 {[
                     { id: 'viagens', label: 'Bônus por Viagens', icon: 'Truck' },
-                    { id: 'extras', label: 'Bonificações Extras', icon: 'PlusCircle' },
+                    { id: 'extras',  label: 'Bonificações Extras', icon: 'PlusCircle' },
                 ].map(s => (
                     <button key={s.id} onClick={() => setSubTab(s.id)}
                         className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-all"
@@ -1745,7 +1584,7 @@ function TabBonificacoes({ isAdmin }) {
                         <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                             <table className="w-full text-sm min-w-[640px]">
                                 <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                    <tr>{['Motorista', 'Placa', 'Destino', 'Data', 'Qtd (sacos)', 'Bônus'].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                                    <tr>{['Motorista','Placa','Destino','Data','Qtd (sacos)','Bônus'].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                                 </thead>
                                 <tbody>
                                     {carregamentosComBonus.length === 0
@@ -1754,7 +1593,7 @@ function TabBonificacoes({ isAdmin }) {
                                                 <Icon name="Package" size={24} color="var(--color-muted-foreground)" />
                                                 <span className="text-sm">Nenhum carregamento no período</span>
                                             </div>
-                                        </td></tr>
+                                          </td></tr>
                                         : carregamentosComBonus.map((c, i) => (
                                             <tr key={c.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                 <td className="px-4 py-3 font-medium">{c.motorista?.name || '—'}</td>
@@ -1785,7 +1624,7 @@ function TabBonificacoes({ isAdmin }) {
                             <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                                 <table className="w-full text-sm min-w-[600px]">
                                     <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                        <tr>{['Motorista', 'Data', 'Valor', 'Observação', 'Criado por', ''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                                        <tr>{['Motorista','Data','Valor','Observação','Criado por',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                                     </thead>
                                     <tbody>
                                         {extras.length === 0
@@ -1794,7 +1633,7 @@ function TabBonificacoes({ isAdmin }) {
                                                     <Icon name="Award" size={24} color="var(--color-muted-foreground)" />
                                                     <span className="text-sm">Nenhuma bonificação extra no período</span>
                                                 </div>
-                                            </td></tr>
+                                              </td></tr>
                                             : extras.map((e, i) => (
                                                 <tr key={e.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                     <td className="px-4 py-3 font-medium">{e.motorista?.name || '—'}</td>
@@ -1920,106 +1759,106 @@ function ModalFornecedoresCarretas({ onClose, onSelect }) {
         <ModalOverlay onClose={onClose} wide>
             <ModalHeader title="Fornecedores" icon="Building2" onClose={onClose} />
 
-            {/* Search + New */}
-            <div className="flex items-center gap-3 px-5 py-3 border-b shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                <input value={busca} onChange={e => setBusca(e.target.value)}
-                    placeholder="Buscar por nome ou CNPJ..."
-                    className={inputCls + ' flex-1'} style={inputStyle} />
-                <button onClick={() => { setForm(emptyForm); setModal({ mode: 'create' }); }}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-white"
-                    style={{ backgroundColor: 'var(--color-primary)' }}>
-                    <Icon name="Plus" size={13} color="white" /> Novo
-                </button>
-            </div>
+                {/* Search + New */}
+                <div className="flex items-center gap-3 px-5 py-3 border-b shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                    <input value={busca} onChange={e => setBusca(e.target.value)}
+                        placeholder="Buscar por nome ou CNPJ..."
+                        className={inputCls + ' flex-1'} style={inputStyle} />
+                    <button onClick={() => { setForm(emptyForm); setModal({ mode: 'create' }); }}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-white"
+                        style={{ backgroundColor: 'var(--color-primary)' }}>
+                        <Icon name="Plus" size={13} color="white" /> Novo
+                    </button>
+                </div>
 
-            {/* List */}
-            <div className="flex-1 overflow-y-auto">
-                {loading ? (
-                    <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div>
-                ) : filtrados.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
-                        <Icon name="Building2" size={32} color="var(--color-muted-foreground)" />
-                        <span className="text-sm">{busca ? 'Nenhum fornecedor encontrado' : 'Nenhum fornecedor cadastrado ainda'}</span>
-                    </div>
-                ) : (
-                    <div className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
-                        {filtrados.map(f => (
-                            <div key={f.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
-                                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: '#EFF6FF' }}>
-                                    <Icon name="Building2" size={15} color="#1D4ED8" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-sm truncate" style={{ color: 'var(--color-text-primary)' }}>{f.nome}</p>
-                                    <div className="flex items-center gap-3 flex-wrap mt-0.5">
-                                        {f.cnpj && <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{f.cnpj}</span>}
-                                        {f.telefone && <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{f.telefone}</span>}
-                                        {f.categoria && <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">{f.categoria}</span>}
+                {/* List */}
+                <div className="flex-1 overflow-y-auto">
+                    {loading ? (
+                        <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div>
+                    ) : filtrados.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
+                            <Icon name="Building2" size={32} color="var(--color-muted-foreground)" />
+                            <span className="text-sm">{busca ? 'Nenhum fornecedor encontrado' : 'Nenhum fornecedor cadastrado ainda'}</span>
+                        </div>
+                    ) : (
+                        <div className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
+                            {filtrados.map(f => (
+                                <div key={f.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
+                                    <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: '#EFF6FF' }}>
+                                        <Icon name="Building2" size={15} color="#1D4ED8" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-medium text-sm truncate" style={{ color: 'var(--color-text-primary)' }}>{f.nome}</p>
+                                        <div className="flex items-center gap-3 flex-wrap mt-0.5">
+                                            {f.cnpj && <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{f.cnpj}</span>}
+                                            {f.telefone && <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{f.telefone}</span>}
+                                            {f.categoria && <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">{f.categoria}</span>}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        {onSelect && (
+                                            <button onClick={() => { onSelect(f); onClose(); }}
+                                                className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white"
+                                                style={{ backgroundColor: 'var(--color-primary)' }}>
+                                                Selecionar
+                                            </button>
+                                        )}
+                                        <button onClick={() => { setForm({ nome: f.nome, cnpj: f.cnpj||'', telefone: f.telefone||'', email: f.email||'', endereco: f.endereco||'', categoria: f.categoria||'', observacoes: f.observacoes||'' }); setModal({ mode: 'edit', data: f }); }}
+                                            className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
+                                        <button onClick={() => handleDelete(f.id)}
+                                            className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-1 shrink-0">
-                                    {onSelect && (
-                                        <button onClick={() => { onSelect(f); onClose(); }}
-                                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white"
-                                            style={{ backgroundColor: 'var(--color-primary)' }}>
-                                            Selecionar
-                                        </button>
-                                    )}
-                                    <button onClick={() => { setForm({ nome: f.nome, cnpj: f.cnpj || '', telefone: f.telefone || '', email: f.email || '', endereco: f.endereco || '', categoria: f.categoria || '', observacoes: f.observacoes || '' }); setModal({ mode: 'edit', data: f }); }}
-                                        className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
-                                    <button onClick={() => handleDelete(f.id)}
-                                        className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>
-                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Inline form */}
+                {modal && (
+                    <div className="border-t p-5 space-y-3 shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                        <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                            {modal.mode === 'create' ? 'Novo Fornecedor' : 'Editar Fornecedor'}
+                        </p>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="col-span-2">
+                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Nome *</label>
+                                <input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Razão social ou nome fantasia" autoFocus />
                             </div>
-                        ))}
+                            <div>
+                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>CNPJ</label>
+                                <input value={form.cnpj} onChange={e => setForm(f => ({ ...f, cnpj: e.target.value }))} className={inputCls} style={inputStyle} placeholder="00.000.000/0000-00" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Telefone</label>
+                                <input value={form.telefone} onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))} className={inputCls} style={inputStyle} placeholder="(00) 00000-0000" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>E-mail</label>
+                                <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className={inputCls} style={inputStyle} placeholder="contato@empresa.com" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Categoria habitual</label>
+                                <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <option value="">Selecione...</option>
+                                    {CATEGORIAS_DESPESA.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div className="col-span-2">
+                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Endereço</label>
+                                <input value={form.endereco} onChange={e => setForm(f => ({ ...f, endereco: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Rua, número, cidade" />
+                            </div>
+                        </div>
+                        <div className="flex gap-2 justify-end pt-1">
+                            <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <Button onClick={handleSave} size="sm" iconName="Check">Salvar</Button>
+                        </div>
                     </div>
                 )}
-            </div>
 
-            {/* Inline form */}
-            {modal && (
-                <div className="border-t p-5 space-y-3 shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                    <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                        {modal.mode === 'create' ? 'Novo Fornecedor' : 'Editar Fornecedor'}
-                    </p>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="col-span-2">
-                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Nome *</label>
-                            <input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Razão social ou nome fantasia" autoFocus />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>CNPJ</label>
-                            <input value={form.cnpj} onChange={e => setForm(f => ({ ...f, cnpj: e.target.value }))} className={inputCls} style={inputStyle} placeholder="00.000.000/0000-00" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Telefone</label>
-                            <input value={form.telefone} onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))} className={inputCls} style={inputStyle} placeholder="(00) 00000-0000" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>E-mail</label>
-                            <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className={inputCls} style={inputStyle} placeholder="contato@empresa.com" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Categoria habitual</label>
-                            <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle}>
-                                <option value="">Selecione...</option>
-                                {CATEGORIAS_DESPESA.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                        </div>
-                        <div className="col-span-2">
-                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Endereço</label>
-                            <input value={form.endereco} onChange={e => setForm(f => ({ ...f, endereco: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Rua, número, cidade" />
-                        </div>
-                    </div>
-                    <div className="flex gap-2 justify-end pt-1">
-                        <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button onClick={handleSave} size="sm" iconName="Check">Salvar</Button>
-                    </div>
-                </div>
-            )}
-
-            <Toast toast={toast} />
-            {ConfirmDialog}
-        </ModalOverlay>
+                <Toast toast={toast} />
+                {ConfirmDialog}
+            </ModalOverlay>
     );
 }
 
@@ -2068,7 +1907,7 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado, isAdmin }) {
         finally { setLoading(false); }
     };
 
-    const boletos = despesa.boletos || [];
+    const boletos  = despesa.boletos        || [];
     const parcelas = despesa.parcelas_cartao || [];
 
     return (
@@ -2177,13 +2016,13 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado, isAdmin }) {
 function TabDespesasExtras({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
-    const [despesas, setDespesas] = useState([]);
-    const [veiculos, setVeiculos] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [modal, setModal] = useState(null);
+    const [despesas, setDespesas]   = useState([]);
+    const [veiculos, setVeiculos]   = useState([]);
+    const [loading, setLoading]     = useState(true);
+    const [modal, setModal]         = useState(null);
     const [showFornecedores, setShowFornecedores] = useState(false);
     const [modalBaixa, setModalBaixa] = useState(null);
-    const [filtro, setFiltro] = useState({ veiculoId: '', categoria: '', mes: '' });
+    const [filtro, setFiltro]       = useState({ veiculoId: '', categoria: '', mes: '' });
     const [categoriasExtras, setCategoriasExtras] = useState(() => {
         try { return JSON.parse(localStorage.getItem('carretas_categorias_extras') || '[]'); } catch { return []; }
     });
@@ -2237,11 +2076,11 @@ function TabDespesasExtras({ isAdmin, profile }) {
         setLoading(true);
         try {
             const f = {};
-            if (filtro.veiculoId) f.veiculoId = filtro.veiculoId;
-            if (filtro.categoria) f.categoria = filtro.categoria;
+            if (filtro.veiculoId) f.veiculoId  = filtro.veiculoId;
+            if (filtro.categoria) f.categoria  = filtro.categoria;
             if (filtro.mes) {
                 f.dataInicio = filtro.mes + '-01';
-                f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2, '0');
+                f.dataFim    = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0');
             }
             const [d, v] = await Promise.all([fetchDespesasExtras(f), fetchCarretasVeiculos()]);
             setDespesas(d); setVeiculos(v);
@@ -2268,23 +2107,23 @@ function TabDespesasExtras({ isAdmin, profile }) {
                 const xml = parser.parseFromString(ev.target.result, 'application/xml');
                 const itens = [];
                 // Dados básicos da NF
-                const nNF = xml.querySelector('nNF')?.textContent || '';
+                const nNF   = xml.querySelector('nNF')?.textContent || '';
                 const dhEmi = xml.querySelector('dhEmi')?.textContent?.slice(0, 10) || '';
-                const vnf = xml.querySelector('vNF')?.textContent || '';
+                const vnf   = xml.querySelector('vNF')?.textContent || '';
                 // Emitente (fornecedor)
-                const emitNome = xml.querySelector('emit xNome')?.textContent || '';
-                const emitCNPJ = xml.querySelector('emit CNPJ')?.textContent || '';
+                const emitNome  = xml.querySelector('emit xNome')?.textContent || '';
+                const emitCNPJ  = xml.querySelector('emit CNPJ')?.textContent || '';
                 const fornecedor = emitNome || (emitCNPJ ? `CNPJ ${emitCNPJ}` : '');
                 // Itens do produto
                 const prods = xml.querySelectorAll('det prod');
                 prods.forEach((p) => {
                     itens.push({
-                        codigo: p.querySelector('cProd')?.textContent || '',
-                        descricao: p.querySelector('xProd')?.textContent || '',
-                        quantidade: p.querySelector('qCom')?.textContent || '',
-                        unidade: p.querySelector('uCom')?.textContent || '',
-                        valor_unit: p.querySelector('vUnCom')?.textContent || '',
-                        valor_total: p.querySelector('vProd')?.textContent || '',
+                        codigo:      p.querySelector('cProd')?.textContent  || '',
+                        descricao:   p.querySelector('xProd')?.textContent  || '',
+                        quantidade:  p.querySelector('qCom')?.textContent   || '',
+                        unidade:     p.querySelector('uCom')?.textContent   || '',
+                        valor_unit:  p.querySelector('vUnCom')?.textContent || '',
+                        valor_total: p.querySelector('vProd')?.textContent  || '',
                     });
                 });
                 const novaNF = { numero: nNF, fornecedor, valor: vnf, data: dhEmi, descricao: '', nf_itens: itens };
@@ -2293,11 +2132,11 @@ function TabDespesasExtras({ isAdmin, profile }) {
                     const somaValor = novasNFs.reduce((s, n) => s + Number(n.valor || 0), 0);
                     return {
                         ...f,
-                        nota_fiscal: f.nota_fiscal || nNF,
-                        valor: somaValor > 0 ? String(somaValor) : f.valor,
+                        nota_fiscal:  f.nota_fiscal || nNF,
+                        valor:        somaValor > 0 ? String(somaValor) : f.valor,
                         data_despesa: f.data_despesa || dhEmi,
-                        fornecedor: f.fornecedor || fornecedor,
-                        descricao: (fornecedor && !f.descricao) ? `Compra — ${fornecedor}` : f.descricao,
+                        fornecedor:   f.fornecedor || fornecedor,
+                        descricao:    (fornecedor && !f.descricao) ? `Compra — ${fornecedor}` : f.descricao,
                         nf_itens: [...(f.nf_itens || []), ...itens],
                         notas_fiscais: novasNFs,
                     };
@@ -2345,8 +2184,8 @@ function TabDespesasExtras({ isAdmin, profile }) {
 
             // Monta os dados extraídos da própria chave (sempre disponíveis)
             const aamm = chave.substring(2, 6);
-            const ano = '20' + aamm.substring(0, 2);
-            const mes = aamm.substring(2, 4);
+            const ano  = '20' + aamm.substring(0, 2);
+            const mes  = aamm.substring(2, 4);
             const dataEmissao = `${ano}-${mes}-01`; // aproximada (dia não está na chave)
 
             setForm(f => ({
@@ -2433,7 +2272,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const handleSubmit = async () => {
         if (!form.categoria || !form.valor || !form.data_despesa) { showToast('Categoria, valor e data são obrigatórios', 'error'); return; }
         try {
-            const payload = { ...form, notas_fiscais: form.notas_fiscais || [], parcelas_cartao: form.parcelas_cartao || [] };
+            const payload = { ...form, notas_fiscais: form.notas_fiscais||[], parcelas_cartao: form.parcelas_cartao||[] };
             if (modal.mode === 'create') await createDespesaExtra(payload);
             else await updateDespesaExtra(modal.data.id, payload);
             showToast('Despesa salva!', 'success'); setModal(null); load();
@@ -2459,10 +2298,10 @@ function TabDespesasExtras({ isAdmin, profile }) {
         }));
         rows.push({ 'Data': 'TOTAL', 'Valor (R$)': totalPeriodo });
         const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [12, 12, 22, 28, 28, 12, 12, 14, 14, 30].map(w => ({ wch: w }));
+        ws['!cols'] = [12,12,22,28,28,12,12,14,14,30].map(w => ({ wch: w }));
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Despesas');
-        XLSX.writeFile(wb, `despesas_extras_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`);
+        XLSX.writeFile(wb, `despesas_extras_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
         showToast('Exportado!', 'success');
     };
 
@@ -2485,14 +2324,14 @@ function TabDespesasExtras({ isAdmin, profile }) {
         if (d.forma_pagamento === 'a_prazo') {
             const label = d.tipo_pagamento === 'boleto' ? 'Boleto'
                 : d.tipo_pagamento === 'cartao_prazo' ? '💳 Cartão Parc.'
-                    : d.tipo_pagamento === 'permuta' ? 'Permuta' : 'Cheque';
+                : d.tipo_pagamento === 'permuta' ? 'Permuta' : 'Cheque';
             const isCard = d.tipo_pagamento === 'cartao_prazo';
             return <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${isCard ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>{label}</span>;
         }
         const label = d.tipo_pagamento === 'pix' ? 'PIX'
             : d.tipo_pagamento === 'dinheiro' ? 'Dinheiro'
-                : d.tipo_pagamento === 'cartao' ? '💳 Cartão'
-                    : 'Transf.';
+            : d.tipo_pagamento === 'cartao' ? '💳 Cartão'
+            : 'Transf.';
         const isCard = d.tipo_pagamento === 'cartao';
         return <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${isCard ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'}`}>{label}</span>;
     };
@@ -2562,7 +2401,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                     <table className="w-full text-sm min-w-[740px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Data', 'Placa', 'Categoria', 'Fornecedor', 'Descrição', 'NF', 'Pagamento', 'Valor', ''].map(h => <th key={h} className="px-3 py-3 text-left font-medium">{h}</th>)}</tr>
+                            <tr>{['Data','Placa','Categoria','Fornecedor','Descrição','NF','Pagamento','Valor',''].map(h => <th key={h} className="px-3 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
                             {despesas.length === 0 ? <tr><td colSpan={9} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
@@ -2571,31 +2410,36 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                     <span className="text-sm">Nenhuma despesa registrada</span>
                                 </div>
                             </td></tr>
-                                : despesas.map((d, i) => (
-                                    <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                        <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(d.data_despesa)}</td>
-                                        <td className="px-3 py-3 font-data">{d.veiculo?.placa || '—'}</td>
-                                        <td className="px-3 py-3"><span className="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700 font-medium">{d.categoria}</span></td>
-                                        <td className="px-3 py-3 text-xs max-w-[130px] truncate font-medium" style={{ color: 'var(--color-text-primary)' }}>{d.fornecedor || '—'}</td>
-                                        <td className="px-3 py-3 text-xs max-w-[130px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
-                                        <td className="px-3 py-3 text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.nota_fiscal || '—'}</td>
-                                        <td className="px-3 py-3">{pgBadge(d)}</td>
-                                        <td className="px-3 py-3 font-data font-semibold text-red-600">{BRL(d.valor)}</td>
-                                        <td className="px-3 py-3">
-                                            <div className="flex gap-1 items-center">
-                                                {d.forma_pagamento === 'a_prazo' && (d.boletos?.length > 0 || d.parcelas_cartao?.length > 0) && (
-                                                    <button onClick={() => setModalBaixa(d)}
-                                                        className="p-1.5 rounded hover:bg-green-50"
-                                                        title="Dar baixa em pagamentos">
-                                                        <Icon name="CheckCircle2" size={13} color="#059669" />
-                                                    </button>
-                                                )}
-                                                {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
-                                                {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                            : despesas.map((d, i) => (
+                                <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                    <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(d.data_despesa)}</td>
+                                    <td className="px-3 py-3 font-data">{d.veiculo?.placa || '—'}</td>
+                                    <td className="px-3 py-3"><span className="px-2 py-0.5 rounded-full text-xs bg-orange-100 text-orange-700 font-medium">{d.categoria}</span></td>
+                                    <td className="px-3 py-3 text-xs max-w-[130px] truncate font-medium" style={{ color: 'var(--color-text-primary)' }}>{d.fornecedor || '—'}</td>
+                                    <td className="px-3 py-3 text-xs max-w-[130px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
+                                    <td className="px-3 py-3 text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.nota_fiscal || '—'}</td>
+                                    <td className="px-3 py-3">{pgBadge(d)}</td>
+                                    <td className="px-3 py-3 font-data font-semibold text-red-600">{BRL(d.valor)}</td>
+                                    <td className="px-3 py-3">
+                                        <div className="flex gap-1 items-center">
+                                            {d.forma_pagamento === 'a_prazo' && (d.boletos?.length > 0 || d.parcelas_cartao?.length > 0) && (
+                                                <button onClick={() => setModalBaixa(d)}
+                                                    className="p-1.5 rounded hover:bg-green-50"
+                                                    title="Dar baixa em pagamentos">
+                                                    <Icon name="CheckCircle2" size={13} color="#059669" />
+                                                </button>
+                                            )}
+                                            <button onClick={() => exportarDiariaIndividual(d)}
+                                                className="p-1.5 rounded hover:bg-emerald-50"
+                                                title="Exportar modelo Excel">
+                                                <Icon name="FileDown" size={13} color="#059669" />
+                                            </button>
+                                            {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
+                                            {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
@@ -2611,14 +2455,14 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             <div className="flex items-center justify-between mb-2">
                                 <p className="text-xs font-semibold text-blue-700">
                                     📄 Notas Fiscais
-                                    {(form.notas_fiscais || []).length > 0 && (
+                                    {(form.notas_fiscais||[]).length > 0 && (
                                         <span className="ml-2 px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-xs font-medium">
-                                            {(form.notas_fiscais || []).length}
+                                            {(form.notas_fiscais||[]).length}
                                         </span>
                                     )}
                                 </p>
                                 <button type="button"
-                                    onClick={() => setForm(f => ({ ...f, notas_fiscais: [...(f.notas_fiscais || []), { numero: '', fornecedor: '', data: '', descricao: '', valor: '', nf_itens: [], _manual: true }] }))}
+                                    onClick={() => setForm(f => ({ ...f, notas_fiscais: [...(f.notas_fiscais||[]), { numero:'', fornecedor:'', data:'', descricao:'', valor:'', nf_itens:[], _manual:true }] }))}
                                     className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border border-blue-300 text-blue-700 hover:bg-blue-100">
                                     <Icon name="Plus" size={11} /> Adicionar NF manual
                                 </button>
@@ -2627,7 +2471,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                 {/* XML digital */}
                                 <button type="button" onClick={() => xmlRef.current?.click()}
                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-600 text-white hover:bg-blue-700">
-                                    <Icon name="FileCode" size={12} /> {(form.notas_fiscais || []).length > 0 ? 'Importar outro XML' : 'Importar XML da NF'}
+                                    <Icon name="FileCode" size={12} /> {(form.notas_fiscais||[]).length > 0 ? 'Importar outro XML' : 'Importar XML da NF'}
                                 </button>
                                 <input ref={xmlRef} type="file" accept=".xml" onChange={handleXmlNF} className="hidden" />
                                 {/* Código de barras / laser */}
@@ -2670,18 +2514,18 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                 </div>
                             )}
                             {/* Cards das NFs — um por nota */}
-                            {(form.notas_fiscais || []).length > 0 && (
+                            {(form.notas_fiscais||[]).length > 0 && (
                                 <div className="mt-3 space-y-2">
-                                    {(form.notas_fiscais || []).map((nf, nfIdx) => (
+                                    {(form.notas_fiscais||[]).map((nf, nfIdx) => (
                                         <div key={nfIdx} className="rounded-xl border border-blue-200 bg-white overflow-hidden">
                                             <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50 border-b border-blue-100">
                                                 <span className="text-xs font-semibold text-blue-800">
-                                                    NF {nfIdx + 1} {nf._manual ? '— digitação manual' : '— XML'}
+                                                    NF {nfIdx+1} {nf._manual ? '— digitação manual' : '— XML'}
                                                 </span>
                                                 <button type="button"
                                                     onClick={() => setForm(f => {
-                                                        const novas = f.notas_fiscais.filter((_, i) => i !== nfIdx);
-                                                        const soma = novas.reduce((s, n) => s + Number(n.valor || 0), 0);
+                                                        const novas = f.notas_fiscais.filter((_,i) => i !== nfIdx);
+                                                        const soma = novas.reduce((s,n) => s + Number(n.valor||0), 0);
                                                         return { ...f, notas_fiscais: novas, valor: soma > 0 ? String(soma) : f.valor };
                                                     })}
                                                     className="p-1 rounded hover:bg-red-100">
@@ -2690,47 +2534,47 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                             </div>
                                             <div className="p-3 grid grid-cols-2 gap-2">
                                                 <div>
-                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Nº da NF</label>
-                                                    <input value={nf.numero || ''} placeholder="Ex: 35520"
-                                                        onChange={e => setForm(f => { const a = [...f.notas_fiscais]; a[nfIdx] = { ...a[nfIdx], numero: e.target.value }; return { ...f, notas_fiscais: a }; })}
+                                                    <label className="block text-xs font-medium mb-1" style={{color:'var(--color-text-secondary)'}}>Nº da NF</label>
+                                                    <input value={nf.numero||''} placeholder="Ex: 35520"
+                                                        onChange={e => setForm(f => { const a=[...f.notas_fiscais]; a[nfIdx]={...a[nfIdx],numero:e.target.value}; return {...f,notas_fiscais:a}; })}
                                                         className={inputCls} style={inputStyle} />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    <label className="block text-xs font-medium mb-1" style={{color:'var(--color-text-secondary)'}}>
                                                         Valor (R$)
                                                         {!nf._manual && nf.valor && <span className="ml-1 text-emerald-600 font-normal text-xs">auto</span>}
                                                     </label>
-                                                    <input type="number" step="0.01" value={nf.valor || ''} placeholder="0,00"
+                                                    <input type="number" step="0.01" value={nf.valor||''} placeholder="0,00"
                                                         onChange={e => setForm(f => {
-                                                            const a = [...f.notas_fiscais];
-                                                            a[nfIdx] = { ...a[nfIdx], valor: e.target.value };
-                                                            const soma = a.reduce((s, n) => s + Number(n.valor || 0), 0);
-                                                            return { ...f, notas_fiscais: a, valor: soma > 0 ? String(soma) : f.valor };
+                                                            const a=[...f.notas_fiscais];
+                                                            a[nfIdx]={...a[nfIdx],valor:e.target.value};
+                                                            const soma=a.reduce((s,n)=>s+Number(n.valor||0),0);
+                                                            return {...f,notas_fiscais:a,valor:soma>0?String(soma):f.valor};
                                                         })}
                                                         className={inputCls} style={inputStyle} />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    <label className="block text-xs font-medium mb-1" style={{color:'var(--color-text-secondary)'}}>
                                                         Fornecedor
                                                         {!nf._manual && nf.fornecedor && <span className="ml-1 text-emerald-600 font-normal text-xs">auto</span>}
                                                     </label>
-                                                    <input value={nf.fornecedor || ''} placeholder="Nome do fornecedor"
-                                                        onChange={e => setForm(f => { const a = [...f.notas_fiscais]; a[nfIdx] = { ...a[nfIdx], fornecedor: e.target.value }; return { ...f, notas_fiscais: a }; })}
+                                                    <input value={nf.fornecedor||''} placeholder="Nome do fornecedor"
+                                                        onChange={e => setForm(f => { const a=[...f.notas_fiscais]; a[nfIdx]={...a[nfIdx],fornecedor:e.target.value}; return {...f,notas_fiscais:a}; })}
                                                         className={inputCls} style={inputStyle} />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    <label className="block text-xs font-medium mb-1" style={{color:'var(--color-text-secondary)'}}>
                                                         Data de emissão
                                                         {!nf._manual && nf.data && <span className="ml-1 text-emerald-600 font-normal text-xs">auto</span>}
                                                     </label>
-                                                    <input type="date" value={nf.data || ''}
-                                                        onChange={e => setForm(f => { const a = [...f.notas_fiscais]; a[nfIdx] = { ...a[nfIdx], data: e.target.value }; return { ...f, notas_fiscais: a }; })}
+                                                    <input type="date" value={nf.data||''}
+                                                        onChange={e => setForm(f => { const a=[...f.notas_fiscais]; a[nfIdx]={...a[nfIdx],data:e.target.value}; return {...f,notas_fiscais:a}; })}
                                                         className={inputCls} style={inputStyle} />
                                                 </div>
                                                 <div className="col-span-2">
-                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Tipo / Descrição (ex: NF de peças, NF de serviços)</label>
-                                                    <input value={nf.descricao || ''} placeholder="Ex: Nota fiscal de serviços"
-                                                        onChange={e => setForm(f => { const a = [...f.notas_fiscais]; a[nfIdx] = { ...a[nfIdx], descricao: e.target.value }; return { ...f, notas_fiscais: a }; })}
+                                                    <label className="block text-xs font-medium mb-1" style={{color:'var(--color-text-secondary)'}}>Tipo / Descrição (ex: NF de peças, NF de serviços)</label>
+                                                    <input value={nf.descricao||''} placeholder="Ex: Nota fiscal de serviços"
+                                                        onChange={e => setForm(f => { const a=[...f.notas_fiscais]; a[nfIdx]={...a[nfIdx],descricao:e.target.value}; return {...f,notas_fiscais:a}; })}
                                                         className={inputCls} style={inputStyle} />
                                                 </div>
                                             </div>
@@ -2738,9 +2582,9 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                                 <div className="px-3 pb-3 overflow-x-auto">
                                                     <p className="text-xs text-blue-600 font-medium mb-1">{nf.nf_itens.length} item(s) do XML:</p>
                                                     <table className="w-full text-xs">
-                                                        <thead><tr className="text-blue-700">{['Cód', 'Descrição', 'Qtd', 'Un', 'V.Total'].map(h => <th key={h} className="text-left px-1 py-0.5 border-b border-blue-100 font-medium">{h}</th>)}</tr></thead>
+                                                        <thead><tr className="text-blue-700">{['Cód','Descrição','Qtd','Un','V.Total'].map(h=><th key={h} className="text-left px-1 py-0.5 border-b border-blue-100 font-medium">{h}</th>)}</tr></thead>
                                                         <tbody>
-                                                            {nf.nf_itens.map((it, i) => (
+                                                            {nf.nf_itens.map((it,i) => (
                                                                 <tr key={i} className="border-b border-blue-50">
                                                                     <td className="px-1 py-1 font-data">{it.codigo}</td>
                                                                     <td className="px-1 py-1 max-w-[130px] truncate">{it.descricao}</td>
@@ -2756,11 +2600,11 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                         </div>
                                     ))}
                                     {/* Resumo: valor total das NFs */}
-                                    {(form.notas_fiscais || []).filter(n => n.valor).length > 1 && (
-                                        <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
-                                            <span className="text-xs font-semibold text-blue-700">Valor total ({(form.notas_fiscais || []).length} NFs)</span>
+                                    {(form.notas_fiscais||[]).filter(n=>n.valor).length > 1 && (
+                                        <div className="flex items-center justify-between px-3 py-2 rounded-lg" style={{backgroundColor:'#EFF6FF',border:'1px solid #BFDBFE'}}>
+                                            <span className="text-xs font-semibold text-blue-700">Valor total ({(form.notas_fiscais||[]).length} NFs)</span>
                                             <span className="text-sm font-bold font-data text-blue-800">
-                                                {BRL((form.notas_fiscais || []).reduce((s, n) => s + Number(n.valor || 0), 0))}
+                                                {BRL((form.notas_fiscais||[]).reduce((s,n)=>s+Number(n.valor||0),0))}
                                             </span>
                                         </div>
                                     )}
@@ -2819,7 +2663,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             <Field label="Fornecedor">
                                 <div className="flex gap-2">
                                     <input
-                                        value={form.fornecedor || ''}
+                                        value={form.fornecedor||''}
                                         onChange={e => setForm(f => ({ ...f, fornecedor: e.target.value }))}
                                         className={inputCls + ' flex-1'} style={inputStyle}
                                         placeholder="Ex: Auto Peças Silva Ltda" />
@@ -2846,7 +2690,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                         <div className="space-y-3">
                             <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-text-secondary)' }}>Forma de Pagamento</p>
                             <div className="flex gap-2">
-                                {[['a_vista', '💳 À Vista'], ['a_prazo', '📋 A Prazo']].map(([v, l]) => (
+                                {[['a_vista','💳 À Vista'], ['a_prazo','📋 A Prazo']].map(([v, l]) => (
                                     <button key={v} type="button" onClick={() => setForm(f => ({ ...f, forma_pagamento: v, tipo_pagamento: v === 'a_vista' ? 'pix' : 'boleto' }))}
                                         className="flex-1 py-2 rounded-lg text-sm font-medium border transition-colors"
                                         style={form.forma_pagamento === v ? { backgroundColor: 'var(--color-primary)', color: '#fff', borderColor: 'var(--color-primary)' } : { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
@@ -2860,7 +2704,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                 <div className="space-y-3 p-3 rounded-xl border" style={{ borderColor: '#BBF7D0', backgroundColor: '#F0FDF4' }}>
                                     <p className="text-xs font-semibold text-green-700">Tipo de pagamento</p>
                                     <div className="flex gap-2 flex-wrap">
-                                        {[['pix', 'PIX'], ['dinheiro', 'Dinheiro'], ['transferencia_m', 'Transferência'], ['cartao', '💳 Cartão à vista']].map(([v, l]) => (
+                                        {[['pix','PIX'], ['dinheiro','Dinheiro'], ['transferencia_m','Transferência'], ['cartao','💳 Cartão à vista']].map(([v, l]) => (
                                             <button key={v} type="button" onClick={() => setForm(f => ({ ...f, tipo_pagamento: v }))}
                                                 className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
                                                 style={form.tipo_pagamento === v ? { backgroundColor: '#059669', color: '#fff', borderColor: '#059669' } : { borderColor: '#BBF7D0', color: '#065F46', backgroundColor: 'white' }}>
@@ -2886,7 +2730,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                 <div className="space-y-3 p-3 rounded-xl border" style={{ borderColor: '#FED7AA', backgroundColor: '#FFF7ED' }}>
                                     <p className="text-xs font-semibold text-amber-700">Tipo de pagamento a prazo</p>
                                     <div className="flex gap-2 flex-wrap">
-                                        {[['boleto', 'Boleto'], ['cartao_prazo', '💳 Cartão Parcelado'], ['cheque', 'Cheque'], ['permuta', 'Permuta']].map(([v, l]) => (
+                                        {[['boleto','Boleto'], ['cartao_prazo','💳 Cartão Parcelado'], ['cheque','Cheque'], ['permuta','Permuta']].map(([v, l]) => (
                                             <button key={v} type="button" onClick={() => setForm(f => ({ ...f, tipo_pagamento: v }))}
                                                 className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
                                                 style={form.tipo_pagamento === v ? { backgroundColor: '#D97706', color: '#fff', borderColor: '#D97706' } : { borderColor: '#FED7AA', color: '#92400E', backgroundColor: 'white' }}>
@@ -2964,20 +2808,20 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                         <div className="space-y-2">
                                             <div className="flex items-center justify-between">
                                                 <p className="text-xs font-medium text-amber-800">Parcelas do Cartão</p>
-                                                {(form.parcelas_cartao || []).length > 0 && (
+                                                {(form.parcelas_cartao||[]).length > 0 && (
                                                     <span className="text-xs font-data font-bold text-amber-700">
-                                                        Total: {BRL((form.parcelas_cartao || []).reduce((s, p) => s + Number(p.valor || 0), 0))}
+                                                        Total: {BRL((form.parcelas_cartao||[]).reduce((s,p)=>s+Number(p.valor||0),0))}
                                                     </span>
                                                 )}
                                             </div>
-                                            {(form.parcelas_cartao || []).map((p, idx) => (
+                                            {(form.parcelas_cartao||[]).map((p, idx) => (
                                                 <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border text-xs" style={{ borderColor: '#FED7AA' }}>
-                                                    <span className="text-amber-700 font-medium whitespace-nowrap">Parcela {idx + 1}</span>
+                                                    <span className="text-amber-700 font-medium whitespace-nowrap">Parcela {idx+1}</span>
                                                     <span className="font-data">{FMT_DATE(p.vencimento)}</span>
                                                     <span className="font-data font-semibold text-amber-800">{BRL(p.valor)}</span>
                                                     {p.cartao && <span className="text-amber-600 truncate max-w-[80px]">{p.cartao}</span>}
                                                     <span className={`ml-auto px-1.5 py-0.5 rounded ${p.pago ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{p.pago ? 'Pago' : 'Pendente'}</span>
-                                                    <button type="button" onClick={() => setForm(f => ({ ...f, parcelas_cartao: f.parcelas_cartao.filter((_, i) => i !== idx) }))} className="p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
+                                                    <button type="button" onClick={() => setForm(f => ({...f, parcelas_cartao: f.parcelas_cartao.filter((_,i)=>i!==idx)}))} className="p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
                                                 </div>
                                             ))}
                                             <div className="grid grid-cols-2 gap-2 mt-2">
@@ -2989,11 +2833,11 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                             </div>
                                             <button type="button" onClick={() => {
                                                 const venc = document.getElementById('pc_venc')?.value;
-                                                const val = document.getElementById('pc_valor')?.value;
+                                                const val  = document.getElementById('pc_valor')?.value;
                                                 const cart = document.getElementById('pc_cartao')?.value || '';
                                                 if (!venc || !val) return;
-                                                setForm(f => ({ ...f, parcelas_cartao: [...(f.parcelas_cartao || []), { vencimento: venc, valor: val, cartao: cart, pago: false }] }));
-                                                ['pc_venc', 'pc_valor', 'pc_cartao'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+                                                setForm(f => ({...f, parcelas_cartao: [...(f.parcelas_cartao||[]), {vencimento:venc,valor:val,cartao:cart,pago:false}]}));
+                                                ['pc_venc','pc_valor','pc_cartao'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
                                             }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-300 text-amber-700 hover:bg-amber-50">
                                                 <Icon name="Plus" size={12} /> Adicionar parcela
                                             </button>
@@ -3043,12 +2887,12 @@ function TabDespesasExtras({ isAdmin, profile }) {
 function TabDiarias({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
-    const [diarias, setDiarias] = useState([]);
+    const [diarias, setDiarias]     = useState([]);
     const [motoristas, setMotoristas] = useState([]);
-    const [viagens, setViagens] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [modal, setModal] = useState(null);
-    const [filtro, setFiltro] = useState({ motoristaId: '', mes: '' });
+    const [viagens, setViagens]     = useState([]);
+    const [loading, setLoading]     = useState(true);
+    const [modal, setModal]         = useState(null);
+    const [filtro, setFiltro]       = useState({ motoristaId: '', mes: '' });
     const [form, setForm] = useState({
         motorista_id: '', viagem_id: '', data_inicio: new Date().toISOString().split('T')[0],
         quantidade_dias: '1', valor_dia: '', descricao: '',
@@ -3061,7 +2905,7 @@ function TabDiarias({ isAdmin, profile }) {
             if (filtro.motoristaId) f.motoristaId = filtro.motoristaId;
             if (filtro.mes) {
                 f.dataInicio = filtro.mes + '-01';
-                f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2, '0');
+                f.dataFim    = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0');
             }
             const [d, m, v] = await Promise.all([fetchDiarias(f), fetchTodosMotoristas(), fetchViagens({})]);
             setDiarias(d);
@@ -3079,14 +2923,14 @@ function TabDiarias({ isAdmin, profile }) {
             const nome = d.motorista?.name || '—';
             if (!acc[id]) acc[id] = { nome, valor: 0, dias: 0 };
             acc[id].valor += Number(d.valor_total || 0);
-            acc[id].dias += Number(d.quantidade_dias || 0);
+            acc[id].dias  += Number(d.quantidade_dias || 0);
             return acc;
         }, {})).sort((a, b) => b.valor - a.valor),
     }), [diarias]);
 
     const previewTotal = useMemo(() =>
         Number(form.quantidade_dias || 0) * Number(form.valor_dia || 0)
-        , [form.quantidade_dias, form.valor_dia]);
+    , [form.quantidade_dias, form.valor_dia]);
 
     const handleSubmit = async () => {
         if (!form.motorista_id || !form.valor_dia || !form.data_inicio) { showToast('Motorista, valor/dia e data são obrigatórios', 'error'); return; }
@@ -3104,20 +2948,16 @@ function TabDiarias({ isAdmin, profile }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
+    // Exportação em lote — usa modelo com resumo por motorista
     const exportar = () => {
         if (!diarias.length) { showToast('Nenhuma diária no período.', 'error'); return; }
-        const rows = diarias.map(d => ({
-            'Data': FMT_DATE(d.data_inicio), 'Motorista': d.motorista?.name || '',
-            'Viagem': d.viagem?.numero || '', 'Destino': d.viagem?.destino || '',
-            'Dias': d.quantidade_dias, 'Valor/Dia (R$)': d.valor_dia, 'Total (R$)': d.valor_total,
-            'Descrição': d.descricao || '',
-        }));
-        const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [12, 20, 12, 20, 8, 16, 14, 25].map(w => ({ wch: w }));
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Diárias');
-        XLSX.writeFile(wb, `diarias_motoristas_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`);
+        exportDiariasRomaneiosModelo(diarias);
         showToast('Exportado!', 'success');
+    };
+
+    // Exportação individual — usa modelo da planilha de diárias
+    const exportarDiariaIndividual = (d) => {
+        exportDiariaModelo(d);
     };
 
     const openCreate = () => {
@@ -3170,7 +3010,7 @@ function TabDiarias({ isAdmin, profile }) {
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                     <table className="w-full text-sm min-w-[640px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Data', 'Motorista', 'Viagem', 'Dias', 'Valor/Dia', 'Total', ''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                            <tr>{['Data','Motorista','Viagem','Dias','Valor/Dia','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
                             {diarias.length === 0 ? <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
@@ -3179,25 +3019,25 @@ function TabDiarias({ isAdmin, profile }) {
                                     <span className="text-sm">Nenhuma diária registrada</span>
                                 </div>
                             </td></tr>
-                                : diarias.map((d, i) => (
-                                    <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
-                                        <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(d.data_inicio)}</td>
-                                        <td className="px-4 py-3 font-medium">{d.motorista?.name || '—'}</td>
-                                        <td className="px-4 py-3 text-xs">
-                                            {d.viagem ? <span className="font-data text-blue-700">{d.viagem.numero}</span> : <span style={{ color: 'var(--color-muted-foreground)' }}>—</span>}
-                                            {d.viagem?.destino && <span className="block text-gray-400">{d.viagem.destino}</span>}
-                                        </td>
-                                        <td className="px-4 py-3 font-data text-center">{d.quantidade_dias}</td>
-                                        <td className="px-4 py-3 font-data">{BRL(d.valor_dia)}</td>
-                                        <td className="px-4 py-3 font-data font-semibold text-indigo-600">{BRL(d.valor_total)}</td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex gap-1">
-                                                {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
-                                                {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                            : diarias.map((d, i) => (
+                                <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                    <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(d.data_inicio)}</td>
+                                    <td className="px-4 py-3 font-medium">{d.motorista?.name || '—'}</td>
+                                    <td className="px-4 py-3 text-xs">
+                                        {d.viagem ? <span className="font-data text-blue-700">{d.viagem.numero}</span> : <span style={{ color: 'var(--color-muted-foreground)' }}>—</span>}
+                                        {d.viagem?.destino && <span className="block text-gray-400">{d.viagem.destino}</span>}
+                                    </td>
+                                    <td className="px-4 py-3 font-data text-center">{d.quantidade_dias}</td>
+                                    <td className="px-4 py-3 font-data">{BRL(d.valor_dia)}</td>
+                                    <td className="px-4 py-3 font-data font-semibold text-indigo-600">{BRL(d.valor_total)}</td>
+                                    <td className="px-4 py-3">
+                                        <div className="flex gap-1">
+                                            {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
+                                            {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
@@ -3263,14 +3103,14 @@ function TabRelatorioFinanceiro({ isAdmin }) {
     const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
 
     const [periodoInicio, setPeriodoInicio] = useState(mesAtual);
-    const [periodoFim, setPeriodoFim] = useState(mesAtual);
-    const [empresa, setEmpresa] = useState('');
-    const [empresas, setEmpresas] = useState([]);
-    const [motoristas, setMotoristas] = useState([]);
-    const [veiculos, setVeiculos] = useState([]);
-    const [filtroPlaca, setFiltroPlaca] = useState(''); // item 7
-    const [dados, setDados] = useState(null);
-    const [loading, setLoading] = useState(false);
+    const [periodoFim,    setPeriodoFim]    = useState(mesAtual);
+    const [empresa,       setEmpresa]       = useState('');
+    const [empresas,      setEmpresas]      = useState([]);
+    const [motoristas,    setMotoristas]    = useState([]);
+    const [veiculos,      setVeiculos]      = useState([]);
+    const [filtroPlaca,   setFiltroPlaca]   = useState(''); // item 7
+    const [dados,         setDados]         = useState(null);
+    const [loading,       setLoading]       = useState(false);
 
     useEffect(() => {
         (async () => {
@@ -3291,7 +3131,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const dataInicio = periodoInicio + '-01';
             const anoFim = Number(periodoFim.split('-')[0]);
             const mesFim = Number(periodoFim.split('-')[1]);
-            const dataFim = periodoFim + '-' + String(new Date(anoFim, mesFim, 0).getDate()).padStart(2, '0');
+            const dataFim = periodoFim + '-' + String(new Date(anoFim, mesFim, 0).getDate()).padStart(2,'0');
 
             const filtros = { dataInicio, dataFim };
             if (empresa) filtros.empresaId = empresa;
@@ -3328,11 +3168,11 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             });
 
             // ── Despesas combustível ───────────────────────────────────────
-            const valorDiesel = abastecimentos.reduce((s, a) => s + Number(a.valor_diesel || 0), 0);
-            const valorArla = abastecimentos.reduce((s, a) => s + Number(a.valor_arla || 0), 0);
+            const valorDiesel        = abastecimentos.reduce((s, a) => s + Number(a.valor_diesel || 0), 0);
+            const valorArla          = abastecimentos.reduce((s, a) => s + Number(a.valor_arla   || 0), 0);
             const despesaCombustivel = valorDiesel + valorArla;
-            const litrosDiesel = abastecimentos.reduce((s, a) => s + Number(a.litros_diesel || 0), 0);
-            const litrosArla = abastecimentos.reduce((s, a) => s + Number(a.litros_arla || 0), 0);
+            const litrosDiesel       = abastecimentos.reduce((s, a) => s + Number(a.litros_diesel || 0), 0);
+            const litrosArla         = abastecimentos.reduce((s, a) => s + Number(a.litros_arla   || 0), 0);
 
             // ── Despesas extras por veículo ──────────────────────────────────
             const totalDespesasExtras = despesasExtras.reduce((s, d) => s + Number(d.valor || 0), 0);
@@ -3350,7 +3190,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 
             // Bônus de viagens: calculado por carregamento (igual à aba Bonificações)
             carregamentos.forEach(c => {
-                const id = c.motorista_id || 'sem_id';
+                const id   = c.motorista_id || 'sem_id';
                 const nome = c.motorista?.name || 'Sem motorista';
                 if (!bonusPorMotorista[id]) bonusPorMotorista[id] = { nome, viagens: 0, bonusViagens: 0, bonusExtras: 0 };
                 bonusPorMotorista[id].viagens++;
@@ -3359,26 +3199,26 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 
             // Bônus extras registrados manualmente
             bonificacoesExtras.forEach(e => {
-                const id = e.motorista_id || 'sem_id';
+                const id   = e.motorista_id || 'sem_id';
                 const nome = e.motorista?.name || 'Sem motorista';
                 if (!bonusPorMotorista[id]) bonusPorMotorista[id] = { nome, viagens: 0, bonusViagens: 0, bonusExtras: 0 };
                 bonusPorMotorista[id].bonusExtras += Number(e.valor || 0);
             });
 
             const bonusTotalViagens = Object.values(bonusPorMotorista).reduce((s, m) => s + m.bonusViagens, 0);
-            const bonusTotalExtras = Object.values(bonusPorMotorista).reduce((s, m) => s + m.bonusExtras, 0);
-            const bonusTotal = bonusTotalViagens + bonusTotalExtras;
+            const bonusTotalExtras  = Object.values(bonusPorMotorista).reduce((s, m) => s + m.bonusExtras, 0);
+            const bonusTotal        = bonusTotalViagens + bonusTotalExtras;
 
             // ── Margens ───────────────────────────────────────────────────
-            const despesaTotal = despesaCombustivel + bonusTotal + totalDiariasLancadas + totalDespesasExtras;
-            const margemBruta = receitaTotal - (despesaCombustivel + bonusTotal + totalDiariasLancadas); // receita − custos operacionais
+            const despesaTotal  = despesaCombustivel + bonusTotal + totalDiariasLancadas + totalDespesasExtras;
+            const margemBruta   = receitaTotal - (despesaCombustivel + bonusTotal + totalDiariasLancadas); // receita − custos operacionais
             const margemLiquida = receitaTotal - despesaTotal;                // receita − combustível − bônus − diárias − despesas extras
-            const margemPct = receitaTotal > 0 ? (margemLiquida / receitaTotal) * 100 : 0;
+            const margemPct     = receitaTotal > 0 ? (margemLiquida / receitaTotal) * 100 : 0;
 
             // ── Por motorista (frete + bônus) ─────────────────────────────
             const fretePorMotorista = {};
             carregamentos.forEach(c => {
-                const id = c.motorista_id || 'sem_id';
+                const id   = c.motorista_id || 'sem_id';
                 const nome = c.motorista?.name || 'Sem motorista';
                 if (!fretePorMotorista[id]) fretePorMotorista[id] = { nome, carregamentos: 0, frete: 0 };
                 fretePorMotorista[id].carregamentos++;
@@ -3391,13 +3231,13 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 ...Object.keys(fretePorMotorista),
             ]);
             const consolidadoMotoristas = Array.from(todosIds).map(id => ({
-                nome: bonusPorMotorista[id]?.nome || fretePorMotorista[id]?.nome || '—',
-                viagens: bonusPorMotorista[id]?.viagens || 0,
-                bonus: (bonusPorMotorista[id]?.bonusViagens || 0) + (bonusPorMotorista[id]?.bonusExtras || 0),
-                bonusViagens: bonusPorMotorista[id]?.bonusViagens || 0,
-                bonusExtras: bonusPorMotorista[id]?.bonusExtras || 0,
+                nome:          bonusPorMotorista[id]?.nome  || fretePorMotorista[id]?.nome || '—',
+                viagens:       bonusPorMotorista[id]?.viagens || 0,
+                bonus:         (bonusPorMotorista[id]?.bonusViagens || 0) + (bonusPorMotorista[id]?.bonusExtras || 0),
+                bonusViagens:  bonusPorMotorista[id]?.bonusViagens || 0,
+                bonusExtras:   bonusPorMotorista[id]?.bonusExtras  || 0,
                 carregamentos: fretePorMotorista[id]?.carregamentos || 0,
-                frete: fretePorMotorista[id]?.frete || 0,
+                frete:         fretePorMotorista[id]?.frete   || 0,
             })).sort((a, b) => b.frete - a.frete);
 
             setDados({
@@ -3477,7 +3317,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             ['TOTAL', dados.totalCarregamentos, dados.receitaTotal, dados.viagensFinalizadas, dados.bonusTotal, dados.receitaTotal + dados.bonusTotal],
         ];
         const ws2 = XLSX.utils.aoa_to_sheet(rowsM);
-        ws2['!cols'] = [{ wch: 22 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 20 }];
+        ws2['!cols'] = [{ wch: 22 },{ wch: 15 },{ wch: 20 },{ wch: 20 },{ wch: 14 },{ wch: 20 }];
         XLSX.utils.book_append_sheet(wb, ws2, 'Por Motorista');
 
         // Aba 3 — Abastecimentos (diesel e arla separados)
@@ -3491,10 +3331,10 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             ['TOTAL', '', '', '', dados.litrosDiesel, dados.valorDiesel, dados.litrosArla, dados.valorArla, dados.despesaCombustivel],
         ];
         const ws3 = XLSX.utils.aoa_to_sheet(rowsAbst);
-        ws3['!cols'] = [12, 20, 12, 18, 10, 14, 10, 14, 14].map(w => ({ wch: w }));
+        ws3['!cols'] = [12,20,12,18,10,14,10,14,14].map(w => ({ wch: w }));
         XLSX.utils.book_append_sheet(wb, ws3, 'Abastecimentos');
 
-        const nome = `relatorio_financeiro_carretas_${dados.periodo.replace(/\s/g, '_')}.xlsx`;
+        const nome = `relatorio_financeiro_carretas_${dados.periodo.replace(/\s/g,'_')}.xlsx`;
         XLSX.writeFile(wb, nome);
         showToast('Relatório exportado com sucesso!', 'success');
     };
@@ -3507,25 +3347,25 @@ function TabRelatorioFinanceiro({ isAdmin }) {
         const absts = (dados._abastecimentos || []).filter(a => a.veiculo_id === filtroPlaca);
         const viags = (dados._viagens || []).filter(v => v.veiculo_id === filtroPlaca);
         const desps = (dados._despesasExtras || []).filter(d => d.veiculo_id === filtroPlaca);
-        const roms = (dados._romaneios || []).filter(r => r.veiculo_id === filtroPlaca && r.status !== 'Cancelado');
-        const diar = (dados._diarias || []).filter(d => {
+        const roms  = (dados._romaneios || []).filter(r => r.veiculo_id === filtroPlaca && r.status !== 'Cancelado');
+        const diar  = (dados._diarias || []).filter(d => {
             // diárias vinculadas ao veículo via viagem
             const viagIds = viags.map(v => v.id);
             return d.viagem_id && viagIds.includes(d.viagem_id);
         });
         const receitaCarrg = carrg.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);
-        const receitaRoms = roms.reduce((s, r) => s + Number(r.valor_frete || 0), 0);
-        const receita = receitaCarrg + receitaRoms;
-        const vDiesel = absts.reduce((s, a) => s + Number(a.valor_diesel || 0), 0);
-        const vArla = absts.reduce((s, a) => s + Number(a.valor_arla || 0), 0);
+        const receitaRoms  = roms.reduce((s, r) => s + Number(r.valor_frete || 0), 0);
+        const receita     = receitaCarrg + receitaRoms;
+        const vDiesel     = absts.reduce((s, a) => s + Number(a.valor_diesel || 0), 0);
+        const vArla       = absts.reduce((s, a) => s + Number(a.valor_arla || 0), 0);
         const combustivel = vDiesel + vArla;
-        const lDiesel = absts.reduce((s, a) => s + Number(a.litros_diesel || 0), 0);
-        const lArla = absts.reduce((s, a) => s + Number(a.litros_arla || 0), 0);
-        const bonus = viags.filter(v => v.status === 'Entrega finalizada').reduce((s, v) => s + calcularBonusCarreteiro(v.destino), 0);
-        const despExtra = desps.reduce((s, d) => s + Number(d.valor || 0), 0);
-        const diarias = diar.reduce((s, d) => s + Number(d.valor_total || 0), 0);
-        const totalDesp = combustivel + bonus + despExtra + diarias;
-        const margem = receita - totalDesp;
+        const lDiesel     = absts.reduce((s, a) => s + Number(a.litros_diesel || 0), 0);
+        const lArla       = absts.reduce((s, a) => s + Number(a.litros_arla || 0), 0);
+        const bonus       = viags.filter(v => v.status === 'Entrega finalizada').reduce((s, v) => s + calcularBonusCarreteiro(v.destino), 0);
+        const despExtra   = desps.reduce((s, d) => s + Number(d.valor || 0), 0);
+        const diarias     = diar.reduce((s, d) => s + Number(d.valor_total || 0), 0);
+        const totalDesp   = combustivel + bonus + despExtra + diarias;
+        const margem      = receita - totalDesp;
         return { veic, carrg, roms, absts, viags, desps, diar, receita, receitaCarrg, receitaRoms, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, totalDesp, margem };
     }, [dados, filtroPlaca, veiculos]);
 
@@ -3569,7 +3409,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 ['TOTAL', '', '', '', '', '', bonus],
             ];
             const wsV = XLSX.utils.aoa_to_sheet(rowsV);
-            wsV['!cols'] = [12, 18, 20, 12, 20, 10, 12].map(w => ({ wch: w }));
+            wsV['!cols'] = [12,18,20,12,20,10,12].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, wsV, 'Viagens');
         }
 
@@ -3585,7 +3425,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 ['TOTAL', '', '', '', '', '', '', '', receitaRoms],
             ];
             const wsR = XLSX.utils.aoa_to_sheet(rowsR);
-            wsR['!cols'] = [14, 16, 20, 18, 20, 12, 10, 16, 14].map(w => ({ wch: w }));
+            wsR['!cols'] = [14,16,20,18,20,12,10,16,14].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, wsR, 'Romaneios');
         }
 
@@ -3597,7 +3437,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 ['TOTAL', '', '', '', '', '', '', '', receitaCarrg],
             ];
             const wsC = XLSX.utils.aoa_to_sheet(rowsC);
-            wsC['!cols'] = [12, 12, 10, 18, 20, 20, 8, 8, 14].map(w => ({ wch: w }));
+            wsC['!cols'] = [12,12,10,18,20,20,8,8,14].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, wsC, 'Fretes');
         }
 
@@ -3609,7 +3449,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 ['TOTAL', '', '', lDiesel, vDiesel, lArla, vArla, combustivel],
             ];
             const wsA = XLSX.utils.aoa_to_sheet(rowsA);
-            wsA['!cols'] = [12, 20, 18, 10, 14, 10, 14, 14].map(w => ({ wch: w }));
+            wsA['!cols'] = [12,20,18,10,14,10,14,14].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, wsA, 'Abastecimentos');
         }
 
@@ -3621,11 +3461,11 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 ['TOTAL', '', '', '', '', despExtra],
             ];
             const wsD = XLSX.utils.aoa_to_sheet(rowsD);
-            wsD['!cols'] = [12, 22, 30, 12, 18, 14].map(w => ({ wch: w }));
+            wsD['!cols'] = [12,22,30,12,18,14].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, wsD, 'Despesas Extras');
         }
 
-        XLSX.writeFile(wb, `relatorio_placa_${veic?.placa || filtroPlaca}_${dados.periodo.replace(/\s/g, '_')}.xlsx`);
+        XLSX.writeFile(wb, `relatorio_placa_${veic?.placa || filtroPlaca}_${dados.periodo.replace(/\s/g,'_')}.xlsx`);
         showToast('Relatório por placa exportado!', 'success');
     };
 
@@ -3684,7 +3524,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 
             {/* ── Resultado ──────────────────────────────────────────────── */}
             {!dados && !loading && (
-                <div className="bg-white rounded-xl border p-10 text-center flex flex-col items-center" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="bg-white rounded-xl border p-10 text-center" style={{ borderColor: 'var(--color-border)' }}>
                     <Icon name="BarChart3" size={40} color="var(--color-muted-foreground)" />
                     <p className="text-sm mt-3 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
                         Selecione o período e clique em "Gerar Relatório"
@@ -3712,12 +3552,12 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                     {/* ── Cards de margem ─────────────────────────────────── */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         {[
-                            { l: 'Receita Total', v: BRL(dados.receitaTotal), c: '#065F46', bg: '#D1FAE5', i: 'TrendingUp', sub: `${dados.totalCarregamentos} carregamentos + ${dados.totalRomaneios || 0} romaneios` },
-                            { l: 'Desp. Combustível', v: BRL(dados.despesaCombustivel), c: '#B45309', bg: '#FEF9C3', i: 'Fuel', sub: `${dados.litrosDiesel.toFixed(0)}L diesel` },
-                            { l: 'Bônus Motoristas', v: BRL(dados.bonusTotal), c: '#7C3AED', bg: '#EDE9FE', i: 'Award', sub: `${dados.viagensFinalizadas} viagens finalizadas` },
-                            { l: 'Despesas Extras', v: BRL(dados.totalDespesasExtras), c: '#EA580C', bg: '#FEF3C7', i: 'Receipt', sub: `${Object.keys(dados.despesasPorCategoria).length} categoria(s)` },
-                            { l: 'Diárias', v: BRL(dados.totalDiariasLancadas), c: '#4F46E5', bg: '#EEF2FF', i: 'CalendarDays', sub: 'motoristas' },
-                            { l: 'Margem Líquida', v: BRL(dados.margemLiquida), c: dados.margemLiquida >= 0 ? '#1D4ED8' : '#DC2626', bg: dados.margemLiquida >= 0 ? '#DBEAFE' : '#FEE2E2', i: dados.margemLiquida >= 0 ? 'TrendingUp' : 'TrendingDown', sub: fmtPct(dados.margemPct) },
+                            { l: 'Receita Total',     v: BRL(dados.receitaTotal),     c: '#065F46', bg: '#D1FAE5', i: 'TrendingUp',  sub: `${dados.totalCarregamentos} carregamentos + ${dados.totalRomaneios || 0} romaneios` },
+                            { l: 'Desp. Combustível', v: BRL(dados.despesaCombustivel), c: '#B45309', bg: '#FEF9C3', i: 'Fuel',        sub: `${dados.litrosDiesel.toFixed(0)}L diesel` },
+                            { l: 'Bônus Motoristas',  v: BRL(dados.bonusTotal),       c: '#7C3AED', bg: '#EDE9FE', i: 'Award',       sub: `${dados.viagensFinalizadas} viagens finalizadas` },
+                            { l: 'Despesas Extras',   v: BRL(dados.totalDespesasExtras), c: '#EA580C', bg: '#FEF3C7', i: 'Receipt',    sub: `${Object.keys(dados.despesasPorCategoria).length} categoria(s)` },
+                            { l: 'Diárias',           v: BRL(dados.totalDiariasLancadas), c: '#4F46E5', bg: '#EEF2FF', i: 'CalendarDays', sub: 'motoristas' },
+                            { l: 'Margem Líquida',    v: BRL(dados.margemLiquida),    c: dados.margemLiquida >= 0 ? '#1D4ED8' : '#DC2626', bg: dados.margemLiquida >= 0 ? '#DBEAFE' : '#FEE2E2', i: dados.margemLiquida >= 0 ? 'TrendingUp' : 'TrendingDown', sub: fmtPct(dados.margemPct) },
                         ].map(k => (
                             <div key={k.l} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                 <div className="flex items-center gap-2 mb-2">
@@ -3915,10 +3755,8 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                     {[
                                         { l: 'Receita Fretes', v: BRL(dadosPorPlaca.receita), c: '#065F46', bg: '#D1FAE5', i: 'TrendingUp' },
-                                        {
-                                            l: 'Total Combustível', v: BRL(dadosPorPlaca.combustivel), c: '#B45309', bg: '#FEF9C3', i: 'Fuel',
-                                            sub: `🛢️ ${BRL(dadosPorPlaca.vDiesel)} · 💧 ${BRL(dadosPorPlaca.vArla)}`
-                                        },
+                                        { l: 'Total Combustível', v: BRL(dadosPorPlaca.combustivel), c: '#B45309', bg: '#FEF9C3', i: 'Fuel',
+                                          sub: `🛢️ ${BRL(dadosPorPlaca.vDiesel)} · 💧 ${BRL(dadosPorPlaca.vArla)}` },
                                         { l: 'Total Despesas', v: BRL(dadosPorPlaca.totalDesp), c: '#DC2626', bg: '#FEE2E2', i: 'Receipt' },
                                         { l: 'Margem Líquida', v: BRL(dadosPorPlaca.margem), c: dadosPorPlaca.margem >= 0 ? '#1D4ED8' : '#DC2626', bg: dadosPorPlaca.margem >= 0 ? '#DBEAFE' : '#FEE2E2', i: dadosPorPlaca.margem >= 0 ? 'TrendingUp' : 'TrendingDown' },
                                     ].map(k => (
@@ -3971,15 +3809,15 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 function TabOrdensServico({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
-    const [ordens, setOrdens] = useState([]);
+    const [ordens, setOrdens]     = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [mecanicos, setMecanicos] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading]   = useState(true);
     const [filtroStatus, setFiltroStatus] = useState('');
-    const [modal, setModal] = useState(false);
-    const [pdfFile, setPdfFile] = useState(null);
+    const [modal, setModal]       = useState(false);
+    const [pdfFile, setPdfFile]   = useState(null);
     const [uploading, setUploading] = useState(false);
-    const [viewPdf, setViewPdf] = useState(null);
+    const [viewPdf, setViewPdf]   = useState(null);
     const [form, setForm] = useState({
         veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '',
     });
@@ -4043,9 +3881,9 @@ function TabOrdensServico({ isAdmin, profile }) {
 
     const STATUS_OS = ['Pendente', 'Em Andamento', 'Problema Reportado', 'Finalizada'];
     const STATUS_COLORS_OS = {
-        'Pendente': { bg: '#FEF9C3', text: '#B45309' },
-        'Em Andamento': { bg: '#DBEAFE', text: '#1D4ED8' },
-        'Finalizada': { bg: '#D1FAE5', text: '#065F46' },
+        'Pendente':           { bg: '#FEF9C3', text: '#B45309' },
+        'Em Andamento':       { bg: '#DBEAFE', text: '#1D4ED8' },
+        'Finalizada':         { bg: '#D1FAE5', text: '#065F46' },
         'Problema Reportado': { bg: '#FEE2E2', text: '#B91C1C' },
     };
 
@@ -4228,13 +4066,13 @@ function TabOrdensServico({ isAdmin, profile }) {
 // ─── TAB: Histórico de Rotas por Motorista ───────────────────────────────────
 function TabHistoricoViagens({ isAdmin }) {
     const { toast, showToast } = useToast();
-    const [viagens, setViagens] = useState([]);
+    const [viagens, setViagens]     = useState([]);
     const [motoristas, setMotoristas] = useState([]);
-    const [veiculos, setVeiculos] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [veiculos, setVeiculos]   = useState([]);
+    const [loading, setLoading]     = useState(true);
     const [filtroMotorista, setFiltroMotorista] = useState('');
-    const [filtroVeiculo, setFiltroVeiculo] = useState('');
-    const [filtroPeriodo, setFiltroPeriodo] = useState('12'); // meses
+    const [filtroVeiculo, setFiltroVeiculo]     = useState('');
+    const [filtroPeriodo, setFiltroPeriodo]     = useState('12'); // meses
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -4245,7 +4083,7 @@ function TabHistoricoViagens({ isAdmin }) {
 
             const filtros = { dataInicio };
             if (filtroMotorista) filtros.motoristaId = filtroMotorista;
-            if (filtroVeiculo) filtros.veiculoId = filtroVeiculo;
+            if (filtroVeiculo)   filtros.veiculoId   = filtroVeiculo;
 
             const [v, m, ve] = await Promise.all([
                 fetchViagens(filtros),
@@ -4264,7 +4102,7 @@ function TabHistoricoViagens({ isAdmin }) {
         const mapa = {}; // motoristaId → { nome, destinos: {cidade→{count,datas,status}} }
 
         viagens.forEach(v => {
-            const mid = v.motorista_id || '__sem__';
+            const mid  = v.motorista_id || '__sem__';
             const nome = v.motorista?.name || 'Sem motorista';
             const dest = (v.destino || '').trim();
             if (!dest) return;
@@ -4333,19 +4171,19 @@ function TabHistoricoViagens({ isAdmin }) {
         porMotorista.forEach(m => {
             m.destinos.forEach((d, idx) => {
                 rowsM.push({
-                    'Motorista': idx === 0 ? m.nome : '',
-                    'Total Viagens': idx === 0 ? m.totalViagens : '',
-                    'Destino': d.cidade,
-                    'Frequência': d.count,
-                    '% do Total': m.totalViagens > 0 ? `${((d.count / m.totalViagens) * 100).toFixed(1)}%` : '0%',
-                    'Última Viagem': d.datas.sort().reverse()[0] ? FMT_DATE(d.datas.sort().reverse()[0]) : '—',
-                    'Alerta': d.count >= 3 ? '⚠️ Rota frequente' : '',
+                    'Motorista':       idx === 0 ? m.nome : '',
+                    'Total Viagens':   idx === 0 ? m.totalViagens : '',
+                    'Destino':         d.cidade,
+                    'Frequência':      d.count,
+                    '% do Total':      m.totalViagens > 0 ? `${((d.count / m.totalViagens) * 100).toFixed(1)}%` : '0%',
+                    'Última Viagem':   d.datas.sort().reverse()[0] ? FMT_DATE(d.datas.sort().reverse()[0]) : '—',
+                    'Alerta':          d.count >= 3 ? '⚠️ Rota frequente' : '',
                 });
             });
             rowsM.push({});
         });
         const ws1 = XLSX.utils.json_to_sheet(rowsM);
-        ws1['!cols'] = [22, 14, 22, 12, 12, 14, 20].map(w => ({ wch: w }));
+        ws1['!cols'] = [22,14,22,12,12,14,20].map(w => ({ wch: w }));
         XLSX.utils.book_append_sheet(wb, ws1, 'Por Motorista');
 
         // Aba 2 — Destinos globais (ranking)
@@ -4363,7 +4201,7 @@ function TabHistoricoViagens({ isAdmin }) {
             const ws3 = XLSX.utils.json_to_sheet(alertasRotas.map(a => ({
                 'Motorista': a.motorista,
                 'Cidade repetida': a.cidade,
-                'Vezes': a.count,
+                'Vezes':      a.count,
                 'Última viagem': FMT_DATE(a.ultimaData),
             })));
             ws3['!cols'] = [22, 22, 10, 14].map(w => ({ wch: w }));
@@ -4372,13 +4210,13 @@ function TabHistoricoViagens({ isAdmin }) {
 
         // Aba 4 — Viagens detalhadas
         const rowsV = viagens.map(v => ({
-            'Motorista': v.motorista?.name || '',
-            'Placa': v.veiculo?.placa || '',
-            'Nº Viagem': v.numero || '',
-            'Status': v.status || '',
-            'Data Saída': FMT_DATE(v.data_saida),
-            'Destino': v.destino || '',
-            'Toneladas': v.toneladas || '',
+            'Motorista':   v.motorista?.name || '',
+            'Placa':       v.veiculo?.placa || '',
+            'Nº Viagem':   v.numero || '',
+            'Status':      v.status || '',
+            'Data Saída':  FMT_DATE(v.data_saida),
+            'Destino':     v.destino || '',
+            'Toneladas':   v.toneladas || '',
         }));
         const ws4 = XLSX.utils.json_to_sheet(rowsV);
         ws4['!cols'] = [20, 12, 12, 18, 12, 22, 10].map(w => ({ wch: w }));
@@ -4626,26 +4464,26 @@ function TabHistoricoViagens({ isAdmin }) {
 
 // ─── Constantes da página principal ─────────────────────────────────────────
 const TABS = [
-    { id: 'viagens', label: 'Viagens', icon: 'Navigation', group: 'Operação' },
-    { id: 'romaneios', label: 'Romaneios', icon: 'FileText', group: 'Operação' },
-    { id: 'veiculos', label: 'Veículos', icon: 'Truck', group: 'Operação' },
-    { id: 'abastecimentos', label: 'Abastecimentos', icon: 'Fuel', group: 'Operação' },
-    { id: 'checklist', label: 'Checklist', icon: 'ClipboardCheck', group: 'Operação' },
-    { id: 'volume', label: 'Volume de carregamento', icon: 'TrendingUp', group: 'Operação' },
-    { id: 'historico', label: 'Histórico Rotas', icon: 'MapPin', group: 'Operação' },
-    { id: 'bonificacoes', label: 'Bonificações', icon: 'Award', group: 'Financeiro' },
-    { id: 'despesas', label: 'Despesas', icon: 'Receipt', group: 'Financeiro' },
-    { id: 'diarias', label: 'Diárias', icon: 'CalendarDays', group: 'Financeiro' },
-    { id: 'financeiro', label: 'Rel. Financeiro', icon: 'BarChart3', group: 'Financeiro' },
-    { id: 'ordens', label: 'Ordens de Serviço', icon: 'Wrench', group: 'Gestão' },
-    { id: 'empresas', label: 'Empresas', icon: 'Building2', group: 'Gestão' },
+    { id: 'viagens',       label: 'Viagens',          icon: 'Navigation',    group: 'Operação' },
+    { id: 'romaneios',     label: 'Romaneios',         icon: 'FileText',      group: 'Operação' },
+    { id: 'veiculos',      label: 'Veículos',          icon: 'Truck',         group: 'Operação' },
+    { id: 'abastecimentos',label: 'Abastecimentos',    icon: 'Fuel',          group: 'Operação' },
+    { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck',group: 'Operação' },
+    { id: 'volume',        label: 'Volume de carregamento', icon: 'TrendingUp',    group: 'Operação' },
+    { id: 'historico',     label: 'Histórico Rotas',   icon: 'MapPin',        group: 'Operação' },
+    { id: 'bonificacoes',  label: 'Bonificações',      icon: 'Award',         group: 'Financeiro' },
+    { id: 'despesas',      label: 'Despesas',          icon: 'Receipt',       group: 'Financeiro' },
+    { id: 'diarias',       label: 'Diárias',           icon: 'CalendarDays',  group: 'Financeiro' },
+    { id: 'financeiro',    label: 'Rel. Financeiro',   icon: 'BarChart3',     group: 'Financeiro' },
+    { id: 'ordens',        label: 'Ordens de Serviço', icon: 'Wrench',        group: 'Gestão' },
+    { id: 'empresas',      label: 'Empresas',          icon: 'Building2',     group: 'Gestão' },
 ];
 
 const GRUPOS = ['Operação', 'Financeiro', 'Gestão'];
 
 export default function CarretasPage() {
     const { profile, isAdmin } = useAuth();
-    const [tab, setTab] = useState('viagens');
+    const [tab, setTab]           = useState('viagens');
     const [drawerOpen, setDrawerOpen] = useState(false);
     const admin = isAdmin();
     const tabAtual = TABS.find(t => t.id === tab);
@@ -4729,20 +4567,20 @@ export default function CarretasPage() {
                             </div>
 
                             {/* Conteúdo da aba */}
-                            {tab === 'viagens' && <TabViagens isAdmin={admin} />}
-                            {tab === 'romaneios' && <TabRomaneios isAdmin={admin} />}
-                            {tab === 'veiculos' && <TabVeiculos isAdmin={admin} />}
-                            {tab === 'abastecimentos' && <TabAbastecimentos isAdmin={admin} profile={profile} />}
-                            {tab === 'checklist' && <TabChecklist isAdmin={admin} profile={profile} />}
-                            {tab === 'volume' && <TabVolume isAdmin={admin} />}
-                            {tab === 'historico' && <TabHistoricoViagens isAdmin={admin} />}
-                            {tab === 'bonificacoes' && <TabBonificacoes isAdmin={admin} />}
-                            {tab === 'despesas' && <TabDespesasExtras isAdmin={admin} profile={profile} />}
-                            {tab === 'diarias' && <TabDiarias isAdmin={admin} profile={profile} />}
-                            {tab === 'financeiro' && <TabRelatorioFinanceiro isAdmin={admin} />}
-                            {tab === 'ordens' && <TabOrdensServico isAdmin={admin} profile={profile} />}
-                            {tab === 'empresas' && <TabEmpresas isAdmin={admin} />}
-
+                            {tab === 'viagens'        && <TabViagens        key={tab} isAdmin={admin} />}
+                            {tab === 'romaneios'      && <TabRomaneios      isAdmin={admin} />}
+                            {tab === 'veiculos'       && <TabVeiculos       isAdmin={admin} />}
+                            {tab === 'abastecimentos' && <TabAbastecimentos  isAdmin={admin} profile={profile} />}
+                            {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}
+                            {tab === 'volume'         && <TabVolume         key={tab} isAdmin={admin} />}
+                            {tab === 'historico'      && <TabHistoricoViagens isAdmin={admin} />}
+                            {tab === 'bonificacoes'   && <TabBonificacoes   isAdmin={admin} />}
+                            {tab === 'despesas'       && <TabDespesasExtras  isAdmin={admin} profile={profile} />}
+                            {tab === 'diarias'         && <TabDiarias         isAdmin={admin} profile={profile} />}
+                            {tab === 'financeiro'     && <TabRelatorioFinanceiro isAdmin={admin} />}
+                            {tab === 'ordens'          && <TabOrdensServico  isAdmin={admin} profile={profile} />}
+                            {tab === 'empresas'       && <TabEmpresas       isAdmin={admin} />}
+                            
                         </div>
                     </div>
                 </div>

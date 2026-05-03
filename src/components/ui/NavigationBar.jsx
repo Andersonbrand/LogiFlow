@@ -12,11 +12,11 @@ const NAV_ITEMS = [
     { id: 'veiculos',     name: 'Veículos',   path: '/vehicle-fleet-management', icon: 'Truck',           roles: ['admin','operador'] },
     { id: 'consolidacao', name: 'Consolid.',  path: '/consolidacao',             icon: 'GitMerge',        roles: ['admin','operador'] },
     { id: 'relatorios',   name: 'Relatórios', path: '/relatorios',               icon: 'BarChart3',       roles: ['admin','operador'] },
-    { id: 'despesas-cam', name: 'Despesas',   path: '/despesas-caminhoes',       icon: 'Receipt',         roles: ['admin'] },
-    { id: 'despesas-adm', name: 'Desp. Adm', path: '/despesas-adm-transporte',  icon: 'ShoppingCart',    roles: ['admin'] },
+    { id: 'despesas-cam', name: 'Despesas',   path: '/despesas-caminhoes',       icon: 'Receipt',         roles: ['admin','operador'] },
+    { id: 'despesas-adm', name: 'Desp. Adm', path: '/despesas-adm-transporte',  icon: 'ShoppingCart',    roles: ['admin','operador'] },
     { id: 'admin',        name: 'Admin',      path: '/admin',                    icon: 'Shield',          roles: ['admin'] },
     // Carretas (admin/operador) — botão destacado, fora do fluxo normal
-    { id: 'carretas',     name: 'Carretas',   path: '/carretas',                 icon: 'Truck',           roles: ['admin'] },
+    { id: 'carretas',     name: 'Carretas',   path: '/carretas',                 icon: 'Truck',           roles: ['admin','operador'] },
     // Motorista caminhão
     { id: 'motorista',    name: 'Minhas Viagens', path: '/motorista',            icon: 'Truck',           roles: ['motorista'] },
     // Carreteiro

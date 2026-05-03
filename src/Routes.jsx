@@ -54,14 +54,14 @@ const Routes = () => (
                     {/* Rota do motorista (caminhão) */}
                     <Route path="/motorista"                element={<MotoristaRoute><MotoristaDashboard /></MotoristaRoute>} />
 
-                    {/* Módulo Transporte - Carretas (somente admin) */}
-                    <Route path="/carretas"                 element={<AdminRoute><CarretasPage /></AdminRoute>} />
+                    {/* Módulo Transporte - Carretas (admin/operador) */}
+                    <Route path="/carretas"                 element={<StaffRoute><CarretasPage /></StaffRoute>} />
 
-                    {/* Módulo Despesas — Caminhões (somente admin) */}
-                    <Route path="/despesas-caminhoes"       element={<AdminRoute><DespesasCaminhoes /></AdminRoute>} />
+                    {/* Módulo Despesas — Caminhões (admin/operador) */}
+                    <Route path="/despesas-caminhoes"       element={<StaffRoute><DespesasCaminhoes /></StaffRoute>} />
 
-                    {/* Módulo Despesas Administrativas — Transporte (somente admin) */}
-                    <Route path="/despesas-adm-transporte"  element={<AdminRoute><DespesasAdmTransporte /></AdminRoute>} />
+                    {/* Módulo Despesas Administrativas — Transporte (admin/operador) */}
+                    <Route path="/despesas-adm-transporte"  element={<StaffRoute><DespesasAdmTransporte /></StaffRoute>} />
 
                     {/* Rota do carreteiro */}
                     <Route path="/carreteiro"               element={<CarreteiroRoute><CarreteiroDashboard /></CarreteiroRoute>} />

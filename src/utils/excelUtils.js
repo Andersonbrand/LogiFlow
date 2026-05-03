@@ -940,3 +940,223 @@ export function exportRelatorioBonificacoes(romaneios, dataInicio, dataFim) {
     const periodo = dataInicio && dataFim ? `_${dataInicio.replace(/\//g,'-')}_a_${dataFim.replace(/\//g,'-')}` : '';
     XLSX.writeFile(wb, `relatorio_bonificacoes${periodo}.xlsx`);
 }
+
+// ── EXPORTAR DIÁRIA INDIVIDUAL NO MODELO ─────────────────────────────────────
+/**
+ * Gera um .xlsx no modelo da planilha de diárias da Comercial Araguaia.
+ * Layout baseado no arquivo modelo fornecido:
+ *   Linha 1 : Motorista | Data
+ *   Linha 2 : Veículo / Placa
+ *   Linha 4 : Diárias (cabeçalho da seção)
+ *   Linha 5-7: Dias trabalhados / Valor por dia / Total
+ *   Linha 8 : Descrição / Motivo
+ *   Linhas 9-15: texto livre
+ *   Linha 16: Valor Total
+ *   Linha 17-20: espaço
+ *   Linha 21-28: Assinatura Transporte
+ *   Linha 25-28: Assinatura Logística
+ *   Linha 29-32: Assinatura Motorista
+ */
+export function exportDiariaModelo(diaria) {
+    if (!diaria) return;
+
+    const wb = XLSX.utils.book_new();
+    const ws = {};
+
+    const thin = { style: 'thin', color: { rgb: '000000' } };
+    const border = { top: thin, bottom: thin, left: thin, right: thin };
+    const borderBottom = { bottom: thin };
+
+    const setCell = (ref, value, opts = {}) => {
+        ws[ref] = {
+            v: value ?? '',
+            t: typeof value === 'number' ? 'n' : 's',
+            s: {
+                font:      { name: 'Arial', sz: opts.sz || 10, bold: opts.bold || false },
+                alignment: { horizontal: opts.align || 'left', vertical: 'center', wrapText: true },
+                border:    opts.border || {},
+                fill:      opts.fill ? { fgColor: { rgb: opts.fill }, patternType: 'solid' } : {},
+            },
+        };
+    };
+
+    const motoristaNome = diaria.motorista?.name || diaria.motorista_nome || '';
+    const dataInicio    = diaria.data_inicio ? new Date(diaria.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR') : '';
+    const dataFim       = diaria.data_fim    ? new Date(diaria.data_fim    + 'T00:00:00').toLocaleDateString('pt-BR') : '';
+    const placa         = diaria.veiculo?.placa || diaria.placa || '';
+    const diasQtd       = Number(diaria.quantidade_dias || 0);
+    const valorDia      = Number(diaria.valor_dia       || 0);
+    const valorTotal    = Number(diaria.valor_total     || diasQtd * valorDia);
+    const descricao     = diaria.descricao || '';
+    const viagem        = diaria.viagem?.numero ? `Viagem ${diaria.viagem.numero}` : '';
+    const destino       = diaria.viagem?.destino || '';
+    const periodo       = dataFim ? `${dataInicio} a ${dataFim}` : dataInicio;
+
+    // ── Linha 1: Motorista / Data ────────────────────────────────────────────
+    setCell('A1', 'Motorista:', { bold: true, border });
+    setCell('B1', motoristaNome, { border });
+    setCell('C1', '', { border });
+    setCell('D1', 'Data:', { bold: true, border });
+    setCell('E1', periodo, { border });
+    setCell('F1', '', {});
+    setCell('G1', '', {});
+
+    // ── Linha 2: Veículo / Placa ─────────────────────────────────────────────
+    setCell('A2', 'Veículo / Placa:', { bold: true, border });
+    setCell('B2', placa, { border });
+    setCell('C2', '', {});
+    setCell('D2', viagem ? 'Viagem:' : '', { bold: !!viagem });
+    setCell('E2', viagem, {});
+    setCell('F2', destino ? 'Destino:' : '', { bold: !!destino });
+    setCell('G2', destino, {});
+
+    // ── Linha 3: vazia ───────────────────────────────────────────────────────
+
+    // ── Linha 4: Cabeçalho da seção Diárias ─────────────────────────────────
+    setCell('A4', 'Diárias', { bold: true, border, sz: 12, fill: 'D9E1F2' });
+    setCell('B4', '', {}); setCell('C4', ''); setCell('D4', ''); setCell('E4', ''); setCell('F4', ''); setCell('G4', '');
+
+    // ── Linha 5: Qtd de dias ─────────────────────────────────────────────────
+    setCell('A5', 'Quantidade de dias:', { bold: true, border });
+    setCell('B5', diasQtd, { border, align: 'center' });
+    setCell('C5', ''); setCell('D5', ''); setCell('E5', ''); setCell('F5', ''); setCell('G5', '');
+
+    // ── Linha 6: Valor por dia ───────────────────────────────────────────────
+    setCell('A6', 'Valor por dia (R$):', { bold: true, border });
+    setCell('B6', 'R$ ' + valorDia.toLocaleString('pt-BR', { minimumFractionDigits: 2 }), { border });
+    setCell('C6', ''); setCell('D6', ''); setCell('E6', ''); setCell('F6', ''); setCell('G6', '');
+
+    // ── Linha 7: vazia ───────────────────────────────────────────────────────
+
+    // ── Linha 8: Descrição / Motivo ──────────────────────────────────────────
+    setCell('A8', 'Descrição / Motivo', { bold: true, border });
+    setCell('B8', ''); setCell('C8', ''); setCell('D8', ''); setCell('E8', ''); setCell('F8', ''); setCell('G8', '');
+
+    // ── Linhas 9–15: texto da descrição ─────────────────────────────────────
+    setCell('A9',  descricao, { border });
+    for (let r = 10; r <= 15; r++) {
+        setCell(`A${r}`, '', { border });
+        ['B','C','D','E','F','G'].forEach(c => setCell(`${c}${r}`, '', {}));
+    }
+    ['B9','C9','D9','E9','F9','G9'].forEach(ref => setCell(ref, '', {}));
+
+    // ── Linha 16: Valor Total ────────────────────────────────────────────────
+    setCell('A16', 'Valor Total:', { bold: true, border, sz: 12 });
+    setCell('B16', 'R$ ' + valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 }), { border, bold: true, sz: 12 });
+    setCell('C16', ''); setCell('D16', ''); setCell('E16', ''); setCell('F16', ''); setCell('G16', '');
+
+    // ── Linhas 17–20: espaço ─────────────────────────────────────────────────
+    for (let r = 17; r <= 20; r++) {
+        ['A','B','C','D','E','F','G'].forEach(c => setCell(`${c}${r}`, '', {}));
+    }
+
+    // ── Linha 20: linha de assinatura Transporte ─────────────────────────────
+    setCell('A20', '', { border: borderBottom });
+    ['B','C','D','E','F','G'].forEach(c => setCell(`${c}20`, '', {}));
+
+    // ── Linha 21: label Assinatura Transporte ────────────────────────────────
+    setCell('A21', 'ASSINATURA DO SETOR DE TRANSPORTE', {});
+    ['B','C','D','E','F','G'].forEach(c => setCell(`${c}21`, '', {}));
+
+    // ── Linhas 22–24: espaço ─────────────────────────────────────────────────
+    for (let r = 22; r <= 24; r++) {
+        ['A','B','C','D','E','F','G'].forEach(c => setCell(`${c}${r}`, '', {}));
+    }
+
+    // ── Linha 24: linha de assinatura Logística ──────────────────────────────
+    setCell('A24', '', { border: borderBottom });
+
+    // ── Linha 25: label Assinatura Logística ─────────────────────────────────
+    setCell('A25', 'ASSINATURA DO SETOR DE LOGISTICA', {});
+    ['B','C','D','E','F','G'].forEach(c => setCell(`${c}25`, '', {}));
+
+    for (let r = 26; r <= 28; r++) {
+        ['A','B','C','D','E','F','G'].forEach(c => setCell(`${c}${r}`, '', {}));
+    }
+
+    // ── Linha 28: linha de assinatura Motorista ───────────────────────────────
+    setCell('A28', '', { border: borderBottom });
+
+    // ── Linha 29: label Assinatura Motorista ─────────────────────────────────
+    setCell('A29', 'ASSINATURA MOTORISTA', {});
+    ['B','C','D','E','F','G'].forEach(c => setCell(`${c}29`, '', {}));
+
+    // ── Dimensões da sheet ────────────────────────────────────────────────────
+    ws['!ref'] = 'A1:G36';
+    ws['!cols'] = [
+        { wch: 28 }, // A
+        { wch: 20 }, // B
+        { wch: 14 }, // C
+        { wch: 12 }, // D
+        { wch: 20 }, // E
+        { wch: 10 }, // F
+        { wch: 16 }, // G
+    ];
+    ws['!rows'] = Array.from({ length: 36 }, (_, i) => {
+        if ([0, 3, 7, 15].includes(i)) return { hpt: 22 }; // linhas de cabeçalho
+        if (i >= 8 && i <= 14)         return { hpt: 20 }; // linhas de descrição
+        return { hpt: 18 };
+    });
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Diária');
+
+    const nomeArquivo = `diaria_${motoristaNome.replace(/\s+/g, '_')}_${dataInicio.replace(/\//g, '-')}.xlsx`;
+    XLSX.writeFile(wb, nomeArquivo);
+}
+
+// ── EXPORTAR DIÁRIAS DOS ROMANEIOS (lote) ─────────────────────────────────────
+/**
+ * Exporta em lote as diárias geradas automaticamente pelos romaneios.
+ * Cada romaneio vira uma linha; também gera uma aba de resumo por motorista.
+ */
+export function exportDiariasRomaneiosModelo(diarias) {
+    if (!diarias || !diarias.length) return;
+
+    const wb = XLSX.utils.book_new();
+    const brl = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+    const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '';
+
+    // ── Aba 1: Detalhes ───────────────────────────────────────────────────────
+    const rows = diarias.map(d => ({
+        'Data':          fmtDate(d.data_inicio),
+        'Motorista':     d.motorista?.name || '',
+        'Placa':         d.veiculo?.placa  || '',
+        'Viagem Nº':     d.viagem?.numero  || '',
+        'Destino':       d.viagem?.destino || '',
+        'Dias':          Number(d.quantidade_dias || 0),
+        'Valor/Dia':     Number(d.valor_dia       || 0),
+        'Total (R$)':    Number(d.valor_total     || 0),
+        'Descrição':     d.descricao || '',
+    }));
+
+    // Linha de total
+    const totalGeral = rows.reduce((s, r) => s + r['Total (R$)'], 0);
+    rows.push({
+        'Data': 'TOTAL', 'Motorista': '', 'Placa': '', 'Viagem Nº': '',
+        'Destino': '', 'Dias': '', 'Valor/Dia': '',
+        'Total (R$)': totalGeral, 'Descrição': '',
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [12, 22, 12, 12, 22, 8, 12, 14, 30].map(w => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws, 'Diárias');
+
+    // ── Aba 2: Resumo por motorista ────────────────────────────────────────
+    const porMotorista = {};
+    diarias.forEach(d => {
+        const nome = d.motorista?.name || 'Sem nome';
+        if (!porMotorista[nome]) porMotorista[nome] = { motorista: nome, totalDias: 0, totalValor: 0 };
+        porMotorista[nome].totalDias  += Number(d.quantidade_dias || 0);
+        porMotorista[nome].totalValor += Number(d.valor_total     || 0);
+    });
+    const rowsResumo = Object.values(porMotorista).map(r => ({
+        'Motorista':      r.motorista,
+        'Total de Dias':  r.totalDias,
+        'Total (R$)':     r.totalValor,
+    }));
+    const wsResumo = XLSX.utils.json_to_sheet(rowsResumo);
+    wsResumo['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo por Motorista');
+
+    XLSX.writeFile(wb, `diarias_${today()}.xlsx`);
+}
