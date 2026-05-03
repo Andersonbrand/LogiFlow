@@ -715,7 +715,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     {tab === 'pedidos' && (
                         <div className="flex flex-col gap-4">
                             {pedidos.length === 0 && (
-                                <div className="text-center py-8 rounded-xl border-2 border-dashed" style={{ borderColor:'var(--color-border)' }}>
+                                <div className="flex flex-col items-center text-center py-8 rounded-xl border-2 border-dashed" style={{ borderColor:'var(--color-border)' }}>
                                     <Icon name="ShoppingCart" size={36} color="var(--color-muted-foreground)" />
                                     <p className="text-sm mt-2 font-caption" style={{ color:'var(--color-muted-foreground)' }}>
                                         Nenhum pedido adicionado

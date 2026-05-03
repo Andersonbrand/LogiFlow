@@ -212,7 +212,7 @@ function TabViagens({ isAdmin }) {
                         <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium"
                             style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', color: '#1D4ED8' }}>
                             <Icon name="Info" size={13} color="#1D4ED8" />
-                            Para lançar, use a aba <strong>Volume por Tipo</strong>
+                            Para lançar, use a aba <strong>Volume de Carregamento</strong>
                         </div>
                     )}
                 </div>
@@ -238,7 +238,7 @@ function TabViagens({ isAdmin }) {
                                         <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                             <div className="flex flex-col items-center gap-2">
                                                 <Icon name="Package" size={28} color="var(--color-muted-foreground)" />
-                                                <span className="text-sm">Nenhum carregamento no período. Lance pela aba <strong>Volume por Tipo</strong>.</span>
+                                                <span className="text-sm">Nenhum carregamento no período. Lance pela aba <strong>Volume de Carregamento</strong>.</span>
                                             </div>
                                         </td></tr>
                                     ) : carregamentos.map((c, i) => (
@@ -3524,7 +3524,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 
             {/* ── Resultado ──────────────────────────────────────────────── */}
             {!dados && !loading && (
-                <div className="bg-white rounded-xl border p-10 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="bg-white rounded-xl border p-10 flex flex-col items-center text-center" style={{ borderColor: 'var(--color-border)' }}>
                     <Icon name="BarChart3" size={40} color="var(--color-muted-foreground)" />
                     <p className="text-sm mt-3 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
                         Selecione o período e clique em "Gerar Relatório"
@@ -4357,7 +4357,7 @@ function TabHistoricoViagens({ isAdmin }) {
 
                     {/* ── Detalhamento por motorista ── */}
                     {dadosFiltrados.length === 0 ? (
-                        <div className="bg-white rounded-xl border p-10 text-center" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="bg-white rounded-xl border p-10 flex flex-col items-center text-center" style={{ borderColor: 'var(--color-border)' }}>
                             <Icon name="MapPin" size={36} color="var(--color-muted-foreground)" />
                             <p className="text-sm mt-3 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum histórico encontrado</p>
                             <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>Ajuste os filtros ou o período</p>
