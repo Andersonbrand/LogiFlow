@@ -13,7 +13,7 @@ import VehicleCards from "./components/VehicleCards";
 import VehicleFormModal from "./components/VehicleFormModal";
 import StatusUpdateModal from "./components/StatusUpdateModal";
 import HistoryModal from "./components/HistoryModal";
-import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate } from "utils/excelUtils";
+import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate, exportDiariaModelo } from "utils/excelUtils";
 import { useAuth } from "utils/AuthContext";
 import AccessDeniedModal from "components/ui/AccessDeniedModal";
 import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle } from "utils/vehicleService";
@@ -156,8 +156,37 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         setModalDiaria({ mode: 'edit', data: d });
     };
 
-    // Exportar
+    // Exportar — abastecimentos e checklists: Excel simples; diárias: modelo oficial
     const exportar = () => {
+        if (tab === 'diarias') {
+            // Exporta cada diária avulsa no modelo oficial (igual ao módulo de carretas)
+            const avulsas = diarias;
+            const romDiarias = romaneiosDiarias;
+            if (!avulsas.length && !romDiarias.length) {
+                showToast('Nenhuma diária no período.', 'error'); return;
+            }
+            // Diárias avulsas: exporta cada uma no modelo
+            avulsas.forEach(d => {
+                exportDiariaModelo({ ...d, motorista: { name: motorista.name } });
+            });
+            // Diárias via romaneio: monta objeto compatível com exportDiariaModelo
+            romDiarias.forEach(r => {
+                exportDiariaModelo({
+                    motorista:       { name: motorista.name },
+                    veiculo:         { placa: r.placa || motorista.veiculo?.placa || '' },
+                    data_inicio:     r.saida ? r.saida.slice(0,10) : r.created_at?.slice(0,10) || '',
+                    data_fim:        null,
+                    quantidade_dias: r.dias_diaria || 1,
+                    valor_dia:       r.valor_diaria_dia || (r.custo_motorista / (r.dias_diaria || 1)),
+                    valor_total:     Number(r.custo_motorista || 0),
+                    descricao:       r.destino || '',
+                    viagem:          { numero: r.numero, destino: r.destino },
+                });
+            });
+            showToast(`${avulsas.length + romDiarias.length} diária(s) exportada(s)!`, 'success');
+            return;
+        }
+        // Abastecimentos e Checklists — comportamento original
         const wb = XLSX.utils.book_new();
         if (abast.length) {
             const ws = XLSX.utils.json_to_sheet(abast.map(a => ({
@@ -179,32 +208,27 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             ws['!cols'] = [12,12,12,10,30,30].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, ws, 'Checklists');
         }
-        const todasDiarias = [
-            ...romaneiosDiarias.map(r => ({
-                'Tipo': 'Romaneio',
-                'Referência': r.numero || '',
-                'Data': r.saida ? FMT(r.saida.slice(0,10)) : r.created_at ? FMT(r.created_at.slice(0,10)) : '',
-                'Destino/Descrição': r.destino || '',
-                'Status': r.status || '',
-                'Total': Number(r.custo_motorista||0),
-            })),
-            ...diarias.map(d => ({
-                'Tipo': 'Avulsa',
-                'Referência': `${d.quantidade_dias}x dia${d.quantidade_dias > 1 ? 's' : ''}`,
-                'Data': FMT(d.data_inicio),
-                'Destino/Descrição': d.descricao || '',
-                'Status': '—',
-                'Total': Number(d.valor_total||0),
-            })),
-        ];
-        if (todasDiarias.length) {
-            const ws = XLSX.utils.json_to_sheet(todasDiarias);
-            ws['!cols'] = [12,16,12,28,14,14].map(w => ({ wch: w }));
-            XLSX.utils.book_append_sheet(wb, ws, 'Diárias');
-        }
         if (!wb.SheetNames.length) { showToast('Nenhum dado para exportar', 'error'); return; }
         XLSX.writeFile(wb, `motorista_${motorista.name.replace(/\s+/g, '_')}_${mes}.xlsx`);
         showToast('Exportado!', 'success');
+    };
+
+    // Exportar diária individual no modelo oficial
+    const exportarDiariaIndividual = (d) => {
+        exportDiariaModelo({ ...d, motorista: { name: motorista.name } });
+    };
+    const exportarRomaneioComoDialia = (r) => {
+        exportDiariaModelo({
+            motorista:       { name: motorista.name },
+            veiculo:         { placa: r.placa || motorista.veiculo?.placa || '' },
+            data_inicio:     r.saida ? r.saida.slice(0,10) : r.created_at?.slice(0,10) || '',
+            data_fim:        null,
+            quantidade_dias: r.dias_diaria || 1,
+            valor_dia:       r.valor_diaria_dia || (r.custo_motorista / (r.dias_diaria || 1)),
+            valor_total:     Number(r.custo_motorista || 0),
+            descricao:       r.destino || '',
+            viagem:          { numero: r.numero, destino: r.destino },
+        });
     };
 
     const TABS_P = [
@@ -460,7 +484,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                 <table className="w-full text-sm min-w-[500px]">
                                                     <thead className="text-xs border-b" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0', color: '#065F46' }}>
                                                         <tr>
-                                                            {['Romaneio', 'Destino', 'Data', 'Status', 'Diária'].map(h =>
+                                                            {['Romaneio', 'Destino', 'Data', 'Status', 'Diária', ''].map(h =>
                                                                 <th key={h} className="px-3 py-2.5 text-left font-medium whitespace-nowrap">{h}</th>
                                                             )}
                                                         </tr>
@@ -486,6 +510,11 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                         <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{r.status}</span>
                                                                     </td>
                                                                     <td className="px-3 py-2.5 font-data font-semibold text-emerald-700">{BRL(r.custo_motorista)}</td>
+                                                                    <td className="px-3 py-2.5">
+                                                                        <button onClick={() => exportarRomaneioComoDialia(r)} title="Exportar no modelo" className="p-1.5 rounded hover:bg-emerald-50">
+                                                                            <Icon name="FileDown" size={13} color="#059669" />
+                                                                        </button>
+                                                                    </td>
                                                                 </tr>
                                                             );
                                                         })}
@@ -538,6 +567,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                 <td className="px-3 py-2.5 text-xs max-w-[180px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
                                                                 <td className="px-3 py-2.5">
                                                                     <div className="flex gap-1">
+                                                                        <button onClick={() => exportarDiariaIndividual(d)} title="Exportar no modelo" className="p-1.5 rounded hover:bg-indigo-50"><Icon name="FileDown" size={13} color="#4F46E5" /></button>
                                                                         <button onClick={() => openEditDiaria(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
                                                                         <button onClick={() => handleDeleteDiaria(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>
                                                                     </div>
