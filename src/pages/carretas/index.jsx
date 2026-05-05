@@ -19,7 +19,7 @@ import {
     fetchCarregamentos, createCarregamento, updateCarregamento, deleteCarregamento,
     fetchEmpresas, createEmpresa, deleteEmpresa,
     fetchCarreteiros, fetchTodosMotoristas,
-    fetchAllRegistrosViagem, deleteRegistroViagem,
+    fetchAllRegistrosViagem,
         CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
     aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
     fetchOrdensServico, createOrdemServico, updateOrdemServico, deleteOrdemServico,
@@ -115,7 +115,6 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 // Sem formulário de criação manual — o admin é direcionado para a aba Volume.
 function TabViagens({ isAdmin }) {
     const { toast, showToast } = useToast();
-    const { confirm, ConfirmDialog } = useConfirm();
     const [carregamentos, setCarregamentos] = useState([]);
     const [registrosMotoristas, setRegistrosMotoristas] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -143,16 +142,6 @@ function TabViagens({ isAdmin }) {
     }, [filtroMes, isAdmin]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
-
-    const handleDeleteRegistro = useCallback(async (id) => {
-        const ok = await confirm({ title: 'Excluir registro?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
-        if (!ok) return;
-        try {
-            await deleteRegistroViagem(id);
-            showToast('Registro excluído.', 'success');
-            load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-    }, [confirm, load]); // eslint-disable-line
 
     const exportar = () => {
         const wb = XLSX.utils.book_new();
@@ -286,13 +275,13 @@ function TabViagens({ isAdmin }) {
                             <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                                 <table className="w-full text-sm min-w-[750px]">
                                     <thead className="text-xs border-b" style={{ backgroundColor: '#F0FDF4', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                        <tr>{['Motorista','Placa','Data Carregamento','Nota Fiscal','Destino','Data Descarga','Observações','Ações'].map(h => (
+                                        <tr>{['Motorista','Placa','Data Carregamento','Nota Fiscal','Destino','Data Descarga','Observações'].map(h => (
                                             <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                         ))}</tr>
                                     </thead>
                                     <tbody>
                                         {registrosMotoristas.length === 0 ? (
-                                            <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                                 <div className="flex flex-col items-center gap-2">
                                                     <Icon name="Truck" size={28} color="var(--color-muted-foreground)" />
                                                     <span className="text-sm">Nenhum registro lançado pelos motoristas ainda</span>
@@ -308,14 +297,6 @@ function TabViagens({ isAdmin }) {
                                                 <td className="px-3 py-3 max-w-[160px] truncate font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</td>
                                                 <td className="px-3 py-3 whitespace-nowrap">{r.data_descarga ? FMT_DATE(r.data_descarga) : <span style={{ color: 'var(--color-muted-foreground)' }}>Em trânsito</span>}</td>
                                                 <td className="px-3 py-3 max-w-[180px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{r.observacoes || '—'}</td>
-                                                <td className="px-3 py-3 whitespace-nowrap">
-                                                    {isAdmin && (
-                                                        <button onClick={() => handleDeleteRegistro(r.id)}
-                                                            className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 hover:underline transition-colors">
-                                                            <Icon name="Trash2" size={12} />Excluir
-                                                        </button>
-                                                    )}
-                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -325,7 +306,6 @@ function TabViagens({ isAdmin }) {
                     )}
                 </>
             )}
-            <ConfirmDialog />
             <Toast toast={toast} />
         </div>
     );
@@ -2904,13 +2884,12 @@ function TabDiarias({ isAdmin, profile }) {
     const { confirm, ConfirmDialog } = useConfirm();
     const [diarias, setDiarias]     = useState([]);
     const [motoristas, setMotoristas] = useState([]);
-    const [veiculos, setVeiculos]   = useState([]);
     const [viagens, setViagens]     = useState([]);
     const [loading, setLoading]     = useState(true);
     const [modal, setModal]         = useState(null);
     const [filtro, setFiltro]       = useState({ motoristaId: '', mes: '' });
     const [form, setForm] = useState({
-        motorista_id: '', veiculo_id: '', viagem_id: '', data_inicio: new Date().toISOString().split('T')[0],
+        motorista_id: '', viagem_id: '', data_inicio: new Date().toISOString().split('T')[0],
         quantidade_dias: '1', valor_dia: '', descricao: '',
     });
 
@@ -2923,11 +2902,10 @@ function TabDiarias({ isAdmin, profile }) {
                 f.dataInicio = filtro.mes + '-01';
                 f.dataFim    = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0');
             }
-            const [d, m, v, veic] = await Promise.all([fetchDiarias(f), fetchTodosMotoristas(), fetchViagens({}), fetchCarretasVeiculos()]);
+            const [d, m, v] = await Promise.all([fetchDiarias(f), fetchTodosMotoristas(), fetchViagens({})]);
             setDiarias(d);
             setMotoristas(m.filter(x => x.tipo_veiculo === 'carreta' || x.role === 'carreteiro'));
             setViagens(v);
-            setVeiculos(veic);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtro]); // eslint-disable-line
@@ -2978,11 +2956,11 @@ function TabDiarias({ isAdmin, profile }) {
     };
 
     const openCreate = () => {
-        setForm({ motorista_id: '', veiculo_id: '', viagem_id: '', data_inicio: new Date().toISOString().split('T')[0], quantidade_dias: '1', valor_dia: '', descricao: '' });
+        setForm({ motorista_id: '', viagem_id: '', data_inicio: new Date().toISOString().split('T')[0], quantidade_dias: '1', valor_dia: '', descricao: '' });
         setModal({ mode: 'create' });
     };
     const openEdit = (d) => {
-        setForm({ motorista_id: d.motorista_id || '', veiculo_id: d.veiculo_id || '', viagem_id: d.viagem_id || '', data_inicio: d.data_inicio, quantidade_dias: d.quantidade_dias, valor_dia: d.valor_dia, descricao: d.descricao || '' });
+        setForm({ motorista_id: d.motorista_id || '', viagem_id: d.viagem_id || '', data_inicio: d.data_inicio, quantidade_dias: d.quantidade_dias, valor_dia: d.valor_dia, descricao: d.descricao || '' });
         setModal({ mode: 'edit', data: d });
     };
 
@@ -3027,7 +3005,7 @@ function TabDiarias({ isAdmin, profile }) {
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                     <table className="w-full text-sm min-w-[640px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Data','Motorista','Placa','Viagem','Dias','Valor/Dia','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                            <tr>{['Data','Motorista','Viagem','Dias','Valor/Dia','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
                             {diarias.length === 0 ? <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
@@ -3040,7 +3018,6 @@ function TabDiarias({ isAdmin, profile }) {
                                 <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(d.data_inicio)}</td>
                                     <td className="px-4 py-3 font-medium">{d.motorista?.name || '—'}</td>
-                                    <td className="px-4 py-3 font-data text-xs">{d.veiculo?.placa || '—'}</td>
                                     <td className="px-4 py-3 text-xs">
                                         {d.viagem ? <span className="font-data text-blue-700">{d.viagem.numero}</span> : <span style={{ color: 'var(--color-muted-foreground)' }}>—</span>}
                                         {d.viagem?.destino && <span className="block text-gray-400">{d.viagem.destino}</span>}
@@ -3076,12 +3053,13 @@ function TabDiarias({ isAdmin, profile }) {
                                 {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                             </select>
                         </Field>
-                        <Field label="Veículo / Placa">
-                            <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                <option value="">Selecione a placa...</option>
-                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
-                            </select>
-                        </Field>
+                        {/* item 10: para carretas não é necessário vincular viagem */}
+                        <div className="flex items-end">
+                            <div className="w-full p-3 rounded-lg text-xs" style={{ backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE' }}>
+                                <p className="text-indigo-700 font-medium">ℹ️ Módulo Carretas</p>
+                                <p className="text-indigo-600 mt-0.5">Diárias deste módulo não precisam vínculo de viagem.</p>
+                            </div>
+                        </div>
                         <Field label="Data de início" required>
                             <input type="date" value={form.data_inicio} onChange={e => setForm(f => ({ ...f, data_inicio: e.target.value }))} className={inputCls} style={inputStyle} />
                         </Field>
