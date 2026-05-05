@@ -170,9 +170,10 @@ export default function CarreteiroDashboard() {
     useEffect(() => {
         load();
         // Realtime: atualiza automaticamente quando admin excluir viagem ou checklist
-        const unsubViagens = subscribeTabela('carretas_registros_viagem', load);
-        const unsubChk     = subscribeTabela('carretas_checklists', load);
-        return () => { unsubViagens(); unsubChk(); };
+        const unsubViagens   = subscribeTabela('carretas_registros_viagem', load);
+        const unsubChk       = subscribeTabela('carretas_checklists', load);
+        const unsubCarreg    = subscribeTabela('carretas_carregamentos', load);
+        return () => { unsubViagens(); unsubChk(); unsubCarreg(); };
     }, [load]);
 
     // Bônus por carregamentos (nova fonte)

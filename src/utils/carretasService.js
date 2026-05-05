@@ -7,10 +7,11 @@
 import { supabase } from './supabaseClient';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CIDADES COM BONIFICAÇÃO REDUZIDA (R$60) — demais = R$120
+// BONIFICAÇÃO: Estoque, Urandi, Pindaí, Candiba e Pilões = R$60
+//              Qualquer outro destino = R$120
 // ─────────────────────────────────────────────────────────────────────────────
 export const CIDADES_BONUS_BAIXO = [
-    'urandi', 'pindai', 'pindaí', 'candiba', 'pilões', 'piloes', 'guanambi'
+    'estoque', 'urandi', 'pindai', 'pindaí', 'candiba', 'pilões', 'piloes',
 ];
 export const BONUS_BAIXO  = 60;
 export const BONUS_ALTO   = 120;
