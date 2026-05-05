@@ -535,6 +535,9 @@ function MotoristasManager({ showToast }) {
     const [lightbox, setLightbox]         = useState(false); // lightbox da foto CNH
     const [confirmDelete, setConfirmDelete] = useState(null); // motorista a excluir
     const [deleting, setDeleting]         = useState(false);
+    const [editando, setEditando]         = useState(null); // motorista sendo editado
+    const [editForm, setEditForm]         = useState({});
+    const [editSaving, setEditSaving]     = useState(false);
 
     const load = useCallback(async () => {
         try {
@@ -564,6 +567,45 @@ function MotoristasManager({ showToast }) {
             showToast('Erro ao excluir: ' + err.message, 'error');
         } finally {
             setDeleting(false);
+        }
+    };
+
+    const handleAbrirEdicao = (m) => {
+        setEditando(m);
+        setEditForm({
+            nome:           m.name             || '',
+            role:           (m.role === 'motorista' && m.tipo_veiculo === 'carreta') ? 'motorista_carreta' : (m.role || 'motorista'),
+            cnhNumero:      m.cnh_numero       || '',
+            cnhCategoria:   m.cnh_categoria    || 'C',
+            cnhVencimento:  m.cnh_vencimento   || '',
+            dataNascimento: m.data_nascimento  || '',
+        });
+    };
+
+    const handleSalvarEdicao = async () => {
+        if (!editForm.nome.trim()) { showToast('Informe o nome do motorista.', 'error'); return; }
+        setEditSaving(true);
+        try {
+            const realRole = editForm.role === 'motorista_carreta' ? 'motorista' : editForm.role;
+            const tipoVeiculo = editForm.role === 'motorista_carreta' ? 'carreta'
+                              : editForm.role === 'motorista'          ? 'caminhao' : null;
+            const updates = {
+                name:            editForm.nome.trim(),
+                role:            realRole,
+                ...(tipoVeiculo ? { tipo_veiculo: tipoVeiculo } : {}),
+                cnh_numero:      editForm.cnhNumero      || null,
+                cnh_categoria:   editForm.cnhCategoria   || null,
+                cnh_vencimento:  editForm.cnhVencimento  || null,
+                data_nascimento: editForm.dataNascimento || null,
+            };
+            await updateUserProfile(editando.id, updates);
+            showToast(`Motorista ${editForm.nome} atualizado com sucesso!`, 'success');
+            setEditando(null);
+            await load();
+        } catch (err) {
+            showToast('Erro ao salvar: ' + err.message, 'error');
+        } finally {
+            setEditSaving(false);
         }
     };
 
@@ -871,6 +913,95 @@ function MotoristasManager({ showToast }) {
                 </div>
             )}
 
+            {/* Modal de edição */}
+            {editando && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}
+                    onClick={e => { if (e.target === e.currentTarget) setEditando(null); }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        {/* Header */}
+                        <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-amber-50">
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-amber-100">
+                                <Icon name="Pencil" size={20} color="#D97706" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="font-bold text-slate-800">Editar Motorista</p>
+                                <p className="text-xs text-slate-500 truncate">{editando.name}</p>
+                            </div>
+                            <button onClick={() => setEditando(null)}
+                                className="p-1.5 rounded-lg hover:bg-amber-200 transition-colors flex-shrink-0">
+                                <Icon name="X" size={16} color="#64748B" />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-5 flex flex-col gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {/* Nome */}
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Nome completo *</label>
+                                    <input value={editForm.nome}
+                                        onChange={e => setEditForm(p => ({ ...p, nome: e.target.value }))}
+                                        placeholder="Nome do motorista" className={inputCls2} />
+                                </div>
+
+                                {/* Função */}
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Função *</label>
+                                    <select value={editForm.role}
+                                        onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))}
+                                        className={inputCls2}>
+                                        {DRIVER_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                                    </select>
+                                </div>
+
+                                {/* Data de nascimento */}
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Data de nascimento</label>
+                                    <input type="date" value={editForm.dataNascimento}
+                                        onChange={e => setEditForm(p => ({ ...p, dataNascimento: e.target.value }))}
+                                        className={inputCls2} />
+                                </div>
+
+                                {/* Nº CNH */}
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">N° Registro da CNH</label>
+                                    <input value={editForm.cnhNumero}
+                                        onChange={e => setEditForm(p => ({ ...p, cnhNumero: e.target.value }))}
+                                        placeholder="00000000000" className={inputCls2} />
+                                </div>
+
+                                {/* Categoria CNH */}
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Categoria CNH</label>
+                                    <select value={editForm.cnhCategoria}
+                                        onChange={e => setEditForm(p => ({ ...p, cnhCategoria: e.target.value }))}
+                                        className={inputCls2}>
+                                        {CNH_CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+
+                                {/* Vencimento CNH */}
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Vencimento da CNH</label>
+                                    <input type="date" value={editForm.cnhVencimento}
+                                        onChange={e => setEditForm(p => ({ ...p, cnhVencimento: e.target.value }))}
+                                        className={inputCls2} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50">
+                            <Button variant="outline" onClick={() => setEditando(null)} disabled={editSaving}>Cancelar</Button>
+                            <Button variant="default" iconName="Save" iconSize={14} onClick={handleSalvarEdicao} loading={editSaving}>
+                                Salvar alterações
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Modal de confirmação de exclusão */}
             {confirmDelete && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
@@ -973,6 +1104,11 @@ function MotoristasManager({ showToast }) {
                                                     className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
                                                     title="Ver motorista">
                                                     <Icon name="Eye" size={14} color="currentColor" />
+                                                </button>
+                                                <button onClick={() => { handleAbrirEdicao(m); setDetalhe(null); setShowForm(false); }}
+                                                    className="p-1.5 rounded-lg hover:bg-amber-50 text-slate-400 hover:text-amber-600 transition-colors"
+                                                    title="Editar motorista">
+                                                    <Icon name="Pencil" size={14} color="currentColor" />
                                                 </button>
                                                 <button
                                                     onClick={() => setConfirmDelete(m)}
