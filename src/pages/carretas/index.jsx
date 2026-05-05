@@ -19,7 +19,7 @@ import {
     fetchCarregamentos, createCarregamento, updateCarregamento, deleteCarregamento,
     fetchEmpresas, createEmpresa, deleteEmpresa,
     fetchCarreteiros, fetchTodosMotoristas,
-    fetchAllRegistrosViagem,
+    fetchAllRegistrosViagem, deleteRegistroViagem,
         CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
     aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
     fetchOrdensServico, createOrdemServico, updateOrdemServico, deleteOrdemServico,
@@ -115,6 +115,7 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 // Sem formulário de criação manual — o admin é direcionado para a aba Volume.
 function TabViagens({ isAdmin }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [carregamentos, setCarregamentos] = useState([]);
     const [registrosMotoristas, setRegistrosMotoristas] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -142,6 +143,16 @@ function TabViagens({ isAdmin }) {
     }, [filtroMes, isAdmin]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
+
+    const handleDeleteRegistro = useCallback(async (id) => {
+        const ok = await confirm({ title: 'Excluir registro?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try {
+            await deleteRegistroViagem(id);
+            showToast('Registro excluído.', 'success');
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    }, [confirm, load]); // eslint-disable-line
 
     const exportar = () => {
         const wb = XLSX.utils.book_new();
@@ -275,13 +286,13 @@ function TabViagens({ isAdmin }) {
                             <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                                 <table className="w-full text-sm min-w-[750px]">
                                     <thead className="text-xs border-b" style={{ backgroundColor: '#F0FDF4', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                        <tr>{['Motorista','Placa','Data Carregamento','Nota Fiscal','Destino','Data Descarga','Observações'].map(h => (
+                                        <tr>{['Motorista','Placa','Data Carregamento','Nota Fiscal','Destino','Data Descarga','Observações','Ações'].map(h => (
                                             <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                         ))}</tr>
                                     </thead>
                                     <tbody>
                                         {registrosMotoristas.length === 0 ? (
-                                            <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                                 <div className="flex flex-col items-center gap-2">
                                                     <Icon name="Truck" size={28} color="var(--color-muted-foreground)" />
                                                     <span className="text-sm">Nenhum registro lançado pelos motoristas ainda</span>
@@ -297,6 +308,14 @@ function TabViagens({ isAdmin }) {
                                                 <td className="px-3 py-3 max-w-[160px] truncate font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</td>
                                                 <td className="px-3 py-3 whitespace-nowrap">{r.data_descarga ? FMT_DATE(r.data_descarga) : <span style={{ color: 'var(--color-muted-foreground)' }}>Em trânsito</span>}</td>
                                                 <td className="px-3 py-3 max-w-[180px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{r.observacoes || '—'}</td>
+                                                <td className="px-3 py-3 whitespace-nowrap">
+                                                    {isAdmin && (
+                                                        <button onClick={() => handleDeleteRegistro(r.id)}
+                                                            className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 hover:underline transition-colors">
+                                                            <Icon name="Trash2" size={12} />Excluir
+                                                        </button>
+                                                    )}
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -306,6 +325,7 @@ function TabViagens({ isAdmin }) {
                     )}
                 </>
             )}
+            <ConfirmDialog />
             <Toast toast={toast} />
         </div>
     );

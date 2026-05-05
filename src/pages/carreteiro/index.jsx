@@ -8,8 +8,8 @@ import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import {
     fetchViagens, fetchCarretasVeiculos,
-    fetchAbastecimentos, createAbastecimento,
-    fetchChecklists, createChecklist, deleteChecklist,
+    fetchAbastecimentos, createAbastecimento, updateAbastecimento,
+    fetchChecklists, createChecklist, updateChecklist, deleteChecklist,
     fetchRegistrosViagem, createRegistroViagem, deleteRegistroViagem,
     fetchConfigAbastecimento,
     fetchPostos,
@@ -104,6 +104,8 @@ export default function CarreteiroDashboard() {
     const [formRegistro, setFormRegistro] = useState({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' });
     const [modalAbast, setModalAbast]   = useState(false);
     const [modalCheck, setModalCheck]   = useState(false);
+    const [editandoAbastId, setEditandoAbastId] = useState(null);
+    const [editandoCheckId, setEditandoCheckId] = useState(null);
     const [formAbast, setFormAbast]     = useState({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' });
     const [formCheck, setFormCheck]     = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
     const [fotoPreview, setFotoPreview] = useState(null);
@@ -258,24 +260,67 @@ export default function CarreteiroDashboard() {
         };
         if (!payload.posto_id) delete payload.posto_id;
         try {
-            await createAbastecimento(payload);
-            showToast('Abastecimento registrado!', 'success');
+            if (editandoAbastId) {
+                await updateAbastecimento(editandoAbastId, payload);
+                showToast('Abastecimento atualizado!', 'success');
+            } else {
+                await createAbastecimento(payload);
+                showToast('Abastecimento registrado!', 'success');
+            }
             setModalAbast(false);
+            setEditandoAbastId(null);
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleEditAbast = (a) => {
+        setEditandoAbastId(a.id);
+        setFormAbast({
+            veiculo_id: a.veiculo_id || '',
+            data_abastecimento: a.data_abastecimento || new Date().toISOString().split('T')[0],
+            horario: a.horario || '',
+            posto_id: a.posto_id || '',
+            posto: a.posto || '',
+            litros_diesel: a.litros_diesel ?? '',
+            valor_diesel: a.valor_diesel ?? '',
+            litros_arla: a.litros_arla ?? '',
+            valor_arla: a.valor_arla ?? '',
+            observacoes: a.observacoes || '',
+        });
+        setModalAbast(true);
     };
 
     const handleCheck = async () => {
         if (!formCheck.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
         try {
-            await createChecklist({ ...formCheck, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
-            showToast('Checklist enviado para análise!', 'success');
+            if (editandoCheckId) {
+                await updateChecklist(editandoCheckId, { ...formCheck });
+                showToast('Checklist atualizado!', 'success');
+                setEditandoCheckId(null);
+            } else {
+                await createChecklist({ ...formCheck, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
+                showToast('Checklist enviado para análise!', 'success');
+            }
             setModalCheck(false);
             setFotoPreview(null);
             setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleEditCheck = (c) => {
+        setEditandoCheckId(c.id);
+        setFormCheck({
+            veiculo_id: c.veiculo_id || '',
+            itens: c.itens || {},
+            problemas: c.problemas || '',
+            necessidades: c.necessidades || '',
+            observacoes_livres: c.observacoes_livres || '',
+            foto_url: c.foto_url || '',
+        });
+        setFotoPreview(c.foto_url || null);
+        setModalCheck(true);
     };
 
     const handleDeleteChecklist = async (id) => {
@@ -465,7 +510,7 @@ export default function CarreteiroDashboard() {
 
                             {/* Ações rápidas */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-                                <button onClick={() => { setFormAbast({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' }); setModalAbast(true); }}
+                                <button onClick={() => { setEditandoAbastId(null); setFormAbast({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' }); setModalAbast(true); }}
                                     className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all"
                                     style={{ borderColor: 'var(--color-border)' }}>
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#D1FAE5' }}>
@@ -476,7 +521,7 @@ export default function CarreteiroDashboard() {
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Diesel + Arla</p>
                                     </div>
                                 </button>
-                                <button onClick={() => { setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '' }); setModalCheck(true); }}
+                                <button onClick={() => { setEditandoCheckId(null); setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '' }); setModalCheck(true); }}
                                     className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all"
                                     style={{ borderColor: 'var(--color-border)' }}>
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#EFF6FF' }}>
@@ -656,6 +701,11 @@ export default function CarreteiroDashboard() {
                                                                 <span className="text-blue-600">{Number(a.litros_diesel || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L diesel</span>
                                                                 {Number(a.litros_arla) > 0 && <span className="text-emerald-600">{Number(a.litros_arla).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L arla</span>}
                                                             </div>
+                                                            <div className="flex justify-end mt-2 pt-2 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                                                <button onClick={() => handleEditAbast(a)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
+                                                                    <Icon name="Pencil" size={13} />Editar
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     ))
                                                 }
@@ -694,8 +744,8 @@ export default function CarreteiroDashboard() {
                                                             <div className="h-full rounded-full" style={{ width: `${(ok / CHECKLIST_ITENS.length) * 100}%`, backgroundColor: ok === CHECKLIST_ITENS.length ? '#059669' : '#D97706' }} />
                                                         </div>
                                                         <div className="flex justify-end mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
-                                                            <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
-                                                                <Icon name="Trash2" size={13} />Excluir
+                                                            <button onClick={() => handleEditCheck(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
+                                                                <Icon name="Pencil" size={13} />Editar
                                                             </button>
                                                         </div>
                                                     </div>
@@ -764,7 +814,7 @@ export default function CarreteiroDashboard() {
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
                                     <Icon name="Fuel" size={18} color="#1D4ED8" />
                                 </div>
-                                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>Registrar Abastecimento</h2>
+                                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>{editandoAbastId ? 'Editar Abastecimento' : 'Registrar Abastecimento'}</h2>
                             </div>
                             <button onClick={() => setModalAbast(false)} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
                         </div>
@@ -838,8 +888,8 @@ export default function CarreteiroDashboard() {
                             </div>
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => setModalAbast(false)} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleAbast} size="sm" iconName="Check">Registrar</Button>
+                            <button onClick={() => { setModalAbast(false); setEditandoAbastId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <Button onClick={handleAbast} size="sm" iconName="Check">{editandoAbastId ? 'Salvar' : 'Registrar'}</Button>
                         </div>
                     </div>
                 </div>
@@ -856,9 +906,9 @@ export default function CarreteiroDashboard() {
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
                                     <Icon name="ClipboardCheck" size={18} color="#1D4ED8" />
                                 </div>
-                                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>Checklist Semanal</h2>
+                                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>{editandoCheckId ? 'Editar Checklist' : 'Checklist Semanal'}</h2>
                             </div>
-                            <button onClick={() => { setModalCheck(false); setFotoPreview(null); }} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
+                            <button onClick={() => { setModalCheck(false); setFotoPreview(null); setEditandoCheckId(null); }} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
                         </div>
                         <div className="p-5 space-y-4 overflow-y-auto flex-1">
                             <Field label="Veículo" required>
@@ -919,8 +969,8 @@ export default function CarreteiroDashboard() {
                             <Field label="Observações livres"><textarea value={formCheck.observacoes_livres} onChange={e => setFormCheck(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => { setModalCheck(false); setFotoPreview(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleCheck} size="sm" iconName="Send">Enviar</Button>
+                            <button onClick={() => { setModalCheck(false); setFotoPreview(null); setEditandoCheckId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <Button onClick={handleCheck} size="sm" iconName={editandoCheckId ? 'Check' : 'Send'}>{editandoCheckId ? 'Salvar' : 'Enviar'}</Button>
                         </div>
                     </div>
                 </div>

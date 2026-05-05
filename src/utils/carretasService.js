@@ -217,6 +217,17 @@ export async function deleteAbastecimento(id) {
     if (error) throw error;
 }
 
+export async function updateAbastecimento(id, abast) {
+    const { data, error } = await supabase
+        .from('carretas_abastecimentos')
+        .update(abast)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CHECKLISTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -255,6 +266,17 @@ export async function createChecklist(checklist) {
     const { data, error } = await supabase
         .from('carretas_checklists')
         .insert({ ...checklist, aprovado: false })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updateChecklist(id, fields) {
+    const { data, error } = await supabase
+        .from('carretas_checklists')
+        .update(fields)
+        .eq('id', id)
         .select()
         .single();
     if (error) throw error;

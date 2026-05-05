@@ -785,7 +785,7 @@ function MotoristasManager({ showToast }) {
                             </div>
                             <div className="flex-1 min-w-0">
                                 <p className="font-semibold text-slate-800 truncate">{detalhe.name || '—'}</p>
-                                <p className="text-xs text-slate-500 truncate">{detalhe.email || '—'}</p>
+                                {detalhe.email && <p className="text-xs text-slate-500 truncate">{detalhe.email}</p>}
                             </div>
                             <button onClick={() => setDetalhe(null)}
                                 className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors flex-shrink-0">
