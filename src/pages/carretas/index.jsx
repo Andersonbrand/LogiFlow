@@ -1443,9 +1443,10 @@ function TabBonificacoes({ isAdmin }) {
         carregamentosComBonus.forEach(c => {
             const id   = c.motorista_id || 'sem';
             const nome = c.motorista?.name || 'Sem motorista';
-            if (!porMotorista[id]) porMotorista[id] = { nome, carregamentos: 0, bonusViagens: 0, bonusExtras: 0 };
+            if (!porMotorista[id]) porMotorista[id] = { nome, carregamentos: 0, bonusViagens: 0, bonusExtras: 0, notas: [] };
             porMotorista[id].carregamentos++;
             porMotorista[id].bonusViagens += c.bonus;
+            if (c.numero_nota_fiscal) porMotorista[id].notas.push(c.numero_nota_fiscal);
         });
         extras.forEach(e => {
             const id   = e.motorista_id || 'sem';
@@ -1577,6 +1578,16 @@ function TabBonificacoes({ isAdmin }) {
                                 <span>Viagens: <strong className="text-purple-600">{BRL(m.bonusViagens)}</strong></span>
                                 {m.bonusExtras > 0 && <span>Extras: <strong className="text-amber-600">{BRL(m.bonusExtras)}</strong></span>}
                             </div>
+                            {m.notas?.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                    {m.notas.map((nf, idx) => (
+                                        <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                            NF {nf}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -1610,11 +1621,11 @@ function TabBonificacoes({ isAdmin }) {
                         <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                             <table className="w-full text-sm min-w-[640px]">
                                 <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                    <tr>{['Motorista','Placa','Destino','Data','Qtd (sacos)','Bônus'].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                                    <tr>{['Motorista','Placa','Destino','Data','Nota Fiscal','Qtd (sacos)','Bônus'].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                                 </thead>
                                 <tbody>
                                     {carregamentosComBonus.length === 0
-                                        ? <tr><td colSpan={6} className="text-center py-10" style={{ color: 'var(--color-muted-foreground)' }}>
+                                        ? <tr><td colSpan={7} className="text-center py-10" style={{ color: 'var(--color-muted-foreground)' }}>
                                             <div className="flex flex-col items-center gap-2">
                                                 <Icon name="Package" size={24} color="var(--color-muted-foreground)" />
                                                 <span className="text-sm">Nenhum carregamento no período</span>
@@ -1626,6 +1637,7 @@ function TabBonificacoes({ isAdmin }) {
                                                 <td className="px-4 py-3 font-data text-xs">{c.veiculo?.placa || '—'}</td>
                                                 <td className="px-4 py-3">{c.destino || '—'}</td>
                                                 <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{FMT_DATE(c.data_carregamento)}</td>
+                                                <td className="px-4 py-3 font-data text-xs">{c.numero_nota_fiscal ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>NF {c.numero_nota_fiscal}</span> : <span style={{ color: 'var(--color-muted-foreground)' }}>—</span>}</td>
                                                 <td className="px-4 py-3 font-data text-right">{Number(c.quantidade || 0).toLocaleString('pt-BR')}</td>
                                                 <td className="px-4 py-3 font-data font-semibold text-purple-600">{BRL(c.bonus)}</td>
                                             </tr>
