@@ -798,12 +798,12 @@ function MotoristasManager({ showToast }) {
                             {/* Grid de informações */}
                             <div className="grid grid-cols-2 gap-3 text-sm">
                                 {[
-                                    ['Função',        DRIVER_ROLES.find(r => r.value === (detalhe.role === 'motorista' && detalhe.tipo_veiculo === 'carreta' ? 'motorista_carreta' : detalhe.role))?.label || detalhe.role || '—'],
-                                    ['CNH N°',        detalhe.cnh_numero      || '—'],
-                                    ['Categoria',     detalhe.cnh_categoria   || '—'],
-                                    ['Vencimento CNH',detalhe.cnh_vencimento  ? new Date(detalhe.cnh_vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : '—'],
-                                    ['Nascimento',    detalhe.data_nascimento ? new Date(detalhe.data_nascimento + 'T12:00:00').toLocaleDateString('pt-BR') : '—'],
-                                ].map(([label, val]) => (
+                                    ['Função',        DRIVER_ROLES.find(r => r.value === (detalhe.role === 'motorista' && detalhe.tipo_veiculo === 'carreta' ? 'motorista_carreta' : detalhe.role))?.label || detalhe.role || ''],
+                                    ['CNH N°',        detalhe.cnh_numero      || ''],
+                                    ['Categoria',     detalhe.cnh_categoria   || ''],
+                                    ['Vencimento CNH',detalhe.cnh_vencimento  ? new Date(detalhe.cnh_vencimento + 'T12:00:00').toLocaleDateString('pt-BR') : ''],
+                                    ['Nascimento',    detalhe.data_nascimento ? new Date(detalhe.data_nascimento + 'T12:00:00').toLocaleDateString('pt-BR') : ''],
+                                ].filter(([, val]) => val).map(([label, val]) => (
                                     <div key={label} className="bg-slate-50 rounded-lg px-3 py-2">
                                         <p className="text-xs text-slate-500 mb-0.5">{label}</p>
                                         <p className="font-medium text-slate-800 text-sm">{val}</p>

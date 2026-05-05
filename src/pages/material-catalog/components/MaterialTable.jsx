@@ -91,6 +91,7 @@ export default function MaterialTable({ materials, sortConfig, onSort, onEdit, o
                                         >
                                             <Icon name="Pencil" size={15} color="currentColor" />
                                         </button>
+                                        {onDelete && (
                                         <button
                                             onClick={() => onDelete(m)}
                                             className="p-1.5 rounded-md hover:bg-red-50 text-red-500 transition-colors"
@@ -99,6 +100,7 @@ export default function MaterialTable({ materials, sortConfig, onSort, onEdit, o
                                         >
                                             <Icon name="Trash2" size={15} color="currentColor" />
                                         </button>
+                                        )}
                                     </div>
                                 </td>
                             </tr>

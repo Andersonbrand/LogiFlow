@@ -115,10 +115,11 @@ export default function MotoristaDashboard() {
 
     useEffect(() => {
         load();
-        // Realtime: atualiza automaticamente quando admin excluir checklist ou abastecimento
+        // Realtime: atualiza automaticamente quando admin excluir romaneio, checklist ou abastecimento
+        const unsubRom   = subscribeTabela('romaneios', load);
         const unsubCheck = subscribeTabela('carretas_checklists', load);
         const unsubAbast = subscribeTabela('carretas_abastecimentos', load);
-        return () => { unsubCheck(); unsubAbast(); };
+        return () => { unsubRom(); unsubCheck(); unsubAbast(); };
     }, [load]); // eslint-disable-line
 
     // ── Computed ─────────────────────────────────────────────────────────────

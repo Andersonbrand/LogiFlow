@@ -9,8 +9,8 @@ import { useAuth } from 'utils/AuthContext';
 import {
     fetchViagens, fetchCarretasVeiculos,
     fetchAbastecimentos, createAbastecimento,
-    fetchChecklists, createChecklist,
-    fetchRegistrosViagem, createRegistroViagem,
+    fetchChecklists, createChecklist, deleteChecklist,
+    fetchRegistrosViagem, createRegistroViagem, deleteRegistroViagem,
     fetchConfigAbastecimento,
     fetchPostos,
     fetchNotificacoesCarreteiro, marcarNotificacaoLida,
@@ -18,6 +18,8 @@ import {
     CHECKLIST_ITENS,
     fetchCarregamentos, fetchBonificacoesExtras,
 } from 'utils/carretasService';
+import { useConfirm } from 'components/ui/ConfirmDialog';
+import { subscribeTabela } from 'utils/supabaseClient';
 import * as XLSX from 'xlsx';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -83,6 +85,7 @@ const PERIOD_OPTIONS = [
 export default function CarreteiroDashboard() {
     const { user, profile } = useAuth();
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const [tab, setTab]           = useState('viagens');
     const [period, setPeriod]     = useState(30);
     const [viagens, setViagens]   = useState([]);
@@ -161,7 +164,13 @@ export default function CarreteiroDashboard() {
         finally { setLoading(false); }
     }, [user?.id, period]); // eslint-disable-line
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        load();
+        // Realtime: atualiza automaticamente quando admin excluir viagem ou checklist
+        const unsubViagens = subscribeTabela('carretas_registros_viagem', load);
+        const unsubChk     = subscribeTabela('carretas_checklists', load);
+        return () => { unsubViagens(); unsubChk(); };
+    }, [load]);
 
     // Bônus por carregamentos (nova fonte)
     const carregamentosComBonus = useMemo(() =>
@@ -267,6 +276,20 @@ export default function CarreteiroDashboard() {
             setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleDeleteChecklist = async (id) => {
+        const ok = await confirm({ title: 'Excluir checklist?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deleteChecklist(id); showToast('Checklist excluído.', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleDeleteRegistro = async (id) => {
+        const ok = await confirm({ title: 'Excluir registro de viagem?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deleteRegistroViagem(id); showToast('Registro excluído.', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
     const exportar = () => {
@@ -594,6 +617,11 @@ export default function CarreteiroDashboard() {
                                                                 {r.data_descarga && <span>Descarga: <strong>{new Date(r.data_descarga + 'T00:00:00').toLocaleDateString('pt-BR')}</strong></span>}
                                                             </div>
                                                             {r.observacoes && <p className="text-xs mt-2 text-gray-500">{r.observacoes}</p>}
+                                                            <div className="flex justify-end mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                                                <button onClick={() => handleDeleteRegistro(r.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
+                                                                    <Icon name="Trash2" size={13} />Excluir
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     ))
                                                 }
@@ -664,6 +692,11 @@ export default function CarreteiroDashboard() {
                                                         </div>
                                                         <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
                                                             <div className="h-full rounded-full" style={{ width: `${(ok / CHECKLIST_ITENS.length) * 100}%`, backgroundColor: ok === CHECKLIST_ITENS.length ? '#059669' : '#D97706' }} />
+                                                        </div>
+                                                        <div className="flex justify-end mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                                            <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
+                                                                <Icon name="Trash2" size={13} />Excluir
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 );
@@ -953,6 +986,7 @@ export default function CarreteiroDashboard() {
             )}
 
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }

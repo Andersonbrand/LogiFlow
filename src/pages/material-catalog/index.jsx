@@ -283,7 +283,7 @@ export default function MaterialCatalog() {
                                     sortConfig={sortConfig}
                                     onSort={handleSort}
                                     onEdit={openEdit}
-                                    onDelete={setDeletingMaterial}
+                                    onDelete={isAdmin() ? setDeletingMaterial : null}
                                     loading={false}
                                 />
                             </div>
@@ -302,7 +302,7 @@ export default function MaterialCatalog() {
                                             key={m?.id}
                                             material={m}
                                             onEdit={openEdit}
-                                            onDelete={setDeletingMaterial}
+                                            onDelete={isAdmin() ? setDeletingMaterial : null}
                                         />
                                     ))
                                 )}

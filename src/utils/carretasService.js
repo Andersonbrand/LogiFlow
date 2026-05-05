@@ -488,6 +488,11 @@ export async function createRegistroViagem(registro) {
     return data;
 }
 
+export async function deleteRegistroViagem(id) {
+    const { error } = await supabase.from('carretas_registros_viagem').delete().eq('id', id);
+    if (error) throw error;
+}
+
 export async function fetchAllRegistrosViagem(filters = {}) {
     let q = supabase
         .from('carretas_registros_viagem')
@@ -753,7 +758,7 @@ export async function revogarParcelaCartaoCarreta(despesaId, parcelaIdx) {
 export async function fetchDiarias(filters = {}) {
     let q = supabase
         .from('carretas_diarias')
-        .select('*, motorista:motorista_id(id, name), viagem:viagem_id(id, numero, destino)')
+        .select('*, motorista:motorista_id(id, name), viagem:viagem_id(id, numero, destino), veiculo:veiculo_id(id, placa, modelo)')
         .order('data_inicio', { ascending: false });
     if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
     if (filters.dataInicio)  q = q.gte('data_inicio', filters.dataInicio);
@@ -765,12 +770,9 @@ export async function fetchDiarias(filters = {}) {
 
 function sanitizeDiaria(obj) {
     // Campos UUID não podem ser string vazia — converte para null
-    // NOTA: carretas_diarias NÃO tem coluna veiculo_id
-    const uuidFields = ['motorista_id', 'viagem_id'];
+    const uuidFields = ['motorista_id', 'viagem_id', 'veiculo_id'];
     const out = { ...obj };
     uuidFields.forEach(f => { if (out[f] === '' || out[f] === undefined) out[f] = null; });
-    // Remove campos que não existem na tabela
-    delete out.veiculo_id;
     return out;
 }
 

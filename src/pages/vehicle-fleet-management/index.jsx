@@ -18,15 +18,16 @@ import { useAuth } from "utils/AuthContext";
 import AccessDeniedModal from "components/ui/AccessDeniedModal";
 import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle } from "utils/vehicleService";
 import { fetchRomaneios } from "utils/romaneioService";
-import { supabase } from "utils/supabaseClient";
 import {
     fetchAbastecimentos,
     fetchChecklists, aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
+    deleteChecklist,
     fetchDiarias, createDiaria, updateDiaria, deleteDiaria,
     fetchMotoristasCaminhao,
     CHECKLIST_ITENS,
 } from "utils/carretasService";
-import * as XLSX from "xlsx";
+import { deleteRomaneio } from "utils/romaneioService";
+import { supabase, subscribeTabela } from "utils/supabaseClient";
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -63,7 +64,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
     const [romaneiosDiarias, setRomaneiosDiarias] = useState([]);
     const [formDiaria, setFormDiaria] = useState({
         data_inicio: new Date().toISOString().split('T')[0],
-        quantidade_dias: '1', valor_dia: '', descricao: '',
+        quantidade_dias: '1', valor_dia: '', placa: '', descricao: '',
     });
 
     const load = useCallback(async () => {
@@ -79,7 +80,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             // cruzando por motorista_id OU nome do motorista (campo texto livre)
             const romaneioRes = await supabase
                 .from('romaneios')
-                .select('id, numero, motorista, motorista_id, destino, status, saida, created_at, custo_motorista')
+                .select('id, numero, motorista, motorista_id, placa, destino, status, saida, created_at, custo_motorista, dias_diaria, valor_diaria_dia')
                 .or(`motorista_id.eq.${motorista.id},motorista.ilike.${motorista.name}`)
                 .gt('custo_motorista', 0)
                 .gte('created_at', f.dataInicio)
@@ -97,7 +98,13 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         finally { setLoading(false); }
     }, [motorista.id, motorista.name, mes]); // eslint-disable-line
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        load();
+        // Realtime: atualiza quando admin excluir romaneio ou checklist
+        const unsubRom = subscribeTabela('romaneios', load);
+        const unsubChk = subscribeTabela('carretas_checklists', load);
+        return () => { unsubRom(); unsubChk(); };
+    }, [load]);
 
     // Totais
     const totaisAbast = useMemo(() => ({
@@ -147,12 +154,24 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         try { await deleteDiaria(id); showToast('Excluída!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
+    const handleDeleteChecklist = async (id) => {
+        const ok = await confirm({ title: 'Excluir checklist?', message: 'O checklist será removido permanentemente da tela do motorista.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deleteChecklist(id); showToast('Checklist excluído.', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+    const handleDeleteRomaneio = async (id) => {
+        const ok = await confirm({ title: 'Excluir romaneio?', message: 'O romaneio e todos os seus dados serão removidos permanentemente da tela do motorista.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deleteRomaneio(id); showToast('Romaneio excluído.', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
     const openCreateDiaria = () => {
-        setFormDiaria({ data_inicio: new Date().toISOString().split('T')[0], quantidade_dias: '1', valor_dia: '', descricao: '' });
+        setFormDiaria({ data_inicio: new Date().toISOString().split('T')[0], quantidade_dias: '1', valor_dia: '', placa: '', descricao: '' });
         setModalDiaria({ mode: 'create' });
     };
     const openEditDiaria = (d) => {
-        setFormDiaria({ data_inicio: d.data_inicio, quantidade_dias: d.quantidade_dias, valor_dia: d.valor_dia, descricao: d.descricao || '' });
+        setFormDiaria({ data_inicio: d.data_inicio, quantidade_dias: d.quantidade_dias, valor_dia: d.valor_dia, placa: d.placa || '', descricao: d.descricao || '' });
         setModalDiaria({ mode: 'edit', data: d });
     };
 
@@ -418,16 +437,19 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                         {c.obs_manutencao && <p className="p-2 rounded bg-orange-50 text-orange-700 border border-orange-100"><span className="font-medium">Manutenção:</span> {c.obs_manutencao}</p>}
                                                     </div>
                                                 )}
-                                                {!c.aprovado && (
-                                                    <div className="flex flex-wrap gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                                <div className="flex flex-wrap gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                                    {!c.aprovado && (<>
                                                         <button onClick={() => handleAprovar(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700">
                                                             <Icon name="CheckCircle2" size={13} />Aprovar
                                                         </button>
                                                         <button onClick={() => { setModalManut(c.id); setObsManut(''); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-orange-300 text-orange-700 hover:bg-orange-50">
                                                             <Icon name="Wrench" size={13} />Registrar Manutenção
                                                         </button>
-                                                    </div>
-                                                )}
+                                                    </>)}
+                                                    <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 ml-auto">
+                                                        <Icon name="Trash2" size={13} />Excluir
+                                                    </button>
+                                                </div>
                                             </div>
                                         );
                                     })}
@@ -487,6 +509,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                             {['Romaneio', 'Destino', 'Data', 'Status', 'Diária', ''].map(h =>
                                                                 <th key={h} className="px-3 py-2.5 text-left font-medium whitespace-nowrap">{h}</th>
                                                             )}
+                                                        <th className="px-3 py-2.5"></th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -511,9 +534,14 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                     </td>
                                                                     <td className="px-3 py-2.5 font-data font-semibold text-emerald-700">{BRL(r.custo_motorista)}</td>
                                                                     <td className="px-3 py-2.5">
-                                                                        <button onClick={() => exportarRomaneioComoDialia(r)} title="Exportar no modelo" className="p-1.5 rounded hover:bg-emerald-50">
-                                                                            <Icon name="FileDown" size={13} color="#059669" />
-                                                                        </button>
+                                                                        <div className="flex gap-1">
+                                                                            <button onClick={() => exportarRomaneioComoDialia(r)} title="Exportar no modelo" className="p-1.5 rounded hover:bg-emerald-50">
+                                                                                <Icon name="FileDown" size={13} color="#059669" />
+                                                                            </button>
+                                                                            <button onClick={() => handleDeleteRomaneio(r.id)} title="Excluir romaneio" className="p-1.5 rounded hover:bg-red-50">
+                                                                                <Icon name="Trash2" size={13} color="#DC2626" />
+                                                                            </button>
+                                                                        </div>
                                                                     </td>
                                                                 </tr>
                                                             );
@@ -666,6 +694,11 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                     <p className="text-xl font-bold font-data text-indigo-700">{BRL(previewDiaria)}</p>
                                 </div>
                             )}
+                            <div className="col-span-2">
+                                <Field label="Placa do veículo">
+                                    <input value={formDiaria.placa} onChange={e => setFormDiaria(f => ({ ...f, placa: e.target.value.toUpperCase() }))} className={inputCls} style={inputStyle} placeholder="ABC-1234" />
+                                </Field>
+                            </div>
                             <div className="col-span-2">
                                 <Field label="Descrição / motivo">
                                     <input value={formDiaria.descricao} onChange={e => setFormDiaria(f => ({ ...f, descricao: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: Viagem a Ibotirama — 2 diárias" />
