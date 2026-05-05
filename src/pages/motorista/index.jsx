@@ -71,7 +71,7 @@ export default function MotoristaDashboard() {
         veiculo_id: '', posto_id: '',
         data_abastecimento: new Date().toISOString().split('T')[0],
         horario: '', litros_diesel: '', valor_diesel: '',
-        litros_arla: '', valor_arla: '', observacoes: '',
+        litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '',
     });
     const emptyCheck = () => ({
         veiculo_id: '', itens: {}, problemas: '', necessidades: '',
@@ -173,6 +173,9 @@ export default function MotoristaDashboard() {
     const handleAbast = async () => {
         if (!formAbast.veiculo_id || !formAbast.data_abastecimento) {
             showToast('Veículo e data são obrigatórios', 'error'); return;
+        }
+        if (!formAbast.cupom_fiscal?.trim()) {
+            showToast('Informe o N° do cupom fiscal', 'error'); return;
         }
         try {
             const payload = { ...formAbast, motorista_id: user.id };
@@ -611,6 +614,17 @@ export default function MotoristaDashboard() {
                             </Field>
                             <Field label="Horário">
                                 <input type="time" value={formAbast.horario} onChange={e => setFormAbast(f => ({ ...f, horario: e.target.value }))} className={inputCls} style={inputStyle} />
+                            </Field>
+                            <Field label="N° do Cupom Fiscal" required>
+                                <input
+                                    type="text"
+                                    value={formAbast.cupom_fiscal}
+                                    onChange={e => setFormAbast(f => ({ ...f, cupom_fiscal: e.target.value }))}
+                                    className={inputCls}
+                                    style={inputStyle}
+                                    placeholder="Ex: 000123456"
+                                    maxLength={50}
+                                />
                             </Field>
                             <Field label="Posto">
                                 <select value={formAbast.posto_id} onChange={e => handlePostoChange(e.target.value)} className={inputCls} style={inputStyle}>

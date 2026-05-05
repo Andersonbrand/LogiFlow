@@ -447,7 +447,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
     const [editPosto, setEditPosto] = useState(null);
     const [formPosto, setFormPosto] = useState({ nome: '', cidade: '', cnpj: '', preco_diesel: '', preco_arla: '' });
     const [filtro, setFiltro] = useState({ motoristaId: '', veiculoId: '', mes: '' });
-    const [form, setForm] = useState({ motorista_id: '', veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' });
+    const [form, setForm] = useState({ motorista_id: '', veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '' });
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -473,6 +473,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
 
     const handleSubmit = async () => {
         if (!form.veiculo_id || !form.motorista_id || !form.data_abastecimento) { showToast('Preencha veículo, motorista e data', 'error'); return; }
+        if (!form.cupom_fiscal?.trim()) { showToast('Informe o N° do cupom fiscal', 'error'); return; }
         const payload = { ...form };
         if (!payload.posto_id) delete payload.posto_id;
         // nome do posto para exibição legacy
@@ -582,7 +583,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                         </button>
                     )}
                     <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}><Icon name="FileDown" size={14} /> Exportar</button>
-                    <Button onClick={() => { setForm({ motorista_id: isAdmin ? '' : (profile?.id || ''), veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' }); setModal(true); }} iconName="Plus" size="sm">Registrar</Button>
+                    <Button onClick={() => { setForm({ motorista_id: isAdmin ? '' : (profile?.id || ''), veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '' }); setModal(true); }} iconName="Plus" size="sm">Registrar</Button>
                 </div>
             </div>
 
@@ -670,6 +671,17 @@ function TabAbastecimentos({ isAdmin, profile }) {
                         </Field>
                         <Field label="Data" required><input type="date" value={form.data_abastecimento} onChange={e => setForm(f => ({ ...f, data_abastecimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                         <Field label="Horário"><input type="time" value={form.horario} onChange={e => setForm(f => ({ ...f, horario: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                        <Field label="N° do Cupom Fiscal" required>
+                            <input
+                                type="text"
+                                value={form.cupom_fiscal}
+                                onChange={e => setForm(f => ({ ...f, cupom_fiscal: e.target.value }))}
+                                className={inputCls}
+                                style={inputStyle}
+                                placeholder="Ex: 000123456"
+                                maxLength={50}
+                            />
+                        </Field>
                         <Field label="Posto" required>
                             <select value={form.posto_id} onChange={e => handlePostoChange(e.target.value)} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione o posto...</option>
