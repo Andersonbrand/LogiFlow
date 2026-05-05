@@ -3059,7 +3059,7 @@ function TabDiarias({ isAdmin, profile }) {
                         <Field label="Veículo / Placa">
                             <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione a placa...</option>
-                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ?  : ''}</option>)}
+                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
                             </select>
                         </Field>
                         <Field label="Data de início" required>
