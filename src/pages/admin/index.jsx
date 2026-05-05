@@ -538,6 +538,7 @@ function MotoristasManager({ showToast }) {
     const [editando, setEditando]         = useState(null); // motorista sendo editado
     const [editForm, setEditForm]         = useState({});
     const [editSaving, setEditSaving]     = useState(false);
+    const [editCnhFile, setEditCnhFile]   = useState(null); // novo arquivo CNH no modo edição
 
     const load = useCallback(async () => {
         try {
@@ -572,6 +573,7 @@ function MotoristasManager({ showToast }) {
 
     const handleAbrirEdicao = (m) => {
         setEditando(m);
+        setEditCnhFile(null);
         setEditForm({
             nome:           m.name             || '',
             role:           (m.role === 'motorista' && m.tipo_veiculo === 'carreta') ? 'motorista_carreta' : (m.role || 'motorista'),
@@ -589,6 +591,23 @@ function MotoristasManager({ showToast }) {
             const realRole = editForm.role === 'motorista_carreta' ? 'motorista' : editForm.role;
             const tipoVeiculo = editForm.role === 'motorista_carreta' ? 'carreta'
                               : editForm.role === 'motorista'          ? 'caminhao' : null;
+
+            // Faz upload do novo arquivo CNH, se selecionado
+            let cnhFotoUrl = undefined; // undefined = não altera; null = remove; string = nova URL
+            if (editCnhFile) {
+                const ext = editCnhFile.name.split('.').pop().toLowerCase();
+                const safeName = `cnh_${editando.id}_${Date.now()}.${ext}`;
+                const { data: uploadData, error: uploadErr } = await supabase.storage
+                    .from('cnh-documents').upload(safeName, editCnhFile, { upsert: true });
+                if (uploadErr) {
+                    showToast(`Aviso: não foi possível salvar o novo arquivo da CNH (${uploadErr.message}). Os demais dados serão atualizados normalmente.`, 'error');
+                } else if (uploadData) {
+                    const { data: urlData } = supabase.storage
+                        .from('cnh-documents').getPublicUrl(uploadData.path);
+                    cnhFotoUrl = urlData?.publicUrl || null;
+                }
+            }
+
             const updates = {
                 name:            editForm.nome.trim(),
                 role:            realRole,
@@ -597,10 +616,12 @@ function MotoristasManager({ showToast }) {
                 cnh_categoria:   editForm.cnhCategoria   || null,
                 cnh_vencimento:  editForm.cnhVencimento  || null,
                 data_nascimento: editForm.dataNascimento || null,
+                ...(cnhFotoUrl !== undefined ? { cnh_foto_url: cnhFotoUrl } : {}),
             };
             await updateUserProfile(editando.id, updates);
             showToast(`Motorista ${editForm.nome} atualizado com sucesso!`, 'success');
             setEditando(null);
+            setEditCnhFile(null);
             await load();
         } catch (err) {
             showToast('Erro ao salvar: ' + err.message, 'error');
@@ -987,6 +1008,36 @@ function MotoristasManager({ showToast }) {
                                     <input type="date" value={editForm.cnhVencimento}
                                         onChange={e => setEditForm(p => ({ ...p, cnhVencimento: e.target.value }))}
                                         className={inputCls2} />
+                                </div>
+
+                                {/* Anexo CNH */}
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-medium text-slate-600 mb-1">Anexo da CNH</label>
+                                    {editando.cnh_foto_url && !editCnhFile && (
+                                        <div className="flex items-center gap-2 mb-2 p-2 rounded-lg bg-slate-50 border border-slate-200">
+                                            <Icon name="FileText" size={14} color="#64748B" />
+                                            <span className="text-xs text-slate-600 flex-1 truncate">Arquivo atual anexado</span>
+                                            <a href={editando.cnh_foto_url} target="_blank" rel="noopener noreferrer"
+                                                className="text-xs text-amber-600 hover:underline font-medium">Ver</a>
+                                        </div>
+                                    )}
+                                    <label className="flex flex-col items-center gap-1 cursor-pointer border-2 border-dashed border-slate-300 hover:border-amber-400 rounded-xl p-3 transition-colors bg-slate-50 hover:bg-amber-50">
+                                        <Icon name="Upload" size={18} color={editCnhFile ? '#D97706' : '#94A3B8'} />
+                                        <span className="text-xs text-slate-500 text-center">
+                                            {editCnhFile
+                                                ? <span className="text-amber-700 font-medium">{editCnhFile.name}</span>
+                                                : <>{editando.cnh_foto_url ? 'Clique para trocar o arquivo' : 'Clique para adicionar a CNH'}<br/><span className="text-slate-400">PDF, JPG, PNG, etc.</span></>
+                                            }
+                                        </span>
+                                        <input type="file" accept="image/*,application/pdf" className="hidden"
+                                            onChange={e => setEditCnhFile(e.target.files?.[0] || null)} />
+                                    </label>
+                                    {editCnhFile && (
+                                        <button onClick={() => setEditCnhFile(null)}
+                                            className="mt-1 text-xs text-slate-400 hover:text-red-500 transition-colors">
+                                            Cancelar troca de arquivo
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
