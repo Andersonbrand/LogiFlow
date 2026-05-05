@@ -10,7 +10,7 @@ import {
     fetchViagens, fetchCarretasVeiculos,
     fetchAbastecimentos, createAbastecimento, updateAbastecimento,
     fetchChecklists, createChecklist, updateChecklist, deleteChecklist,
-    fetchRegistrosViagem, createRegistroViagem, deleteRegistroViagem,
+    fetchRegistrosViagem, createRegistroViagem, updateRegistroViagem, deleteRegistroViagem,
     fetchConfigAbastecimento,
     fetchPostos,
     fetchNotificacoesCarreteiro, marcarNotificacaoLida,
@@ -101,6 +101,7 @@ export default function CarreteiroDashboard() {
     const [registros, setRegistros] = useState([]);
     const [notificacoes, setNotificacoes] = useState([]);
     const [modalRegistro, setModalRegistro] = useState(false);
+    const [editandoRegistroId, setEditandoRegistroId] = useState(null);
     const [formRegistro, setFormRegistro] = useState({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' });
     const [modalAbast, setModalAbast]   = useState(false);
     const [modalCheck, setModalCheck]   = useState(false);
@@ -335,6 +336,19 @@ export default function CarreteiroDashboard() {
         if (!ok) return;
         try { await deleteRegistroViagem(id); showToast('Registro excluído.', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleEditRegistro = (r) => {
+        setEditandoRegistroId(r.id);
+        setFormRegistro({
+            data_carregamento: r.data_carregamento || new Date().toISOString().split('T')[0],
+            numero_nota_fiscal: r.numero_nota_fiscal || '',
+            veiculo_id: r.veiculo_id || '',
+            destino: r.destino || '',
+            data_descarga: r.data_descarga || '',
+            observacoes: r.observacoes || '',
+        });
+        setModalRegistro(true);
     };
 
     const exportar = () => {
@@ -639,7 +653,7 @@ export default function CarreteiroDashboard() {
                                     {tab === 'registros' && (
                                         <div>
                                             <div className="flex justify-end mb-4">
-                                                <Button onClick={() => { setFormRegistro({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' }); setModalRegistro(true); }} iconName="Plus" size="sm">
+                                                <Button onClick={() => { setEditandoRegistroId(null); setFormRegistro({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' }); setModalRegistro(true); }} iconName="Plus" size="sm">
                                                     Nova Entrada
                                                 </Button>
                                             </div>
@@ -663,8 +677,8 @@ export default function CarreteiroDashboard() {
                                                             </div>
                                                             {r.observacoes && <p className="text-xs mt-2 text-gray-500">{r.observacoes}</p>}
                                                             <div className="flex justify-end mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
-                                                                <button onClick={() => handleDeleteRegistro(r.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
-                                                                    <Icon name="Trash2" size={13} />Excluir
+                                                                <button onClick={() => handleEditRegistro(r)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
+                                                                    <Icon name="Pencil" size={13} />Editar
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -987,9 +1001,9 @@ export default function CarreteiroDashboard() {
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
                                     <Icon name="FilePlus" size={18} color="#1D4ED8" />
                                 </div>
-                                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>Registrar Viagem</h2>
+                                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>{editandoRegistroId ? 'Editar Viagem' : 'Registrar Viagem'}</h2>
                             </div>
-                            <button onClick={() => setModalRegistro(false)} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
+                            <button onClick={() => { setModalRegistro(false); setEditandoRegistroId(null); }} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
                         </div>
                         <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                             <div>
@@ -1021,15 +1035,21 @@ export default function CarreteiroDashboard() {
                             </div>
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => setModalRegistro(false)} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <button onClick={() => { setModalRegistro(false); setEditandoRegistroId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <Button onClick={async () => {
                                 if (!formRegistro.data_carregamento || !formRegistro.destino) { showToast('Data e destino são obrigatórios', 'error'); return; }
                                 try {
-                                    await createRegistroViagem({ ...formRegistro, motorista_id: user.id });
-                                    showToast('Viagem registrada!', 'success');
+                                    if (editandoRegistroId) {
+                                        await updateRegistroViagem(editandoRegistroId, { ...formRegistro });
+                                        showToast('Viagem atualizada!', 'success');
+                                    } else {
+                                        await createRegistroViagem({ ...formRegistro, motorista_id: user.id });
+                                        showToast('Viagem registrada!', 'success');
+                                    }
+                                    setEditandoRegistroId(null);
                                     setModalRegistro(false); load();
                                 } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                            }} size="sm" iconName="Check">Salvar</Button>
+                            }} size="sm" iconName="Check">{editandoRegistroId ? 'Salvar' : 'Registrar'}</Button>
                         </div>
                     </div>
                 </div>

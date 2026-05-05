@@ -510,6 +510,17 @@ export async function createRegistroViagem(registro) {
     return data;
 }
 
+export async function updateRegistroViagem(id, registro) {
+    const { data, error } = await supabase
+        .from('carretas_registros_viagem')
+        .update(registro)
+        .eq('id', id)
+        .select('*, veiculo:veiculo_id(id, placa, modelo)')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
 export async function deleteRegistroViagem(id) {
     const { error } = await supabase.from('carretas_registros_viagem').delete().eq('id', id);
     if (error) throw error;
