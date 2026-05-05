@@ -107,7 +107,7 @@ export default function CarreteiroDashboard() {
     const [modalCheck, setModalCheck]   = useState(false);
     const [editandoAbastId, setEditandoAbastId] = useState(null);
     const [editandoCheckId, setEditandoCheckId] = useState(null);
-    const [formAbast, setFormAbast]     = useState({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' });
+    const [formAbast, setFormAbast]     = useState({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '' });
     const [formCheck, setFormCheck]     = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
     const [fotoPreview, setFotoPreview] = useState(null);
     const fotoRef = useRef(null);
@@ -246,6 +246,7 @@ export default function CarreteiroDashboard() {
 
     const handleAbast = async () => {
         if (!formAbast.veiculo_id || !formAbast.data_abastecimento) { showToast('Veículo e data são obrigatórios', 'error'); return; }
+        if (!formAbast.cupom_fiscal?.trim()) { showToast('Informe o N° do cupom fiscal', 'error'); return; }
         const precoDiesel = getPrecoCarreteiro(formAbast.posto_id, 'diesel');
         const precoArla   = getPrecoCarreteiro(formAbast.posto_id, 'arla');
         const valorDiesel = formAbast.valor_diesel
@@ -525,7 +526,7 @@ export default function CarreteiroDashboard() {
 
                             {/* Ações rápidas */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-                                <button onClick={() => { setEditandoAbastId(null); setFormAbast({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', observacoes: '' }); setModalAbast(true); }}
+                                <button onClick={() => { setEditandoAbastId(null); setFormAbast({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '' }); setModalAbast(true); }}
                                     className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all"
                                     style={{ borderColor: 'var(--color-border)' }}>
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#D1FAE5' }}>
@@ -845,6 +846,17 @@ export default function CarreteiroDashboard() {
                             </Field>
                             <Field label="Data" required><input type="date" value={formAbast.data_abastecimento} onChange={e => setFormAbast(f => ({ ...f, data_abastecimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                             <Field label="Horário"><input type="time" value={formAbast.horario} onChange={e => setFormAbast(f => ({ ...f, horario: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                            <Field label="N° do Cupom Fiscal" required>
+                                <input
+                                    type="text"
+                                    value={formAbast.cupom_fiscal}
+                                    onChange={e => setFormAbast(f => ({ ...f, cupom_fiscal: e.target.value }))}
+                                    className={inputCls}
+                                    style={inputStyle}
+                                    placeholder="Ex: 000123456"
+                                    maxLength={50}
+                                />
+                            </Field>
                             <Field label="Posto">
                                 <select value={formAbast.posto_id} onChange={e => handlePostoChangeCarreteiro(e.target.value)} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione o posto...</option>
