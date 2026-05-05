@@ -677,7 +677,10 @@ export default function CarreteiroDashboard() {
                                                                 {r.data_descarga && <span>Descarga: <strong>{new Date(r.data_descarga + 'T00:00:00').toLocaleDateString('pt-BR')}</strong></span>}
                                                             </div>
                                                             {r.observacoes && <p className="text-xs mt-2 text-gray-500">{r.observacoes}</p>}
-                                                            <div className="flex justify-end mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                                            <div className="flex justify-end gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                                                <button onClick={() => handleDeleteRegistro(r.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
+                                                                    <Icon name="Trash2" size={13} />Excluir
+                                                                </button>
                                                                 <button onClick={() => handleEditRegistro(r)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
                                                                     <Icon name="Pencil" size={13} />Editar
                                                                 </button>
