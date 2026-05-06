@@ -298,6 +298,8 @@ export async function fetchRomaneiosPorMotorista(motoristaId) {
         .select(`
             id, numero, motorista, motorista_id, placa, destino, status,
             aprovado, aprovado_em, peso_total, saida, created_at,
+            valor_frete, valor_frete_calculado,
+            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido),
             romaneio_itens(id, quantidade, peso_total, material_id,
                 materials(id, nome, unidade, peso, categoria_frete))
         `)
