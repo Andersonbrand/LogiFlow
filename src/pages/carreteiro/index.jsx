@@ -157,7 +157,7 @@ export default function CarreteiroDashboard() {
 
             // Romaneios do sistema principal atribuídos a este motorista
             try {
-                const roms = await fetchRomaneiosPorMotorista(user.id);
+                const roms = await fetchRomaneiosPorMotorista(user.id, profile?.name);
                 setRomaneiosPrincipais(roms || []);
             } catch { setRomaneiosPrincipais([]); }
 

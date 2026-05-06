@@ -144,7 +144,7 @@ function TabViagens({ isAdmin }) {
             try {
                 const roms = await fetchRomaneiosPrincipais();
                 setRomaneiosPrincipais(roms || []);
-            } catch { setRomaneiosPrincipais([]); }
+            } catch (e) { console.error('Erro ao buscar romaneios principais:', e); setRomaneiosPrincipais([]); }
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtroMes, isAdmin]); // eslint-disable-line

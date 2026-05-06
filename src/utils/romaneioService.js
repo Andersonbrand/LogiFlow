@@ -292,7 +292,11 @@ export async function reprovarRomaneio(id, adminId, motivo = '') {
     return data;
 }
 
-export async function fetchRomaneiosPorMotorista(motoristaId) {
+export async function fetchRomaneiosPorMotorista(motoristaId, nomeMotorista) {
+    // Busca por UUID (motorista_id) OU por nome em texto (motorista) — cobre ambos os casos
+    let filtro = 'motorista_id.eq.' + motoristaId;
+    if (nomeMotorista) filtro += ',motorista.ilike.' + JSON.stringify(nomeMotorista);
+
     const { data, error } = await supabase
         .from('romaneios')
         .select(`
@@ -303,7 +307,7 @@ export async function fetchRomaneiosPorMotorista(motoristaId) {
             romaneio_itens(id, quantidade, peso_total, material_id,
                 materials(id, nome, unidade, peso, categoria_frete))
         `)
-        .eq('motorista_id', motoristaId)
+        .or(filtro)
         .order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
