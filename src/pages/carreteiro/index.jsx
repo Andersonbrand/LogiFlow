@@ -589,7 +589,11 @@ export default function CarreteiroDashboard() {
                                     {tab === 'viagens' && (
                                         <div className="flex flex-col gap-4">
                                             {/* ── Romaneios do Sistema Principal ─── */}
-                                            {romaneiosPrincipais.length > 0 && (
+                                            {/* DEBUG TEMPORÁRIO */}
+                                        <div style={{background:'#fef9c3',padding:'8px 12px',borderRadius:'8px',marginBottom:'8px',fontSize:'12px',color:'#713f12'}}>
+                                            🔍 romaneiosPrincipais={romaneiosPrincipais.length} | user={user?.id?.slice(0,8)} | profile={profile?.name}
+                                        </div>
+                                        {romaneiosPrincipais.length > 0 && (
                                                 <div>
                                                     <div className="flex items-center gap-2 mb-2">
                                                         <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>

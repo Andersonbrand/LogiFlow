@@ -255,6 +255,10 @@ function TabViagens({ isAdmin }) {
                     {/* ── Sub-aba: Romaneios do Sistema Principal ── */}
                     {abaViagens === 'romaneios' && (
                         <div>
+                            {/* DEBUG TEMPORÁRIO */}
+                            <div style={{background:'#fef9c3',padding:'8px 12px',borderRadius:'8px',marginBottom:'8px',fontSize:'12px',color:'#713f12'}}>
+                                🔍 Debug: romaneiosPrincipais.length = {romaneiosPrincipais.length} | loading = {String(loading)}
+                            </div>
                             <div className="flex items-center gap-2 mb-3 p-3 rounded-xl" style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
                                 <Icon name="Info" size={14} color="#1D4ED8" />
                                 <p className="text-xs" style={{ color: '#1D4ED8' }}>

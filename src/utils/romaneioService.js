@@ -40,7 +40,8 @@ export async function fetchRomaneios() {
         `)
         .order('created_at', { ascending: false })
         .limit(200);
-    if (error) throw error;
+    if (error) { console.error('[romaneioService] fetchRomaneios error:', error); throw error; }
+    console.log('[romaneioService] fetchRomaneios retornou:', (data||[]).length, 'registros');
     return (data || []).map(addMargem);
 }
 
