@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import TabRomaneios from './TabRomaneios';
 import TabVolume from './TabVolume';
+import { fetchRomaneios as fetchRomaneiosPrincipais } from 'utils/romaneioService';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -118,8 +119,9 @@ function TabViagens({ isAdmin }) {
     const { confirm, ConfirmDialog } = useConfirm();
     const [carregamentos, setCarregamentos] = useState([]);
     const [registrosMotoristas, setRegistrosMotoristas] = useState([]);
+    const [romaneiosPrincipais, setRomaneiosPrincipais] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [abaViagens, setAbaViagens] = useState('carregamentos'); // 'carregamentos' | 'motoristas'
+    const [abaViagens, setAbaViagens] = useState('romaneios'); // 'romaneios' | 'carregamentos' | 'motoristas'
     const [filtroMes, setFiltroMes] = useState('');
 
     const load = useCallback(async () => {
@@ -138,6 +140,11 @@ function TabViagens({ isAdmin }) {
             ]);
             setCarregamentos(c);
             setRegistrosMotoristas(regs);
+            // Busca romaneios do sistema principal
+            try {
+                const roms = await fetchRomaneiosPrincipais();
+                setRomaneiosPrincipais(roms || []);
+            } catch { setRomaneiosPrincipais([]); }
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtroMes, isAdmin]); // eslint-disable-line
@@ -189,7 +196,8 @@ function TabViagens({ isAdmin }) {
                     {/* Sub-abas */}
                     <div className="flex gap-1 p-1 rounded-xl" style={{ backgroundColor: 'var(--color-muted)' }}>
                         {[
-                            { id: 'carregamentos', label: 'Carregamentos', count: carregamentos.length },
+                            { id: 'romaneios',    label: 'Romaneios',               count: romaneiosPrincipais.length },
+                            { id: 'carregamentos', label: 'Carregamentos',           count: carregamentos.length },
                             { id: 'motoristas',    label: 'Lançados pelos Motoristas', count: registrosMotoristas.length },
                         ].map(s => (
                             <button key={s.id} onClick={() => setAbaViagens(s.id)}
@@ -232,6 +240,78 @@ function TabViagens({ isAdmin }) {
                 </div>
             ) : (
                 <>
+                    {/* ── Sub-aba: Romaneios do Sistema Principal ── */}
+                    {abaViagens === 'romaneios' && (
+                        <div>
+                            <div className="flex items-center gap-2 mb-3 p-3 rounded-xl" style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+                                <Icon name="Info" size={14} color="#1D4ED8" />
+                                <p className="text-xs" style={{ color: '#1D4ED8' }}>
+                                    Romaneios lançados pelo admin no sistema principal. Atualizados em tempo real.
+                                </p>
+                            </div>
+                            <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                                <table className="w-full text-sm min-w-[800px]">
+                                    <thead className="text-xs border-b" style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', color: 'var(--color-muted-foreground)' }}>
+                                        <tr>{['Romaneio','Nota Fiscal','Motorista','Placa','Destino','Valor do Frete','Status','Data Saída'].map(h => (
+                                            <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                                        ))}</tr>
+                                    </thead>
+                                    <tbody>
+                                        {romaneiosPrincipais.length === 0 ? (
+                                            <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <Icon name="FileText" size={28} color="var(--color-muted-foreground)" />
+                                                    <span className="text-sm">Nenhum romaneio lançado ainda.</span>
+                                                </div>
+                                            </td></tr>
+                                        ) : romaneiosPrincipais.map((r, i) => {
+                                            const nf = r.romaneio_pedidos?.[0]?.numero_pedido || r.romaneio_pedidos?.[0]?.numero || '—';
+                                            const frete = Number(r.valor_frete_calculado || r.valor_frete) || 0;
+                                            const STATUS_CORES = {
+                                                'Aprovado':  { bg: '#D1FAE5', text: '#065F46' },
+                                                'Pendente':  { bg: '#FEF9C3', text: '#B45309' },
+                                                'Aguardando': { bg: '#FEF9C3', text: '#B45309' },
+                                                'Cancelado': { bg: '#FEE2E2', text: '#B91C1C' },
+                                                'Em trânsito': { bg: '#DBEAFE', text: '#1D4ED8' },
+                                                'Finalizado': { bg: '#F0FDF4', text: '#15803D' },
+                                            };
+                                            const sc = STATUS_CORES[r.status] || { bg: '#F3F4F6', text: '#6B7280' };
+                                            return (
+                                                <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors"
+                                                    style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                                    <td className="px-3 py-3 font-data font-semibold whitespace-nowrap" style={{ color: '#1D4ED8' }}>
+                                                        {r.numero || r.id?.slice(0, 8)}
+                                                    </td>
+                                                    <td className="px-3 py-3 font-data whitespace-nowrap text-blue-700">{nf}</td>
+                                                    <td className="px-3 py-3 font-medium whitespace-nowrap">{r.motorista || '—'}</td>
+                                                    <td className="px-3 py-3 font-data whitespace-nowrap">{r.placa || '—'}</td>
+                                                    <td className="px-3 py-3 max-w-[140px] truncate font-medium">{r.destino || '—'}</td>
+                                                    <td className="px-3 py-3 font-data text-right text-purple-600 font-semibold whitespace-nowrap">
+                                                        {frete > 0 ? BRL(frete) : '—'}
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap">
+                                                        <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>
+                                                            {r.status || 'Pendente'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap">{r.saida ? FMT_DATE(r.saida) : '—'}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                                {romaneiosPrincipais.length > 0 && (
+                                    <div className="px-4 py-3 border-t flex items-center justify-between text-xs" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFF', color: 'var(--color-muted-foreground)' }}>
+                                        <span>{romaneiosPrincipais.length} romaneio(s)</span>
+                                        <span className="font-semibold font-data text-purple-600">
+                                            Total Frete: {BRL(romaneiosPrincipais.reduce((s, r) => s + Number(r.valor_frete_calculado || r.valor_frete || 0), 0))}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* ── Sub-aba: Resumo de Carregamentos ── */}
                     {abaViagens === 'carregamentos' && (
                         <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
