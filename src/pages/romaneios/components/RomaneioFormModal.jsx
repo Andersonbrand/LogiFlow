@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 import Autocomplete from 'components/ui/Autocomplete';
-import { fetchMotoristas, fetchDestinos } from 'utils/romaneioService';
+import { fetchMotoristas, fetchMotoristasComId, fetchDestinos } from 'utils/romaneioService';
 import { fetchPostos } from 'utils/carretasService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { fetchMaterials } from 'utils/materialService';
@@ -19,7 +19,7 @@ export const EMPRESAS = [
 ];
 
 const EMPTY_FORM = {
-    motorista:'', placa:'', destino:'', status:'Aguardando', saida:'', observacoes:'',
+    motorista:'', motorista_id:'', placa:'', destino:'', status:'Aguardando', saida:'', observacoes:'',
     vehicle_id:'', distancia_km:'', custo_combustivel:'', custo_pedagio:'', custo_motorista:'',
 };
 const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', empresa:'Comercial Araguaia', itens:[] };
@@ -31,6 +31,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     const [errors, setErrors]       = useState({});
     const [loading, setLoading]     = useState(false);
     const [motoristas, setMotoristas] = useState([]);
+    const [motoristasComId, setMotoristasComId] = useState([]);
     const [destinos, setDestinos]   = useState([]);
 
     // Estado interno de vehicles/materials — usa props quando disponíveis,
@@ -77,6 +78,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
 
     useEffect(() => {
         fetchMotoristas().then(setMotoristas);
+        fetchMotoristasComId().then(setMotoristasComId);
         fetchDestinos().then(setDestinos);
         fetchPostos().then(p => setPostos(p)).catch(() => {});
     }, []);
@@ -86,6 +88,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         if (editingRomaneio) {
             setForm({
                 motorista:         editingRomaneio.motorista         || '',
+                motorista_id:      editingRomaneio.motorista_id      || '',
                 placa:             editingRomaneio.placa             || '',
                 destino:           editingRomaneio.destino           || '',
                 status:            editingRomaneio.status            || 'Aguardando',
@@ -495,7 +498,17 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                         <div className="flex flex-col gap-4">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <Autocomplete label="Motorista" required name="motorista"
-                                    value={form.motorista} onChange={v => setF('motorista', v)}
+                                    value={form.motorista} onChange={v => {
+                                        // Ao selecionar nome, tenta vincular o UUID do motorista
+                                        const match = motoristasComId.find(m =>
+                                            m.name?.toLowerCase().trim() === v?.toLowerCase().trim()
+                                        );
+                                        setForm(prev => ({
+                                            ...prev,
+                                            motorista: v,
+                                            motorista_id: match?.id || prev.motorista_id || '',
+                                        }));
+                                    }}
                                     suggestions={motoristas} placeholder="Nome do motorista" error={errors.motorista} />
                                 <div className="flex flex-col gap-2">
                                     <Autocomplete label="Destino Final" required name="destino"

@@ -152,10 +152,10 @@ function TabViagens({ isAdmin }) {
                         .from('romaneios')
                         .select('id, numero, motorista, motorista_id, placa, destino, status, saida, valor_frete, valor_frete_calculado, romaneio_pedidos(id, numero_pedido)')
                         .order('created_at', { ascending: false })
-                        .limit(200);
+                        .limit(300);
                     if (errDir) { console.error('[Carretas] Query direta erro:', errDir); setRomaneiosPrincipais([]); }
-                    else setRomaneiosPrincipais(romsDir || []);
-                } catch (e2) { console.error('[Carretas] Fallback também falhou:', e2); setRomaneiosPrincipais([]); }
+                    else { console.log('[Carretas] Romaneios fallback OK:', romsDir?.length); setRomaneiosPrincipais(romsDir || []); }
+                } catch (e2) { console.error('[Carretas] Fallback falhou:', e2); setRomaneiosPrincipais([]); }
             }
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }

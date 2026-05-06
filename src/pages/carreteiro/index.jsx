@@ -164,15 +164,21 @@ export default function CarreteiroDashboard() {
                 console.warn('[Carreteiro] fetchRomaneiosPorMotorista falhou, tentando query direta:', eRom?.message);
                 // Fallback: query direta ao supabase
                 try {
-                    const nomeFiltro = profile?.name ? `,motorista.ilike."${profile.name}"` : '';
-                    const { data: romsDir, error: errDir } = await supabase
-                        .from('romaneios')
-                        .select('id, numero, motorista, motorista_id, placa, destino, status, saida, valor_frete, valor_frete_calculado, romaneio_pedidos(id, numero_pedido)')
-                        .or(`motorista_id.eq.${user.id}${nomeFiltro}`)
-                        .order('created_at', { ascending: false });
-                    if (errDir) { console.error('[Carreteiro] Query direta erro:', errDir); setRomaneiosPrincipais([]); }
-                    else setRomaneiosPrincipais(romsDir || []);
-                } catch (e2) { console.error('[Carreteiro] Fallback também falhou:', e2); setRomaneiosPrincipais([]); }
+                    // Monta filtro: por nome E por UUID
+                    const partes = [];
+                    if (user?.id) partes.push('motorista_id.eq.' + user.id);
+                    if (profile?.name) partes.push('motorista.ilike."' + profile.name + '"');
+                    if (partes.length === 0) { setRomaneiosPrincipais([]); }
+                    else {
+                        const { data: romsDir, error: errDir } = await supabase
+                            .from('romaneios')
+                            .select('id, numero, motorista, motorista_id, placa, destino, status, saida, valor_frete, valor_frete_calculado, romaneio_pedidos(id, numero_pedido)')
+                            .or(partes.join(','))
+                            .order('created_at', { ascending: false });
+                        if (errDir) { console.error('[Carreteiro] Query direta erro:', errDir); setRomaneiosPrincipais([]); }
+                        else { console.log('[Carreteiro] Romaneios OK:', romsDir?.length); setRomaneiosPrincipais(romsDir || []); }
+                    }
+                } catch (e2) { console.error('[Carreteiro] Fallback falhou:', e2); setRomaneiosPrincipais([]); }
             }
 
             // Carrega registros de viagem do motorista

@@ -71,8 +71,19 @@ function addMargem(r) {
 
 // ── Autocomplete ──────────────────────────────────────────────────────────────
 export async function fetchMotoristas() {
+    // Retorna lista de nomes únicos dos romaneios existentes (autocomplete)
     const { data } = await supabase.from('romaneios').select('motorista').not('motorista','is',null);
     return [...new Set((data||[]).map(r=>r.motorista).filter(Boolean))].sort();
+}
+
+// Retorna motoristas com UUID — usado para vincular motorista_id ao criar romaneio
+export async function fetchMotoristasComId() {
+    const { data } = await supabase
+        .from('user_profiles')
+        .select('id, name')
+        .in('role', ['motorista', 'carreteiro'])
+        .order('name');
+    return data || [];
 }
 export async function fetchDestinos() {
     const { data } = await supabase.from('romaneios').select('destino').not('destino','is',null);
@@ -98,6 +109,7 @@ function localDatetimeToUTC(str) {
 function buildPayload(r) {
     return {
         motorista:              r.motorista              || null,
+        motorista_id:           r.motorista_id           || null,
         placa:                  r.placa                  || null,
         destino:                r.destino                || null,
         status:                 r.status                 || 'Aguardando',
@@ -293,9 +305,13 @@ export async function reprovarRomaneio(id, adminId, motivo = '') {
 }
 
 export async function fetchRomaneiosPorMotorista(motoristaId, nomeMotorista) {
-    // Busca por UUID (motorista_id) OU por nome em texto (motorista) — cobre ambos os casos
-    let filtro = 'motorista_id.eq.' + motoristaId;
-    if (nomeMotorista) filtro += ',motorista.ilike.' + JSON.stringify(nomeMotorista);
+    // Monta filtro OR: por nome (registros antigos) e por UUID (registros novos)
+    const partes = [];
+    if (motoristaId) partes.push(`motorista_id.eq.${motoristaId}`);
+    if (nomeMotorista) partes.push(`motorista.ilike."${nomeMotorista}"`);
+
+    // Se não tem nenhum critério, retorna vazio
+    if (partes.length === 0) return [];
 
     const { data, error } = await supabase
         .from('romaneios')
@@ -307,8 +323,13 @@ export async function fetchRomaneiosPorMotorista(motoristaId, nomeMotorista) {
             romaneio_itens(id, quantidade, peso_total, material_id,
                 materials(id, nome, unidade, peso, categoria_frete))
         `)
-        .or(filtro)
+        .or(partes.join(','))
         .order('created_at', { ascending: false });
-    if (error) throw error;
+
+    if (error) {
+        console.error('[romaneioService] fetchRomaneiosPorMotorista erro:', error);
+        throw error;
+    }
     return data || [];
 }
+
