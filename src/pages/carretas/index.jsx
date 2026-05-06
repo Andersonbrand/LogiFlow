@@ -10,6 +10,7 @@ import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import { useConfirm } from 'components/ui/ConfirmDialog';
+import { supabase } from 'utils/supabaseClient';
 import { fetchCorredores, CORREDORES_PADRAO } from 'utils/corredoresService';
 import {
     fetchViagens, createViagem, updateViagem, deleteViagem,
@@ -144,7 +145,18 @@ function TabViagens({ isAdmin }) {
             try {
                 const roms = await fetchRomaneiosPrincipais();
                 setRomaneiosPrincipais(roms || []);
-            } catch (e) { console.error('Erro ao buscar romaneios principais:', e); setRomaneiosPrincipais([]); }
+            } catch (eRom) {
+                console.warn('[Carretas] fetchRomaneiosPrincipais falhou, tentando query direta:', eRom?.message);
+                try {
+                    const { data: romsDir, error: errDir } = await supabase
+                        .from('romaneios')
+                        .select('id, numero, motorista, motorista_id, placa, destino, status, saida, valor_frete, valor_frete_calculado, romaneio_pedidos(id, numero_pedido)')
+                        .order('created_at', { ascending: false })
+                        .limit(200);
+                    if (errDir) { console.error('[Carretas] Query direta erro:', errDir); setRomaneiosPrincipais([]); }
+                    else setRomaneiosPrincipais(romsDir || []);
+                } catch (e2) { console.error('[Carretas] Fallback também falhou:', e2); setRomaneiosPrincipais([]); }
+            }
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtroMes, isAdmin]); // eslint-disable-line

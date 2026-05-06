@@ -19,7 +19,7 @@ import {
     fetchCarregamentos, fetchBonificacoesExtras,
 } from 'utils/carretasService';
 import { useConfirm } from 'components/ui/ConfirmDialog';
-import { subscribeTabela } from 'utils/supabaseClient';
+import { supabase, subscribeTabela } from 'utils/supabaseClient';
 import { fetchRomaneiosPorMotorista } from 'utils/romaneioService';
 import * as XLSX from 'xlsx';
 
@@ -157,9 +157,23 @@ export default function CarreteiroDashboard() {
 
             // Romaneios do sistema principal atribuídos a este motorista
             try {
+                // Tenta pelo serviço primeiro
                 const roms = await fetchRomaneiosPorMotorista(user.id, profile?.name);
                 setRomaneiosPrincipais(roms || []);
-            } catch { setRomaneiosPrincipais([]); }
+            } catch (eRom) {
+                console.warn('[Carreteiro] fetchRomaneiosPorMotorista falhou, tentando query direta:', eRom?.message);
+                // Fallback: query direta ao supabase
+                try {
+                    const nomeFiltro = profile?.name ? `,motorista.ilike."${profile.name}"` : '';
+                    const { data: romsDir, error: errDir } = await supabase
+                        .from('romaneios')
+                        .select('id, numero, motorista, motorista_id, placa, destino, status, saida, valor_frete, valor_frete_calculado, romaneio_pedidos(id, numero_pedido)')
+                        .or(`motorista_id.eq.${user.id}${nomeFiltro}`)
+                        .order('created_at', { ascending: false });
+                    if (errDir) { console.error('[Carreteiro] Query direta erro:', errDir); setRomaneiosPrincipais([]); }
+                    else setRomaneiosPrincipais(romsDir || []);
+                } catch (e2) { console.error('[Carreteiro] Fallback também falhou:', e2); setRomaneiosPrincipais([]); }
+            }
 
             // Carrega registros de viagem do motorista
             try {
@@ -173,7 +187,7 @@ export default function CarreteiroDashboard() {
             } catch { setNotificacoes([]); }
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [user?.id, period]); // eslint-disable-line
+    }, [user?.id, period, profile?.name]); // eslint-disable-line
 
     useEffect(() => {
         load();
