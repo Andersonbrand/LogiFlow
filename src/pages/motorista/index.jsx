@@ -79,6 +79,8 @@ export default function MotoristaDashboard() {
     });
     const [formAbast, setFormAbast] = useState(emptyAbast());
     const [formCheck, setFormCheck] = useState(emptyCheck());
+    const [savingAbast, setSavingAbast] = useState(false);
+    const [savingCheck, setSavingCheck] = useState(false);
 
     // ── Load ─────────────────────────────────────────────────────────────────
     const load = useCallback(async () => {
@@ -177,6 +179,7 @@ export default function MotoristaDashboard() {
         if (!formAbast.cupom_fiscal?.trim()) {
             showToast('Informe o N° do cupom fiscal', 'error'); return;
         }
+        setSavingAbast(true);
         try {
             const payload = { ...formAbast, motorista_id: user.id };
             if (!payload.posto_id) delete payload.posto_id;
@@ -186,6 +189,7 @@ export default function MotoristaDashboard() {
             showToast('Abastecimento registrado!', 'success');
             setModalAbast(false); setFormAbast(emptyAbast()); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingAbast(false); }
     };
 
     const handleFoto = (e) => {
@@ -203,11 +207,13 @@ export default function MotoristaDashboard() {
     const handleCheck = async () => {
         if (!formCheck.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
+        setSavingCheck(true);
         try {
             await createChecklist({ ...formCheck, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
             showToast('Checklist enviado!', 'success');
             setModalCheck(false); setFotoPreview(null); setFormCheck(emptyCheck()); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingCheck(false); }
     };
 
     const exportar = () => {
@@ -685,8 +691,9 @@ export default function MotoristaDashboard() {
                         </div>
                         <div className="flex gap-3 p-5 border-t flex-shrink-0 justify-end" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => setModalAbast(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <button onClick={handleAbast} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: 'var(--color-primary)' }}>
-                                <Icon name="Check" size={15} color="white" /> Salvar
+                            <button onClick={handleAbast} disabled={savingAbast} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed" style={{ backgroundColor: 'var(--color-primary)' }}>
+                                {savingAbast ? <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Icon name="Check" size={15} color="white" />}
+                                {savingAbast ? 'Salvando...' : 'Salvar'}
                             </button>
                         </div>
                     </div>
@@ -778,8 +785,9 @@ export default function MotoristaDashboard() {
                         </div>
                         <div className="flex gap-3 p-5 border-t flex-shrink-0 justify-end" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => setModalCheck(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <button onClick={handleCheck} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: 'var(--color-primary)' }}>
-                                <Icon name="Send" size={15} color="white" /> Enviar
+                            <button onClick={handleCheck} disabled={savingCheck} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed" style={{ backgroundColor: 'var(--color-primary)' }}>
+                                {savingCheck ? <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Icon name="Send" size={15} color="white" />}
+                                {savingCheck ? 'Enviando...' : 'Enviar'}
                             </button>
                         </div>
                     </div>

@@ -796,9 +796,6 @@ function MotoristasManager({ showToast }) {
                                     {cnhFile.name}
                                 </p>
                             )}
-                            <p className="text-xs text-slate-400 mt-1">
-                                Requer bucket "cnh-documents" criado no Supabase Storage.
-                            </p>
                         </div>
                     </div>
 

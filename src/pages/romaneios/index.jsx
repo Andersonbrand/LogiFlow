@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -38,12 +38,20 @@ export default function Romaneios() {
     const { toast, showToast } = useToast();
     const [importModal, setImportModal] = useState(false);
     const { confirm, ConfirmDialog } = useConfirm();
+    // Ref para rastrear IDs cujo status está sendo atualizado
+    // Evita que o realtime sobrescreva o status durante uma atualização em andamento
+    const updatingIdsRef = useRef(new Set());
 
     // Carrega APENAS romaneios (usado pelo Realtime — não recarrega veículos/materiais desnecessariamente)
     const loadRomaneios = useCallback(async () => {
         try {
             const rom = await fetchRomaneios();
-            setRomaneios(rom);
+            // Preserva o status dos romaneios que estão sendo atualizados no momento
+            setRomaneios(prev => rom.map(r =>
+                updatingIdsRef.current.has(r.id)
+                    ? { ...r, status: prev.find(p => p.id === r.id)?.status ?? r.status }
+                    : r
+            ));
         } catch (err) {
             console.warn('Erro ao recarregar romaneios:', err.message);
         }
@@ -100,12 +108,21 @@ export default function Romaneios() {
     };
 
     const handleStatusChange = async (id, status) => {
+        // Marca o ID como "em atualização" para evitar que o realtime sobrescreva o status
+        updatingIdsRef.current.add(id);
+        // Atualiza otimisticamente na UI imediatamente
+        setRomaneios(prev => prev.map(r => r.id === id ? { ...r, status } : r));
         try {
-            const updated = await updateRomaneioStatus(id, status);
-            setRomaneios(prev => prev.map(r => r.id === id ? { ...r, status: updated.status } : r));
+            await updateRomaneioStatus(id, status);
             showToast(`Status atualizado para "${status}"`);
         } catch (err) {
+            // Reverte em caso de erro
             showToast('Erro ao atualizar status: ' + err.message, 'error');
+            const rom = await fetchRomaneios().catch(() => null);
+            if (rom) setRomaneios(rom);
+        } finally {
+            // Libera o lock após 2 segundos (tempo suficiente para o realtime não sobrescrever)
+            setTimeout(() => updatingIdsRef.current.delete(id), 2000);
         }
     };
 

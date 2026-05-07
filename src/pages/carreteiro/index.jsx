@@ -113,6 +113,9 @@ export default function CarreteiroDashboard() {
     const [formCheck, setFormCheck]     = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
     const [fotoPreview, setFotoPreview] = useState(null);
     const fotoRef = useRef(null);
+    const [savingAbast, setSavingAbast]   = useState(false);
+    const [savingCheck, setSavingCheck]   = useState(false);
+    const [savingRegistro, setSavingRegistro] = useState(false);
 
     const handleFotoCheck = (e) => {
         const file = e.target.files?.[0];
@@ -291,6 +294,7 @@ export default function CarreteiroDashboard() {
             valor_arla:   valorArla.toFixed(2),
         };
         if (!payload.posto_id) delete payload.posto_id;
+        setSavingAbast(true);
         try {
             if (editandoAbastId) {
                 await updateAbastecimento(editandoAbastId, payload);
@@ -303,6 +307,7 @@ export default function CarreteiroDashboard() {
             setEditandoAbastId(null);
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingAbast(false); }
     };
 
     const handleEditAbast = (a) => {
@@ -325,6 +330,7 @@ export default function CarreteiroDashboard() {
     const handleCheck = async () => {
         if (!formCheck.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
+        setSavingCheck(true);
         try {
             if (editandoCheckId) {
                 await updateChecklist(editandoCheckId, { ...formCheck });
@@ -339,6 +345,7 @@ export default function CarreteiroDashboard() {
             setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingCheck(false); }
     };
 
     const handleEditCheck = (c) => {
@@ -1049,7 +1056,7 @@ export default function CarreteiroDashboard() {
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => { setModalAbast(false); setEditandoAbastId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleAbast} size="sm" iconName="Check">{editandoAbastId ? 'Salvar' : 'Registrar'}</Button>
+                            <Button onClick={handleAbast} size="sm" iconName="Check" loading={savingAbast} disabled={savingAbast}>{editandoAbastId ? 'Salvar' : 'Registrar'}</Button>
                         </div>
                     </div>
                 </div>
@@ -1130,7 +1137,7 @@ export default function CarreteiroDashboard() {
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => { setModalCheck(false); setFotoPreview(null); setEditandoCheckId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleCheck} size="sm" iconName={editandoCheckId ? 'Check' : 'Send'}>{editandoCheckId ? 'Salvar' : 'Enviar'}</Button>
+                            <Button onClick={handleCheck} size="sm" iconName={editandoCheckId ? 'Check' : 'Send'} loading={savingCheck} disabled={savingCheck}>{editandoCheckId ? 'Salvar' : 'Enviar'}</Button>
                         </div>
                     </div>
                 </div>
@@ -1184,6 +1191,7 @@ export default function CarreteiroDashboard() {
                             <button onClick={() => { setModalRegistro(false); setEditandoRegistroId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <Button onClick={async () => {
                                 if (!formRegistro.data_carregamento || !formRegistro.destino) { showToast('Data e destino são obrigatórios', 'error'); return; }
+                                setSavingRegistro(true);
                                 try {
                                     if (editandoRegistroId) {
                                         await updateRegistroViagem(editandoRegistroId, { ...formRegistro });
@@ -1195,7 +1203,8 @@ export default function CarreteiroDashboard() {
                                     setEditandoRegistroId(null);
                                     setModalRegistro(false); load();
                                 } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                            }} size="sm" iconName="Check">{editandoRegistroId ? 'Salvar' : 'Registrar'}</Button>
+                                finally { setSavingRegistro(false); }
+                            }} loading={savingRegistro} disabled={savingRegistro} size="sm" iconName="Check">{editandoRegistroId ? 'Salvar' : 'Registrar'}</Button>
                         </div>
                     </div>
                 </div>

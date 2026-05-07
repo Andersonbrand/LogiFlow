@@ -581,6 +581,23 @@ export async function aprovarChecklistComNotificacao(id, adminId, motoristaId) {
     return data;
 }
 
+export async function aprovarChecklistComNotificacaoRetorno(id, adminId, motoristaId, retorno = '') {
+    const { data, error } = await supabase
+        .from('carretas_checklists')
+        .update({ aprovado: true, aprovado_por: adminId, aprovado_em: new Date().toISOString() })
+        .eq('id', id).select().single();
+    if (error) throw error;
+    // Envia notificação ao motorista com retorno opcional do admin
+    if (motoristaId) {
+        const mensagem = retorno
+            ? `Seu checklist semanal foi aprovado! Retorno do administrador: ${retorno}`
+            : 'Seu checklist semanal foi aprovado pelo administrador.';
+        await createNotificacaoCarreteiro(motoristaId, 'checklist_aprovado',
+            '✅ Checklist Aprovado', mensagem);
+    }
+    return data;
+}
+
 export async function reprovarChecklistComNotificacao(id, adminId, motoristaId, motivo) {
     const { data, error } = await supabase
         .from('carretas_checklists')

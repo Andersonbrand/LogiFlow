@@ -23,7 +23,7 @@ import {
     fetchCarreteiros, fetchTodosMotoristas,
     fetchAllRegistrosViagem, deleteRegistroViagem,
         CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
-    aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
+    aprovarChecklistComNotificacao, reprovarChecklistComNotificacao, aprovarChecklistComNotificacaoRetorno,
     fetchOrdensServico, createOrdemServico, updateOrdemServico, deleteOrdemServico,
     fetchMecanicos,
     fetchDespesasExtras, createDespesaExtra, updateDespesaExtra, deleteDespesaExtra,
@@ -954,6 +954,10 @@ function TabChecklist({ isAdmin, profile }) {
     const [modal, setModal] = useState(null);
     const [modalManut, setModalManut] = useState(null);
     const [obsManut, setObsManut] = useState('');
+    const [modalAprovar, setModalAprovar] = useState(null); // checklist aguardando aprovação com retorno
+    const [obsAprovar, setObsAprovar] = useState('');
+    const [savingManut, setSavingManut] = useState(false);
+    const [savingAprovar, setSavingAprovar] = useState(false);
     const [filtro, setFiltro] = useState('pendentes');
     const [form, setForm] = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
     const [fotoPreview, setFotoPreview] = useState(null);
@@ -991,20 +995,30 @@ function TabChecklist({ isAdmin, profile }) {
             showToast('Checklist enviado!', 'success'); setModal(null); setFotoPreview(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
-    const handleAprovar = async (c) => {
+    const handleAprovarClick = (c) => {
+        setModalAprovar(c);
+        setObsAprovar('');
+    };
+    const handleConfirmarAprovacao = async () => {
+        if (!modalAprovar) return;
+        setSavingAprovar(true);
         try {
-            await aprovarChecklistComNotificacao(c.id, profile.id, c.motorista_id);
-            showToast('Aprovado! Motorista notificado.', 'success'); load();
+            await aprovarChecklistComNotificacaoRetorno(modalAprovar.id, profile.id, modalAprovar.motorista_id, obsAprovar.trim());
+            showToast('Aprovado! Motorista notificado.', 'success');
+            setModalAprovar(null); setObsAprovar(''); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingAprovar(false); }
     };
     const handleManutencao = async () => {
         if (!obsManut.trim()) { showToast('Descreva a manutenção', 'error'); return; }
         const checklist = checklists.find(c => c.id === modalManut);
+        setSavingManut(true);
         try {
             await reprovarChecklistComNotificacao(modalManut, profile.id, checklist?.motorista_id, obsManut);
             showToast('Manutenção registrada! Motorista notificado.', 'success');
             setModalManut(null); setObsManut(''); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingManut(false); }
     };
     const handleDeleteChecklist = async (id) => {
         const ok = await confirm({
@@ -1104,7 +1118,7 @@ function TabChecklist({ isAdmin, profile }) {
                                 )}
                                 {isAdmin && !c.aprovado && (
                                     <div className="flex flex-wrap gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
-                                        <button onClick={() => handleAprovar(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"><Icon name="CheckCircle2" size={13} />Aprovar</button>
+                                        <button onClick={() => handleAprovarClick(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"><Icon name="CheckCircle2" size={13} />Aprovar</button>
                                         <button onClick={() => { setModalManut(c.id); setObsManut(''); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-orange-300 text-orange-700 hover:bg-orange-50 transition-colors"><Icon name="Wrench" size={13} />Registrar Manutenção</button>
                                         <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors ml-auto"><Icon name="Trash2" size={13} />Excluir</button>
                                     </div>
@@ -1177,6 +1191,26 @@ function TabChecklist({ isAdmin, profile }) {
             )}
 
             {/* Modal manutenção */}
+            {/* Modal aprovar checklist com retorno */}
+            {modalAprovar && (
+                <ModalOverlay onClose={() => setModalAprovar(null)}>
+                    <ModalHeader title="Aprovar Checklist" icon="CheckCircle2" onClose={() => setModalAprovar(null)} />
+                    <div className="p-5 overflow-y-auto flex-1">
+                        <p className="text-sm text-slate-600 mb-4">
+                            Você está aprovando o checklist de <strong>{modalAprovar.motoristas?.name || 'motorista'}</strong>.
+                            Adicione um retorno/observação para o motorista (opcional).
+                        </p>
+                        <Field label="Retorno / Observação para o motorista">
+                            <textarea value={obsAprovar} onChange={e => setObsAprovar(e.target.value)} className={inputCls} style={inputStyle} rows={4} placeholder="Ex: Tudo certo! Boa viagem. / Atenção aos pneus na próxima verificação..." />
+                        </Field>
+                    </div>
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
+                        <button onClick={() => setModalAprovar(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <Button onClick={handleConfirmarAprovacao} size="sm" iconName="CheckCircle2" loading={savingAprovar} disabled={savingAprovar}>Aprovar</Button>
+                    </div>
+                </ModalOverlay>
+            )}
+
             {modalManut && (
                 <ModalOverlay onClose={() => setModalManut(null)}>
                     <ModalHeader title="Registrar Manutenção" icon="Wrench" onClose={() => setModalManut(null)} />
@@ -1187,7 +1221,7 @@ function TabChecklist({ isAdmin, profile }) {
                     </div>
                     <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                         <button onClick={() => setModalManut(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button onClick={handleManutencao} size="sm" iconName="Wrench">Registrar</Button>
+                        <Button onClick={handleManutencao} size="sm" iconName="Wrench" loading={savingManut} disabled={savingManut}>Registrar</Button>
                     </div>
                 </ModalOverlay>
             )}
