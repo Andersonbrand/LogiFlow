@@ -20,7 +20,6 @@ import {
 } from 'utils/carretasService';
 import { useConfirm } from 'components/ui/ConfirmDialog';
 import { supabase, subscribeTabela } from 'utils/supabaseClient';
-import { fetchRomaneiosPorMotorista } from 'utils/romaneioService';
 import * as XLSX from 'xlsx';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -91,7 +90,6 @@ export default function CarreteiroDashboard() {
     const [period, setPeriod]     = useState(30);
     const [viagens, setViagens]   = useState([]);
     const [carregamentos, setCarregamentos] = useState([]);
-    const [romaneiosPrincipais, setRomaneiosPrincipais] = useState([]);
     const [bonusExtras, setBonusExtras]     = useState([]);
     const [abast, setAbast]       = useState([]);
     const [checklists, setChecklists] = useState([]);
@@ -158,31 +156,7 @@ export default function CarreteiroDashboard() {
                 setBonusExtras(extras || []);
             } catch { setCarregamentos([]); setBonusExtras([]); }
 
-            // Romaneios do sistema principal atribuídos a este motorista
-            try {
-                // Tenta pelo serviço primeiro
-                const roms = await fetchRomaneiosPorMotorista(user.id, profile?.name);
-                setRomaneiosPrincipais(roms || []);
-            } catch (eRom) {
-                console.warn('[Carreteiro] fetchRomaneiosPorMotorista falhou, tentando query direta:', eRom?.message);
-                // Fallback: query direta ao supabase
-                try {
-                    // Monta filtro: por nome E por UUID
-                    const partes = [];
-                    if (user?.id) partes.push('motorista_id.eq.' + user.id);
-                    if (profile?.name) partes.push('motorista.ilike."' + profile.name + '"');
-                    if (partes.length === 0) { setRomaneiosPrincipais([]); }
-                    else {
-                        const { data: romsDir, error: errDir } = await supabase
-                            .from('romaneios')
-                            .select('id, numero, motorista, motorista_id, placa, destino, status, saida, valor_frete, valor_frete_calculado, romaneio_pedidos(id, numero_pedido)')
-                            .or(partes.join(','))
-                            .order('created_at', { ascending: false });
-                        if (errDir) { console.error('[Carreteiro] Query direta erro:', errDir); setRomaneiosPrincipais([]); }
-                        else { console.log('[Carreteiro] Romaneios OK:', romsDir?.length); setRomaneiosPrincipais(romsDir || []); }
-                    }
-                } catch (e2) { console.error('[Carreteiro] Fallback falhou:', e2); setRomaneiosPrincipais([]); }
-            }
+
 
             // Carrega registros de viagem do motorista
             try {
@@ -595,108 +569,21 @@ export default function CarreteiroDashboard() {
                                 <>
                                     {tab === 'viagens' && (
                                         <div className="flex flex-col gap-4">
-                                            {/* ── Romaneios do Sistema Principal ─── */}
-                                            {/* DEBUG TEMPORÁRIO */}
-                                        <div style={{background:'#fef9c3',padding:'8px 12px',borderRadius:'8px',marginBottom:'8px',fontSize:'12px',color:'#713f12'}}>
-                                            🔍 romaneiosPrincipais={romaneiosPrincipais.length} | user={user?.id?.slice(0,8)} | profile={profile?.name}
-                                        </div>
-                                        {romaneiosPrincipais.length > 0 && (
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                                                            <Icon name="FileText" size={14} color="#1D4ED8" />
-                                                        </div>
-                                                        <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                                                            Romaneios Lançados pelo Admin
-                                                        </h3>
-                                                        <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>
-                                                            {romaneiosPrincipais.length}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex flex-col gap-2">
-                                                        {romaneiosPrincipais.map(r => {
-                                                            const nf = r.romaneio_pedidos?.[0]?.numero_pedido || '—';
-                                                            const statusColors = {
-                                                                'Aprovado': { bg: '#D1FAE5', text: '#065F46' },
-                                                                'Pendente': { bg: '#FEF9C3', text: '#B45309' },
-                                                                'Cancelado': { bg: '#FEE2E2', text: '#B91C1C' },
-                                                            };
-                                                            const sc = statusColors[r.status] || { bg: '#F3F4F6', text: '#6B7280' };
-                                                            const frete = Number(r.valor_frete_calculado || r.valor_frete) || 0;
-                                                            return (
-                                                                <div key={r.id} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                                                                    {/* Header do card */}
-                                                                    <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ backgroundColor: '#F8FAFF', borderColor: '#DBEAFE' }}>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <Icon name="FileText" size={14} color="#1D4ED8" />
-                                                                            <span className="text-xs font-semibold font-data" style={{ color: '#1D4ED8' }}>
-                                                                                Romaneio #{r.numero || r.id?.slice(0, 8)}
-                                                                            </span>
-                                                                        </div>
-                                                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: sc.bg, color: sc.text }}>
-                                                                            {r.status || 'Pendente'}
-                                                                        </span>
-                                                                    </div>
-                                                                    {/* Corpo do card — grid 2 colunas */}
-                                                                    <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-3">
-                                                                        <div>
-                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Nota Fiscal</p>
-                                                                            <p className="text-sm font-semibold font-data" style={{ color: 'var(--color-text-primary)' }}>{nf}</p>
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Valor do Frete</p>
-                                                                            <p className="text-sm font-bold font-data text-purple-600">{frete > 0 ? BRL(frete) : '—'}</p>
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Motorista</p>
-                                                                            <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.motorista || '—'}</p>
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Placa</p>
-                                                                            <p className="text-sm font-semibold font-data" style={{ color: 'var(--color-text-primary)' }}>{r.placa || '—'}</p>
-                                                                        </div>
-                                                                        <div className="col-span-2">
-                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Destino</p>
-                                                                            <div className="flex items-center gap-1.5">
-                                                                                <Icon name="MapPin" size={13} color="#1D4ED8" />
-                                                                                <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
-                                                                            </div>
-                                                                        </div>
-                                                                        {r.saida && (
-                                                                            <div className="col-span-2 pt-2 border-t flex items-center gap-1.5" style={{ borderColor: 'var(--color-border)' }}>
-                                                                                <Icon name="Calendar" size={13} color="var(--color-muted-foreground)" />
-                                                                                <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                                    Saída: {FMT_DATE(r.saida)}
-                                                                                </p>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )}
-
                                             {/* ── Carregamentos (sistema de carretas) ─── */}
                                             <div>
-                                                {(carregamentosComBonus.length > 0 || romaneiosPrincipais.length > 0) && (
+                                                {carregamentosComBonus.length > 0 && (
                                                     <div className="flex items-center gap-2 mb-2">
                                                         <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#D1FAE5' }}>
                                                             <Icon name="Package" size={14} color="#059669" />
                                                         </div>
                                                         <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Carregamentos</h3>
-                                                        {carregamentosComBonus.length > 0 && (
-                                                            <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
-                                                                {carregamentosComBonus.length}
-                                                            </span>
-                                                        )}
+                                                        <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                                            {carregamentosComBonus.length}
+                                                        </span>
                                                     </div>
                                                 )}
                                                 {carregamentosComBonus.length === 0
-                                                    ? (romaneiosPrincipais.length === 0
-                                                        ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Package" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</span></div>
-                                                        : null)
+                                                    ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Package" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</span></div>
                                                     : carregamentosComBonus.map(c => (
                                                         <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm mb-2" style={{ borderColor: 'var(--color-border)' }}>
                                                             <div className="flex items-start justify-between mb-2">
