@@ -581,6 +581,11 @@ export async function aprovarChecklistComNotificacao(id, adminId, motoristaId) {
     return data;
 }
 
+// Alias com retorno explícito — compatível com versões mais novas do carretas/index.jsx
+export async function aprovarChecklistComNotificacaoRetorno(id, adminId, motoristaId) {
+    return aprovarChecklistComNotificacao(id, adminId, motoristaId);
+}
+
 export async function reprovarChecklistComNotificacao(id, adminId, motoristaId, motivo) {
     const { data, error } = await supabase
         .from('carretas_checklists')
