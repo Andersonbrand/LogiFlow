@@ -1014,7 +1014,7 @@ export default function CarreteiroDashboard() {
                                         </div>
                                     )}
 
-
+                                    {tab === 'bonificacoes' && (
                                         <div className="flex flex-col gap-4">
                                             {/* Resumo */}
                                             <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
