@@ -17,9 +17,12 @@ import {
     calcularBonusCarreteiro, BONUS_BAIXO, BONUS_ALTO, CIDADES_BONUS_BAIXO,
     CHECKLIST_ITENS,
     fetchCarregamentos, fetchBonificacoesExtras,
+    fetchPontosParada, createPontoParada, updatePontoParada, deletePontoParada,
+    fetchRomaneiosCarreteiro,
 } from 'utils/carretasService';
 import { useConfirm } from 'components/ui/ConfirmDialog';
 import { supabase, subscribeTabela } from 'utils/supabaseClient';
+import { fetchRomaneiosPorMotorista } from 'utils/romaneioService';
 import * as XLSX from 'xlsx';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -90,6 +93,7 @@ export default function CarreteiroDashboard() {
     const [period, setPeriod]     = useState(30);
     const [viagens, setViagens]   = useState([]);
     const [carregamentos, setCarregamentos] = useState([]);
+    const [romaneiosPrincipais, setRomaneiosPrincipais] = useState([]);
     const [bonusExtras, setBonusExtras]     = useState([]);
     const [abast, setAbast]       = useState([]);
     const [checklists, setChecklists] = useState([]);
@@ -100,9 +104,19 @@ export default function CarreteiroDashboard() {
     const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
     const [registros, setRegistros] = useState([]);
     const [notificacoes, setNotificacoes] = useState([]);
+    const [pontosParada, setPontosParada] = useState([]);
+    const [romaneiosCarreteiro, setRomaneiosCarreteiro] = useState([]);
     const [modalRegistro, setModalRegistro] = useState(false);
     const [editandoRegistroId, setEditandoRegistroId] = useState(null);
     const [formRegistro, setFormRegistro] = useState({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' });
+    const [modalPonto, setModalPonto] = useState(false);
+    const [editandoPontoId, setEditandoPontoId] = useState(null);
+    const [formPonto, setFormPonto] = useState({
+        local: '', tipo_local: 'Outro', veiculo_id: '',
+        data_saida: new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '',
+        data_chegada: '', horario_chegada: '', km_chegada: '',
+        cupom_fiscal: '', observacoes: '',
+    });
     const [modalAbast, setModalAbast]   = useState(false);
     const [modalCheck, setModalCheck]   = useState(false);
     const [editandoAbastId, setEditandoAbastId] = useState(null);
@@ -111,9 +125,6 @@ export default function CarreteiroDashboard() {
     const [formCheck, setFormCheck]     = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
     const [fotoPreview, setFotoPreview] = useState(null);
     const fotoRef = useRef(null);
-    const [savingAbast, setSavingAbast]   = useState(false);
-    const [savingCheck, setSavingCheck]   = useState(false);
-    const [savingRegistro, setSavingRegistro] = useState(false);
 
     const handleFotoCheck = (e) => {
         const file = e.target.files?.[0];
@@ -156,7 +167,31 @@ export default function CarreteiroDashboard() {
                 setBonusExtras(extras || []);
             } catch { setCarregamentos([]); setBonusExtras([]); }
 
-
+            // Romaneios do sistema principal atribuídos a este motorista
+            try {
+                // Tenta pelo serviço primeiro
+                const roms = await fetchRomaneiosPorMotorista(user.id, profile?.name);
+                setRomaneiosPrincipais(roms || []);
+            } catch (eRom) {
+                console.warn('[Carreteiro] fetchRomaneiosPorMotorista falhou, tentando query direta:', eRom?.message);
+                // Fallback: query direta ao supabase
+                try {
+                    // Monta filtro: por nome E por UUID
+                    const partes = [];
+                    if (user?.id) partes.push('motorista_id.eq.' + user.id);
+                    if (profile?.name) partes.push('motorista.ilike."' + profile.name + '"');
+                    if (partes.length === 0) { setRomaneiosPrincipais([]); }
+                    else {
+                        const { data: romsDir, error: errDir } = await supabase
+                            .from('romaneios')
+                            .select('id, numero, motorista, motorista_id, placa, destino, status, saida, valor_frete, valor_frete_calculado, romaneio_pedidos(id, numero_pedido)')
+                            .or(partes.join(','))
+                            .order('created_at', { ascending: false });
+                        if (errDir) { console.error('[Carreteiro] Query direta erro:', errDir); setRomaneiosPrincipais([]); }
+                        else { console.log('[Carreteiro] Romaneios OK:', romsDir?.length); setRomaneiosPrincipais(romsDir || []); }
+                    }
+                } catch (e2) { console.error('[Carreteiro] Fallback falhou:', e2); setRomaneiosPrincipais([]); }
+            }
 
             // Carrega registros de viagem do motorista
             try {
@@ -168,6 +203,16 @@ export default function CarreteiroDashboard() {
                 const notifs = await fetchNotificacoesCarreteiro(user.id);
                 setNotificacoes(notifs || []);
             } catch { setNotificacoes([]); }
+            // Carrega pontos de parada
+            try {
+                const pontos = await fetchPontosParada(user.id);
+                setPontosParada(pontos || []);
+            } catch { setPontosParada([]); }
+            // Carrega romaneios do admin vinculados a este motorista
+            try {
+                const roms = await fetchRomaneiosCarreteiro(user.id);
+                setRomaneiosCarreteiro(roms || []);
+            } catch { setRomaneiosCarreteiro([]); }
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [user?.id, period, profile?.name]); // eslint-disable-line
@@ -179,7 +224,9 @@ export default function CarreteiroDashboard() {
         const unsubChk       = subscribeTabela('carretas_checklists', load);
         const unsubCarreg    = subscribeTabela('carretas_carregamentos', load);
         const unsubRomaneios = subscribeTabela('romaneios', load);
-        return () => { unsubViagens(); unsubChk(); unsubCarreg(); unsubRomaneios(); };
+        const unsubPontos    = subscribeTabela('carretas_pontos_parada', load);
+        const unsubRomCar    = subscribeTabela('carretas_romaneios', load);
+        return () => { unsubViagens(); unsubChk(); unsubCarreg(); unsubRomaneios(); unsubPontos(); unsubRomCar(); };
     }, [load]);
 
     // Bônus por carregamentos (nova fonte)
@@ -268,7 +315,6 @@ export default function CarreteiroDashboard() {
             valor_arla:   valorArla.toFixed(2),
         };
         if (!payload.posto_id) delete payload.posto_id;
-        setSavingAbast(true);
         try {
             if (editandoAbastId) {
                 await updateAbastecimento(editandoAbastId, payload);
@@ -281,7 +327,6 @@ export default function CarreteiroDashboard() {
             setEditandoAbastId(null);
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-        finally { setSavingAbast(false); }
     };
 
     const handleEditAbast = (a) => {
@@ -304,7 +349,6 @@ export default function CarreteiroDashboard() {
     const handleCheck = async () => {
         if (!formCheck.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
-        setSavingCheck(true);
         try {
             if (editandoCheckId) {
                 await updateChecklist(editandoCheckId, { ...formCheck });
@@ -319,7 +363,6 @@ export default function CarreteiroDashboard() {
             setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-        finally { setSavingCheck(false); }
     };
 
     const handleEditCheck = (c) => {
@@ -379,10 +422,12 @@ export default function CarreteiroDashboard() {
 
     const TABS = [
         { id: 'viagens',       label: 'Minhas Viagens',   icon: 'Navigation' },
-        { id: 'bonificacoes',  label: 'Bonificações',     icon: 'DollarSign' },
-        { id: 'registros',     label: 'Registrar Viagem', icon: 'FilePlus' },
-        { id: 'abastecimentos',label: 'Abastecimentos',   icon: 'Fuel' },
-        { id: 'checklist',     label: 'Checklist',        icon: 'ClipboardCheck' },
+        { id: 'romaneios',     label: 'Romaneios',         icon: 'FileText' },
+        { id: 'pontos',        label: 'Pontos de Parada',  icon: 'MapPin' },
+        { id: 'bonificacoes',  label: 'Bonificações',      icon: 'DollarSign' },
+        { id: 'registros',     label: 'Registrar Viagem',  icon: 'FilePlus' },
+        { id: 'abastecimentos',label: 'Abastecimentos',    icon: 'Fuel' },
+        { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck' },
     ];
 
     const tabAtual = TABS.find(t => t.id === tab);
@@ -569,21 +614,108 @@ export default function CarreteiroDashboard() {
                                 <>
                                     {tab === 'viagens' && (
                                         <div className="flex flex-col gap-4">
+                                            {/* ── Romaneios do Sistema Principal ─── */}
+                                            {/* DEBUG TEMPORÁRIO */}
+                                        <div style={{background:'#fef9c3',padding:'8px 12px',borderRadius:'8px',marginBottom:'8px',fontSize:'12px',color:'#713f12'}}>
+                                            🔍 romaneiosPrincipais={romaneiosPrincipais.length} | user={user?.id?.slice(0,8)} | profile={profile?.name}
+                                        </div>
+                                        {romaneiosPrincipais.length > 0 && (
+                                                <div>
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
+                                                            <Icon name="FileText" size={14} color="#1D4ED8" />
+                                                        </div>
+                                                        <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                                                            Romaneios Lançados pelo Admin
+                                                        </h3>
+                                                        <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>
+                                                            {romaneiosPrincipais.length}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex flex-col gap-2">
+                                                        {romaneiosPrincipais.map(r => {
+                                                            const nf = r.romaneio_pedidos?.[0]?.numero_pedido || '—';
+                                                            const statusColors = {
+                                                                'Aprovado': { bg: '#D1FAE5', text: '#065F46' },
+                                                                'Pendente': { bg: '#FEF9C3', text: '#B45309' },
+                                                                'Cancelado': { bg: '#FEE2E2', text: '#B91C1C' },
+                                                            };
+                                                            const sc = statusColors[r.status] || { bg: '#F3F4F6', text: '#6B7280' };
+                                                            const frete = Number(r.valor_frete_calculado || r.valor_frete) || 0;
+                                                            return (
+                                                                <div key={r.id} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                                                                    {/* Header do card */}
+                                                                    <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ backgroundColor: '#F8FAFF', borderColor: '#DBEAFE' }}>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Icon name="FileText" size={14} color="#1D4ED8" />
+                                                                            <span className="text-xs font-semibold font-data" style={{ color: '#1D4ED8' }}>
+                                                                                Romaneio #{r.numero || r.id?.slice(0, 8)}
+                                                                            </span>
+                                                                        </div>
+                                                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: sc.bg, color: sc.text }}>
+                                                                            {r.status || 'Pendente'}
+                                                                        </span>
+                                                                    </div>
+                                                                    {/* Corpo do card — grid 2 colunas */}
+                                                                    <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-3">
+                                                                        <div>
+                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Nota Fiscal</p>
+                                                                            <p className="text-sm font-semibold font-data" style={{ color: 'var(--color-text-primary)' }}>{nf}</p>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Valor do Frete</p>
+                                                                            <p className="text-sm font-bold font-data text-purple-600">{frete > 0 ? BRL(frete) : '—'}</p>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Motorista</p>
+                                                                            <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.motorista || '—'}</p>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Placa</p>
+                                                                            <p className="text-sm font-semibold font-data" style={{ color: 'var(--color-text-primary)' }}>{r.placa || '—'}</p>
+                                                                        </div>
+                                                                        <div className="col-span-2">
+                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Destino</p>
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <Icon name="MapPin" size={13} color="#1D4ED8" />
+                                                                                <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                        {r.saida && (
+                                                                            <div className="col-span-2 pt-2 border-t flex items-center gap-1.5" style={{ borderColor: 'var(--color-border)' }}>
+                                                                                <Icon name="Calendar" size={13} color="var(--color-muted-foreground)" />
+                                                                                <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                                    Saída: {FMT_DATE(r.saida)}
+                                                                                </p>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             {/* ── Carregamentos (sistema de carretas) ─── */}
                                             <div>
-                                                {carregamentosComBonus.length > 0 && (
+                                                {(carregamentosComBonus.length > 0 || romaneiosPrincipais.length > 0) && (
                                                     <div className="flex items-center gap-2 mb-2">
                                                         <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#D1FAE5' }}>
                                                             <Icon name="Package" size={14} color="#059669" />
                                                         </div>
                                                         <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Carregamentos</h3>
-                                                        <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
-                                                            {carregamentosComBonus.length}
-                                                        </span>
+                                                        {carregamentosComBonus.length > 0 && (
+                                                            <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                                                {carregamentosComBonus.length}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 )}
                                                 {carregamentosComBonus.length === 0
-                                                    ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Package" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</span></div>
+                                                    ? (romaneiosPrincipais.length === 0
+                                                        ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Package" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</span></div>
+                                                        : null)
                                                     : carregamentosComBonus.map(c => (
                                                         <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm mb-2" style={{ borderColor: 'var(--color-border)' }}>
                                                             <div className="flex items-start justify-between mb-2">
@@ -610,7 +742,279 @@ export default function CarreteiroDashboard() {
                                         </div>
                                     )}
 
-                                    {tab === 'bonificacoes' && (
+                                    {tab === 'romaneios' && (
+                                        <div className="flex flex-col gap-3">
+                                            {/* Header informativo */}
+                                            <div className="flex items-center gap-2 p-3 rounded-xl border"
+                                                style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }}>
+                                                <Icon name="Info" size={15} color="#1D4ED8" />
+                                                <p className="text-xs" style={{ color: '#1D4ED8' }}>
+                                                    Romaneios lançados pelo administrador e vinculados ao seu perfil.
+                                                </p>
+                                            </div>
+
+                                            {romaneiosCarreteiro.length === 0 ? (
+                                                <div className="bg-white rounded-xl border p-10 flex flex-col items-center justify-center gap-3"
+                                                    style={{ borderColor: 'var(--color-border)' }}>
+                                                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
+                                                        <Icon name="FileText" size={28} color="#1D4ED8" />
+                                                    </div>
+                                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Nenhum romaneio encontrado</p>
+                                                    <p className="text-xs text-center" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                        Quando o admin lançar um romaneio para você, ele aparecerá aqui.
+                                                    </p>
+                                                </div>
+                                            ) : romaneiosCarreteiro.map(r => {
+                                                const STATUS_ROM = {
+                                                    'Aguardando':        { bg: '#FEF9C3', text: '#B45309', icon: 'Clock' },
+                                                    'Carregando':        { bg: '#FEF3C7', text: '#D97706', icon: 'Package' },
+                                                    'Em Trânsito':       { bg: '#D1FAE5', text: '#065F46', icon: 'Truck' },
+                                                    'Entrega finalizada':{ bg: '#DCFCE7', text: '#15803D', icon: 'CheckCircle2' },
+                                                    'Cancelado':         { bg: '#FEE2E2', text: '#B91C1C', icon: 'XCircle' },
+                                                };
+                                                const sc = STATUS_ROM[r.status] || { bg: '#F3F4F6', text: '#6B7280', icon: 'FileText' };
+                                                const itens = r.carretas_romaneio_itens || [];
+                                                const pesoTotal = itens.reduce((s, i) => s + Number(i.peso_total || i.quantidade || 0), 0);
+                                                const nfs = itens.map(i => i.descricao).filter(Boolean).join(', ');
+                                                return (
+                                                    <div key={r.id} className="bg-white rounded-xl border shadow-sm overflow-hidden"
+                                                        style={{ borderColor: 'var(--color-border)' }}>
+                                                        {/* Header */}
+                                                        <div className="flex items-center justify-between px-4 py-3 border-b"
+                                                            style={{ backgroundColor: '#F8FAFF', borderColor: '#DBEAFE' }}>
+                                                            <div className="flex items-center gap-2">
+                                                                <Icon name="FileText" size={15} color="#1D4ED8" />
+                                                                <span className="font-semibold text-sm font-data" style={{ color: '#1D4ED8' }}>
+                                                                    Romaneio #{r.numero}
+                                                                </span>
+                                                                {r.aprovado && (
+                                                                    <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-medium"
+                                                                        style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                                                        <Icon name="CheckCircle2" size={10} />Aprovado
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium"
+                                                                style={{ backgroundColor: sc.bg, color: sc.text }}>
+                                                                <Icon name={sc.icon} size={11} />{r.status}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Grid de informações */}
+                                                        <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-3">
+                                                            {/* NF / Descrição */}
+                                                            <div className="col-span-2">
+                                                                <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Nota(s) Fiscal / Carga</p>
+                                                                <p className="text-sm font-semibold font-data" style={{ color: 'var(--color-text-primary)' }}>
+                                                                    {nfs || '—'}
+                                                                </p>
+                                                            </div>
+
+                                                            {/* Data saída */}
+                                                            <div>
+                                                                <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Data Saída</p>
+                                                                <div className="flex items-center gap-1">
+                                                                    <Icon name="Calendar" size={13} color="#1D4ED8" />
+                                                                    <p className="text-sm font-medium font-data" style={{ color: 'var(--color-text-primary)' }}>
+                                                                        {r.data_saida ? FMT_DATE(r.data_saida) : '—'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Peso total */}
+                                                            <div>
+                                                                <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Peso / Toneladas</p>
+                                                                <div className="flex items-center gap-1">
+                                                                    <Icon name="Weight" size={13} color="#7C3AED" />
+                                                                    <p className="text-sm font-semibold font-data" style={{ color: '#7C3AED' }}>
+                                                                        {(pesoTotal || Number(r.toneladas) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ton
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Placa */}
+                                                            <div>
+                                                                <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Placa</p>
+                                                                <p className="text-sm font-semibold font-data" style={{ color: 'var(--color-text-primary)' }}>
+                                                                    {r.veiculo?.placa || '—'}
+                                                                </p>
+                                                            </div>
+
+                                                            {/* Empresa */}
+                                                            {r.empresa && (
+                                                                <div>
+                                                                    <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Empresa</p>
+                                                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.empresa}</p>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Destino */}
+                                                            <div className="col-span-2">
+                                                                <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Destino</p>
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <Icon name="MapPin" size={13} color="#1D4ED8" />
+                                                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Frete */}
+                                                            {Number(r.valor_frete) > 0 && (
+                                                                <div className="col-span-2 pt-2 border-t flex items-center justify-between"
+                                                                    style={{ borderColor: 'var(--color-border)' }}>
+                                                                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Valor do Frete</span>
+                                                                    <span className="font-data font-bold text-emerald-600">{BRL(r.valor_frete)}</span>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Observações */}
+                                                            {r.observacoes && (
+                                                                <div className="col-span-2 pt-2 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{r.observacoes}</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {tab === 'pontos' && (
+                                        <div>
+                                            <div className="flex justify-end mb-4">
+                                                <Button onClick={() => {
+                                                    setEditandoPontoId(null);
+                                                    setFormPonto({
+                                                        local: '', tipo_local: 'Outro', veiculo_id: '',
+                                                        data_saida: new Date().toISOString().split('T')[0],
+                                                        horario_saida: '', km_saida: '',
+                                                        data_chegada: '', horario_chegada: '', km_chegada: '',
+                                                        cupom_fiscal: '', observacoes: '',
+                                                    });
+                                                    setModalPonto(true);
+                                                }} iconName="Plus" size="sm">
+                                                    Novo Registro
+                                                </Button>
+                                            </div>
+
+                                            {pontosParada.length === 0 ? (
+                                                <div className="bg-white rounded-xl border p-10 flex flex-col items-center justify-center gap-3"
+                                                    style={{ borderColor: 'var(--color-border)' }}>
+                                                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
+                                                        <Icon name="MapPin" size={28} color="#1D4ED8" />
+                                                    </div>
+                                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Nenhum ponto de parada registrado</p>
+                                                    <p className="text-xs text-center" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                        Registre os horários de saída e chegada em fábricas, estoques e entregas.
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                /* Tabela estilo planilha — horizontal scroll em mobile */
+                                                <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full text-xs" style={{ minWidth: 700 }}>
+                                                            <thead>
+                                                                <tr style={{ backgroundColor: '#1D4ED8' }}>
+                                                                    {['KM/Destino','Data Saída','Hor. Saída','KM Saída','Data Chegada','Hor. Chegada','KM Chegada','Nº Cupom Fiscal','Obs.',''].map(h => (
+                                                                        <th key={h} className="px-3 py-2.5 text-left font-semibold text-white whitespace-nowrap">{h}</th>
+                                                                    ))}
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {pontosParada.map((p, idx) => {
+                                                                    const TIPO_COLOR = {
+                                                                        'Fábrica': '#EFF6FF', 'Estoque': '#FEF9C3',
+                                                                        'Entrega': '#D1FAE5', 'Posto': '#EDE9FE',
+                                                                        'Oficina': '#FEE2E2', 'Outro': '#F3F4F6',
+                                                                    };
+                                                                    const TIPO_TEXT = {
+                                                                        'Fábrica': '#1D4ED8', 'Estoque': '#B45309',
+                                                                        'Entrega': '#065F46', 'Posto': '#7C3AED',
+                                                                        'Oficina': '#B91C1C', 'Outro': '#6B7280',
+                                                                    };
+                                                                    return (
+                                                                        <tr key={p.id}
+                                                                            className="border-t transition-colors hover:bg-blue-50/30"
+                                                                            style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                                                            <td className="px-3 py-2.5">
+                                                                                <div>
+                                                                                    <p className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{p.local}</p>
+                                                                                    <span className="inline-block px-1.5 py-0.5 rounded text-xs font-medium mt-0.5"
+                                                                                        style={{ backgroundColor: TIPO_COLOR[p.tipo_local] || '#F3F4F6', color: TIPO_TEXT[p.tipo_local] || '#6B7280' }}>
+                                                                                        {p.tipo_local}
+                                                                                    </span>
+                                                                                    {p.veiculo?.placa && (
+                                                                                        <p className="font-data text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{p.veiculo.placa}</p>
+                                                                                    )}
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
+                                                                                {p.data_saida ? FMT_DATE(p.data_saida) : '—'}
+                                                                            </td>
+                                                                            <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
+                                                                                {p.horario_saida || '—'}
+                                                                            </td>
+                                                                            <td className="px-3 py-2.5 font-data text-right" style={{ color: '#1D4ED8' }}>
+                                                                                {p.km_saida != null ? Number(p.km_saida).toLocaleString('pt-BR') : '—'}
+                                                                            </td>
+                                                                            <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
+                                                                                {p.data_chegada ? FMT_DATE(p.data_chegada) : '—'}
+                                                                            </td>
+                                                                            <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
+                                                                                {p.horario_chegada || '—'}
+                                                                            </td>
+                                                                            <td className="px-3 py-2.5 font-data text-right" style={{ color: '#059669' }}>
+                                                                                {p.km_chegada != null ? Number(p.km_chegada).toLocaleString('pt-BR') : '—'}
+                                                                            </td>
+                                                                            <td className="px-3 py-2.5 font-data" style={{ color: 'var(--color-text-secondary)' }}>
+                                                                                {p.cupom_fiscal || '—'}
+                                                                            </td>
+                                                                            <td className="px-3 py-2.5 max-w-[120px] truncate" style={{ color: 'var(--color-muted-foreground)' }}
+                                                                                title={p.observacoes}>
+                                                                                {p.observacoes || ''}
+                                                                            </td>
+                                                                            <td className="px-2 py-2.5">
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <button onClick={() => {
+                                                                                        setEditandoPontoId(p.id);
+                                                                                        setFormPonto({
+                                                                                            local: p.local || '', tipo_local: p.tipo_local || 'Outro',
+                                                                                            veiculo_id: p.veiculo_id || '',
+                                                                                            data_saida: p.data_saida || '',
+                                                                                            horario_saida: p.horario_saida || '', km_saida: p.km_saida ?? '',
+                                                                                            data_chegada: p.data_chegada || '',
+                                                                                            horario_chegada: p.horario_chegada || '', km_chegada: p.km_chegada ?? '',
+                                                                                            cupom_fiscal: p.cupom_fiscal || '', observacoes: p.observacoes || '',
+                                                                                        });
+                                                                                        setModalPonto(true);
+                                                                                    }} className="p-1.5 rounded hover:bg-blue-50 transition-colors" title="Editar">
+                                                                                        <Icon name="Pencil" size={13} color="#1D4ED8" />
+                                                                                    </button>
+                                                                                    <button onClick={async () => {
+                                                                                        const ok = await confirm({ title: 'Excluir registro?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+                                                                                        if (!ok) return;
+                                                                                        try { await deletePontoParada(p.id); showToast('Registro excluído.', 'success'); load(); }
+                                                                                        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+                                                                                    }} className="p-1.5 rounded hover:bg-red-50 transition-colors" title="Excluir">
+                                                                                        <Icon name="Trash2" size={13} color="#DC2626" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
+                                                        {pontosParada.length} registro{pontosParada.length !== 1 ? 's' : ''}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+
                                         <div className="flex flex-col gap-4">
                                             {/* Resumo */}
                                             <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
@@ -943,7 +1347,7 @@ export default function CarreteiroDashboard() {
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => { setModalAbast(false); setEditandoAbastId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleAbast} size="sm" iconName="Check" loading={savingAbast} disabled={savingAbast}>{editandoAbastId ? 'Salvar' : 'Registrar'}</Button>
+                            <Button onClick={handleAbast} size="sm" iconName="Check">{editandoAbastId ? 'Salvar' : 'Registrar'}</Button>
                         </div>
                     </div>
                 </div>
@@ -1024,7 +1428,7 @@ export default function CarreteiroDashboard() {
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => { setModalCheck(false); setFotoPreview(null); setEditandoCheckId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleCheck} size="sm" iconName={editandoCheckId ? 'Check' : 'Send'} loading={savingCheck} disabled={savingCheck}>{editandoCheckId ? 'Salvar' : 'Enviar'}</Button>
+                            <Button onClick={handleCheck} size="sm" iconName={editandoCheckId ? 'Check' : 'Send'}>{editandoCheckId ? 'Salvar' : 'Enviar'}</Button>
                         </div>
                     </div>
                 </div>
@@ -1078,7 +1482,6 @@ export default function CarreteiroDashboard() {
                             <button onClick={() => { setModalRegistro(false); setEditandoRegistroId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <Button onClick={async () => {
                                 if (!formRegistro.data_carregamento || !formRegistro.destino) { showToast('Data e destino são obrigatórios', 'error'); return; }
-                                setSavingRegistro(true);
                                 try {
                                     if (editandoRegistroId) {
                                         await updateRegistroViagem(editandoRegistroId, { ...formRegistro });
@@ -1090,8 +1493,163 @@ export default function CarreteiroDashboard() {
                                     setEditandoRegistroId(null);
                                     setModalRegistro(false); load();
                                 } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                                finally { setSavingRegistro(false); }
-                            }} loading={savingRegistro} disabled={savingRegistro} size="sm" iconName="Check">{editandoRegistroId ? 'Salvar' : 'Registrar'}</Button>
+                            }} size="sm" iconName="Check">{editandoRegistroId ? 'Salvar' : 'Registrar'}</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {modalPonto && (
+                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
+                    onClick={e => e.target === e.currentTarget && setModalPonto(false)}>
+                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-2xl sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '94dvh' }}>
+                        <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
+                        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
+                                    <Icon name="MapPin" size={18} color="#1D4ED8" />
+                                </div>
+                                <div>
+                                    <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>
+                                        {editandoPontoId ? 'Editar Ponto de Parada' : 'Novo Ponto de Parada'}
+                                    </h2>
+                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Registre saída e chegada no local</p>
+                                </div>
+                            </div>
+                            <button onClick={() => { setModalPonto(false); setEditandoPontoId(null); }} className="p-1.5 rounded-lg hover:bg-gray-100">
+                                <Icon name="X" size={18} color="var(--color-muted-foreground)" />
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                            {/* Local e tipo */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <Field label="Local / Destino" required>
+                                    <input
+                                        value={formPonto.local}
+                                        onChange={e => setFormPonto(f => ({ ...f, local: e.target.value }))}
+                                        className={inputCls} style={inputStyle}
+                                        placeholder="Ex: Fábrica Cachoeirinha, Estoque BA..."
+                                    />
+                                </Field>
+                                <Field label="Tipo de Local">
+                                    <select value={formPonto.tipo_local}
+                                        onChange={e => setFormPonto(f => ({ ...f, tipo_local: e.target.value }))}
+                                        className={inputCls} style={inputStyle}>
+                                        {['Fábrica','Estoque','Entrega','Posto','Oficina','Outro'].map(t => (
+                                            <option key={t} value={t}>{t}</option>
+                                        ))}
+                                    </select>
+                                </Field>
+                            </div>
+
+                            <Field label="Veículo">
+                                <select value={formPonto.veiculo_id}
+                                    onChange={e => setFormPonto(f => ({ ...f, veiculo_id: e.target.value }))}
+                                    className={inputCls} style={inputStyle}>
+                                    <option value="">Selecione (opcional)...</option>
+                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                </select>
+                            </Field>
+
+                            {/* Bloco SAÍDA */}
+                            <div className="p-4 rounded-xl border space-y-3"
+                                style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
+                                <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#1D4ED8' }}>
+                                    <Icon name="LogOut" size={14} color="#1D4ED8" />SAÍDA
+                                </p>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <Field label="Data" required>
+                                        <input type="date" value={formPonto.data_saida}
+                                            onChange={e => setFormPonto(f => ({ ...f, data_saida: e.target.value }))}
+                                            className={inputCls} style={inputStyle} />
+                                    </Field>
+                                    <Field label="Horário">
+                                        <input type="time" value={formPonto.horario_saida}
+                                            onChange={e => setFormPonto(f => ({ ...f, horario_saida: e.target.value }))}
+                                            className={inputCls} style={inputStyle} />
+                                    </Field>
+                                    <Field label="KM Saída">
+                                        <input type="number" value={formPonto.km_saida}
+                                            onChange={e => setFormPonto(f => ({ ...f, km_saida: e.target.value }))}
+                                            className={inputCls} style={inputStyle} placeholder="Ex: 641300" />
+                                    </Field>
+                                </div>
+                            </div>
+
+                            {/* Bloco CHEGADA */}
+                            <div className="p-4 rounded-xl border space-y-3"
+                                style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
+                                <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#065F46' }}>
+                                    <Icon name="LogIn" size={14} color="#065F46" />CHEGADA
+                                </p>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <Field label="Data">
+                                        <input type="date" value={formPonto.data_chegada}
+                                            onChange={e => setFormPonto(f => ({ ...f, data_chegada: e.target.value }))}
+                                            className={inputCls} style={inputStyle} />
+                                    </Field>
+                                    <Field label="Horário">
+                                        <input type="time" value={formPonto.horario_chegada}
+                                            onChange={e => setFormPonto(f => ({ ...f, horario_chegada: e.target.value }))}
+                                            className={inputCls} style={inputStyle} />
+                                    </Field>
+                                    <Field label="KM Chegada">
+                                        <input type="number" value={formPonto.km_chegada}
+                                            onChange={e => setFormPonto(f => ({ ...f, km_chegada: e.target.value }))}
+                                            className={inputCls} style={inputStyle} placeholder="Ex: 642600" />
+                                    </Field>
+                                </div>
+                            </div>
+
+                            {/* Cupom + Observações */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <Field label="Nº Cupom Fiscal / NF">
+                                    <input value={formPonto.cupom_fiscal}
+                                        onChange={e => setFormPonto(f => ({ ...f, cupom_fiscal: e.target.value }))}
+                                        className={inputCls} style={inputStyle} placeholder="Ex: 143945" />
+                                </Field>
+                                <Field label="Observações">
+                                    <input value={formPonto.observacoes}
+                                        onChange={e => setFormPonto(f => ({ ...f, observacoes: e.target.value }))}
+                                        className={inputCls} style={inputStyle} placeholder="Irregularidades, barulhos..." />
+                                </Field>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end"
+                            style={{ borderColor: 'var(--color-border)' }}>
+                            <button onClick={() => { setModalPonto(false); setEditandoPontoId(null); }}
+                                className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center"
+                                style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <Button onClick={async () => {
+                                if (!formPonto.local?.trim() || !formPonto.data_saida) {
+                                    showToast('Local e data de saída são obrigatórios', 'error'); return;
+                                }
+                                const payload = {
+                                    ...formPonto,
+                                    motorista_id: user.id,
+                                    km_saida: formPonto.km_saida !== '' ? Number(formPonto.km_saida) : null,
+                                    km_chegada: formPonto.km_chegada !== '' ? Number(formPonto.km_chegada) : null,
+                                    veiculo_id: formPonto.veiculo_id || null,
+                                    data_chegada: formPonto.data_chegada || null,
+                                    horario_saida: formPonto.horario_saida || null,
+                                    horario_chegada: formPonto.horario_chegada || null,
+                                };
+                                try {
+                                    if (editandoPontoId) {
+                                        await updatePontoParada(editandoPontoId, payload);
+                                        showToast('Registro atualizado!', 'success');
+                                    } else {
+                                        await createPontoParada(payload);
+                                        showToast('Ponto de parada registrado!', 'success');
+                                    }
+                                    setModalPonto(false); setEditandoPontoId(null); load();
+                                } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+                            }} size="sm" iconName="Check">
+                                {editandoPontoId ? 'Salvar' : 'Registrar'}
+                            </Button>
                         </div>
                     </div>
                 </div>

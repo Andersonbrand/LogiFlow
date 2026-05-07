@@ -581,23 +581,6 @@ export async function aprovarChecklistComNotificacao(id, adminId, motoristaId) {
     return data;
 }
 
-export async function aprovarChecklistComNotificacaoRetorno(id, adminId, motoristaId, retorno = '') {
-    const { data, error } = await supabase
-        .from('carretas_checklists')
-        .update({ aprovado: true, aprovado_por: adminId, aprovado_em: new Date().toISOString() })
-        .eq('id', id).select().single();
-    if (error) throw error;
-    // Envia notificação ao motorista com retorno opcional do admin
-    if (motoristaId) {
-        const mensagem = retorno
-            ? `Seu checklist semanal foi aprovado! Retorno do administrador: ${retorno}`
-            : 'Seu checklist semanal foi aprovado pelo administrador.';
-        await createNotificacaoCarreteiro(motoristaId, 'checklist_aprovado',
-            '✅ Checklist Aprovado', mensagem);
-    }
-    return data;
-}
-
 export async function reprovarChecklistComNotificacao(id, adminId, motoristaId, motivo) {
     const { data, error } = await supabase
         .from('carretas_checklists')
@@ -1070,4 +1053,69 @@ export async function deleteBonificacaoExtra(id) {
         .delete()
         .eq('id', id);
     if (error) throw error;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PONTOS DE PARADA — registros de chegada/saída em locais
+// ═══════════════════════════════════════════════════════════════
+
+export async function fetchPontosParada(motoristaId) {
+    const q = supabase
+        .from('carretas_pontos_parada')
+        .select('*, veiculo:veiculo_id(id, placa, modelo)')
+        .order('data_saida', { ascending: false })
+        .order('created_at', { ascending: false });
+    if (motoristaId) q.eq('motorista_id', motoristaId);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createPontoParada(ponto) {
+    const { data, error } = await supabase
+        .from('carretas_pontos_parada')
+        .insert(ponto)
+        .select('*, veiculo:veiculo_id(id, placa, modelo)')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updatePontoParada(id, ponto) {
+    const { data, error } = await supabase
+        .from('carretas_pontos_parada')
+        .update(ponto)
+        .eq('id', id)
+        .select('*, veiculo:veiculo_id(id, placa, modelo)')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deletePontoParada(id) {
+    const { error } = await supabase
+        .from('carretas_pontos_parada')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ROMANEIOS DO CARRETEIRO — busca da tabela carretas_romaneios
+// ═══════════════════════════════════════════════════════════════
+
+export async function fetchRomaneiosCarreteiro(motoristaId) {
+    if (!motoristaId) return [];
+    const { data, error } = await supabase
+        .from('carretas_romaneios')
+        .select(`
+            id, numero, status, data_saida, data_chegada, destino,
+            toneladas, empresa, valor_frete, aprovado, observacoes,
+            veiculo:veiculo_id(id, placa, modelo),
+            carretas_romaneio_itens(id, descricao, quantidade, unidade, peso_total)
+        `)
+        .eq('motorista_id', motoristaId)
+        .order('data_saida', { ascending: false });
+    if (error) throw error;
+    return data || [];
 }
