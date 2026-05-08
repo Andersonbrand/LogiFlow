@@ -117,6 +117,7 @@ export default function CarreteiroDashboard() {
         data_saida: new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '',
         data_chegada: '', horario_chegada: '', km_chegada: '',
         cupom_fiscal: '', observacoes: '',
+        horarios_extras: [],
     });
     // Modal romaneio de ferragens (registrado pelo motorista)
     const [modalFerragem, setModalFerragem] = useState(false);
@@ -895,6 +896,7 @@ export default function CarreteiroDashboard() {
                                                         horario_saida: '', km_saida: '',
                                                         data_chegada: '', horario_chegada: '', km_chegada: '',
                                                         cupom_fiscal: '', observacoes: '',
+                                                        horarios_extras: [],
                                                     });
                                                     setModalPonto(true);
                                                 }} iconName="Plus" size="sm">
@@ -990,6 +992,7 @@ export default function CarreteiroDashboard() {
                                                                                             data_chegada: p.data_chegada || '',
                                                                                             horario_chegada: p.horario_chegada || '', km_chegada: p.km_chegada ?? '',
                                                                                             cupom_fiscal: p.cupom_fiscal || '', observacoes: p.observacoes || '',
+                                                                                            horarios_extras: p.horarios_extras || [],
                                                                                         });
                                                                                         setModalPonto(true);
                                                                                     }} className="p-1.5 rounded hover:bg-blue-50 transition-colors" title="Editar">
@@ -1006,6 +1009,20 @@ export default function CarreteiroDashboard() {
                                                                                 </div>
                                                                             </td>
                                                                         </tr>
+                                                                        {p.horarios_extras && p.horarios_extras.length > 0 && p.horarios_extras.map((ex, exIdx) => (
+                                                                            <tr key={`${p.id}-extra-${exIdx}`} className="border-t" style={{ borderColor: '#E9D5FF', backgroundColor: '#FAF5FF' }}>
+                                                                                <td className="px-3 py-1.5">
+                                                                                    <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#E9D5FF', color: '#6D28D9' }}>Extra #{exIdx + 1}</span>
+                                                                                </td>
+                                                                                <td className="px-3 py-1.5 font-data text-xs whitespace-nowrap" style={{ color: '#6D28D9' }}>{ex.data_saida ? FMT_DATE(ex.data_saida) : '—'}</td>
+                                                                                <td className="px-3 py-1.5 font-data text-xs" style={{ color: '#6D28D9' }}>{ex.horario_saida || '—'}</td>
+                                                                                <td className="px-3 py-1.5 font-data text-xs text-right" style={{ color: '#1D4ED8' }}>{ex.km_saida != null ? Number(ex.km_saida).toLocaleString('pt-BR') : '—'}</td>
+                                                                                <td className="px-3 py-1.5 font-data text-xs whitespace-nowrap" style={{ color: '#6D28D9' }}>{ex.data_chegada ? FMT_DATE(ex.data_chegada) : '—'}</td>
+                                                                                <td className="px-3 py-1.5 font-data text-xs" style={{ color: '#6D28D9' }}>{ex.horario_chegada || '—'}</td>
+                                                                                <td className="px-3 py-1.5 font-data text-xs text-right" style={{ color: '#059669' }}>{ex.km_chegada != null ? Number(ex.km_chegada).toLocaleString('pt-BR') : '—'}</td>
+                                                                                <td colSpan={3} />
+                                                                            </tr>
+                                                                        ))}
                                                                     );
                                                                 })}
                                                             </tbody>
@@ -1712,6 +1729,55 @@ export default function CarreteiroDashboard() {
                                 </div>
                             </div>
 
+                            {/* Horários extras (saídas/chegadas adicionais no mesmo dia) */}
+                            {formPonto.horarios_extras && formPonto.horarios_extras.length > 0 && formPonto.horarios_extras.map((extra, idx) => (
+                                <div key={idx} className="rounded-xl border space-y-3" style={{ borderColor: '#E9D5FF', backgroundColor: '#FAF5FF' }}>
+                                    <div className="flex items-center justify-between px-4 pt-3">
+                                        <p className="text-xs font-bold" style={{ color: '#6D28D9' }}>SAÍDA/CHEGADA EXTRA #{idx + 1}</p>
+                                        <button type="button" onClick={() => setFormPonto(f => ({ ...f, horarios_extras: f.horarios_extras.filter((_, i) => i !== idx) }))}
+                                            className="p-1 rounded hover:bg-red-50" title="Remover">
+                                            <Icon name="X" size={14} color="#DC2626" />
+                                        </button>
+                                    </div>
+                                    <div className="px-4 pb-3 space-y-3">
+                                        <div className="p-3 rounded-lg border space-y-2" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
+                                            <p className="text-xs font-bold flex items-center gap-1" style={{ color: '#1D4ED8' }}><Icon name="LogOut" size={12} color="#1D4ED8" />SAÍDA</p>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <Field label="Data" required>
+                                                    <input type="date" value={extra.data_saida || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], data_saida: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} />
+                                                </Field>
+                                                <Field label="Horário">
+                                                    <input type="time" value={extra.horario_saida || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], horario_saida: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} />
+                                                </Field>
+                                                <Field label="KM Saída">
+                                                    <input type="number" value={extra.km_saida || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], km_saida: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} placeholder="Ex: 641300" />
+                                                </Field>
+                                            </div>
+                                        </div>
+                                        <div className="p-3 rounded-lg border space-y-2" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
+                                            <p className="text-xs font-bold flex items-center gap-1" style={{ color: '#065F46' }}><Icon name="LogIn" size={12} color="#065F46" />CHEGADA</p>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <Field label="Data">
+                                                    <input type="date" value={extra.data_chegada || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], data_chegada: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} />
+                                                </Field>
+                                                <Field label="Horário">
+                                                    <input type="time" value={extra.horario_chegada || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], horario_chegada: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} />
+                                                </Field>
+                                                <Field label="KM Chegada">
+                                                    <input type="number" value={extra.km_chegada || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], km_chegada: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} placeholder="Ex: 642600" />
+                                                </Field>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            <button type="button" onClick={() => setFormPonto(f => ({ ...f, horarios_extras: [...(f.horarios_extras || []), { data_saida: formPonto.data_saida || new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '', data_chegada: '', horario_chegada: '', km_chegada: '' }] }))}
+                                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed text-xs font-medium w-full justify-center hover:bg-purple-50 transition-colors"
+                                style={{ borderColor: '#C4B5FD', color: '#6D28D9' }}>
+                                <Icon name="Plus" size={14} color="#6D28D9" />
+                                Adicionar mais um registro de saída e chegada
+                            </button>
+
                             {/* Cupom + Observações */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <Field label="Nº Cupom Fiscal / NF">
@@ -1745,6 +1811,14 @@ export default function CarreteiroDashboard() {
                                     data_chegada: formPonto.data_chegada || null,
                                     horario_saida: formPonto.horario_saida || null,
                                     horario_chegada: formPonto.horario_chegada || null,
+                                    horarios_extras: (formPonto.horarios_extras || []).map(e => ({
+                                        ...e,
+                                        km_saida: e.km_saida !== '' && e.km_saida != null ? Number(e.km_saida) : null,
+                                        km_chegada: e.km_chegada !== '' && e.km_chegada != null ? Number(e.km_chegada) : null,
+                                        data_chegada: e.data_chegada || null,
+                                        horario_saida: e.horario_saida || null,
+                                        horario_chegada: e.horario_chegada || null,
+                                    })),
                                 };
                                 try {
                                     if (editandoPontoId) {
