@@ -1115,12 +1115,50 @@ export async function fetchRomaneiosCarreteiro(motoristaId) {
         .from('carretas_romaneios')
         .select(`
             id, numero, status, data_saida, data_chegada, destino,
-            toneladas, empresa, valor_frete, aprovado, observacoes,
+            toneladas, empresa, valor_frete, aprovado, observacoes, numero_nf,
             veiculo:veiculo_id(id, placa, modelo),
             carretas_romaneio_itens(id, descricao, quantidade, unidade, peso_total)
         `)
         .eq('motorista_id', motoristaId)
         .order('data_saida', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ROMANEIO DE FERRAGENS — registrado pelo próprio motorista
+// ═══════════════════════════════════════════════════════════════
+
+export async function createRomaneioFerragem(payload) {
+    // Gera próximo número de romaneio
+    const numero = await nextRomaneioNumero();
+    const { data, error } = await supabase
+        .from('carretas_romaneios')
+        .insert({
+            ...payload,
+            numero,
+            tipo_carga: 'ferragem',
+            status: 'Aguardando',
+        })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function fetchRomaneiosFerragem(filters = {}) {
+    let q = supabase
+        .from('carretas_romaneios')
+        .select(`
+            *,
+            motorista:motorista_id(id, name),
+            veiculo:veiculo_id(id, placa, modelo)
+        `)
+        .eq('tipo_carga', 'ferragem')
+        .order('created_at', { ascending: false });
+    if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
+    if (filters.status)      q = q.eq('status', filters.status);
+    const { data, error } = await q;
     if (error) throw error;
     return data || [];
 }

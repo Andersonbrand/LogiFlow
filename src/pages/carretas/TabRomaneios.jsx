@@ -8,6 +8,7 @@ import {
     fetchRomaneios, createRomaneio, updateRomaneio, deleteRomaneio,
     fetchCarretasVeiculos, fetchTodosMotoristas, fetchEmpresas,
     STATUS_ROMANEIO, STATUS_ROMANEIO_COLORS,
+    fetchRomaneiosFerragem,
 } from 'utils/carretasService';
 import { fetchMaterials } from 'utils/materialService';
 import * as XLSX from 'xlsx';
@@ -627,7 +628,9 @@ export default function TabRomaneios({ isAdmin }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
 
+    const [guia, setGuia]               = useState('cimento'); // 'cimento' | 'ferragens'
     const [romaneios, setRomaneios]     = useState([]);
+    const [romaneiosFerragem, setRomaneiosFerragem] = useState([]);
     const [motoristas, setMotoristas]   = useState([]);
     const [veiculos, setVeiculos]       = useState([]);
     const [empresas, setEmpresas]       = useState([]);
@@ -650,33 +653,21 @@ export default function TabRomaneios({ isAdmin }) {
                     Number(filtroMes.split('-')[1]), 0
                 ).getDate()).padStart(2, '0');
             }
-            const [r, v, m, e, mat] = await Promise.all([
+            const [r, v, m, e, mat, rf] = await Promise.all([
                 fetchRomaneios(f),
                 fetchCarretasVeiculos(),
                 fetchTodosMotoristas(),
                 fetchEmpresas(),
                 fetchMaterials(),
+                fetchRomaneiosFerragem(),
             ]);
             setRomaneios(r); setVeiculos(v); setMotoristas(m); setEmpresas(e); setMateriais(mat);
+            setRomaneiosFerragem(rf || []);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtroStatus, filtroMes]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
-
-    // Auto-atualiza status por data ao carregar
-    useEffect(() => {
-        if (!romaneios.length) return;
-        const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-        const para_atualizar = romaneios.filter(r => {
-            if (!r.data_saida || r.status !== 'Aguardando') return false;
-            return new Date(r.data_saida + 'T00:00:00') <= hoje;
-        });
-        if (!para_atualizar.length) return;
-        Promise.all(para_atualizar.map(r => updateRomaneio(r.id, { status: 'Em Trânsito' })))
-            .then(() => load())
-            .catch(() => {});
-    }, [romaneios.length]); // eslint-disable-line
 
     const handleStatusChange = async (id, novoStatus) => {
         try {
@@ -730,6 +721,90 @@ export default function TabRomaneios({ isAdmin }) {
 
     return (
         <div>
+            {/* ── Guias Cimento / Ferragens ── */}
+            <div className="flex gap-1 mb-5 p-1 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB', width: 'fit-content' }}>
+                {[
+                    { id: 'cimento',   label: 'Romaneios de Cimento',   icon: 'Package',  color: '#1D4ED8' },
+                    { id: 'ferragens', label: 'Romaneios de Ferragens',  icon: 'FileText', color: '#059669' },
+                ].map(g => (
+                    <button key={g.id} onClick={() => setGuia(g.id)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                        style={guia === g.id
+                            ? { backgroundColor: 'white', color: g.color, boxShadow: '0 1px 3px rgba(0,0,0,0.1)', fontWeight: 600 }
+                            : { color: 'var(--color-muted-foreground)' }}>
+                        <Icon name={g.icon} size={14} color={guia === g.id ? g.color : 'var(--color-muted-foreground)'} />
+                        {g.label}
+                        <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full font-semibold"
+                            style={guia === g.id
+                                ? { backgroundColor: g.id === 'cimento' ? '#EFF6FF' : '#ECFDF5', color: g.color }
+                                : { backgroundColor: '#F3F4F6', color: 'var(--color-muted-foreground)' }}>
+                            {g.id === 'cimento' ? romaneios.length : romaneiosFerragem.length}
+                        </span>
+                    </button>
+                ))}
+            </div>
+
+            {/* ═══ GUIA FERRAGENS ═══ */}
+            {guia === 'ferragens' && (
+                <div>
+                    <div className="flex items-center gap-2 p-3 rounded-xl border mb-4" style={{ backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }}>
+                        <Icon name="Info" size={14} color="#065F46" />
+                        <p className="text-xs" style={{ color: '#065F46' }}>Romaneios de ferragens registrados pelos motoristas carreteiros. Use para conferência e acompanhamento.</p>
+                    </div>
+                    {loading ? (
+                        <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: '#059669', borderTopColor: 'transparent' }} /></div>
+                    ) : romaneiosFerragem.length === 0 ? (
+                        <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-3" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#ECFDF5' }}>
+                                <Icon name="FileText" size={28} color="#059669" />
+                            </div>
+                            <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Nenhum romaneio de ferragens</p>
+                            <p className="text-xs text-center" style={{ color: 'var(--color-muted-foreground)' }}>Quando um motorista registrar um romaneio de ferragens, ele aparecerá aqui.</p>
+                        </div>
+                    ) : (
+                        <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr style={{ backgroundColor: '#059669' }}>
+                                        {['Nº ROM', 'Motorista', 'Placa', 'NF', 'Data Saída', 'Destino', 'Peso', 'Empresa', 'Status'].map(h => (
+                                            <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-white whitespace-nowrap">{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {romaneiosFerragem.map((r, idx) => {
+                                        const sc = STATUS_ROMANEIO_COLORS[r.status] || { bg: '#F3F4F6', text: '#6B7280' };
+                                        return (
+                                            <tr key={r.id} className="border-t hover:bg-green-50/30 transition-colors"
+                                                style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                                <td className="px-3 py-3 font-data font-semibold text-xs" style={{ color: '#059669' }}>{r.numero}</td>
+                                                <td className="px-3 py-3 text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.motorista?.name || '—'}</td>
+                                                <td className="px-3 py-3 font-data text-xs" style={{ color: 'var(--color-text-primary)' }}>{r.veiculo?.placa || '—'}</td>
+                                                <td className="px-3 py-3 font-data font-semibold text-xs" style={{ color: '#1D4ED8' }}>{r.numero_nf || '—'}</td>
+                                                <td className="px-3 py-3 font-data text-xs whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{r.data_saida ? FMT_DATE(r.data_saida) : '—'}</td>
+                                                <td className="px-3 py-3 text-xs" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</td>
+                                                <td className="px-3 py-3 font-data text-xs text-right" style={{ color: '#7C3AED' }}>
+                                                    {r.toneladas ? `${Number(r.toneladas).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ton` : '—'}
+                                                </td>
+                                                <td className="px-3 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{r.empresa || '—'}</td>
+                                                <td className="px-3 py-3">
+                                                    <span className="text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap" style={{ backgroundColor: sc.bg, color: sc.text }}>{r.status}</span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                            <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
+                                {romaneiosFerragem.length} romaneio{romaneiosFerragem.length !== 1 ? 's' : ''} de ferragens
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {guia === 'cimento' && (<>
+
             {/* ── Toolbar ── */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <div className="flex flex-wrap gap-2">
@@ -906,6 +981,8 @@ export default function TabRomaneios({ isAdmin }) {
                     onClose={() => setDetailModal(null)}
                 />
             )}
+
+            </>)} {/* fim guia cimento */}
 
             <Toast toast={toast} />
             {ConfirmDialog}
