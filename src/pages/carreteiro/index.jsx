@@ -940,6 +940,7 @@ export default function CarreteiroDashboard() {
                                                                         'Oficina': '#B91C1C', 'Outro': '#6B7280',
                                                                     };
                                                                     return (
+                                                                        <>
                                                                         <tr key={p.id}
                                                                             className="border-t transition-colors hover:bg-blue-50/30"
                                                                             style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
@@ -1023,6 +1024,7 @@ export default function CarreteiroDashboard() {
                                                                                 <td colSpan={3} />
                                                                             </tr>
                                                                         ))}
+                                                                    </>
                                                                     );
                                                                 })}
                                                             </tbody>
