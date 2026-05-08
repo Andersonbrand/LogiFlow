@@ -724,8 +724,8 @@ export default function TabRomaneios({ isAdmin }) {
             {/* ── Guias Cimento / Ferragens ── */}
             <div className="flex gap-1 mb-5 p-1 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB', width: 'fit-content' }}>
                 {[
-                    { id: 'cimento',   label: 'Romaneios de Cimento',   icon: 'Package',  color: '#1D4ED8' },
-                    { id: 'ferragens', label: 'Romaneios de Ferragens',  icon: 'FileText', color: '#059669' },
+                    { id: 'cimento',   label: 'Romaneios',                        icon: 'Package',  color: '#1D4ED8' },
+                    { id: 'ferragens', label: 'Romaneios lançados pelo motorista', icon: 'FileText', color: '#059669' },
                 ].map(g => (
                     <button key={g.id} onClick={() => setGuia(g.id)}
                         className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"

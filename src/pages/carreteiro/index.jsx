@@ -20,6 +20,7 @@ import {
     fetchPontosParada, createPontoParada, updatePontoParada, deletePontoParada,
     fetchRomaneiosCarreteiro,
     createRomaneioFerragem,
+    fetchEmpresas,
 } from 'utils/carretasService';
 import { useConfirm } from 'components/ui/ConfirmDialog';
 import { supabase, subscribeTabela } from 'utils/supabaseClient';
@@ -100,6 +101,7 @@ export default function CarreteiroDashboard() {
     const [checklists, setChecklists] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [postos, setPostos]     = useState([]);
+    const [empresas, setEmpresas] = useState([]);
     const [loading, setLoading]   = useState(true);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
@@ -155,16 +157,18 @@ export default function CarreteiroDashboard() {
             const cut = new Date();
             cut.setDate(cut.getDate() - period);
             const dateStr = cut.toISOString().split('T')[0];
-            const [v, a, c, ve, cfg, p] = await Promise.all([
+            const [v, a, c, ve, cfg, p, emps] = await Promise.all([
                 fetchViagens({ motoristaId: user.id, dataInicio: dateStr }),
                 fetchAbastecimentos({ motoristaId: user.id, dataInicio: dateStr }),
                 fetchChecklists({ motoristaId: user.id }),
                 fetchCarretasVeiculos(),
                 fetchConfigAbastecimento(),
                 fetchPostos().catch(() => []),
+                fetchEmpresas().catch(() => []),
             ]);
             setViagens(v); setAbast(a); setChecklists(c); setVeiculos(ve);
             setPostos(p);
+            setEmpresas(emps || []);
             setConfigAbast(cfg || { preco_diesel: 0, preco_arla: 0 });
 
             // Carregamentos do motorista (nova fonte de dados para viagens e bônus)
@@ -922,7 +926,7 @@ export default function CarreteiroDashboard() {
                                                         <table className="w-full text-xs" style={{ minWidth: 700 }}>
                                                             <thead>
                                                                 <tr style={{ backgroundColor: '#1D4ED8' }}>
-                                                                    {['KM/Destino','Data Saída','Hor. Saída','KM Saída','Data Chegada','Hor. Chegada','KM Chegada','Nº Cupom Fiscal','Obs.',''].map(h => (
+                                                                    {['KM/Destino','Data Saída','Hor. Saída','KM Saída','Data Chegada','Hor. Chegada','KM Chegada','Obs.',''].map(h => (
                                                                         <th key={h} className="px-3 py-2.5 text-left font-semibold text-white whitespace-nowrap">{h}</th>
                                                                     ))}
                                                                 </tr>
@@ -973,9 +977,6 @@ export default function CarreteiroDashboard() {
                                                                             </td>
                                                                             <td className="px-3 py-2.5 font-data text-right" style={{ color: '#059669' }}>
                                                                                 {p.km_chegada != null ? Number(p.km_chegada).toLocaleString('pt-BR') : '—'}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 font-data" style={{ color: 'var(--color-text-secondary)' }}>
-                                                                                {p.cupom_fiscal || '—'}
                                                                             </td>
                                                                             <td className="px-3 py-2.5 max-w-[120px] truncate" style={{ color: 'var(--color-muted-foreground)' }}
                                                                                 title={p.observacoes}>
@@ -1590,8 +1591,11 @@ export default function CarreteiroDashboard() {
                             </Field>
                         </div>
                         <Field label="Empresa / Fornecedor">
-                            <input value={formFerragem.empresa} onChange={e => setFormFerragem(f => ({ ...f, empresa: e.target.value }))}
-                                className={inputCls} style={inputStyle} placeholder="Ex: Confiance Indústria" />
+                            <select value={formFerragem.empresa} onChange={e => setFormFerragem(f => ({ ...f, empresa: e.target.value }))}
+                                className={inputCls} style={inputStyle}>
+                                <option value="">Selecione...</option>
+                                {empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}
+                            </select>
                         </Field>
                         <Field label="Observações">
                             <textarea value={formFerragem.observacoes} onChange={e => setFormFerragem(f => ({ ...f, observacoes: e.target.value }))}
@@ -1780,13 +1784,8 @@ export default function CarreteiroDashboard() {
                                 Adicionar mais um registro de saída e chegada
                             </button>
 
-                            {/* Cupom + Observações */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <Field label="Nº Cupom Fiscal / NF">
-                                    <input value={formPonto.cupom_fiscal}
-                                        onChange={e => setFormPonto(f => ({ ...f, cupom_fiscal: e.target.value }))}
-                                        className={inputCls} style={inputStyle} placeholder="Ex: 143945" />
-                                </Field>
+                            {/* Observações */}
+                            <div>
                                 <Field label="Observações">
                                     <input value={formPonto.observacoes}
                                         onChange={e => setFormPonto(f => ({ ...f, observacoes: e.target.value }))}
