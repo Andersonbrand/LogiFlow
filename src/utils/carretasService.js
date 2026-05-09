@@ -340,7 +340,7 @@ export async function fetchCarregamentos(filters = {}) {
         .from('carretas_carregamentos')
         .select(`
             *,
-            motorista:motorista_id(id, name),
+            motorista:motorista_id(id, name, is_terceiro),
             veiculo:veiculo_id(id, placa),
             empresa:empresa_id(id, nome)
         `)
@@ -354,6 +354,13 @@ export async function fetchCarregamentos(filters = {}) {
 
     const { data, error } = await q;
     if (error) throw error;
+
+    // Garante exclusão de registros de motoristas terceirizados mesmo que is_terceiro
+    // esteja false/null no registro (dados legados antes da flag existir)
+    if (filters.is_terceiro === false) {
+        return (data || []).filter(c => !c.motorista?.is_terceiro);
+    }
+
     return data || [];
 }
 
