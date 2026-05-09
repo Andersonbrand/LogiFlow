@@ -203,7 +203,8 @@ export default function TabVolume({ isAdmin }) {
         data_carregamento: new Date().toISOString().slice(0, 10),
         quantidade: '', unidade_quantidade: 'saco',
         empresa_origem: '', destino: '', numero_pedido: '', numero_nota_fiscal: '', observacoes: '',
-        tipo: '', motorista_id: '',
+        tipo: '', motorista_id: '', veiculo_id: '',
+        tipo_calculo_frete: 'por_saco', valor_base_frete: '',
     });
     const [modalTerceiro, setModalTerceiro] = useState(null);
     const [formTerceiro, setFormTerceiro] = useState(emptyFormTerceiro());
@@ -350,6 +351,9 @@ export default function TabVolume({ isAdmin }) {
             destino: r.destino || '',
             observacoes: r.observacoes || '',
             motorista_id: r.motorista_id || '',
+            veiculo_id: r.veiculo_id || '',
+            tipo_calculo_frete: r.tipo_calculo_frete || 'por_saco',
+            valor_base_frete: r.valor_base_frete || '',
         });
         setModalTerceiro({ mode: 'edit', id: r.id });
     };
@@ -370,9 +374,9 @@ export default function TabVolume({ isAdmin }) {
             is_terceiro: true,
             motorista_id: formTerceiro.motorista_id || null,
             empresa_id: null,
-            veiculo_id: null,
-            tipo_calculo_frete: null,
-            valor_base_frete: null,
+            veiculo_id: formTerceiro.veiculo_id || null,
+            tipo_calculo_frete: formTerceiro.tipo_calculo_frete || null,
+            valor_base_frete: formTerceiro.valor_base_frete ? Number(formTerceiro.valor_base_frete) : null,
             _consumoVeiculo: null,
         };
         setSavingTerceiro(true);
@@ -693,6 +697,32 @@ export default function TabVolume({ isAdmin }) {
                                 ))}
                             </select>
                         </Field>
+                        <Field label="Placa do Veículo Terceirizado">
+                            <select value={formTerceiro.veiculo_id} onChange={e => setFormTerceiro(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <option value="">Selecione a placa (opcional)...</option>
+                                {veiculos.filter(v => v.is_terceiro).map(v => (
+                                    <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>
+                                ))}
+                            </select>
+                        </Field>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Field label="Tipo de Cálculo do Frete">
+                                <select value={formTerceiro.tipo_calculo_frete} onChange={e => setFormTerceiro(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <option value="">Sem cálculo de frete</option>
+                                    {TIPOS_CALCULO_FRETE.map(t => (
+                                        <option key={t.value} value={t.value}>{t.label}</option>
+                                    ))}
+                                </select>
+                            </Field>
+                            <Field label={formTerceiro.tipo_calculo_frete === 'por_saco' ? 'R$ por saco' : formTerceiro.tipo_calculo_frete === 'por_tonelada' ? 'R$ por tonelada' : formTerceiro.tipo_calculo_frete === 'percentual' ? '% do valor' : formTerceiro.tipo_calculo_frete === 'por_carga' ? 'Valor fixo (R$)' : 'Valor base'}>
+                                <input type="number" min="0" step="0.01" value={formTerceiro.valor_base_frete} onChange={e => setFormTerceiro(f => ({ ...f, valor_base_frete: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 9,52" disabled={!formTerceiro.tipo_calculo_frete} />
+                            </Field>
+                        </div>
+                        {formTerceiro.tipo_calculo_frete && formTerceiro.valor_base_frete && formTerceiro.quantidade && (
+                            <div className="px-3 py-2 rounded-lg text-xs font-semibold" style={{ backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', color: '#15803D' }}>
+                                💰 Frete calculado: {Number(calcularFrete(formTerceiro.tipo_calculo_frete, formTerceiro.quantidade, formTerceiro.valor_base_frete, null)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </div>
+                        )}
                         <Field label="Fornecedor / Origem">
                             <OrigemDropdown value={formTerceiro.empresa_origem} onChange={v => setFormTerceiro(f => ({ ...f, empresa_origem: v }))} fornecedores={fornecedores} />
                         </Field>
