@@ -1477,6 +1477,7 @@ function TabBonificacoes({ isAdmin }) {
             const fCarr = {};
             if (filtroMotorista) fCarr.motoristaId = filtroMotorista;
             if (filtroMes) { fCarr.dataInicio = f.dataInicio; fCarr.dataFim = f.dataFim; }
+            fCarr.is_terceiro = false; // Carregamentos de terceiros NUNCA entram no cálculo de bônus
 
             const [c, e, m] = await Promise.all([
                 fetchCarregamentos(fCarr),
@@ -3227,7 +3228,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const mesFim = Number(periodoFim.split('-')[1]);
             const dataFim = periodoFim + '-' + String(new Date(anoFim, mesFim, 0).getDate()).padStart(2,'0');
 
-            const filtros = { dataInicio, dataFim };
+            const filtros = { dataInicio, dataFim, is_terceiro: false };
             if (empresa) filtros.empresaId = empresa;
 
             const [carregamentos, abastecimentos, viagens, despesasExtras, diariasLancadas, romaneiosCarga, bonificacoesExtras] = await Promise.all([

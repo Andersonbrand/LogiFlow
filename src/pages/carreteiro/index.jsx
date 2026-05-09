@@ -175,7 +175,7 @@ export default function CarreteiroDashboard() {
             // Carregamentos do motorista (nova fonte de dados para viagens e bônus)
             try {
                 const [carreg, extras] = await Promise.all([
-                    fetchCarregamentos({ motoristaId: user.id, dataInicio: dateStr }),
+                    fetchCarregamentos({ motoristaId: user.id, dataInicio: dateStr, is_terceiro: false }),
                     fetchBonificacoesExtras({ motorista_id: user.id, dataInicio: dateStr }),
                 ]);
                 setCarregamentos(carreg || []);

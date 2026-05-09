@@ -473,7 +473,7 @@ export async function fetchCarreteiros() {
 export async function fetchTodosMotoristas() {
     const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, name, role, tipo_veiculo')
+        .select('id, name, role, tipo_veiculo, is_terceiro')
         .eq('role', 'motorista')
         .order('name', { ascending: true });
     if (error) throw error;

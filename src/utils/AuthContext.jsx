@@ -117,11 +117,14 @@ export function AuthProvider({ children }) {
 
     const isAdmin      = () => profile?.role === 'admin';
     const isOperador   = () => profile?.role === 'operador';
-    const isMotorista  = () => profile?.role === 'motorista';
+    // Motoristas terceirizados NÃO têm acesso ao sistema — apenas para controle interno
+    const isTerceiro   = () => profile?.is_terceiro === true;
+    const isMotorista  = () => profile?.role === 'motorista' && !isTerceiro();
     // Trata role legado 'carreteiro' e novo padrão 'motorista' + tipo_veiculo='carreta'
     const isCarreteiro = () =>
-        profile?.role === 'carreteiro' ||
-        (profile?.role === 'motorista' && profile?.tipo_veiculo === 'carreta');
+        (profile?.role === 'carreteiro' ||
+        (profile?.role === 'motorista' && profile?.tipo_veiculo === 'carreta')) &&
+        !isTerceiro();
     const hasRole = (...roles) => roles.includes(profile?.role);
 
     const can = {
@@ -143,7 +146,7 @@ export function AuthProvider({ children }) {
         <AuthContext.Provider value={{
             user, profile, loading,
             signIn, signUp, signOut, sendPasswordReset,
-            isAdmin, isOperador, isMotorista, isCarreteiro, hasRole, can,
+            isAdmin, isOperador, isMotorista, isCarreteiro, isTerceiro, hasRole, can,
         }}>
             {children}
         </AuthContext.Provider>
