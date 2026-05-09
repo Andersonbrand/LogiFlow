@@ -4179,9 +4179,10 @@ function TabHistoricoViagens({ isAdmin }) {
             if (filtroMotorista) filtros.motoristaId = filtroMotorista;
             if (filtroVeiculo)   filtros.veiculoId   = filtroVeiculo;
 
-            const [v, roms, m, ve] = await Promise.all([
+            const [v, roms, carr, m, ve] = await Promise.all([
                 fetchViagens(filtros),
                 fetchRomaneios({ dataInicio }),
+                fetchCarregamentos({ dataInicio, ...(filtroMotorista ? { motoristaId: filtroMotorista } : {}), ...(filtroVeiculo ? { veiculoId: filtroVeiculo } : {}) }),
                 fetchTodosMotoristas(),
                 fetchCarretasVeiculos(),
             ]);
@@ -4202,9 +4203,23 @@ function TabHistoricoViagens({ isAdmin }) {
                     _fonte:       'romaneio',
                 }));
 
-            // Merge: evita duplicatas por destino+data+motorista
+            // Normaliza carregamentos (volume) para o mesmo formato
+            const carrNorm = (carr || [])
+                .filter(c => c.destino && c.motorista_id)
+                .map(c => ({
+                    motorista_id: c.motorista_id,
+                    motorista:    c.motorista,
+                    veiculo_id:   c.veiculo_id,
+                    veiculo:      c.veiculo,
+                    destino:      c.destino,
+                    data_saida:   c.data_carregamento,
+                    status:       'Concluído',
+                    _fonte:       'carregamento',
+                }));
+
+            // Merge todos: viagens + romaneios + carregamentos
             const viagensNorm = (v || []).map(x => ({ ...x, _fonte: 'viagem' }));
-            const combinados = [...viagensNorm, ...romsNorm];
+            const combinados = [...viagensNorm, ...romsNorm, ...carrNorm];
 
             setViagens(combinados); setMotoristas(m); setVeiculos(ve);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }

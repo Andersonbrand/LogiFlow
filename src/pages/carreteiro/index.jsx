@@ -109,6 +109,7 @@ export default function CarreteiroDashboard() {
     const [notificacoes, setNotificacoes] = useState([]);
     const [pontosParada, setPontosParada] = useState([]);
     const [romaneiosCarreteiro, setRomaneiosCarreteiro] = useState([]);
+    const [romaneiosFerragem, setRomaneiosFerragem] = useState([]);
     const [modalRegistro, setModalRegistro] = useState(false);
     const [editandoRegistroId, setEditandoRegistroId] = useState(null);
     const [formRegistro, setFormRegistro] = useState({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' });
@@ -225,8 +226,9 @@ export default function CarreteiroDashboard() {
             // Carrega romaneios do admin vinculados a este motorista
             try {
                 const roms = await fetchRomaneiosCarreteiro(user.id);
-                setRomaneiosCarreteiro(roms || []);
-            } catch { setRomaneiosCarreteiro([]); }
+                setRomaneiosCarreteiro((roms || []).filter(r => r.tipo_carga !== 'ferragem'));
+                setRomaneiosFerragem((roms || []).filter(r => r.tipo_carga === 'ferragem'));
+            } catch { setRomaneiosCarreteiro([]); setRomaneiosFerragem([]); }
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [user?.id, period, profile?.name]); // eslint-disable-line
@@ -672,7 +674,7 @@ export default function CarreteiroDashboard() {
                                                                             <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Nota Fiscal</p>
                                                                             <p className="text-sm font-semibold font-data" style={{ color: 'var(--color-text-primary)' }}>{nf}</p>
                                                                         </div>
-                                                                        <div>
+                                                                        <div style={{ display: 'none' }}>
                                                                             <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Valor do Frete</p>
                                                                             <p className="text-sm font-bold font-data text-purple-600">{frete > 0 ? BRL(frete) : '—'}</p>
                                                                         </div>
@@ -703,6 +705,50 @@ export default function CarreteiroDashboard() {
                                                                 </div>
                                                             );
                                                         })}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* ── Romaneios de Ferragem lançados pelo motorista ─── */}
+                                            {romaneiosFerragem.length > 0 && (
+                                                <div>
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#FEF3C7' }}>
+                                                            <Icon name="Wrench" size={14} color="#D97706" />
+                                                        </div>
+                                                        <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                                                            Romaneios de Ferragem
+                                                        </h3>
+                                                        <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#FEF3C7', color: '#D97706' }}>
+                                                            {romaneiosFerragem.length}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex flex-col gap-2">
+                                                        {romaneiosFerragem.map(r => (
+                                                            <div key={r.id} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: '#FDE68A' }}>
+                                                                <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }}>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Icon name="Wrench" size={14} color="#D97706" />
+                                                                        <span className="text-xs font-semibold font-data" style={{ color: '#D97706' }}>
+                                                                            Romaneio #{r.numero || '—'}
+                                                                        </span>
+                                                                        <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+                                                                            Ferragem
+                                                                        </span>
+                                                                    </div>
+                                                                    <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>
+                                                                        {r.status || 'Aguardando'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-2">
+                                                                    {r.numero_nf && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Nota Fiscal</p><p className="text-sm font-semibold font-data">{r.numero_nf}</p></div>}
+                                                                    {r.data_saida && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Data Saída</p><p className="text-sm font-medium font-data">{FMT_DATE(r.data_saida)}</p></div>}
+                                                                    {r.toneladas && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Toneladas</p><p className="text-sm font-semibold font-data" style={{ color: '#7C3AED' }}>{Number(r.toneladas).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ton</p></div>}
+                                                                    {r.empresa && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Empresa</p><p className="text-sm font-medium">{r.empresa}</p></div>}
+                                                                    {r.destino && <div className="col-span-2"><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Destino</p><div className="flex items-center gap-1.5"><Icon name="MapPin" size={13} color="#D97706" /><p className="text-sm font-medium">{r.destino}</p></div></div>}
+                                                                </div>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 </div>
                                             )}
@@ -867,14 +913,7 @@ export default function CarreteiroDashboard() {
                                                                 </div>
                                                             </div>
 
-                                                            {/* Frete */}
-                                                            {Number(r.valor_frete) > 0 && (
-                                                                <div className="col-span-2 pt-2 border-t flex items-center justify-between"
-                                                                    style={{ borderColor: 'var(--color-border)' }}>
-                                                                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Valor do Frete</span>
-                                                                    <span className="font-data font-bold text-emerald-600">{BRL(r.valor_frete)}</span>
-                                                                </div>
-                                                            )}
+                                                            {/* Frete oculto para motorista */}
 
                                                             {/* Observações */}
                                                             {r.observacoes && (
@@ -934,12 +973,12 @@ export default function CarreteiroDashboard() {
                                                             <tbody>
                                                                 {pontosParada.map((p, idx) => {
                                                                     const TIPO_COLOR = {
-                                                                        'Fábrica': '#EFF6FF', 'Estoque': '#FEF9C3',
+                                                                        'Fábrica': '#EFF6FF', 'Empresa': '#FEF3C7', 'Estoque': '#FEF9C3',
                                                                         'Entrega': '#D1FAE5', 'Posto': '#EDE9FE',
                                                                         'Oficina': '#FEE2E2', 'Outro': '#F3F4F6',
                                                                     };
                                                                     const TIPO_TEXT = {
-                                                                        'Fábrica': '#1D4ED8', 'Estoque': '#B45309',
+                                                                        'Fábrica': '#1D4ED8', 'Empresa': '#D97706', 'Estoque': '#B45309',
                                                                         'Entrega': '#065F46', 'Posto': '#7C3AED',
                                                                         'Oficina': '#B91C1C', 'Outro': '#6B7280',
                                                                     };
@@ -1014,7 +1053,12 @@ export default function CarreteiroDashboard() {
                                                                         {p.horarios_extras && p.horarios_extras.length > 0 && p.horarios_extras.map((ex, exIdx) => (
                                                                             <tr key={`${p.id}-extra-${exIdx}`} className="border-t" style={{ borderColor: '#E9D5FF', backgroundColor: '#FAF5FF' }}>
                                                                                 <td className="px-3 py-1.5">
-                                                                                    <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#E9D5FF', color: '#6D28D9' }}>Extra #{exIdx + 1}</span>
+                                                                                    <div>
+                                                                                        <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#E9D5FF', color: '#6D28D9' }}>
+                                                                                            {ex.local || `Extra #${exIdx + 1}`}
+                                                                                        </span>
+                                                                                        {ex.tipo_local && <span className="ml-1 text-xs" style={{ color: '#9CA3AF' }}>{ex.tipo_local}</span>}
+                                                                                    </div>
                                                                                 </td>
                                                                                 <td className="px-3 py-1.5 font-data text-xs whitespace-nowrap" style={{ color: '#6D28D9' }}>{ex.data_saida ? FMT_DATE(ex.data_saida) : '—'}</td>
                                                                                 <td className="px-3 py-1.5 font-data text-xs" style={{ color: '#6D28D9' }}>{ex.horario_saida || '—'}</td>
@@ -1669,7 +1713,7 @@ export default function CarreteiroDashboard() {
                                     <select value={formPonto.tipo_local}
                                         onChange={e => setFormPonto(f => ({ ...f, tipo_local: e.target.value }))}
                                         className={inputCls} style={inputStyle}>
-                                        {['Fábrica','Estoque','Entrega','Posto','Oficina','Outro'].map(t => (
+                                        {['Fábrica','Empresa','Estoque','Entrega','Posto','Oficina','Outro'].map(t => (
                                             <option key={t} value={t}>{t}</option>
                                         ))}
                                     </select>
@@ -1755,7 +1799,7 @@ export default function CarreteiroDashboard() {
                                             <Field label="Tipo de Local">
                                                 <select value={extra.tipo_local || 'Outro'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local: e.target.value }; return { ...f, horarios_extras: h }; })}
                                                     className={inputCls} style={inputStyle}>
-                                                    {['Fábrica','Estoque','Entrega','Posto','Oficina','Outro'].map(t => (
+                                                    {['Fábrica','Empresa','Estoque','Entrega','Posto','Oficina','Outro'].map(t => (
                                                         <option key={t} value={t}>{t}</option>
                                                     ))}
                                                 </select>

@@ -203,7 +203,7 @@ export default function TabVolume({ isAdmin }) {
         data_carregamento: new Date().toISOString().slice(0, 10),
         quantidade: '', unidade_quantidade: 'saco',
         empresa_origem: '', destino: '', numero_pedido: '', numero_nota_fiscal: '', observacoes: '',
-        tipo: '',
+        tipo: '', motorista_id: '',
     });
     const [modalTerceiro, setModalTerceiro] = useState(null);
     const [formTerceiro, setFormTerceiro] = useState(emptyFormTerceiro());
@@ -253,13 +253,17 @@ export default function TabVolume({ isAdmin }) {
 
     // ── Cálculo de totais ─────────────────────────────────────────────────────
     const totais = (() => {
-        const t = { ARA_GBI_FOB: 0, ARA_BARR_FOB: 0, CIF_GBI: 0, CIF_BARR: 0, total: 0 };
+        const t = { ARA_GBI_FOB: 0, ARA_BARR_FOB: 0, CIF_GBI: 0, CIF_BARR: 0, total: 0, totalTerceiros: 0 };
         carregamentos.forEach(r => {
             const qtd = Number(r.quantidade) || 0;
             const { tipo } = parseTipo(r);
             if (tipo && t.hasOwnProperty(tipo)) t[tipo] += qtd;
             t.total += qtd;
         });
+        carregamentosTerceiros.forEach(r => {
+            t.totalTerceiros += Number(r.quantidade) || 0;
+        });
+        t.totalGeral = t.total + t.totalTerceiros;
         return t;
     })();
 
@@ -345,6 +349,7 @@ export default function TabVolume({ isAdmin }) {
             numero_nota_fiscal: r.numero_nota_fiscal || '',
             destino: r.destino || '',
             observacoes: r.observacoes || '',
+            motorista_id: r.motorista_id || '',
         });
         setModalTerceiro({ mode: 'edit', id: r.id });
     };
@@ -363,7 +368,7 @@ export default function TabVolume({ isAdmin }) {
             destino: formTerceiro.destino || null,
             observacoes: formTerceiro.observacoes || null,
             is_terceiro: true,
-            motorista_id: null,
+            motorista_id: formTerceiro.motorista_id || null,
             empresa_id: null,
             veiculo_id: null,
             tipo_calculo_frete: null,
@@ -510,7 +515,7 @@ export default function TabVolume({ isAdmin }) {
                     <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                 </div>
             ) : subAba === 'dashboard' ? (
-                <DashboardVolume totais={totais} carregamentos={carregamentos} mes={mes} />
+                <DashboardVolume totais={totais} carregamentos={carregamentos} carregamentosTerceiros={carregamentosTerceiros} mes={mes} />
             ) : subAba === 'tabela' ? (
                 <TabelaCarregamentos
                     carregamentos={carregamentos}
@@ -680,6 +685,14 @@ export default function TabVolume({ isAdmin }) {
                                 <input type="number" min="0" value={formTerceiro.quantidade} onChange={e => setFormTerceiro(f => ({ ...f, quantidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 1200" />
                             </Field>
                         </div>
+                        <Field label="Motorista Terceirizado">
+                            <select value={formTerceiro.motorista_id} onChange={e => setFormTerceiro(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <option value="">Selecione o motorista (opcional)...</option>
+                                {motoristas.filter(m => m.is_terceiro).map(m => (
+                                    <option key={m.id} value={m.id}>{m.name}</option>
+                                ))}
+                            </select>
+                        </Field>
                         <Field label="Fornecedor / Origem">
                             <OrigemDropdown value={formTerceiro.empresa_origem} onChange={v => setFormTerceiro(f => ({ ...f, empresa_origem: v }))} fornecedores={fornecedores} />
                         </Field>
@@ -708,7 +721,7 @@ export default function TabVolume({ isAdmin }) {
 }
 
 // ─── Sub-componente: Dashboard ─────────────────────────────────────────────────
-function DashboardVolume({ totais, carregamentos, mes }) {
+function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], mes }) {
     const pct = v => totais.total > 0 ? ((v / totais.total) * 100).toFixed(1) : '0.0';
     const tipoEntries = Object.entries(TIPOS);
 
@@ -729,6 +742,11 @@ function DashboardVolume({ totais, carregamentos, mes }) {
                     <p className="text-xs font-semibold uppercase tracking-wide opacity-75 mb-2">📦 Total Geral</p>
                     <p className="text-3xl font-black leading-none">{fmtNum(totais.total)}</p>
                     <p className="text-xs opacity-60 mt-1">sacos · {carregamentos.length} carreg.</p>
+                    {carregamentosTerceiros.length > 0 && (
+                        <p className="text-xs mt-1 font-medium" style={{ color: '#D97706' }}>
+                            + {carregamentosTerceiros.reduce((s,r) => s + (Number(r.quantidade)||0), 0).toLocaleString('pt-BR')} sacos terceiros = {totais.totalGeral?.toLocaleString('pt-BR')} total geral
+                        </p>
+                    )}
                 </div>
                 {/* Por tipo */}
                 {tipoEntries.map(([key, t]) => (
@@ -946,7 +964,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete }) {
                     <table className="w-full text-sm min-w-[600px]">
                         <thead className="text-xs border-b" style={{ background: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}>
                             <tr>
-                                {['Data', 'Tipo', 'Fornecedor/Origem', 'Destino', 'Pedido', 'NF', 'Qtd (sacos)', ''].map(h => (
+                                {['Data', 'Motorista', 'Tipo', 'Fornecedor/Origem', 'Destino', 'Pedido', 'NF', 'Qtd (sacos)', ''].map(h => (
                                     <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
@@ -957,6 +975,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete }) {
                                 return (
                                     <tr key={r.id} className="border-t hover:bg-amber-50 transition-colors" style={{ borderColor: '#FDE68A', background: i % 2 === 0 ? '#fff' : '#FFFBEB' }}>
                                         <td className="px-3 py-2.5 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
+                                        <td className="px-3 py-2.5 text-xs font-medium">{r.motorista?.name || '—'}</td>
                                         <td className="px-3 py-2.5"><TipoBadge tipo={tipo} /></td>
                                         <td className="px-3 py-2.5 max-w-[140px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{nome || '—'}</td>
                                         <td className="px-3 py-2.5 text-xs max-w-[120px] truncate">{r.destino || '—'}</td>
