@@ -102,7 +102,7 @@ export async function resolveMaintenanceAlert(id) {
  * Usa cliente temporário isolado (persistSession: false) para não afetar
  * a sessão do admin nem disparar redirecionamentos no app.
  */
-export async function createDriverUser(supabaseClient, { nome, email, senha, role, tipoVeiculo, cnhNumero, cnhCategoria, cnhVencimento, dataNascimento, cnhFotoUrl }) {
+export async function createDriverUser(supabaseClient, { nome, email, senha, role, tipoVeiculo, cnhNumero, cnhCategoria, cnhVencimento, dataNascimento, cnhFotoUrl, is_terceiro }) {
     // Cliente temporário isolado — não compartilha sessão com o app
     const tempClient = createClient(
         import.meta.env.VITE_SUPABASE_URL,
@@ -137,6 +137,7 @@ export async function createDriverUser(supabaseClient, { nome, email, senha, rol
         cnh_vencimento:  cnhVencimento  || null,
         data_nascimento: dataNascimento || null,
         cnh_foto_url:    cnhFotoUrl     || null,
+        is_terceiro:     is_terceiro    || false,
         updated_at:      new Date().toISOString(),
     };
 

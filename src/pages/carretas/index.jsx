@@ -334,7 +334,7 @@ function TabVeiculos({ isAdmin }) {
     const [veiculos, setVeiculos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(null);
-    const [form, setForm] = useState({ placa: '', marca: '', modelo: '', ano_fabricacao: '', tipo_composicao: 'Cavalo + Carreta', capacidade_carga: '', media_consumo: '', capacidade_tanque: '', observacoes: '' });
+    const [form, setForm] = useState({ placa: '', marca: '', modelo: '', ano_fabricacao: '', tipo_composicao: 'Cavalo + Carreta', capacidade_carga: '', media_consumo: '', capacidade_tanque: '', observacoes: '', is_terceiro: false });
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -345,11 +345,11 @@ function TabVeiculos({ isAdmin }) {
     useEffect(() => { load(); }, [load]);
 
     const openCreate = () => {
-        setForm({ placa: '', marca: '', modelo: '', ano_fabricacao: '', tipo_composicao: 'Cavalo + Carreta', capacidade_carga: '', media_consumo: '', capacidade_tanque: '', observacoes: '' });
+        setForm({ placa: '', marca: '', modelo: '', ano_fabricacao: '', tipo_composicao: 'Cavalo + Carreta', capacidade_carga: '', media_consumo: '', capacidade_tanque: '', observacoes: '', is_terceiro: false });
         setModal({ mode: 'create' });
     };
     const openEdit = (v) => {
-        setForm({ placa: v.placa, marca: v.marca, modelo: v.modelo, ano_fabricacao: v.ano_fabricacao || '', tipo_composicao: v.tipo_composicao || 'Cavalo + Carreta', capacidade_carga: v.capacidade_carga || '', media_consumo: v.media_consumo || '', capacidade_tanque: v.capacidade_tanque || '', observacoes: v.observacoes || '' });
+        setForm({ placa: v.placa, marca: v.marca, modelo: v.modelo, ano_fabricacao: v.ano_fabricacao || '', tipo_composicao: v.tipo_composicao || 'Cavalo + Carreta', capacidade_carga: v.capacidade_carga || '', media_consumo: v.media_consumo || '', capacidade_tanque: v.capacidade_tanque || '', observacoes: v.observacoes || '', is_terceiro: v.is_terceiro || false });
         setModal({ mode: 'edit', data: v });
     };
     const handleSubmit = async () => {
@@ -380,13 +380,16 @@ function TabVeiculos({ isAdmin }) {
                             <span className="text-sm">Nenhum veículo cadastrado</span>
                         </div>
                     ) : veiculos.map(v => (
-                        <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm hover:shadow-md transition-shadow" style={{ borderColor: 'var(--color-border)' }}>
+                        <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm hover:shadow-md transition-shadow" style={{ borderColor: v.is_terceiro ? '#FDE68A' : 'var(--color-border)' }}>
                             <div className="flex items-start justify-between mb-3">
                                 <div>
                                     <p className="font-bold text-lg font-data" style={{ color: 'var(--color-text-primary)' }}>{v.placa}</p>
                                     <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>{v.marca} {v.modelo} {v.ano_fabricacao ? `(${v.ano_fabricacao})` : ''}</p>
                                 </div>
-                                <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>{v.tipo_composicao}</span>
+                                <div className="flex flex-col items-end gap-1">
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>{v.tipo_composicao}</span>
+                                    {v.is_terceiro && <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: '#FEF3C7', color: '#D97706' }}>Terceirizado</span>}
+                                </div>
                             </div>
                             <div className="grid grid-cols-3 gap-2 text-xs mb-3">
                                 {v.capacidade_carga && <div><p className="text-gray-400">Carga</p><p className="font-medium">{v.capacidade_carga} t</p></div>}
@@ -421,6 +424,23 @@ function TabVeiculos({ isAdmin }) {
                         <Field label="Cap. tanque (L)"><input type="number" step="1" value={form.capacidade_tanque} onChange={e => setForm(f => ({ ...f, capacidade_tanque: e.target.value }))} className={inputCls} style={inputStyle} placeholder="600" /></Field>
                         <div className="sm:col-span-2">
                             <Field label="Observações"><textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
+                        </div>
+                        {/* Veículo Terceirizado */}
+                        <div className="sm:col-span-2">
+                            <div className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setForm(f => ({ ...f, is_terceiro: !f.is_terceiro }))}
+                                    className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0"
+                                    style={{ backgroundColor: form.is_terceiro ? '#D97706' : '#D1D5DB' }}>
+                                    <span className="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
+                                        style={{ transform: form.is_terceiro ? 'translateX(20px)' : 'translateX(4px)' }} />
+                                </button>
+                                <div>
+                                    <p className="text-xs font-semibold" style={{ color: '#92400E' }}>Veículo Terceirizado</p>
+                                    <p className="text-xs" style={{ color: '#B45309' }}>Volume registrado separadamente, sem gerar bonificações</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
@@ -4159,12 +4179,34 @@ function TabHistoricoViagens({ isAdmin }) {
             if (filtroMotorista) filtros.motoristaId = filtroMotorista;
             if (filtroVeiculo)   filtros.veiculoId   = filtroVeiculo;
 
-            const [v, m, ve] = await Promise.all([
+            const [v, roms, m, ve] = await Promise.all([
                 fetchViagens(filtros),
+                fetchRomaneios({ dataInicio }),
                 fetchTodosMotoristas(),
                 fetchCarretasVeiculos(),
             ]);
-            setViagens(v); setMotoristas(m); setVeiculos(ve);
+
+            // Normaliza romaneios para o mesmo formato de viagem
+            const romsNorm = (roms || [])
+                .filter(r => r.destino && r.motorista_id)
+                .filter(r => !filtroMotorista || r.motorista_id === filtroMotorista)
+                .filter(r => !filtroVeiculo   || r.veiculo_id   === filtroVeiculo)
+                .map(r => ({
+                    motorista_id: r.motorista_id,
+                    motorista:    r.motorista,
+                    veiculo_id:   r.veiculo_id,
+                    veiculo:      r.veiculo,
+                    destino:      r.destino,
+                    data_saida:   r.data_saida,
+                    status:       r.status,
+                    _fonte:       'romaneio',
+                }));
+
+            // Merge: evita duplicatas por destino+data+motorista
+            const viagensNorm = (v || []).map(x => ({ ...x, _fonte: 'viagem' }));
+            const combinados = [...viagensNorm, ...romsNorm];
+
+            setViagens(combinados); setMotoristas(m); setVeiculos(ve);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtroMotorista, filtroVeiculo, filtroPeriodo]); // eslint-disable-line

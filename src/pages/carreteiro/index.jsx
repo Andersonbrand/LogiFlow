@@ -1739,13 +1739,28 @@ export default function CarreteiroDashboard() {
                             {formPonto.horarios_extras && formPonto.horarios_extras.length > 0 && formPonto.horarios_extras.map((extra, idx) => (
                                 <div key={idx} className="rounded-xl border space-y-3" style={{ borderColor: '#E9D5FF', backgroundColor: '#FAF5FF' }}>
                                     <div className="flex items-center justify-between px-4 pt-3">
-                                        <p className="text-xs font-bold" style={{ color: '#6D28D9' }}>SAÍDA/CHEGADA EXTRA #{idx + 1}</p>
+                                        <p className="text-xs font-bold" style={{ color: '#6D28D9' }}>PONTO EXTRA #{idx + 1}</p>
                                         <button type="button" onClick={() => setFormPonto(f => ({ ...f, horarios_extras: f.horarios_extras.filter((_, i) => i !== idx) }))}
                                             className="p-1 rounded hover:bg-red-50" title="Remover">
                                             <Icon name="X" size={14} color="#DC2626" />
                                         </button>
                                     </div>
                                     <div className="px-4 pb-3 space-y-3">
+                                        {/* Local e Tipo */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <Field label="Local / Destino" required>
+                                                <input value={extra.local || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], local: e.target.value }; return { ...f, horarios_extras: h }; })}
+                                                    className={inputCls} style={inputStyle} placeholder="Ex: Estoque Ibotirama..." />
+                                            </Field>
+                                            <Field label="Tipo de Local">
+                                                <select value={extra.tipo_local || 'Outro'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local: e.target.value }; return { ...f, horarios_extras: h }; })}
+                                                    className={inputCls} style={inputStyle}>
+                                                    {['Fábrica','Estoque','Entrega','Posto','Oficina','Outro'].map(t => (
+                                                        <option key={t} value={t}>{t}</option>
+                                                    ))}
+                                                </select>
+                                            </Field>
+                                        </div>
                                         <div className="p-3 rounded-lg border space-y-2" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
                                             <p className="text-xs font-bold flex items-center gap-1" style={{ color: '#1D4ED8' }}><Icon name="LogOut" size={12} color="#1D4ED8" />SAÍDA</p>
                                             <div className="grid grid-cols-3 gap-2">
@@ -1777,7 +1792,7 @@ export default function CarreteiroDashboard() {
                                     </div>
                                 </div>
                             ))}
-                            <button type="button" onClick={() => setFormPonto(f => ({ ...f, horarios_extras: [...(f.horarios_extras || []), { data_saida: formPonto.data_saida || new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '', data_chegada: '', horario_chegada: '', km_chegada: '' }] }))}
+                            <button type="button" onClick={() => setFormPonto(f => ({ ...f, horarios_extras: [...(f.horarios_extras || []), { local: '', tipo_local: 'Outro', data_saida: formPonto.data_saida || new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '', data_chegada: '', horario_chegada: '', km_chegada: '' }] }))}
                                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed text-xs font-medium w-full justify-center hover:bg-purple-50 transition-colors"
                                 style={{ borderColor: '#C4B5FD', color: '#6D28D9' }}>
                                 <Icon name="Plus" size={14} color="#6D28D9" />

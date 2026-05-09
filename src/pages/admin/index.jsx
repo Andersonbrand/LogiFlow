@@ -521,6 +521,7 @@ const DRIVER_ROLES = [
 const FORM_VAZIO = {
     nome: '', email: '', senha: '', role: 'motorista',
     cnhNumero: '', cnhCategoria: 'C', cnhVencimento: '', dataNascimento: '',
+    is_terceiro: false,
 };
 
 function MotoristasManager({ showToast }) {
@@ -581,6 +582,7 @@ function MotoristasManager({ showToast }) {
             cnhCategoria:   m.cnh_categoria    || 'C',
             cnhVencimento:  m.cnh_vencimento   || '',
             dataNascimento: m.data_nascimento  || '',
+            is_terceiro:    m.is_terceiro      || false,
         });
     };
 
@@ -616,6 +618,7 @@ function MotoristasManager({ showToast }) {
                 cnh_categoria:   editForm.cnhCategoria   || null,
                 cnh_vencimento:  editForm.cnhVencimento  || null,
                 data_nascimento: editForm.dataNascimento || null,
+                is_terceiro:     editForm.is_terceiro    || false,
                 ...(cnhFotoUrl !== undefined ? { cnh_foto_url: cnhFotoUrl } : {}),
             };
             await updateUserProfile(editando.id, updates);
@@ -796,6 +799,22 @@ function MotoristasManager({ showToast }) {
                                     {cnhFile.name}
                                 </p>
                             )}
+                        </div>
+                    </div>
+
+                    {/* Motorista Terceirizado */}
+                    <div className="mt-3 flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}>
+                        <button
+                            type="button"
+                            onClick={() => setField('is_terceiro', !form.is_terceiro)}
+                            className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0"
+                            style={{ backgroundColor: form.is_terceiro ? '#D97706' : '#D1D5DB' }}>
+                            <span className="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
+                                style={{ transform: form.is_terceiro ? 'translateX(20px)' : 'translateX(4px)' }} />
+                        </button>
+                        <div>
+                            <p className="text-xs font-semibold" style={{ color: '#92400E' }}>Motorista Terceirizado</p>
+                            <p className="text-xs" style={{ color: '#B45309' }}>Não gera bonificações nem aparece nas telas de controle interno</p>
                         </div>
                     </div>
 
@@ -1039,6 +1058,24 @@ function MotoristasManager({ showToast }) {
                             </div>
                         </div>
 
+                        {/* Terceirizado toggle */}
+                        <div className="px-6 py-3 border-t border-slate-100">
+                            <div className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setEditForm(p => ({ ...p, is_terceiro: !p.is_terceiro }))}
+                                    className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0"
+                                    style={{ backgroundColor: editForm.is_terceiro ? '#D97706' : '#D1D5DB' }}>
+                                    <span className="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
+                                        style={{ transform: editForm.is_terceiro ? 'translateX(20px)' : 'translateX(4px)' }} />
+                                </button>
+                                <div>
+                                    <p className="text-xs font-semibold" style={{ color: '#92400E' }}>Motorista Terceirizado</p>
+                                    <p className="text-xs" style={{ color: '#B45309' }}>Não gera bonificações nem aparece nas telas de controle interno</p>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Footer */}
                         <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50">
                             <Button variant="outline" onClick={() => setEditando(null)} disabled={editSaving}>Cancelar</Button>
@@ -1126,6 +1163,7 @@ function MotoristasManager({ showToast }) {
                                             <td className="px-4 py-3">
                                                 <p className="font-medium text-slate-800 text-xs">{m.name || '—'}</p>
                                                 <p className="text-slate-400 text-xs">{m.email || ''}</p>
+                                                {m.is_terceiro && <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-xs font-bold" style={{ backgroundColor: '#FEF3C7', color: '#D97706' }}>Terceirizado</span>}
                                             </td>
                                             <td className="px-4 py-3 hidden sm:table-cell">
                                                 <span className="px-2 py-0.5 rounded-full text-xs font-semibold"

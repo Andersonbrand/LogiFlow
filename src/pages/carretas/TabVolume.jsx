@@ -184,7 +184,7 @@ export default function TabVolume({ isAdmin }) {
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [subAba, setSubAba] = useState('dashboard'); // 'dashboard' | 'tabela' | 'fornecedores'
+    const [subAba, setSubAba] = useState('dashboard'); // 'dashboard' | 'tabela' | 'fornecedores' | 'terceiros'
 
     // Modal carregamento
     const emptyForm = () => ({
@@ -197,6 +197,18 @@ export default function TabVolume({ isAdmin }) {
     const [modal, setModal] = useState(null); // null | { mode: 'create'|'edit', id?: string }
     const [form, setForm] = useState(emptyForm());
     const [saving, setSaving] = useState(false);
+
+    // Modal carregamento terceiro
+    const emptyFormTerceiro = () => ({
+        data_carregamento: new Date().toISOString().slice(0, 10),
+        quantidade: '', unidade_quantidade: 'saco',
+        empresa_origem: '', destino: '', numero_pedido: '', numero_nota_fiscal: '', observacoes: '',
+        tipo: '',
+    });
+    const [modalTerceiro, setModalTerceiro] = useState(null);
+    const [formTerceiro, setFormTerceiro] = useState(emptyFormTerceiro());
+    const [savingTerceiro, setSavingTerceiro] = useState(false);
+    const [carregamentosTerceiros, setCarregamentosTerceiros] = useState([]);
 
     // Frete preview
     const veiculoSelecionado = veiculos.find(v => v.id === form.veiculo_id);
@@ -219,18 +231,20 @@ export default function TabVolume({ isAdmin }) {
             };
             if (empresaFiltro) filters.empresaId = empresaFiltro;
 
-            const [carr, emp, forn, ve, mot] = await Promise.all([
-                fetchCarregamentos(filters),
+            const [carr, emp, forn, ve, mot, carrTerc] = await Promise.all([
+                fetchCarregamentos({ ...filters, is_terceiro: false }),
                 fetchEmpresas(),
                 fetchFornecedoresCarretas(),
                 fetchCarretasVeiculos(),
                 isAdmin ? fetchTodosMotoristas() : Promise.resolve([]),
+                fetchCarregamentos({ ...filters, is_terceiro: true }),
             ]);
             setCarregamentos(carr);
             setEmpresas(emp);
             setFornecedores(forn);
             setVeiculos(ve);
             setMotoristas(mot);
+            setCarregamentosTerceiros(carrTerc);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [mes, empresaFiltro, isAdmin]); // eslint-disable-line
@@ -311,6 +325,66 @@ export default function TabVolume({ isAdmin }) {
     };
 
     const handleDelete = async id => {
+        const ok = await confirm({ title: 'Excluir carregamento?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deleteCarregamento(id); showToast('Excluído!', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    // ── Handlers carregamento terceiro ───────────────────────────────────────
+    const openCreateTerceiro = () => { setFormTerceiro(emptyFormTerceiro()); setModalTerceiro({ mode: 'create' }); };
+    const openEditTerceiro = r => {
+        const { tipo, nome } = parseTipo(r);
+        setFormTerceiro({
+            tipo: tipo || '',
+            data_carregamento: r.data_carregamento || new Date().toISOString().slice(0, 10),
+            quantidade: r.quantidade || '',
+            unidade_quantidade: r.unidade_quantidade || 'saco',
+            empresa_origem: nome || '',
+            numero_pedido: r.numero_pedido || '',
+            numero_nota_fiscal: r.numero_nota_fiscal || '',
+            destino: r.destino || '',
+            observacoes: r.observacoes || '',
+        });
+        setModalTerceiro({ mode: 'edit', id: r.id });
+    };
+    const handleSaveTerceiro = async () => {
+        if (!formTerceiro.tipo) { showToast('Selecione o tipo de carregamento.', 'error'); return; }
+        if (!formTerceiro.data_carregamento) { showToast('Informe a data.', 'error'); return; }
+        if (!formTerceiro.quantidade || isNaN(formTerceiro.quantidade)) { showToast('Informe a quantidade.', 'error'); return; }
+        const empresaOrigem = formTerceiro.empresa_origem ? `${formTerceiro.tipo}|${formTerceiro.empresa_origem}` : formTerceiro.tipo;
+        const payload = {
+            empresa_origem: empresaOrigem,
+            data_carregamento: formTerceiro.data_carregamento,
+            quantidade: Number(formTerceiro.quantidade),
+            unidade_quantidade: formTerceiro.unidade_quantidade || 'saco',
+            numero_pedido: formTerceiro.numero_pedido || null,
+            numero_nota_fiscal: formTerceiro.numero_nota_fiscal || null,
+            destino: formTerceiro.destino || null,
+            observacoes: formTerceiro.observacoes || null,
+            is_terceiro: true,
+            motorista_id: null,
+            empresa_id: null,
+            veiculo_id: null,
+            tipo_calculo_frete: null,
+            valor_base_frete: null,
+            _consumoVeiculo: null,
+        };
+        setSavingTerceiro(true);
+        try {
+            if (modalTerceiro.mode === 'edit') {
+                await updateCarregamento(modalTerceiro.id, payload);
+                showToast('Carregamento atualizado!', 'success');
+            } else {
+                await createCarregamento(payload);
+                showToast('Carregamento de terceiro registrado!', 'success');
+            }
+            setModalTerceiro(null);
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingTerceiro(false); }
+    };
+    const handleDeleteTerceiro = async id => {
         const ok = await confirm({ title: 'Excluir carregamento?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
         if (!ok) return;
         try { await deleteCarregamento(id); showToast('Excluído!', 'success'); load(); }
@@ -415,6 +489,7 @@ export default function TabVolume({ isAdmin }) {
                 {[
                     { id: 'dashboard', label: 'Dashboard', icon: 'BarChart3' },
                     { id: 'tabela', label: 'Registros', icon: 'Table2' },
+                    { id: 'terceiros', label: 'Terceiros', icon: 'Users' },
                     { id: 'fornecedores', label: 'Fornecedores', icon: 'Building' },
                 ].map(s => (
                     <button
@@ -442,6 +517,14 @@ export default function TabVolume({ isAdmin }) {
                     isAdmin={isAdmin}
                     onEdit={openEdit}
                     onDelete={handleDelete}
+                />
+            ) : subAba === 'terceiros' ? (
+                <TabelaTerceiros
+                    carregamentos={carregamentosTerceiros}
+                    isAdmin={isAdmin}
+                    onNovo={openCreateTerceiro}
+                    onEdit={openEditTerceiro}
+                    onDelete={handleDeleteTerceiro}
                 />
             ) : (
                 <PainelFornecedores
@@ -566,6 +649,53 @@ export default function TabVolume({ isAdmin }) {
                         </Field>
                         <Field label="Observações">
                             <textarea value={formFornec.observacoes} onChange={e => setFormFornec(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
+                        </Field>
+                    </div>
+                </Modal>
+            )}
+
+            {/* ── Modal Carregamento Terceiro ── */}
+            {modalTerceiro && isAdmin && (
+                <Modal
+                    title={modalTerceiro.mode === 'create' ? 'Novo Carregamento — Terceiro' : 'Editar Carregamento — Terceiro'}
+                    icon="Users"
+                    onClose={() => setModalTerceiro(null)}
+                    footer={<>
+                        <button onClick={() => setModalTerceiro(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <Button onClick={handleSaveTerceiro} size="sm" iconName="Check" disabled={savingTerceiro}>{savingTerceiro ? 'Salvando...' : 'Salvar'}</Button>
+                    </>}
+                >
+                    <div className="flex flex-col gap-4">
+                        <div className="p-3 rounded-xl text-xs font-medium" style={{ backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }}>
+                            ⚠️ Este lançamento é exclusivo para veículos terceirizados. Não gera bonificações e não aparece nas telas dos motoristas.
+                        </div>
+                        <Field label="Tipo de carregamento" required>
+                            <TipoSelector value={formTerceiro.tipo} onChange={v => setFormTerceiro(f => ({ ...f, tipo: v }))} />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Field label="Data" required>
+                                <input type="date" value={formTerceiro.data_carregamento} onChange={e => setFormTerceiro(f => ({ ...f, data_carregamento: e.target.value }))} className={inputCls} style={inputStyle} />
+                            </Field>
+                            <Field label="Quantidade (sacos)" required>
+                                <input type="number" min="0" value={formTerceiro.quantidade} onChange={e => setFormTerceiro(f => ({ ...f, quantidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 1200" />
+                            </Field>
+                        </div>
+                        <Field label="Fornecedor / Origem">
+                            <OrigemDropdown value={formTerceiro.empresa_origem} onChange={v => setFormTerceiro(f => ({ ...f, empresa_origem: v }))} fornecedores={fornecedores} />
+                        </Field>
+                        <Field label="Destino">
+                            <input value={formTerceiro.destino} onChange={e => setFormTerceiro(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Cidade ou estoque" />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Field label="Nº Pedido">
+                                <input value={formTerceiro.numero_pedido} onChange={e => setFormTerceiro(f => ({ ...f, numero_pedido: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 123456" />
+                            </Field>
+                            <Field label="Nota Fiscal">
+                                <input value={formTerceiro.numero_nota_fiscal} onChange={e => setFormTerceiro(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
+                            </Field>
+                        </div>
+                        <Field label="Observações">
+                            <textarea value={formTerceiro.observacoes} onChange={e => setFormTerceiro(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Observações gerais..." />
                         </Field>
                     </div>
                 </Modal>
@@ -772,6 +902,80 @@ function PainelFornecedores({ fornecedores, isAdmin, onNovo, onDelete }) {
                             {f.observacoes && <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>{f.observacoes}</p>}
                         </div>
                     ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Sub-componente: Tabela Terceiros ─────────────────────────────────────────
+function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete }) {
+    const fmtNum = v => Number(v || 0).toLocaleString('pt-BR');
+    const totalSacos = carregamentos.reduce((s, r) => s + (Number(r.quantidade) || 0), 0);
+
+    return (
+        <div className="flex flex-col gap-4">
+            {/* Header informativo */}
+            <div className="flex items-center justify-between">
+                <div className="p-3 rounded-xl text-xs font-medium flex items-center gap-2" style={{ backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }}>
+                    <span>🚛</span>
+                    <span>Carregamentos de <strong>veículos terceirizados</strong> — registrado apenas o volume, sem bonificações ou vínculo com motoristas.</span>
+                </div>
+                {isAdmin && (
+                    <Button onClick={onNovo} iconName="Plus" size="sm">Novo Carregamento Terceiro</Button>
+                )}
+            </div>
+
+            {/* Card resumo */}
+            <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl p-4 border" style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#B45309' }}>Total Terceiros (mês)</p>
+                    <p className="text-2xl font-black" style={{ color: '#D97706' }}>{fmtNum(totalSacos)}</p>
+                    <p className="text-xs mt-0.5" style={{ color: '#B45309' }}>sacos · {carregamentos.length} registros</p>
+                </div>
+            </div>
+
+            {carregamentos.length === 0 ? (
+                <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
+                    <Icon name="Users" size={36} color="var(--color-muted-foreground)" />
+                    <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento de terceiros no período</p>
+                    {isAdmin && <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Clique em "Novo Carregamento Terceiro" para adicionar</p>}
+                </div>
+            ) : (
+                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: '#FDE68A' }}>
+                    <table className="w-full text-sm min-w-[600px]">
+                        <thead className="text-xs border-b" style={{ background: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}>
+                            <tr>
+                                {['Data', 'Tipo', 'Fornecedor/Origem', 'Destino', 'Pedido', 'NF', 'Qtd (sacos)', ''].map(h => (
+                                    <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {carregamentos.map((r, i) => {
+                                const { tipo, nome } = parseTipo(r);
+                                return (
+                                    <tr key={r.id} className="border-t hover:bg-amber-50 transition-colors" style={{ borderColor: '#FDE68A', background: i % 2 === 0 ? '#fff' : '#FFFBEB' }}>
+                                        <td className="px-3 py-2.5 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
+                                        <td className="px-3 py-2.5"><TipoBadge tipo={tipo} /></td>
+                                        <td className="px-3 py-2.5 max-w-[140px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{nome || '—'}</td>
+                                        <td className="px-3 py-2.5 text-xs max-w-[120px] truncate">{r.destino || '—'}</td>
+                                        <td className="px-3 py-2.5 font-mono text-xs">{r.numero_pedido || '—'}</td>
+                                        <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>
+                                        <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap" style={{ color: '#D97706' }}>{fmtNum(r.quantidade)}</td>
+                                        {isAdmin && (
+                                            <td className="px-3 py-2.5">
+                                                <div className="flex items-center gap-1">
+                                                    <button onClick={() => onEdit(r)} className="p-1.5 rounded hover:bg-blue-50 transition-colors"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
+                                                    <button onClick={() => onDelete(r.id)} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={13} color="#DC2626" /></button>
+                                                </div>
+                                            </td>
+                                        )}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
                 </div>
             )}
         </div>

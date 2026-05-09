@@ -346,10 +346,11 @@ export async function fetchCarregamentos(filters = {}) {
         `)
         .order('data_carregamento', { ascending: false });
 
-    if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
-    if (filters.empresaId)   q = q.eq('empresa_id', filters.empresaId);
-    if (filters.dataInicio)  q = q.gte('data_carregamento', filters.dataInicio);
-    if (filters.dataFim)     q = q.lte('data_carregamento', filters.dataFim);
+    if (filters.motoristaId)              q = q.eq('motorista_id', filters.motoristaId);
+    if (filters.empresaId)                q = q.eq('empresa_id', filters.empresaId);
+    if (filters.dataInicio)               q = q.gte('data_carregamento', filters.dataInicio);
+    if (filters.dataFim)                  q = q.lte('data_carregamento', filters.dataFim);
+    if (filters.is_terceiro !== undefined) q = q.eq('is_terceiro', filters.is_terceiro);
 
     const { data, error } = await q;
     if (error) throw error;
