@@ -769,7 +769,7 @@ export default function CarreteiroDashboard() {
                                                     </div>
                                                 )}
                                                 {carregamentosComBonus.length === 0
-                                                    ? (romaneiosPrincipais.length === 0
+                                                    ? (romaneiosPrincipais.length === 0 && romaneiosFerragem.length === 0
                                                         ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Package" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</span></div>
                                                         : null)
                                                     : carregamentosComBonus.map(c => (

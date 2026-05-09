@@ -890,7 +890,8 @@ export async function fetchRomaneios(filters = {}) {
                 material:material_id(id, nome, peso, unidade, percentual_frete, categoria_frete)
             )
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .neq('tipo_carga', 'ferragem'); // Romaneios de ferragem são lançados pelo motorista — ficam na guia própria
     if (filters.status)      q = q.eq('status', filters.status);
     if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
     if (filters.dataInicio)  q = q.gte('data_saida', filters.dataInicio);
@@ -1115,7 +1116,7 @@ export async function fetchRomaneiosCarreteiro(motoristaId) {
     const { data, error } = await supabase
         .from('carretas_romaneios')
         .select(`
-            id, numero, status, data_saida, data_chegada, destino,
+            id, numero, status, tipo_carga, data_saida, data_chegada, destino,
             toneladas, empresa, valor_frete, aprovado, observacoes, numero_nf,
             veiculo:veiculo_id(id, placa, modelo),
             carretas_romaneio_itens(id, descricao, quantidade, unidade, peso_total)
