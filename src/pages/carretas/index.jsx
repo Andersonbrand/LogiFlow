@@ -134,7 +134,7 @@ function TabViagens({ isAdmin }) {
                 f.dataFim    = `${filtroMes}-${String(lastDay).padStart(2, '0')}`;
             }
             const [c, regs] = await Promise.all([
-                fetchCarregamentos(f),
+                fetchCarregamentos({ ...f, is_terceiro: false }),
                 isAdmin ? fetchAllRegistrosViagem() : Promise.resolve([]),
             ]);
             setCarregamentos(c);
@@ -251,7 +251,7 @@ function TabViagens({ isAdmin }) {
                                                 <span className="text-sm">Nenhum carregamento no período. Lance pela aba <strong>Volume de Carregamento</strong>.</span>
                                             </div>
                                         </td></tr>
-                                    ) : carregamentos.map((c, i) => (
+                                    ) : carregamentos.filter(c => !c.is_terceiro && !c.motorista?.is_terceiro).map((c, i) => (
                                         <tr key={c.id} className="border-t hover:bg-gray-50 transition-colors"
                                             style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                             <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(c.data_carregamento)}</td>
@@ -4183,7 +4183,7 @@ function TabHistoricoViagens({ isAdmin }) {
             const [v, roms, carr, m, ve] = await Promise.all([
                 fetchViagens(filtros),
                 fetchRomaneios({ dataInicio }),
-                fetchCarregamentos({ dataInicio, ...(filtroMotorista ? { motoristaId: filtroMotorista } : {}), ...(filtroVeiculo ? { veiculoId: filtroVeiculo } : {}) }),
+                fetchCarregamentos({ dataInicio, is_terceiro: false, ...(filtroMotorista ? { motoristaId: filtroMotorista } : {}), ...(filtroVeiculo ? { veiculoId: filtroVeiculo } : {}) }),
                 fetchTodosMotoristas(),
                 fetchCarretasVeiculos(),
             ]);
