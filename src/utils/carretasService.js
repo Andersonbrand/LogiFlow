@@ -1171,3 +1171,14 @@ export async function fetchRomaneiosFerragem(filters = {}) {
     if (error) throw error;
     return data || [];
 }
+
+// ─── Tabela de Fretes por Cidade ─────────────────────────────────────────────
+export async function fetchFretesCidades(tipo = 'frota') {
+    const { data, error } = await supabase
+        .from('carretas_fretes')
+        .select('id, cidade, km, frete_por_saco')
+        .eq('tipo', tipo)
+        .order('cidade', { ascending: true });
+    if (error) throw error;
+    return data || [];
+}

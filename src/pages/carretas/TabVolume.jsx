@@ -11,6 +11,7 @@ import {
     fetchFornecedoresCarretas, createFornecedorCarretas, deleteFornecedorCarretas,
     fetchCarretasVeiculos, fetchTodosMotoristas,
     calcularFrete, TIPOS_CALCULO_FRETE,
+    fetchFretesCidades,
 } from 'utils/carretasService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -169,7 +170,66 @@ function OrigemDropdown({ value, onChange, fornecedores }) {
     );
 }
 
-// ─── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
+// ─── Select de Destino com auto-preenchimento de frete ───────────────────────
+function DestinoSelect({ value, onChange, onFreteAutoFill, fretes, placeholder = 'Cidade ou estoque' }) {
+    const [open, setOpen] = useState(false);
+    const [q, setQ] = useState('');
+    const ref = useRef();
+
+    useEffect(() => {
+        const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const filtered = fretes.filter(f => f.cidade.toLowerCase().includes(q.toLowerCase()));
+
+    const select = (frete) => {
+        onChange(frete.cidade);
+        if (onFreteAutoFill) onFreteAutoFill(frete.frete_por_saco);
+        setQ('');
+        setOpen(false);
+    };
+
+    return (
+        <div ref={ref} className="relative">
+            <div className="flex">
+                <input
+                    value={value}
+                    onChange={e => { onChange(e.target.value); setQ(e.target.value); setOpen(true); }}
+                    onFocus={() => setOpen(true)}
+                    className={inputCls + ' pr-9'}
+                    style={inputStyle}
+                    placeholder={placeholder}
+                />
+                <button type="button" onClick={() => setOpen(o => !o)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-gray-100"
+                    style={{ color: 'var(--color-primary)' }}>
+                    <Icon name="ChevronDown" size={14} />
+                </button>
+            </div>
+            {open && (
+                <div className="absolute z-50 w-full mt-1 bg-white rounded-xl border shadow-lg overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="max-h-52 overflow-y-auto">
+                        {filtered.length === 0 ? (
+                            <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                {fretes.length === 0 ? 'Cadastre cidades na aba Fretes' : 'Nenhuma cidade encontrada'}
+                            </div>
+                        ) : filtered.map(f => (
+                            <button key={f.id} type="button" onClick={() => select(f)}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between gap-2">
+                                <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{f.cidade}</span>
+                                <span className="text-xs font-mono font-semibold flex-shrink-0" style={{ color: '#059669' }}>
+                                    {Number(f.frete_por_saco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/saco
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
 export default function TabVolume({ isAdmin }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
@@ -210,6 +270,8 @@ export default function TabVolume({ isAdmin }) {
     const [formTerceiro, setFormTerceiro] = useState(emptyFormTerceiro());
     const [savingTerceiro, setSavingTerceiro] = useState(false);
     const [carregamentosTerceiros, setCarregamentosTerceiros] = useState([]);
+    const [fretesFretas, setFretesFretas] = useState([]);   // tabela frota
+    const [fretosTerceiros, setFretesTerceiros] = useState([]); // tabela terceiros
 
     // Frete preview
     const veiculoSelecionado = veiculos.find(v => v.id === form.veiculo_id);
@@ -232,13 +294,15 @@ export default function TabVolume({ isAdmin }) {
             };
             if (empresaFiltro) filters.empresaId = empresaFiltro;
 
-            const [carr, emp, forn, ve, mot, carrTerc] = await Promise.all([
+            const [carr, emp, forn, ve, mot, carrTerc, fretFr, fretTerc] = await Promise.all([
                 fetchCarregamentos({ ...filters, is_terceiro: false }),
                 fetchEmpresas(),
                 fetchFornecedoresCarretas(),
                 fetchCarretasVeiculos(),
                 isAdmin ? fetchTodosMotoristas() : Promise.resolve([]),
                 fetchCarregamentos({ ...filters, is_terceiro: true }),
+                fetchFretesCidades('frota'),
+                fetchFretesCidades('terceiros'),
             ]);
             setCarregamentos(carr);
             setEmpresas(emp);
@@ -246,6 +310,8 @@ export default function TabVolume({ isAdmin }) {
             setVeiculos(ve);
             setMotoristas(mot);
             setCarregamentosTerceiros(carrTerc);
+            setFretesFretas(fretFr);
+            setFretesTerceiros(fretTerc);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [mes, empresaFiltro, isAdmin]); // eslint-disable-line
@@ -534,6 +600,9 @@ export default function TabVolume({ isAdmin }) {
                     onNovo={openCreateTerceiro}
                     onEdit={openEditTerceiro}
                     onDelete={handleDeleteTerceiro}
+                    fretosTerceiros={fretosTerceiros}
+                    motoristas={motoristas}
+                    mes={mes}
                 />
             ) : (
                 <PainelFornecedores
@@ -593,7 +662,13 @@ export default function TabVolume({ isAdmin }) {
                             </Field>
                         </div>
                         <Field label="Destino">
-                            <input value={form.destino} onChange={e => setForm(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Cidade ou estoque" />
+                            <DestinoSelect
+                                value={form.destino}
+                                onChange={v => setForm(f => ({ ...f, destino: v }))}
+                                onFreteAutoFill={v => setForm(f => ({ ...f, tipo_calculo_frete: 'por_saco', valor_base_frete: String(v) }))}
+                                fretes={fretesFretas}
+                                placeholder="Cidade ou estoque"
+                            />
                         </Field>
                         <Field label="Empresa (frete)">
                             <select value={form.empresa_id} onChange={e => setForm(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}>
@@ -727,7 +802,13 @@ export default function TabVolume({ isAdmin }) {
                             <OrigemDropdown value={formTerceiro.empresa_origem} onChange={v => setFormTerceiro(f => ({ ...f, empresa_origem: v }))} fornecedores={fornecedores} />
                         </Field>
                         <Field label="Destino">
-                            <input value={formTerceiro.destino} onChange={e => setFormTerceiro(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Cidade ou estoque" />
+                            <DestinoSelect
+                                value={formTerceiro.destino}
+                                onChange={v => setFormTerceiro(f => ({ ...f, destino: v }))}
+                                onFreteAutoFill={v => setFormTerceiro(f => ({ ...f, tipo_calculo_frete: 'por_saco', valor_base_frete: String(v) }))}
+                                fretes={fretosTerceiros}
+                                placeholder="Cidade ou estoque"
+                            />
                         </Field>
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Nº Pedido">
@@ -957,61 +1038,171 @@ function PainelFornecedores({ fornecedores, isAdmin, onNovo, onDelete }) {
 }
 
 // ─── Sub-componente: Tabela Terceiros ─────────────────────────────────────────
-function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete }) {
-    const fmtNum = v => Number(v || 0).toLocaleString('pt-BR');
+function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fretosTerceiros = [], motoristas = [], mes }) {
+    const [filtroMotoristaTer, setFiltroMotoristaTer] = useState('');
+
+    // Calcula frete de cada carregamento: usa valor_frete_calculado se existir,
+    // senão busca na tabela de fretes pelo destino
+    const calcFrete = (r) => {
+        if (r.valor_frete_calculado && Number(r.valor_frete_calculado) > 0) return Number(r.valor_frete_calculado);
+        if (!r.destino) return 0;
+        const entrada = fretosTerceiros.find(f => f.cidade.toLowerCase() === (r.destino || '').toLowerCase());
+        if (entrada) return Number(entrada.frete_por_saco) * (Number(r.quantidade) || 0);
+        return 0;
+    };
+
     const totalSacos = carregamentos.reduce((s, r) => s + (Number(r.quantidade) || 0), 0);
+    const totalFrete = carregamentos.reduce((s, r) => s + calcFrete(r), 0);
+
+    // Agrupamento por motorista para o card de resumo
+    const porMotorista = (() => {
+        const map = {};
+        carregamentos.forEach(r => {
+            const key = r.motorista_id || '__sem_motorista__';
+            const nome = r.motorista?.name || '—';
+            const placa = r.veiculo?.placa || '—';
+            if (!map[key]) map[key] = { nome, placa, sacos: 0, frete: 0, viagens: 0 };
+            map[key].sacos  += Number(r.quantidade) || 0;
+            map[key].frete  += calcFrete(r);
+            map[key].viagens += 1;
+        });
+        return Object.values(map).sort((a, b) => b.frete - a.frete);
+    })();
+
+    const carr = filtroMotoristaTer
+        ? carregamentos.filter(r => r.motorista_id === filtroMotoristaTer)
+        : carregamentos;
 
     return (
         <div className="flex flex-col gap-4">
-            {/* Header informativo */}
-            <div className="flex items-center justify-between">
+            {/* Header */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="p-3 rounded-xl text-xs font-medium flex items-center gap-2" style={{ backgroundColor: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A' }}>
                     <span>🚛</span>
-                    <span>Carregamentos de <strong>veículos terceirizados</strong> — registrado apenas o volume, sem bonificações ou vínculo com motoristas.</span>
+                    <span>Carregamentos de <strong>veículos terceirizados</strong> — sem bonificações ou vínculo com a frota.</span>
                 </div>
                 {isAdmin && (
                     <Button onClick={onNovo} iconName="Plus" size="sm">Novo Carregamento Terceiro</Button>
                 )}
             </div>
 
-            {/* Card resumo */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Cards de resumo do mês */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <div className="rounded-xl p-4 border" style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }}>
-                    <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#B45309' }}>Total Terceiros (mês)</p>
-                    <p className="text-2xl font-black" style={{ color: '#D97706' }}>{fmtNum(totalSacos)}</p>
-                    <p className="text-xs mt-0.5" style={{ color: '#B45309' }}>sacos · {carregamentos.length} registros</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#B45309' }}>Total Sacos (mês)</p>
+                    <p className="text-2xl font-black" style={{ color: '#D97706' }}>{totalSacos.toLocaleString('pt-BR')}</p>
+                    <p className="text-xs mt-0.5" style={{ color: '#B45309' }}>{carregamentos.length} registros</p>
+                </div>
+                <div className="rounded-xl p-4 border" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#065F46' }}>Frete Total (mês)</p>
+                    <p className="text-2xl font-black" style={{ color: '#059669' }}>{BRL(totalFrete)}</p>
+                    <p className="text-xs mt-0.5" style={{ color: '#065F46' }}>soma dos fretes calculados</p>
+                </div>
+                <div className="rounded-xl p-4 border col-span-2" style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#1E3A5F' }}>Motoristas ativos (mês)</p>
+                    <p className="text-2xl font-black" style={{ color: '#1D4ED8' }}>{porMotorista.length}</p>
+                    <p className="text-xs mt-0.5" style={{ color: '#1E3A5F' }}>motoristas com carregamentos</p>
                 </div>
             </div>
 
-            {carregamentos.length === 0 ? (
+            {/* Card de resumo por motorista */}
+            {porMotorista.length > 0 && (
+                <div className="bg-white rounded-xl border shadow-sm" style={{ borderColor: '#FDE68A' }}>
+                    <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}>
+                        <p className="text-sm font-semibold" style={{ color: '#92400E' }}>💰 Resumo por Motorista — {mes ? new Date(mes + '-01T00:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : 'mês atual'}</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm min-w-[500px]">
+                            <thead className="text-xs border-b" style={{ background: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}>
+                                <tr>
+                                    {['Motorista', 'Viagens', 'Total (sacos)', 'Frete Total'].map(h => (
+                                        <th key={h} className="px-4 py-2.5 text-left font-semibold whitespace-nowrap">{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {porMotorista.map((m, i) => (
+                                    <tr key={i} className="border-t hover:bg-amber-50 transition-colors cursor-pointer"
+                                        style={{ borderColor: '#FDE68A', background: i % 2 === 0 ? '#fff' : '#FFFBEB' }}
+                                        onClick={() => setFiltroMotoristaTer(prev => prev === Object.keys(carregamentos.reduce((acc, r) => { if (r.motorista?.name === m.nome) acc[r.motorista_id] = true; return acc; }, {}))[0] ? '' : carregamentos.find(r => r.motorista?.name === m.nome)?.motorista_id || '')}>
+                                        <td className="px-4 py-2.5 font-semibold" style={{ color: 'var(--color-text-primary)' }}>{m.nome}</td>
+                                        <td className="px-4 py-2.5 font-mono text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{m.viagens}</td>
+                                        <td className="px-4 py-2.5 font-mono font-bold" style={{ color: '#D97706' }}>{m.sacos.toLocaleString('pt-BR')}</td>
+                                        <td className="px-4 py-2.5 font-mono font-bold" style={{ color: '#059669' }}>{BRL(m.frete)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot>
+                                <tr className="border-t" style={{ borderColor: '#FDE68A', backgroundColor: '#FEF3C7' }}>
+                                    <td className="px-4 py-2.5 font-bold text-xs" style={{ color: '#92400E' }}>TOTAL</td>
+                                    <td className="px-4 py-2.5 font-mono font-bold text-xs" style={{ color: '#92400E' }}>{carregamentos.length}</td>
+                                    <td className="px-4 py-2.5 font-mono font-bold text-xs" style={{ color: '#D97706' }}>{totalSacos.toLocaleString('pt-BR')}</td>
+                                    <td className="px-4 py-2.5 font-mono font-bold text-xs" style={{ color: '#059669' }}>{BRL(totalFrete)}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Filtro por motorista */}
+            {motoristas.filter(m => m.is_terceiro).length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Filtrar:</span>
+                    <button onClick={() => setFiltroMotoristaTer('')}
+                        className="px-3 py-1 rounded-full text-xs font-medium border transition-colors"
+                        style={!filtroMotoristaTer
+                            ? { backgroundColor: '#D97706', color: '#fff', borderColor: '#D97706' }
+                            : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                        Todos
+                    </button>
+                    {motoristas.filter(m => m.is_terceiro).map(m => (
+                        <button key={m.id} onClick={() => setFiltroMotoristaTer(prev => prev === m.id ? '' : m.id)}
+                            className="px-3 py-1 rounded-full text-xs font-medium border transition-colors"
+                            style={filtroMotoristaTer === m.id
+                                ? { backgroundColor: '#D97706', color: '#fff', borderColor: '#D97706' }
+                                : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                            {m.name}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* Tabela de carregamentos */}
+            {carr.length === 0 ? (
                 <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                     <Icon name="Users" size={36} color="var(--color-muted-foreground)" />
-                    <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento de terceiros no período</p>
-                    {isAdmin && <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Clique em "Novo Carregamento Terceiro" para adicionar</p>}
+                    <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+                        {filtroMotoristaTer ? 'Nenhum carregamento para este motorista no período' : 'Nenhum carregamento de terceiros no período'}
+                    </p>
                 </div>
             ) : (
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: '#FDE68A' }}>
-                    <table className="w-full text-sm min-w-[600px]">
+                    <table className="w-full text-sm min-w-[750px]">
                         <thead className="text-xs border-b" style={{ background: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}>
                             <tr>
-                                {['Data', 'Motorista', 'Tipo', 'Fornecedor/Origem', 'Destino', 'Pedido', 'NF', 'Qtd (sacos)', ''].map(h => (
+                                {['Data', 'Motorista', 'Placa', 'Tipo', 'Fornecedor/Origem', 'Destino', 'Pedido', 'NF', 'Qtd (sacos)', 'Frete', ''].map(h => (
                                     <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
                         </thead>
                         <tbody>
-                            {carregamentos.map((r, i) => {
+                            {carr.map((r, i) => {
                                 const { tipo, nome } = parseTipo(r);
+                                const frete = calcFrete(r);
                                 return (
-                                    <tr key={r.id} className="border-t hover:bg-amber-50 transition-colors" style={{ borderColor: '#FDE68A', background: i % 2 === 0 ? '#fff' : '#FFFBEB' }}>
+                                    <tr key={r.id} className="border-t hover:bg-amber-50 transition-colors"
+                                        style={{ borderColor: '#FDE68A', background: i % 2 === 0 ? '#fff' : '#FFFBEB' }}>
                                         <td className="px-3 py-2.5 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
                                         <td className="px-3 py-2.5 text-xs font-medium">{r.motorista?.name || '—'}</td>
+                                        <td className="px-3 py-2.5 font-mono text-xs">{r.veiculo?.placa || '—'}</td>
                                         <td className="px-3 py-2.5"><TipoBadge tipo={tipo} /></td>
-                                        <td className="px-3 py-2.5 max-w-[140px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{nome || '—'}</td>
+                                        <td className="px-3 py-2.5 max-w-[130px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{nome || '—'}</td>
                                         <td className="px-3 py-2.5 text-xs max-w-[120px] truncate">{r.destino || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs">{r.numero_pedido || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>
-                                        <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap" style={{ color: '#D97706' }}>{fmtNum(r.quantidade)}</td>
+                                        <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap" style={{ color: '#D97706' }}>{(Number(r.quantidade)||0).toLocaleString('pt-BR')}</td>
+                                        <td className="px-3 py-2.5 font-mono font-semibold whitespace-nowrap" style={{ color: '#059669' }}>{frete > 0 ? BRL(frete) : '—'}</td>
                                         {isAdmin && (
                                             <td className="px-3 py-2.5">
                                                 <div className="flex items-center gap-1">

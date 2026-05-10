@@ -9,6 +9,7 @@ import {
     fetchCarretasVeiculos, fetchTodosMotoristas, fetchEmpresas,
     STATUS_ROMANEIO, STATUS_ROMANEIO_COLORS,
     fetchRomaneiosFerragem,
+    fetchFretesCidades,
 } from 'utils/carretasService';
 import { fetchMaterials } from 'utils/materialService';
 import * as XLSX from 'xlsx';
@@ -19,7 +20,66 @@ const FMT_DATE = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') 
 const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
 
-// ─── Sub-componentes reutilizáveis ────────────────────────────────────────────
+// ─── Select de Destino com auto-preenchimento de frete ───────────────────────
+function DestinoSelect({ value, onChange, onFreteAutoFill, fretes }) {
+    const [open, setOpen] = useState(false);
+    const [q, setQ] = useState('');
+    const ref = React.useRef();
+
+    React.useEffect(() => {
+        const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    const filtered = fretes.filter(f => f.cidade.toLowerCase().includes(q.toLowerCase()));
+
+    const select = (frete) => {
+        onChange(frete.cidade);
+        if (onFreteAutoFill) onFreteAutoFill(frete.frete_por_saco);
+        setQ('');
+        setOpen(false);
+    };
+
+    return (
+        <div ref={ref} className="relative">
+            <div className="flex">
+                <input
+                    value={value}
+                    onChange={e => { onChange(e.target.value); setQ(e.target.value); setOpen(true); }}
+                    onFocus={() => setOpen(true)}
+                    className={inputCls + ' pr-9'}
+                    style={inputStyle}
+                    placeholder="Cidade / Endereço"
+                />
+                <button type="button" onClick={() => setOpen(o => !o)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-gray-100"
+                    style={{ color: 'var(--color-primary)' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+            </div>
+            {open && (
+                <div className="absolute z-50 w-full mt-1 bg-white rounded-xl border shadow-lg overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="max-h-52 overflow-y-auto">
+                        {filtered.length === 0 ? (
+                            <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                {fretes.length === 0 ? 'Cadastre cidades na aba Fretes' : 'Nenhuma cidade encontrada'}
+                            </div>
+                        ) : filtered.map(f => (
+                            <button key={f.id} type="button" onClick={() => select(f)}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between gap-2">
+                                <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{f.cidade}</span>
+                                <span className="text-xs font-mono font-semibold flex-shrink-0" style={{ color: '#059669' }}>
+                                    {Number(f.frete_por_saco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/saco
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
 function ModalOverlay({ children, onClose, wide, sm }) {
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
@@ -390,8 +450,21 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                             </select>
                         </Field>
                         <Field label="Destino de Entrega" required>
-                            <input value={form.destino} onChange={e => set('destino', e.target.value)}
-                                className={inputCls} style={inputStyle} placeholder="Cidade / Endereço" />
+                            <DestinoSelect
+                                value={form.destino}
+                                onChange={v => set('destino', v)}
+                                onFreteAutoFill={fretePorSaco => {
+                                    // Calcula o frete total estimado e preenche como valor fixo
+                                    const qtd = Number(form.toneladas) || 0;
+                                    // Para romaneios usa o frete por saco como valor fixo sugerido
+                                    set('tipo_calculo_frete', 'fixo');
+                                    set('valor_frete', String(fretePorSaco));
+                                }}
+                                fretes={fretesFretas}
+                            />
+                            <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>
+                                Selecione uma cidade para preencher o frete automaticamente
+                            </p>
                         </Field>
                         <Field label="Data de Saída">
                             <input type="date" value={form.data_saida} onChange={e => set('data_saida', e.target.value)}
@@ -635,6 +708,7 @@ export default function TabRomaneios({ isAdmin }) {
     const [veiculos, setVeiculos]       = useState([]);
     const [empresas, setEmpresas]       = useState([]);
     const [materiais, setMateriais]     = useState([]);
+    const [fretesFretas, setFretesFretas] = useState([]);
     const [loading, setLoading]         = useState(true);
     const [modal, setModal]             = useState(null);
     const [detailModal, setDetailModal] = useState(null);
@@ -653,16 +727,18 @@ export default function TabRomaneios({ isAdmin }) {
                     Number(filtroMes.split('-')[1]), 0
                 ).getDate()).padStart(2, '0');
             }
-            const [r, v, m, e, mat, rf] = await Promise.all([
+            const [r, v, m, e, mat, rf, fr] = await Promise.all([
                 fetchRomaneios(f),
                 fetchCarretasVeiculos(),
                 fetchTodosMotoristas(),
                 fetchEmpresas(),
                 fetchMaterials(),
                 fetchRomaneiosFerragem(),
+                fetchFretesCidades('frota'),
             ]);
             setRomaneios(r); setVeiculos(v); setMotoristas(m); setEmpresas(e); setMateriais(mat);
             setRomaneiosFerragem(rf || []);
+            setFretesFretas(fr || []);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtroStatus, filtroMes]); // eslint-disable-line
