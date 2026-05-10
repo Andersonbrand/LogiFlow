@@ -948,15 +948,16 @@ export async function createRomaneio(romaneio) {
 
 export async function updateRomaneio(id, romaneio) {
     const { itens, ...payload } = romaneio;
-    if (!payload.motorista_id) delete payload.motorista_id;
-    if (!payload.veiculo_id)   delete payload.veiculo_id;
+    // Não deletar veiculo_id quando é undefined — só quando explicitamente vazio
+    if (payload.motorista_id === '') delete payload.motorista_id;
+    if (payload.veiculo_id === '')   delete payload.veiculo_id;
     payload.updated_at = new Date().toISOString();
     const { data, error } = await supabase
         .from('carretas_romaneios')
         .update(payload)
         .eq('id', id)
         .select()
-        .single();
+        .maybeSingle(); // evita erro "Cannot coerce to single JSON object" quando RLS filtra
     if (error) throw error;
     if (itens !== undefined) {
         // Replace all itens

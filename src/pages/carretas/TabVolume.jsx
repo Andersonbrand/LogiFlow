@@ -394,7 +394,7 @@ export default function TabVolume({ isAdmin }) {
             motorista_id: form.motorista_id || null,
             numero_pedido: form.numero_pedido || null,
             numero_nota_fiscal: form.numero_nota_fiscal || null,
-            destino: form.destino || null,
+            destino: form.destino || '',
             observacoes: form.observacoes || null,
         };
 
@@ -453,7 +453,7 @@ export default function TabVolume({ isAdmin }) {
             unidade_quantidade: formTerceiro.unidade_quantidade || 'saco',
             numero_pedido: formTerceiro.numero_pedido || null,
             numero_nota_fiscal: formTerceiro.numero_nota_fiscal || null,
-            destino: formTerceiro.destino || null,
+            destino: formTerceiro.destino || '',
             observacoes: formTerceiro.observacoes || null,
             is_terceiro: true,
             motorista_id: formTerceiro.motorista_id || null,
