@@ -20,6 +20,7 @@ import {
     fetchPontosParada, createPontoParada, updatePontoParada, deletePontoParada,
     fetchRomaneiosCarreteiro,
     createRomaneioFerragem,
+    updateRomaneio, deleteRomaneio,
     fetchEmpresas,
 } from 'utils/carretasService';
 import { useConfirm } from 'components/ui/ConfirmDialog';
@@ -124,6 +125,7 @@ export default function CarreteiroDashboard() {
     });
     // Modal romaneio de ferragens (registrado pelo motorista)
     const [modalFerragem, setModalFerragem] = useState(false);
+    const [editandoFerragemId, setEditandoFerragemId] = useState(null); // null = criar, string = editar
     const [formFerragem, setFormFerragem] = useState({
         numero_nf: '', veiculo_id: '',
         data_saida: new Date().toISOString().split('T')[0],
@@ -749,9 +751,50 @@ export default function CarreteiroDashboard() {
                                                                             Ferragem
                                                                         </span>
                                                                     </div>
-                                                                    <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>
-                                                                        {r.status || 'Aguardando'}
-                                                                    </span>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>
+                                                                            {r.status || 'Aguardando'}
+                                                                        </span>
+                                                                        {/* Botões editar / excluir */}
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setEditandoFerragemId(r.id);
+                                                                                setFormFerragem({
+                                                                                    numero_nf: r.numero_nf || '',
+                                                                                    veiculo_id: r.veiculo_id || '',
+                                                                                    data_saida: r.data_saida || new Date().toISOString().split('T')[0],
+                                                                                    destino: r.destino || '',
+                                                                                    toneladas: r.toneladas ? String(r.toneladas) : '',
+                                                                                    empresa: r.empresa || '',
+                                                                                    observacoes: r.observacoes || '',
+                                                                                });
+                                                                                setModalFerragem(true);
+                                                                            }}
+                                                                            className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors"
+                                                                            title="Editar romaneio">
+                                                                            <Icon name="Pencil" size={13} color="#1D4ED8" />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={async () => {
+                                                                                const { confirm: doConfirm } = window._confirmRef || {};
+                                                                                const ok = await confirm({
+                                                                                    title: 'Excluir romaneio?',
+                                                                                    message: 'Esta ação não pode ser desfeita.',
+                                                                                    confirmLabel: 'Excluir',
+                                                                                    variant: 'danger',
+                                                                                });
+                                                                                if (!ok) return;
+                                                                                try {
+                                                                                    await deleteRomaneio(r.id);
+                                                                                    showToast('Romaneio excluído!', 'success');
+                                                                                    setRomaneiosFerragem(prev => prev.filter(x => x.id !== r.id));
+                                                                                } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+                                                                            }}
+                                                                            className="p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                                                                            title="Excluir romaneio">
+                                                                            <Icon name="Trash2" size={13} color="#DC2626" />
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
                                                                 <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-2">
                                                                     {r.numero_nf && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Nota Fiscal</p><p className="text-sm font-semibold font-data">{r.numero_nf}</p></div>}
@@ -1613,8 +1656,8 @@ export default function CarreteiroDashboard() {
             )}
 
             {modalFerragem && (
-                <ModalOverlay onClose={() => setModalFerragem(false)}>
-                    <ModalHeader title="Romaneio de Ferragens" icon="FileText" onClose={() => setModalFerragem(false)} />
+                <ModalOverlay onClose={() => { setModalFerragem(false); setEditandoFerragemId(null); }}>
+                    <ModalHeader title={editandoFerragemId ? 'Editar Romaneio de Ferragens' : 'Novo Romaneio de Ferragens'} icon="FileText" onClose={() => { setModalFerragem(false); setEditandoFerragemId(null); }} />
                     <div className="p-5 space-y-4 overflow-y-auto">
                         <div className="flex items-center gap-2 p-3 rounded-xl border" style={{ backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }}>
                             <Icon name="Info" size={14} color="#065F46" />
@@ -1660,29 +1703,49 @@ export default function CarreteiroDashboard() {
                         </Field>
                     </div>
                     <div className="flex gap-3 p-5 border-t justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                        <button onClick={() => setModalFerragem(false)} className="px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <button onClick={() => { setModalFerragem(false); setEditandoFerragemId(null); }} className="px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button disabled={salvandoFerragem} onClick={async () => {
                             if (!formFerragem.numero_nf?.trim() || !formFerragem.data_saida || !formFerragem.destino?.trim() || !formFerragem.veiculo_id) {
                                 showToast('NF, data, veículo e destino são obrigatórios', 'error'); return;
                             }
                             setSalvandoFerragem(true);
                             try {
-                                await createRomaneioFerragem({
-                                    numero_nf:    formFerragem.numero_nf,
-                                    data_saida:   formFerragem.data_saida,
-                                    veiculo_id:   formFerragem.veiculo_id,
-                                    destino:      formFerragem.destino,
-                                    toneladas:    formFerragem.toneladas ? Number(formFerragem.toneladas) : null,
-                                    empresa:      formFerragem.empresa || null,
-                                    observacoes:  formFerragem.observacoes || null,
-                                    motorista_id: user.id,
-                                });
-                                showToast('Romaneio de ferragens registrado!', 'success');
+                                if (editandoFerragemId) {
+                                    await updateRomaneio(editandoFerragemId, {
+                                        numero_nf:   formFerragem.numero_nf,
+                                        data_saida:  formFerragem.data_saida,
+                                        veiculo_id:  formFerragem.veiculo_id,
+                                        destino:     formFerragem.destino,
+                                        toneladas:   formFerragem.toneladas ? Number(formFerragem.toneladas) : null,
+                                        empresa:     formFerragem.empresa || null,
+                                        observacoes: formFerragem.observacoes || null,
+                                    });
+                                    showToast('Romaneio atualizado!', 'success');
+                                    setRomaneiosFerragem(prev => prev.map(r =>
+                                        r.id === editandoFerragemId
+                                            ? { ...r, ...formFerragem, toneladas: formFerragem.toneladas ? Number(formFerragem.toneladas) : null }
+                                            : r
+                                    ));
+                                } else {
+                                    await createRomaneioFerragem({
+                                        numero_nf:    formFerragem.numero_nf,
+                                        data_saida:   formFerragem.data_saida,
+                                        veiculo_id:   formFerragem.veiculo_id,
+                                        destino:      formFerragem.destino,
+                                        toneladas:    formFerragem.toneladas ? Number(formFerragem.toneladas) : null,
+                                        empresa:      formFerragem.empresa || null,
+                                        observacoes:  formFerragem.observacoes || null,
+                                        motorista_id: user.id,
+                                    });
+                                    showToast('Romaneio de ferragens registrado!', 'success');
+                                }
+                                setEditandoFerragemId(null);
                                 setModalFerragem(false);
+                                load();
                             } catch (e) { showToast('Erro: ' + e.message, 'error'); }
                             finally { setSalvandoFerragem(false); }
                         }} size="sm" iconName="Check">
-                            {salvandoFerragem ? 'Salvando...' : 'Registrar'}
+                            {salvandoFerragem ? 'Salvando...' : editandoFerragemId ? 'Salvar' : 'Registrar'}
                         </Button>
                     </div>
                 </ModalOverlay>

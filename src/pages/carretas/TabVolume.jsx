@@ -237,6 +237,7 @@ export default function TabVolume({ isAdmin }) {
     // Estado
     const hoje = new Date().toISOString().slice(0, 7);
     const [mes, setMes] = useState(hoje);
+    const [dia, setDia] = useState(''); // dia específico — tem prioridade sobre mês
     const [empresaFiltro, setEmpresaFiltro] = useState('');
     const [carregamentos, setCarregamentos] = useState([]);
     const [empresas, setEmpresas] = useState([]);
@@ -297,12 +298,16 @@ export default function TabVolume({ isAdmin }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [yr, mo] = mes.split('-');
-            const lastDay = new Date(+yr, +mo, 0).getDate();
-            const filters = {
-                dataInicio: `${mes}-01`,
-                dataFim: `${mes}-${String(lastDay).padStart(2, '0')}`,
-            };
+            let filters = {};
+            if (dia) {
+                filters.dataInicio = dia;
+                filters.dataFim    = dia;
+            } else {
+                const [yr, mo] = mes.split('-');
+                const lastDay = new Date(+yr, +mo, 0).getDate();
+                filters.dataInicio = `${mes}-01`;
+                filters.dataFim    = `${mes}-${String(lastDay).padStart(2, '0')}`;
+            }
             if (empresaFiltro) filters.empresaId = empresaFiltro;
 
             const [carr, emp, forn, ve, mot, carrTerc, fretFr, fretTerc, carrRet] = await Promise.all([
@@ -327,7 +332,7 @@ export default function TabVolume({ isAdmin }) {
             setCarregamentosRetira(carrRet);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [mes, empresaFiltro, isAdmin]); // eslint-disable-line
+    }, [mes, dia, empresaFiltro, isAdmin]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
 
@@ -607,11 +612,31 @@ export default function TabVolume({ isAdmin }) {
                         <input
                             type="month"
                             value={mes}
-                            onChange={e => setMes(e.target.value)}
+                            onChange={e => { setMes(e.target.value); setDia(''); }}
                             className="px-3 py-2 rounded-lg border text-sm"
                             style={inputStyle}
+                            title="Filtrar por mês"
                         />
                     </div>
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Dia específico</label>
+                        <input
+                            type="date"
+                            value={dia}
+                            onChange={e => { setDia(e.target.value); setMes(''); }}
+                            className="px-3 py-2 rounded-lg border text-sm"
+                            style={inputStyle}
+                            title="Filtrar por dia específico"
+                        />
+                    </div>
+                    {(dia) && (
+                        <button
+                            onClick={() => { setDia(''); setMes(hoje); }}
+                            className="flex items-center gap-1 px-2 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 self-end"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                            ✕ Dia
+                        </button>
+                    )}
                     <div className="flex flex-col gap-1">
                         <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Empresa</label>
                         <select value={empresaFiltro} onChange={e => setEmpresaFiltro(e.target.value)} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
