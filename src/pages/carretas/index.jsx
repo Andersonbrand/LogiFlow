@@ -158,6 +158,17 @@ function TabViagens({ isAdmin }) {
         catch (e) { showToast('Erro ao excluir: ' + e.message, 'error'); }
     };
 
+    // CIF: apenas volume — excluir completamente da aba Viagens
+    const isCIF = (c) => {
+        const orig = (c.empresa_origem || '').toUpperCase();
+        return orig.startsWith('CIF_') || orig.includes('|CIF_');
+    };
+    const carregamentosComBonus = useMemo(() =>
+        carregamentos
+            .filter(c => !isCIF(c))
+            .map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }))
+    , [carregamentos]); // eslint-disable-line
+
     const exportar = () => {
         const wb = XLSX.utils.book_new();
         if (carregamentos.length) {
