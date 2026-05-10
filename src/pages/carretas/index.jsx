@@ -123,12 +123,16 @@ function TabViagens({ isAdmin }) {
     const [loading, setLoading] = useState(true);
     const [abaViagens, setAbaViagens] = useState('carregamentos'); // 'carregamentos' | 'motoristas'
     const [filtroMes, setFiltroMes] = useState('');
+    const [filtroDia, setFiltroDia] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
             const f = {};
-            if (filtroMes) {
+            if (filtroDia) {
+                f.dataInicio = filtroDia;
+                f.dataFim    = filtroDia;
+            } else if (filtroMes) {
                 const [yr, mo] = filtroMes.split('-');
                 const lastDay = new Date(+yr, +mo, 0).getDate();
                 f.dataInicio = `${filtroMes}-01`;
@@ -143,7 +147,7 @@ function TabViagens({ isAdmin }) {
 
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filtroMes, isAdmin]); // eslint-disable-line
+    }, [filtroMes, filtroDia, isAdmin]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
 
@@ -208,8 +212,16 @@ function TabViagens({ isAdmin }) {
                             </button>
                         ))}
                     </div>
-                    <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
-                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                    <input type="month" value={filtroMes} onChange={e => { setFiltroMes(e.target.value); setFiltroDia(''); }}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
+                    <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); setFiltroMes(''); }}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
+                    {(filtroMes || filtroDia) && (
+                        <button onClick={() => { setFiltroMes(''); setFiltroDia(''); }}
+                            className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                            title="Limpar data">✕ Data</button>
+                    )}
                 </div>
                 <div className="flex gap-2">
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
@@ -486,7 +498,11 @@ function TabAbastecimentos({ isAdmin, profile }) {
             const f = {};
             if (filtro.motoristaId) f.motoristaId = filtro.motoristaId;
             if (filtro.veiculoId)   f.veiculoId   = filtro.veiculoId;
-            if (filtro.mes)         { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
+            if (filtro.dia) {
+                f.dataInicio = filtro.dia; f.dataFim = filtro.dia;
+            } else if (filtro.dia) {
+                f.dataInicio = filtro.dia; f.dataFim = filtro.dia;
+            } else if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
             const [a, v, m, p] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchTodosMotoristas(), fetchPostos().catch(() => [])]);
             setAbast(a); setVeiculos(v); setMotoristas(m); setPostos(p);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -601,7 +617,16 @@ function TabAbastecimentos({ isAdmin, profile }) {
                         <option value="">Todos veículos</option>
                         {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                     </select>
-                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value, dia: '' }))}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
+                    <input type="date" value={filtro.dia || ''} onChange={e => setFiltro(f => ({ ...f, dia: e.target.value, mes: '' }))}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
+                    {(filtro.mes || filtro.dia) && (
+                        <button onClick={() => setFiltro(f => ({ ...f, mes: '', dia: '' }))}
+                            className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                            title="Limpar data">✕ Data</button>
+                    )}
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     {/* item 4: botão atualizar */}
@@ -1196,7 +1221,9 @@ function TabCarregamentos({ isAdmin }) {
         try {
             const f = {};
             if (filtro.empresaId) f.empresaId = filtro.empresaId;
-            if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
+            if (filtro.dia) {
+                f.dataInicio = filtro.dia; f.dataFim = filtro.dia;
+            } else if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
             const [c, v, m, e] = await Promise.all([fetchCarregamentos(f), fetchCarretasVeiculos(), fetchTodosMotoristas(), fetchEmpresas()]);
             setCarregamentos(c); setVeiculos(v); setMotoristas(m); setEmpresas(e);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -1255,7 +1282,16 @@ function TabCarregamentos({ isAdmin }) {
                         <option value="">Todas empresas</option>
                         {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
                     </select>
-                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value, dia: '' }))}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
+                    <input type="date" value={filtro.dia || ''} onChange={e => setFiltro(f => ({ ...f, dia: e.target.value, mes: '' }))}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
+                    {(filtro.mes || filtro.dia) && (
+                        <button onClick={() => setFiltro(f => ({ ...f, mes: '', dia: '' }))}
+                            className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                            title="Limpar data">✕ Data</button>
+                    )}
                 </div>
                 <div className="flex gap-2">
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
@@ -1468,6 +1504,7 @@ function TabBonificacoes({ isAdmin }) {
     const [motoristas,    setMotoristas]    = useState([]);
     const [filtroMotorista, setFiltroMotorista] = useState('');
     const [filtroMes,       setFiltroMes]       = useState('');
+    const [filtroDia,       setFiltroDia]       = useState('');
     const [loading,  setLoading]  = useState(true);
     const [subTab,   setSubTab]   = useState('viagens'); // 'viagens' | 'extras'
     const [modalExtra, setModalExtra] = useState(null);  // null | {mode, data?}
@@ -1479,13 +1516,15 @@ function TabBonificacoes({ isAdmin }) {
         try {
             const f = {};
             if (filtroMotorista) f.motorista_id = filtroMotorista;
-            if (filtroMes) {
+            if (filtroDia) {
+                f.dataInicio = filtroDia; f.dataFim = filtroDia;
+            } else if (filtroMes) {
                 f.dataInicio = filtroMes + '-01';
                 f.dataFim    = filtroMes + '-' + String(new Date(+filtroMes.split('-')[0], +filtroMes.split('-')[1], 0).getDate()).padStart(2,'0');
             }
             const fCarr = {};
             if (filtroMotorista) fCarr.motoristaId = filtroMotorista;
-            if (filtroMes) { fCarr.dataInicio = f.dataInicio; fCarr.dataFim = f.dataFim; }
+            if (filtroDia || filtroMes) { fCarr.dataInicio = f.dataInicio; fCarr.dataFim = f.dataFim; }
             fCarr.is_terceiro = false; // Carregamentos de terceiros NUNCA entram no cálculo de bônus
 
             const [c, e, m] = await Promise.all([
@@ -1496,7 +1535,7 @@ function TabBonificacoes({ isAdmin }) {
             setCarregamentos(c); setExtras(e); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filtroMotorista, filtroMes]); // eslint-disable-line
+    }, [filtroMotorista, filtroMes, filtroDia]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
     // ── Cálculos ─────────────────────────────────────────────────────────────────
@@ -1599,8 +1638,16 @@ function TabBonificacoes({ isAdmin }) {
                         <option value="">Todos motoristas</option>
                         {carreteiros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
-                    <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
-                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                    <input type="month" value={filtroMes} onChange={e => { setFiltroMes(e.target.value); setFiltroDia(''); }}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
+                    <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); setFiltroMes(''); }}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
+                    {(filtroMes || filtroDia) && (
+                        <button onClick={() => { setFiltroMes(''); setFiltroDia(''); }}
+                            className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                            title="Limpar data">✕ Data</button>
+                    )}
                 </div>
                 <div className="flex gap-2">
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
@@ -2188,7 +2235,9 @@ function TabDespesasExtras({ isAdmin, profile }) {
             const f = {};
             if (filtro.veiculoId) f.veiculoId  = filtro.veiculoId;
             if (filtro.categoria) f.categoria  = filtro.categoria;
-            if (filtro.mes) {
+            if (filtro.dia) {
+                f.dataInicio = filtro.dia; f.dataFim = filtro.dia;
+            } else if (filtro.mes) {
                 f.dataInicio = filtro.mes + '-01';
                 f.dataFim    = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0');
             }
@@ -2458,7 +2507,16 @@ function TabDespesasExtras({ isAdmin, profile }) {
                         <option value="">Todas categorias</option>
                         {todasCategorias.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value, dia: '' }))}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
+                    <input type="date" value={filtro.dia || ''} onChange={e => setFiltro(f => ({ ...f, dia: e.target.value, mes: '' }))}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
+                    {(filtro.mes || filtro.dia) && (
+                        <button onClick={() => setFiltro(f => ({ ...f, mes: '', dia: '' }))}
+                            className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                            title="Limpar data">✕ Data</button>
+                    )}
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
@@ -3008,7 +3066,9 @@ function TabDiarias({ isAdmin, profile }) {
         try {
             const f = {};
             if (filtro.motoristaId) f.motoristaId = filtro.motoristaId;
-            if (filtro.mes) {
+            if (filtro.dia) {
+                f.dataInicio = filtro.dia; f.dataFim = filtro.dia;
+            } else if (filtro.mes) {
                 f.dataInicio = filtro.mes + '-01';
                 f.dataFim    = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0');
             }
@@ -3082,7 +3142,16 @@ function TabDiarias({ isAdmin, profile }) {
                         <option value="">Todos motoristas</option>
                         {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
-                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value, dia: '' }))}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
+                    <input type="date" value={filtro.dia || ''} onChange={e => setFiltro(f => ({ ...f, dia: e.target.value, mes: '' }))}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
+                    {(filtro.mes || filtro.dia) && (
+                        <button onClick={() => setFiltro(f => ({ ...f, mes: '', dia: '' }))}
+                            className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                            title="Limpar data">✕ Data</button>
+                    )}
                 </div>
                 <div className="flex gap-2">
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
@@ -4376,11 +4445,12 @@ function TabHistoricoViagens({ isAdmin }) {
     // ── Cor do heatmap por frequência ─────────────────────────────────────────
     const heatColor = (count, max) => {
         if (max === 0) return { bg: '#F8FAFC', text: '#64748B' };
-        const ratio = count / max;
-        if (ratio >= 0.8) return { bg: '#FEE2E2', text: '#991B1B' };  // vermelho — muito frequente
-        if (ratio >= 0.5) return { bg: '#FEF9C3', text: '#B45309' };  // amarelo — frequente
-        if (ratio >= 0.25) return { bg: '#DCFCE7', text: '#166534' }; // verde — moderado
-        return { bg: '#F0F9FF', text: '#0369A1' };                     // azul — raro
+        // Limiar mínimo: só considera "frequente" se tiver pelo menos 3 viagens
+        // E "muito frequente" se tiver pelo menos 5 viagens
+        if (count >= 5 && count / max >= 0.7) return { bg: '#FEE2E2', text: '#991B1B' }; // vermelho — muito frequente
+        if (count >= 3 && count / max >= 0.4) return { bg: '#FEF9C3', text: '#B45309' }; // amarelo — frequente
+        if (count >= 2)                        return { bg: '#DCFCE7', text: '#166534' }; // verde — moderado
+        return { bg: '#F0F9FF', text: '#0369A1' };                                         // azul — raro (1 viagem)
     };
 
     return (

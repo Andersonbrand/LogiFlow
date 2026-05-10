@@ -259,7 +259,7 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
 }
 
 // ─── Modal Formulário Romaneio ─────────────────────────────────────────────────
-function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empresas, materiais }) {
+function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empresas, materiais, fretesFretas = [] }) {
     const { toast, showToast } = useToast();
     const isEdit = modal?.mode === 'edit';
     const rom = modal?.data;
@@ -714,13 +714,18 @@ export default function TabRomaneios({ isAdmin }) {
     const [detailModal, setDetailModal] = useState(null);
     const [filtroStatus, setFiltroStatus] = useState('');
     const [filtroMes, setFiltroMes]       = useState('');
+    const [filtroDia, setFiltroDia]       = useState(''); // dia específico (YYYY-MM-DD)
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
             const f = {};
             if (filtroStatus) f.status = filtroStatus;
-            if (filtroMes) {
+            // Dia específico tem prioridade sobre mês
+            if (filtroDia) {
+                f.dataInicio = filtroDia;
+                f.dataFim    = filtroDia;
+            } else if (filtroMes) {
                 f.dataInicio = filtroMes + '-01';
                 f.dataFim    = filtroMes + '-' + String(new Date(
                     Number(filtroMes.split('-')[0]),
@@ -741,14 +746,16 @@ export default function TabRomaneios({ isAdmin }) {
             setFretesFretas(fr || []);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filtroStatus, filtroMes]); // eslint-disable-line
+    }, [filtroStatus, filtroMes, filtroDia]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
 
     const handleStatusChange = async (id, novoStatus) => {
         try {
             await updateRomaneio(id, { status: novoStatus });
+            // Atualiza em ambas as listas (romaneio pode estar em qualquer uma)
             setRomaneios(prev => prev.map(r => r.id === id ? { ...r, status: novoStatus } : r));
+            setRomaneiosFerragem(prev => prev.map(r => r.id === id ? { ...r, status: novoStatus } : r));
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
@@ -864,7 +871,18 @@ export default function TabRomaneios({ isAdmin }) {
                                                 </td>
                                                 <td className="px-3 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{r.empresa || '—'}</td>
                                                 <td className="px-3 py-3">
-                                                    <span className="text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap" style={{ backgroundColor: sc.bg, color: sc.text }}>{r.status}</span>
+                                                    {isAdmin ? (
+                                                        <select
+                                                            value={r.status}
+                                                            onChange={e => handleStatusChange(r.id, e.target.value)}
+                                                            className="text-xs font-semibold rounded-full px-2.5 py-1 border-0 cursor-pointer outline-none"
+                                                            style={{ backgroundColor: sc.bg, color: sc.text }}
+                                                            title="Clique para mudar o status">
+                                                            {STATUS_ROMANEIO.map(s => <option key={s} value={s}>{s}</option>)}
+                                                        </select>
+                                                    ) : (
+                                                        <span className="text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap" style={{ backgroundColor: sc.bg, color: sc.text }}>{r.status}</span>
+                                                    )}
                                                 </td>
                                             </tr>
                                         );
@@ -883,14 +901,26 @@ export default function TabRomaneios({ isAdmin }) {
 
             {/* ── Toolbar ── */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 items-center">
                     <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todos os status</option>
                         {STATUS_ROMANEIO.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
-                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                    <input type="month" value={filtroMes} onChange={e => { setFiltroMes(e.target.value); setFiltroDia(''); }}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}
+                        title="Filtrar por mês" />
+                    <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); setFiltroMes(''); }}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}
+                        title="Filtrar por dia específico" />
+                    {(filtroMes || filtroDia) && (
+                        <button onClick={() => { setFiltroMes(''); setFiltroDia(''); }}
+                            className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                            title="Limpar filtro de data">
+                            ✕ Data
+                        </button>
+                    )}
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <button onClick={load}
@@ -1048,6 +1078,7 @@ export default function TabRomaneios({ isAdmin }) {
                     veiculos={veiculos}
                     empresas={empresas}
                     materiais={materiais}
+                    fretesFretas={fretesFretas}
                 />
             )}
 
