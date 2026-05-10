@@ -242,12 +242,25 @@ export default function CarreteiroDashboard() {
         const unsubRomaneios = subscribeTabela('romaneios', load);
         const unsubPontos    = subscribeTabela('carretas_pontos_parada', load);
         const unsubRomCar    = subscribeTabela('carretas_romaneios', load);
-        return () => { unsubViagens(); unsubChk(); unsubCarreg(); unsubRomaneios(); unsubPontos(); unsubRomCar(); };
+        // Polling de 30s como fallback — garante que status de romaneios
+        // atualizado pelo admin apareça mesmo se o Realtime falhar
+        const pollInterval = setInterval(async () => {
+            if (!user?.id) return;
+            try {
+                const roms = await fetchRomaneiosCarreteiro(user.id);
+                setRomaneiosCarreteiro((roms || []).filter(r => r.tipo_carga !== 'ferragem'));
+                setRomaneiosFerragem((roms || []).filter(r => r.tipo_carga === 'ferragem'));
+            } catch { /* silencioso */ }
+        }, 30000);
+        return () => { unsubViagens(); unsubChk(); unsubCarreg(); unsubRomaneios(); unsubPontos(); unsubRomCar(); clearInterval(pollInterval); };
     }, [load]);
 
     // Bônus por carregamentos (nova fonte)
     const carregamentosComBonus = useMemo(() =>
-        carregamentos.map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }))
+        carregamentos.map(c => {
+            const isCIF = (c.empresa_origem || '').toUpperCase().replace(/\|.*/, '').trim().startsWith('CIF');
+            return { ...c, bonus: isCIF ? 0 : calcularBonusCarreteiro(c.destino) };
+        })
     , [carregamentos]);
 
     // Manter compatibilidade com viagens para checklist e registros

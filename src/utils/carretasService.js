@@ -346,11 +346,13 @@ export async function fetchCarregamentos(filters = {}) {
         `)
         .order('data_carregamento', { ascending: false });
 
-    if (filters.motoristaId)              q = q.eq('motorista_id', filters.motoristaId);
-    if (filters.empresaId)                q = q.eq('empresa_id', filters.empresaId);
-    if (filters.dataInicio)               q = q.gte('data_carregamento', filters.dataInicio);
-    if (filters.dataFim)                  q = q.lte('data_carregamento', filters.dataFim);
+    if (filters.motoristaId)               q = q.eq('motorista_id', filters.motoristaId);
+    if (filters.empresaId)                 q = q.eq('empresa_id', filters.empresaId);
+    if (filters.dataInicio)                q = q.gte('data_carregamento', filters.dataInicio);
+    if (filters.dataFim)                   q = q.lte('data_carregamento', filters.dataFim);
     if (filters.is_terceiro !== undefined) q = q.eq('is_terceiro', filters.is_terceiro);
+    if (filters.is_retira !== undefined)   q = q.eq('is_retira', filters.is_retira);
+    else if (filters.is_terceiro === false) q = q.eq('is_retira', false); // por padrão, frota não inclui retira
 
     const { data, error } = await q;
     if (error) throw error;
@@ -372,9 +374,16 @@ function sanitizeUuids(obj) {
     return out;
 }
 
+// CIF: apenas volume, sem frete e sem bônus
+function isCIF(empresa_origem) {
+    const s = (empresa_origem || '').toUpperCase();
+    return s.startsWith('CIF_') || s.includes('|CIF_');
+}
+
 export async function createCarregamento(carregamento) {
     const payload = sanitizeUuids(carregamento);
-    const valorFrete = calcularFrete(
+    // CIF não gera frete calculado
+    const valorFrete = isCIF(payload.empresa_origem) ? 0 : calcularFrete(
         payload.tipo_calculo_frete,
         payload.quantidade,
         payload.valor_base_frete,
@@ -392,7 +401,8 @@ export async function createCarregamento(carregamento) {
 
 export async function updateCarregamento(id, updates) {
     const payload = sanitizeUuids(updates);
-    const valorFrete = calcularFrete(
+    // CIF não gera frete calculado
+    const valorFrete = isCIF(payload.empresa_origem) ? 0 : calcularFrete(
         payload.tipo_calculo_frete,
         payload.quantidade,
         payload.valor_base_frete,

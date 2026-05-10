@@ -244,7 +244,7 @@ export default function TabVolume({ isAdmin }) {
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [subAba, setSubAba] = useState('dashboard'); // 'dashboard' | 'tabela' | 'fornecedores' | 'terceiros'
+    const [subAba, setSubAba] = useState('dashboard'); // 'dashboard' | 'tabela' | 'terceiros' | 'retira' | 'fornecedores'
 
     // Modal carregamento
     const emptyForm = () => ({
@@ -270,8 +270,19 @@ export default function TabVolume({ isAdmin }) {
     const [formTerceiro, setFormTerceiro] = useState(emptyFormTerceiro());
     const [savingTerceiro, setSavingTerceiro] = useState(false);
     const [carregamentosTerceiros, setCarregamentosTerceiros] = useState([]);
-    const [fretesFretas, setFretesFretas] = useState([]);   // tabela frota
-    const [fretosTerceiros, setFretesTerceiros] = useState([]); // tabela terceiros
+    const [carregamentosRetira, setCarregamentosRetira] = useState([]);
+    const [fretesFretas, setFretesFretas] = useState([]);
+    const [fretosTerceiros, setFretesTerceiros] = useState([]);
+
+    // Modal retira
+    const emptyFormRetira = () => ({
+        data_carregamento: new Date().toISOString().slice(0, 10),
+        quantidade: '', empresa_origem: '', numero_pedido: '', numero_nota_fiscal: '',
+        pedido_venda: '', motorista_id: '', veiculo_id: '', observacoes: '', tipo: '',
+    });
+    const [modalRetira, setModalRetira] = useState(null);
+    const [formRetira, setFormRetira] = useState(emptyFormRetira());
+    const [savingRetira, setSavingRetira] = useState(false);
 
     // Frete preview
     const veiculoSelecionado = veiculos.find(v => v.id === form.veiculo_id);
@@ -294,8 +305,8 @@ export default function TabVolume({ isAdmin }) {
             };
             if (empresaFiltro) filters.empresaId = empresaFiltro;
 
-            const [carr, emp, forn, ve, mot, carrTerc, fretFr, fretTerc] = await Promise.all([
-                fetchCarregamentos({ ...filters, is_terceiro: false }),
+            const [carr, emp, forn, ve, mot, carrTerc, fretFr, fretTerc, carrRet] = await Promise.all([
+                fetchCarregamentos({ ...filters, is_terceiro: false, is_retira: false }),
                 fetchEmpresas(),
                 fetchFornecedoresCarretas(),
                 fetchCarretasVeiculos(),
@@ -303,6 +314,7 @@ export default function TabVolume({ isAdmin }) {
                 fetchCarregamentos({ ...filters, is_terceiro: true }),
                 fetchFretesCidades('frota'),
                 fetchFretesCidades('terceiros'),
+                fetchCarregamentos({ ...filters, is_retira: true }),
             ]);
             setCarregamentos(carr);
             setEmpresas(emp);
@@ -312,6 +324,7 @@ export default function TabVolume({ isAdmin }) {
             setCarregamentosTerceiros(carrTerc);
             setFretesFretas(fretFr);
             setFretesTerceiros(fretTerc);
+            setCarregamentosRetira(carrRet);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [mes, empresaFiltro, isAdmin]); // eslint-disable-line
@@ -466,6 +479,67 @@ export default function TabVolume({ isAdmin }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
+    // ── Handlers retira ───────────────────────────────────────────────────────
+    const openCreateRetira = () => { setFormRetira(emptyFormRetira()); setModalRetira({ mode: 'create' }); };
+    const openEditRetira = r => {
+        const { tipo, nome } = parseTipo(r);
+        setFormRetira({
+            tipo: tipo || '',
+            data_carregamento: r.data_carregamento || new Date().toISOString().slice(0, 10),
+            quantidade: r.quantidade || '',
+            empresa_origem: nome || '',
+            numero_pedido: r.numero_pedido || '',
+            numero_nota_fiscal: r.numero_nota_fiscal || '',
+            pedido_venda: r.pedido_venda || '',
+            motorista_id: r.motorista_id || '',
+            veiculo_id: r.veiculo_id || '',
+            observacoes: r.observacoes || '',
+        });
+        setModalRetira({ mode: 'edit', id: r.id });
+    };
+    const handleSaveRetira = async () => {
+        if (!formRetira.data_carregamento) { showToast('Informe a data.', 'error'); return; }
+        if (!formRetira.quantidade || isNaN(formRetira.quantidade)) { showToast('Informe a quantidade.', 'error'); return; }
+        const empresaOrigem = formRetira.empresa_origem ? `${formRetira.tipo || 'RETIRA'}|${formRetira.empresa_origem}` : (formRetira.tipo || 'RETIRA');
+        const payload = {
+            empresa_origem: empresaOrigem,
+            data_carregamento: formRetira.data_carregamento,
+            quantidade: Number(formRetira.quantidade),
+            unidade_quantidade: 'saco',
+            numero_pedido: formRetira.numero_pedido || null,
+            numero_nota_fiscal: formRetira.numero_nota_fiscal || null,
+            pedido_venda: formRetira.pedido_venda || null,
+            motorista_id: formRetira.motorista_id || null,
+            veiculo_id: formRetira.veiculo_id || null,
+            observacoes: formRetira.observacoes || null,
+            is_retira: true,
+            is_terceiro: false,
+            empresa_id: null,
+            tipo_calculo_frete: null,
+            valor_base_frete: null,
+            _consumoVeiculo: null,
+        };
+        setSavingRetira(true);
+        try {
+            if (modalRetira.mode === 'edit') {
+                await updateCarregamento(modalRetira.id, payload);
+                showToast('Retira atualizada!', 'success');
+            } else {
+                await createCarregamento(payload);
+                showToast('Retira registrada!', 'success');
+            }
+            setModalRetira(null);
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingRetira(false); }
+    };
+    const handleDeleteRetira = async id => {
+        const ok = await confirm({ title: 'Excluir retira?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deleteCarregamento(id); showToast('Excluído!', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
     // ── Handlers fornecedor ───────────────────────────────────────────────────
     const handleSaveFornec = async () => {
         if (!formFornec.nome.trim()) { showToast('Nome é obrigatório.', 'error'); return; }
@@ -565,6 +639,7 @@ export default function TabVolume({ isAdmin }) {
                     { id: 'dashboard', label: 'Dashboard', icon: 'BarChart3' },
                     { id: 'tabela', label: 'Registros', icon: 'Table2' },
                     { id: 'terceiros', label: 'Terceiros', icon: 'Users' },
+                    { id: 'retira', label: 'Retira de Clientes', icon: 'ShoppingBag' },
                     { id: 'fornecedores', label: 'Fornecedores', icon: 'Building' },
                 ].map(s => (
                     <button
@@ -603,6 +678,16 @@ export default function TabVolume({ isAdmin }) {
                     fretosTerceiros={fretosTerceiros}
                     motoristas={motoristas}
                     mes={mes}
+                />
+            ) : subAba === 'retira' ? (
+                <TabelaRetira
+                    carregamentos={carregamentosRetira}
+                    isAdmin={isAdmin}
+                    onNovo={openCreateRetira}
+                    onEdit={openEditRetira}
+                    onDelete={handleDeleteRetira}
+                    veiculos={veiculos}
+                    motoristas={motoristas}
                 />
             ) : (
                 <PainelFornecedores
@@ -820,6 +905,64 @@ export default function TabVolume({ isAdmin }) {
                         </div>
                         <Field label="Observações">
                             <textarea value={formTerceiro.observacoes} onChange={e => setFormTerceiro(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Observações gerais..." />
+                        </Field>
+                    </div>
+                </Modal>
+            )}
+
+            {/* ── Modal Retira ── */}
+            {modalRetira && isAdmin && (
+                <Modal
+                    title={modalRetira.mode === 'create' ? 'Nova Retira de Cliente' : 'Editar Retira de Cliente'}
+                    icon="ShoppingBag"
+                    onClose={() => setModalRetira(null)}
+                    footer={<>
+                        <button onClick={() => setModalRetira(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <Button onClick={handleSaveRetira} size="sm" iconName="Check" disabled={savingRetira}>{savingRetira ? 'Salvando...' : 'Salvar'}</Button>
+                    </>}
+                >
+                    <div className="flex flex-col gap-4">
+                        <div className="p-3 rounded-xl text-xs font-medium flex items-center gap-2" style={{ backgroundColor: '#F0FDF4', color: '#065F46', border: '1px solid #BBF7D0' }}>
+                            🏭 Retira de cliente na fábrica — apenas volume, sem cálculo de frete ou bonificações.
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Field label="Data" required>
+                                <input type="date" value={formRetira.data_carregamento} onChange={e => setFormRetira(f => ({ ...f, data_carregamento: e.target.value }))} className={inputCls} style={inputStyle} />
+                            </Field>
+                            <Field label="Quantidade (sacos)" required>
+                                <input type="number" min="0" value={formRetira.quantidade} onChange={e => setFormRetira(f => ({ ...f, quantidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 800" />
+                            </Field>
+                        </div>
+                        <Field label="Cliente / Origem">
+                            <OrigemDropdown value={formRetira.empresa_origem} onChange={v => setFormRetira(f => ({ ...f, empresa_origem: v }))} fornecedores={fornecedores} />
+                        </Field>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Field label="Veículo (placa)">
+                                <select value={formRetira.veiculo_id} onChange={e => setFormRetira(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <option value="">Selecione...</option>
+                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
+                                </select>
+                            </Field>
+                            <Field label="Motorista">
+                                <select value={formRetira.motorista_id} onChange={e => setFormRetira(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <option value="">Selecione...</option>
+                                    {motoristas.filter(m => !m.is_terceiro).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                </select>
+                            </Field>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Field label="Pedido de Venda">
+                                <input value={formRetira.pedido_venda} onChange={e => setFormRetira(f => ({ ...f, pedido_venda: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: PV-00123" />
+                            </Field>
+                            <Field label="Nota Fiscal">
+                                <input value={formRetira.numero_nota_fiscal} onChange={e => setFormRetira(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
+                            </Field>
+                        </div>
+                        <Field label="Nº Pedido">
+                            <input value={formRetira.numero_pedido} onChange={e => setFormRetira(f => ({ ...f, numero_pedido: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 123456" />
+                        </Field>
+                        <Field label="Observações">
+                            <textarea value={formRetira.observacoes} onChange={e => setFormRetira(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Observações..." />
                         </Field>
                     </div>
                 </Modal>
@@ -1203,6 +1346,88 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
                                         <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>
                                         <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap" style={{ color: '#D97706' }}>{(Number(r.quantidade)||0).toLocaleString('pt-BR')}</td>
                                         <td className="px-3 py-2.5 font-mono font-semibold whitespace-nowrap" style={{ color: '#059669' }}>{frete > 0 ? BRL(frete) : '—'}</td>
+                                        {isAdmin && (
+                                            <td className="px-3 py-2.5">
+                                                <div className="flex items-center gap-1">
+                                                    <button onClick={() => onEdit(r)} className="p-1.5 rounded hover:bg-blue-50 transition-colors"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
+                                                    <button onClick={() => onDelete(r.id)} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={13} color="#DC2626" /></button>
+                                                </div>
+                                            </td>
+                                        )}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Sub-componente: Retira de Clientes na Fábrica ───────────────────────────
+function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veiculos, motoristas }) {
+    const totalSacos = carregamentos.reduce((s, r) => s + (Number(r.quantidade) || 0), 0);
+
+    return (
+        <div className="flex flex-col gap-4">
+            {/* Header */}
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="p-3 rounded-xl text-xs font-medium flex items-center gap-2" style={{ backgroundColor: '#F0FDF4', color: '#065F46', border: '1px solid #BBF7D0' }}>
+                    <span>🏭</span>
+                    <span>Retira de clientes na fábrica — apenas volume, <strong>sem frete e sem bonificações</strong>.</span>
+                </div>
+                {isAdmin && (
+                    <Button onClick={onNovo} iconName="Plus" size="sm">Nova Retira</Button>
+                )}
+            </div>
+
+            {/* Cards de resumo */}
+            <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl p-4 border" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#065F46' }}>Total Sacos (mês)</p>
+                    <p className="text-2xl font-black" style={{ color: '#059669' }}>{totalSacos.toLocaleString('pt-BR')}</p>
+                    <p className="text-xs mt-0.5" style={{ color: '#065F46' }}>{carregamentos.length} registros</p>
+                </div>
+                <div className="rounded-xl p-4 border" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#065F46' }}>Média por retira</p>
+                    <p className="text-2xl font-black" style={{ color: '#059669' }}>
+                        {carregamentos.length > 0 ? Math.round(totalSacos / carregamentos.length).toLocaleString('pt-BR') : '—'}
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: '#065F46' }}>sacos por operação</p>
+                </div>
+            </div>
+
+            {carregamentos.length === 0 ? (
+                <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
+                    <Icon name="ShoppingBag" size={36} color="var(--color-muted-foreground)" />
+                    <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma retira registrada no período</p>
+                    {isAdmin && <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Clique em "Nova Retira" para adicionar</p>}
+                </div>
+            ) : (
+                <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: '#BBF7D0' }}>
+                    <table className="w-full text-sm min-w-[750px]">
+                        <thead className="text-xs border-b" style={{ background: '#F0FDF4', borderColor: '#BBF7D0', color: '#065F46' }}>
+                            <tr>
+                                {['Data', 'Cliente/Origem', 'Motorista', 'Placa', 'Pedido Venda', 'NF', 'Nº Pedido', 'Qtd (sacos)', ''].map(h => (
+                                    <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {carregamentos.map((r, i) => {
+                                const { nome } = parseTipo(r);
+                                return (
+                                    <tr key={r.id} className="border-t hover:bg-green-50 transition-colors"
+                                        style={{ borderColor: '#BBF7D0', background: i % 2 === 0 ? '#fff' : '#F0FDF4' }}>
+                                        <td className="px-3 py-2.5 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
+                                        <td className="px-3 py-2.5 text-xs font-medium max-w-[140px] truncate">{nome || r.empresa_origem || '—'}</td>
+                                        <td className="px-3 py-2.5 text-xs">{r.motorista?.name || '—'}</td>
+                                        <td className="px-3 py-2.5 font-mono text-xs">{r.veiculo?.placa || '—'}</td>
+                                        <td className="px-3 py-2.5 font-mono text-xs font-semibold" style={{ color: '#059669' }}>{r.pedido_venda || '—'}</td>
+                                        <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>
+                                        <td className="px-3 py-2.5 font-mono text-xs">{r.numero_pedido || '—'}</td>
+                                        <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap" style={{ color: '#059669' }}>{(Number(r.quantidade) || 0).toLocaleString('pt-BR')}</td>
                                         {isAdmin && (
                                             <td className="px-3 py-2.5">
                                                 <div className="flex items-center gap-1">

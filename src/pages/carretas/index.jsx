@@ -356,8 +356,16 @@ function TabVeiculos({ isAdmin }) {
     const handleSubmit = async () => {
         if (!form.placa || !form.marca || !form.modelo) { showToast('Placa, marca e modelo são obrigatórios', 'error'); return; }
         try {
-            if (modal.mode === 'create') await createCarretaVeiculo(form);
-            else await updateCarretaVeiculo(modal.data.id, form);
+            // Campos integer: converter string vazia para null para evitar erro no banco
+            const payload = {
+                ...form,
+                ano_fabricacao:    form.ano_fabricacao    !== '' ? Number(form.ano_fabricacao)    : null,
+                capacidade_carga:  form.capacidade_carga  !== '' ? Number(form.capacidade_carga)  : null,
+                capacidade_tanque: form.capacidade_tanque !== '' ? Number(form.capacidade_tanque) : null,
+                media_consumo:     form.media_consumo     !== '' ? Number(form.media_consumo)     : null,
+            };
+            if (modal.mode === 'create') await createCarretaVeiculo(payload);
+            else await updateCarretaVeiculo(modal.data.id, payload);
             showToast('Veículo salvo!', 'success'); setModal(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -1492,9 +1500,15 @@ function TabBonificacoes({ isAdmin }) {
     useEffect(() => { load(); }, [load]);
 
     // ── Cálculos ─────────────────────────────────────────────────────────────────
+    // CIF (Guanambi ou Barreiras): apenas volume, sem bônus e sem frete
+    const isCIF = (c) => {
+        const orig = (c.empresa_origem || '').toUpperCase();
+        return orig.startsWith('CIF_') || orig.includes('|CIF_');
+    };
+
     const carregamentosComBonus = useMemo(() =>
-        carregamentos.map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }))
-    , [carregamentos]);
+        carregamentos.map(c => ({ ...c, bonus: isCIF(c) ? 0 : calcularBonusCarreteiro(c.destino) }))
+    , [carregamentos]); // eslint-disable-line
 
     const totais = useMemo(() => {
         const porMotorista = {};
