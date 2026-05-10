@@ -453,7 +453,6 @@ export default function CarreteiroDashboard() {
 
     const TABS = [
         { id: 'viagens',       label: 'Minhas Viagens',   icon: 'Navigation' },
-        { id: 'romaneios',     label: 'Romaneios',         icon: 'FileText' },
         { id: 'pontos',        label: 'Pontos de Parada',  icon: 'MapPin' },
         { id: 'bonificacoes',  label: 'Bonificações',      icon: 'DollarSign' },
         { id: 'registros',     label: 'Registrar Viagem',  icon: 'FilePlus' },
@@ -1536,7 +1535,7 @@ export default function CarreteiroDashboard() {
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => { setModalAbast(false); setEditandoAbastId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleAbast} size="sm" iconName="Check">{editandoAbastId ? 'Salvar' : 'Registrar'}</Button>
+                            <Button onClick={handleAbast} size="sm" iconName="Check" className="w-full sm:w-auto">{editandoAbastId ? 'Salvar' : 'Registrar'}</Button>
                         </div>
                     </div>
                 </div>
@@ -1617,7 +1616,7 @@ export default function CarreteiroDashboard() {
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => { setModalCheck(false); setFotoPreview(null); setEditandoCheckId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleCheck} size="sm" iconName={editandoCheckId ? 'Check' : 'Send'}>{editandoCheckId ? 'Salvar' : 'Enviar'}</Button>
+                            <Button onClick={handleCheck} size="sm" iconName={editandoCheckId ? 'Check' : 'Send'} className="w-full sm:w-auto">{editandoCheckId ? 'Salvar' : 'Enviar'}</Button>
                         </div>
                     </div>
                 </div>
@@ -1682,7 +1681,7 @@ export default function CarreteiroDashboard() {
                                     setEditandoRegistroId(null);
                                     setModalRegistro(false); load();
                                 } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                            }} size="sm" iconName="Check">{editandoRegistroId ? 'Salvar' : 'Registrar'}</Button>
+                            }} size="sm" iconName="Check" className="w-full sm:w-auto">{editandoRegistroId ? 'Salvar' : 'Registrar'}</Button>
                         </div>
                     </div>
                 </div>
@@ -1735,8 +1734,8 @@ export default function CarreteiroDashboard() {
                                 className={inputCls} style={{ ...inputStyle, resize: 'vertical' }} rows={2} placeholder="Informações adicionais..." />
                         </Field>
                     </div>
-                    <div className="flex gap-3 p-5 border-t justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                        <button onClick={() => { setModalFerragem(false); setEditandoFerragemId(null); }} className="px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                    <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
+                        <button onClick={() => { setModalFerragem(false); setEditandoFerragemId(null); }} className="px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 w-full sm:w-auto" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button disabled={salvandoFerragem} onClick={async () => {
                             if (!formFerragem.numero_nf?.trim() || !formFerragem.data_saida || !formFerragem.destino?.trim() || !formFerragem.veiculo_id) {
                                 showToast('NF, data, veículo e destino são obrigatórios', 'error'); return;
@@ -1777,7 +1776,7 @@ export default function CarreteiroDashboard() {
                                 load();
                             } catch (e) { showToast('Erro: ' + e.message, 'error'); }
                             finally { setSalvandoFerragem(false); }
-                        }} size="sm" iconName="Check">
+                        }} size="sm" iconName="Check" className="w-full sm:w-auto">
                             {salvandoFerragem ? 'Salvando...' : editandoFerragemId ? 'Salvar' : 'Registrar'}
                         </Button>
                     </div>
@@ -1999,7 +1998,7 @@ export default function CarreteiroDashboard() {
                                     }
                                     setModalPonto(false); setEditandoPontoId(null); load();
                                 } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                            }} size="sm" iconName="Check">
+                            }} size="sm" iconName="Check" className="w-full sm:w-auto">
                                 {editandoPontoId ? 'Salvar' : 'Registrar'}
                             </Button>
                         </div>

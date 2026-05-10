@@ -1624,20 +1624,18 @@ function TabBonificacoes({ isAdmin }) {
     useEffect(() => { load(); }, [load]);
 
     // ── Cálculos ─────────────────────────────────────────────────────────────────
-    // CIF (Guanambi ou Barreiras): apenas volume, sem bônus e sem frete — excluir de Viagens e Bonificações
+    // CIF (Guanambi ou Barreiras): apenas volume — excluir totalmente de Viagens e Bonificações
     const isCIF = (c) => {
         const orig = (c.empresa_origem || '').toUpperCase();
         return orig.startsWith('CIF_') || orig.includes('|CIF_');
     };
 
-    // Exclui CIF completamente — não aparece em nenhuma tela de bônus ou viagens
-    const carregamentosSemCIF = useMemo(() =>
-        carregamentos.filter(c => !isCIF(c))
-    , [carregamentos]); // eslint-disable-line
-
+    // Remove CIF antes do mapeamento — não aparece em tabelas, não conta no total
     const carregamentosComBonus = useMemo(() =>
-        carregamentosSemCIF.map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }))
-    , [carregamentosSemCIF]); // eslint-disable-line
+        carregamentos
+            .filter(c => !isCIF(c))
+            .map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }))
+    , [carregamentos]); // eslint-disable-line
 
     const totais = useMemo(() => {
         const porMotorista = {};
@@ -4505,13 +4503,14 @@ function TabHistoricoViagens({ isAdmin }) {
     };
 
     // ── Cor do heatmap por frequência ─────────────────────────────────────────
-    // Limiares absolutos — independente de proporção relativa
-    // Raro: 1-2 viagens | Moderado: 3-4 | Frequente: 5-7 | Muito frequente: 8+
-    const heatColor = (count) => {
-        if (count >= 8) return { bg: '#FEE2E2', text: '#991B1B' }; // vermelho — muito frequente
-        if (count >= 5) return { bg: '#FEF9C3', text: '#B45309' }; // amarelo — frequente
-        if (count >= 3) return { bg: '#DCFCE7', text: '#166534' }; // verde — moderado
-        return { bg: '#F0F9FF', text: '#0369A1' };                  // azul — raro
+    const heatColor = (count, max) => {
+        if (max === 0) return { bg: '#F8FAFC', text: '#64748B' };
+        // Limiar mínimo: só considera "frequente" se tiver pelo menos 3 viagens
+        // E "muito frequente" se tiver pelo menos 5 viagens
+        if (count >= 5 && count / max >= 0.7) return { bg: '#FEE2E2', text: '#991B1B' }; // vermelho — muito frequente
+        if (count >= 3 && count / max >= 0.4) return { bg: '#FEF9C3', text: '#B45309' }; // amarelo — frequente
+        if (count >= 2)                        return { bg: '#DCFCE7', text: '#166534' }; // verde — moderado
+        return { bg: '#F0F9FF', text: '#0369A1' };                                         // azul — raro (1 viagem)
     };
 
     return (
@@ -4676,7 +4675,7 @@ function TabHistoricoViagens({ isAdmin }) {
                                         <div className="p-5">
                                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                                                 {m.destinos.map(d => {
-                                                    const cor = heatColor(d.count);
+                                                    const cor = heatColor(d.count, maxCount);
                                                     const ultimaData = d.datas.length > 0
                                                         ? d.datas.sort().reverse()[0]
                                                         : null;
@@ -4717,10 +4716,10 @@ function TabHistoricoViagens({ isAdmin }) {
                                         <div className="flex items-center gap-3 px-5 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', backgroundColor: '#FAFAFA' }}>
                                             <span style={{ color: 'var(--color-muted-foreground)' }}>Frequência:</span>
                                             {[
-                                                { bg: '#F0F9FF', text: '#0369A1', label: 'Raro (1-2×)' },
-                                                { bg: '#DCFCE7', text: '#166534', label: 'Moderado (3-4×)' },
-                                                { bg: '#FEF9C3', text: '#B45309', label: 'Frequente (5-7×)' },
-                                                { bg: '#FEE2E2', text: '#991B1B', label: 'Muito frequente (8×+)' },
+                                                { bg: '#F0F9FF', text: '#0369A1', label: 'Raro' },
+                                                { bg: '#DCFCE7', text: '#166534', label: 'Moderado' },
+                                                { bg: '#FEF9C3', text: '#B45309', label: 'Frequente' },
+                                                { bg: '#FEE2E2', text: '#991B1B', label: 'Muito frequente' },
                                             ].map(c => (
                                                 <div key={c.label} className="flex items-center gap-1">
                                                     <div className="w-3 h-3 rounded-sm border" style={{ backgroundColor: c.bg, borderColor: c.text + '40' }} />
@@ -4743,6 +4742,7 @@ function TabHistoricoViagens({ isAdmin }) {
 // ─── Constantes da página principal ─────────────────────────────────────────
 const TABS = [
     { id: 'viagens',       label: 'Viagens',          icon: 'Navigation',    group: 'Operação' },
+    { id: 'romaneios',     label: 'Romaneios',         icon: 'FileText',      group: 'Operação' },
     { id: 'veiculos',      label: 'Veículos',          icon: 'Truck',         group: 'Operação' },
     { id: 'abastecimentos',label: 'Abastecimentos',    icon: 'Fuel',          group: 'Operação' },
     { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck',group: 'Operação' },
