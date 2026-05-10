@@ -10,14 +10,10 @@ body {
     font-family: inherit;
     margin: unset;
 }
-/* ── Mobile touch improvements ─────────────────────────────────────────────── */
-/* Elimina o delay de 300ms em tap no iOS/Android */
-button, a, [role="button"] {
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-}
-
-/* Garante área mínima de toque de 44px (recomendação Apple/Google) */
-button:not(.no-min-touch), a:not(.no-min-touch) {
-    min-height: 44px;
+/* ── Mobile: elimina delay de 300ms em tap (iOS/Android) ───────────────────── */
+@media (max-width: 768px) {
+    button, a, [role="button"] {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
 }

@@ -196,7 +196,7 @@ function TabViagens({ isAdmin }) {
                     {/* Sub-abas */}
                     <div className="flex gap-1 p-1 rounded-xl" style={{ backgroundColor: 'var(--color-muted)' }}>
                         {[
-                                                        { id: 'carregamentos', label: 'Carregamentos',           count: carregamentos.length },
+                        { id: 'carregamentos', label: 'Carregamentos', count: carregamentosComBonus.length },
                             { id: 'motoristas',    label: 'Romaneios lançados pelo motorista', count: registrosMotoristas.length },
                         ].map(s => (
                             <button key={s.id} onClick={() => setAbaViagens(s.id)}
@@ -1624,13 +1624,12 @@ function TabBonificacoes({ isAdmin }) {
     useEffect(() => { load(); }, [load]);
 
     // ── Cálculos ─────────────────────────────────────────────────────────────────
-    // CIF (Guanambi ou Barreiras): apenas volume — excluir totalmente de Viagens e Bonificações
+    // CIF: apenas volume — excluir completamente de Viagens e Bonificações
     const isCIF = (c) => {
         const orig = (c.empresa_origem || '').toUpperCase();
         return orig.startsWith('CIF_') || orig.includes('|CIF_');
     };
 
-    // Remove CIF antes do mapeamento — não aparece em tabelas, não conta no total
     const carregamentosComBonus = useMemo(() =>
         carregamentos
             .filter(c => !isCIF(c))
