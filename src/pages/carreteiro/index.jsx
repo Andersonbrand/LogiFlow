@@ -751,50 +751,9 @@ export default function CarreteiroDashboard() {
                                                                             Ferragem
                                                                         </span>
                                                                     </div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>
-                                                                            {r.status || 'Aguardando'}
-                                                                        </span>
-                                                                        {/* Botões editar / excluir */}
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                setEditandoFerragemId(r.id);
-                                                                                setFormFerragem({
-                                                                                    numero_nf: r.numero_nf || '',
-                                                                                    veiculo_id: r.veiculo_id || '',
-                                                                                    data_saida: r.data_saida || new Date().toISOString().split('T')[0],
-                                                                                    destino: r.destino || '',
-                                                                                    toneladas: r.toneladas ? String(r.toneladas) : '',
-                                                                                    empresa: r.empresa || '',
-                                                                                    observacoes: r.observacoes || '',
-                                                                                });
-                                                                                setModalFerragem(true);
-                                                                            }}
-                                                                            className="p-1.5 rounded-lg hover:bg-blue-50 transition-colors"
-                                                                            title="Editar romaneio">
-                                                                            <Icon name="Pencil" size={13} color="#1D4ED8" />
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={async () => {
-                                                                                const { confirm: doConfirm } = window._confirmRef || {};
-                                                                                const ok = await confirm({
-                                                                                    title: 'Excluir romaneio?',
-                                                                                    message: 'Esta ação não pode ser desfeita.',
-                                                                                    confirmLabel: 'Excluir',
-                                                                                    variant: 'danger',
-                                                                                });
-                                                                                if (!ok) return;
-                                                                                try {
-                                                                                    await deleteRomaneio(r.id);
-                                                                                    showToast('Romaneio excluído!', 'success');
-                                                                                    setRomaneiosFerragem(prev => prev.filter(x => x.id !== r.id));
-                                                                                } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                                                                            }}
-                                                                            className="p-1.5 rounded-lg hover:bg-red-50 transition-colors"
-                                                                            title="Excluir romaneio">
-                                                                            <Icon name="Trash2" size={13} color="#DC2626" />
-                                                                        </button>
-                                                                    </div>
+                                                                    <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>
+                                                                        {r.status || 'Aguardando'}
+                                                                    </span>
                                                                 </div>
                                                                 <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-2">
                                                                     {r.numero_nf && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Nota Fiscal</p><p className="text-sm font-semibold font-data">{r.numero_nf}</p></div>}
@@ -1268,7 +1227,81 @@ export default function CarreteiroDashboard() {
                                                     </div>
                                                 </div>
                                             )}
-                                            {registros.length === 0 && (
+
+                                            {/* ── Romaneios de Ferragem lançados pelo motorista — editáveis aqui ── */}
+                                            {romaneiosFerragem.length > 0 && (
+                                                <div className="mt-4">
+                                                    <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>Romaneios de Ferragem</p>
+                                                    <div className="flex flex-col gap-2">
+                                                        {romaneiosFerragem.map(r => (
+                                                            <div key={r.id} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: '#FDE68A' }}>
+                                                                <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }}>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Icon name="Wrench" size={13} color="#D97706" />
+                                                                        <span className="text-xs font-semibold font-data" style={{ color: '#D97706' }}>
+                                                                            Romaneio #{r.numero || '—'}
+                                                                        </span>
+                                                                        <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+                                                                            Ferragem
+                                                                        </span>
+                                                                    </div>
+                                                                    <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>
+                                                                        {r.status || 'Aguardando'}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="p-4">
+                                                                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-3">
+                                                                        {r.numero_nf && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Nota Fiscal</p><p className="text-sm font-semibold font-data">{r.numero_nf}</p></div>}
+                                                                        {r.data_saida && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Data Saída</p><p className="text-sm font-medium font-data">{FMT_DATE(r.data_saida)}</p></div>}
+                                                                        {r.toneladas && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Toneladas</p><p className="text-sm font-semibold font-data" style={{ color: '#7C3AED' }}>{Number(r.toneladas).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ton</p></div>}
+                                                                        {r.empresa && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Empresa</p><p className="text-sm font-medium">{r.empresa}</p></div>}
+                                                                        {r.destino && <div className="col-span-2"><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Destino</p><div className="flex items-center gap-1.5"><Icon name="MapPin" size={12} color="#D97706" /><p className="text-sm font-medium">{r.destino}</p></div></div>}
+                                                                    </div>
+                                                                    <div className="flex justify-end gap-2 pt-3 border-t" style={{ borderColor: '#FDE68A' }}>
+                                                                        <button
+                                                                            onClick={async () => {
+                                                                                const ok = await confirm({
+                                                                                    title: 'Excluir romaneio?',
+                                                                                    message: 'Esta ação não pode ser desfeita.',
+                                                                                    confirmLabel: 'Excluir',
+                                                                                    variant: 'danger',
+                                                                                });
+                                                                                if (!ok) return;
+                                                                                try {
+                                                                                    await deleteRomaneio(r.id);
+                                                                                    showToast('Romaneio excluído!', 'success');
+                                                                                    setRomaneiosFerragem(prev => prev.filter(x => x.id !== r.id));
+                                                                                } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+                                                                            }}
+                                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
+                                                                            <Icon name="Trash2" size={13} />Excluir
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setEditandoFerragemId(r.id);
+                                                                                setFormFerragem({
+                                                                                    numero_nf:   r.numero_nf || '',
+                                                                                    veiculo_id:  r.veiculo_id || '',
+                                                                                    data_saida:  r.data_saida || new Date().toISOString().split('T')[0],
+                                                                                    destino:     r.destino || '',
+                                                                                    toneladas:   r.toneladas ? String(r.toneladas) : '',
+                                                                                    empresa:     r.empresa || '',
+                                                                                    observacoes: r.observacoes || '',
+                                                                                });
+                                                                                setModalFerragem(true);
+                                                                            }}
+                                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-200 text-amber-700 hover:bg-amber-50">
+                                                                            <Icon name="Pencil" size={13} />Editar
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {registros.length === 0 && romaneiosFerragem.length === 0 && (
                                                 <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                                                     <Icon name="Navigation" size={28} color="var(--color-muted-foreground)" />
                                                     <span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem registrada</span>
