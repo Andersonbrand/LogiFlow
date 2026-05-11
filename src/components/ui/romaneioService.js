@@ -115,11 +115,70 @@ function buildPayload(r) {
     };
 }
 
+// ─── Helpers de numeração compartilhada ───────────────────────────────────────
+
+/** Tenta reusar um número já existente (motorista + destino + data). */
+async function buscarNumeroExistente({ motorista_id, motoristaNome, destino, saida }) {
+    if (!destino || !saida) return null;
+
+    const destinoNorm = (destino || '').trim().toLowerCase();
+    const dataStr     = (saida || '').substring(0, 10);
+
+    // Busca em romaneios (admin)
+    {
+        let q = supabase
+            .from('romaneios')
+            .select('numero, motorista_id, motorista, destino, saida')
+            .not('numero', 'is', null);
+        if (motorista_id) q = q.eq('motorista_id', motorista_id);
+        else if (motoristaNome) q = q.ilike('motorista', `%${motoristaNome.trim()}%`);
+        const { data: rows } = await q;
+        const match = (rows || []).find(r =>
+            (r.destino || '').trim().toLowerCase() === destinoNorm &&
+            (r.saida || '').substring(0, 10) === dataStr
+        );
+        if (match?.numero) return match.numero;
+    }
+
+    // Busca em carretas_romaneios (motorista)
+    {
+        let q = supabase
+            .from('carretas_romaneios')
+            .select('numero, motorista_id, destino, data_saida')
+            .not('numero', 'is', null);
+        if (motorista_id) q = q.eq('motorista_id', motorista_id);
+        const { data: rows } = await q;
+        const match = (rows || []).find(r =>
+            (r.destino || '').trim().toLowerCase() === destinoNorm &&
+            (r.data_saida || '').substring(0, 10) === dataStr
+        );
+        if (match?.numero) return match.numero;
+    }
+
+    return null;
+}
+
+/** Gera próximo número sequencial global, considerando as duas tabelas. */
+async function nextNumeroGlobal() {
+    const [{ data: lastAdmin }, { data: lastCarretas }] = await Promise.all([
+        supabase.from('romaneios').select('numero').order('created_at', { ascending: false }).limit(1).single(),
+        supabase.from('carretas_romaneios').select('numero').order('created_at', { ascending: false }).limit(1).single(),
+    ]);
+    const parseNum = (str) => str ? parseInt((str || '').replace(/\D/g, ''), 10) || 0 : 0;
+    const maxN = Math.max(parseNum(lastAdmin?.numero), parseNum(lastCarretas?.numero));
+    return `ROM-${String(maxN + 1).padStart(5, '0')}`;
+}
+
 // ── Create ────────────────────────────────────────────────────────────────────
 export async function createRomaneio(romaneio, itens = []) {
-    const year  = new Date().getFullYear();
-    const { count } = await supabase.from('romaneios').select('*', { count:'exact', head:true });
-    const numero = `ROM-${year}-${String((count||0)+1).padStart(4,'0')}`;
+    // Tenta reaproveitar número de romaneio já existente com mesmo motorista+destino+data
+    const numeroExistente = await buscarNumeroExistente({
+        motorista_id:  romaneio.motorista_id || null,
+        motoristaNome: romaneio.motorista    || null,
+        destino:       romaneio.destino,
+        saida:         romaneio.saida,
+    });
+    const numero = numeroExistente || await nextNumeroGlobal();
 
     const { data: romData, error } = await supabase.from('romaneios')
         .insert({ ...buildPayload(romaneio), numero }).select('id').single();

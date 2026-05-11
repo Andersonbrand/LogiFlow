@@ -879,20 +879,63 @@ export async function fetchMotoristasCaminhao() {
 // ROMANEIOS DE CARRETA
 // ─────────────────────────────────────────────────────────────────────────────
 
-let _romaneioCounter = null;
+/**
+ * Busca um romaneio existente com mesmo motorista, destino e data_saida
+ * em qualquer das duas tabelas (carretas_romaneios ou romaneios do admin).
+ * Retorna o número existente, ou null se não encontrar.
+ */
+async function buscarNumeroExistente({ motorista_id, motoristaNome, destino, data_saida }) {
+    if (!destino || !data_saida) return null;
 
-async function nextRomaneioNumero() {
-    const { data } = await supabase
-        .from('carretas_romaneios')
-        .select('numero')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-    if (data?.numero) {
-        const n = parseInt(data.numero.replace(/\D/g, ''), 10);
-        return `ROM-${String((n || 0) + 1).padStart(5, '0')}`;
+    const destinoNorm = (destino || '').trim().toLowerCase();
+    const dataStr     = (data_saida || '').substring(0, 10); // YYYY-MM-DD
+
+    // ── Busca na tabela carretas_romaneios (motorista + admin carretas) ──
+    {
+        let q = supabase
+            .from('carretas_romaneios')
+            .select('numero, motorista_id, destino, data_saida')
+            .not('numero', 'is', null);
+        if (motorista_id) q = q.eq('motorista_id', motorista_id);
+        const { data: rows } = await q;
+        const match = (rows || []).find(r =>
+            (r.destino || '').trim().toLowerCase() === destinoNorm &&
+            (r.data_saida || '').substring(0, 10) === dataStr
+        );
+        if (match?.numero) return match.numero;
     }
-    return 'ROM-00001';
+
+    // ── Busca na tabela romaneios (admin — sistema principal) ──
+    {
+        let q = supabase
+            .from('romaneios')
+            .select('numero, motorista_id, motorista, destino, saida')
+            .not('numero', 'is', null);
+        if (motorista_id) q = q.eq('motorista_id', motorista_id);
+        else if (motoristaNome) q = q.ilike('motorista', `%${motoristaNome.trim()}%`);
+        const { data: rows } = await q;
+        const match = (rows || []).find(r =>
+            (r.destino || '').trim().toLowerCase() === destinoNorm &&
+            (r.saida || '').substring(0, 10) === dataStr
+        );
+        if (match?.numero) return match.numero;
+    }
+
+    return null;
+}
+
+/**
+ * Gera o próximo número sequencial considerando as duas tabelas,
+ * garantindo que não haja colisão entre romaneios do admin e do motorista.
+ */
+async function nextRomaneioNumero() {
+    const [{ data: lastCarretas }, { data: lastAdmin }] = await Promise.all([
+        supabase.from('carretas_romaneios').select('numero').order('created_at', { ascending: false }).limit(1).single(),
+        supabase.from('romaneios').select('numero').order('created_at', { ascending: false }).limit(1).single(),
+    ]);
+    const parseNum = (str) => str ? parseInt((str || '').replace(/\D/g, ''), 10) || 0 : 0;
+    const maxN = Math.max(parseNum(lastCarretas?.numero), parseNum(lastAdmin?.numero));
+    return `ROM-${String(maxN + 1).padStart(5, '0')}`;
 }
 
 export async function fetchRomaneios(filters = {}) {
@@ -1150,8 +1193,15 @@ export async function fetchRomaneiosCarreteiro(motoristaId) {
 // ═══════════════════════════════════════════════════════════════
 
 export async function createRomaneioFerragem(payload) {
-    // Gera próximo número de romaneio
-    const numero = await nextRomaneioNumero();
+    // Tenta reaproveitar número de romaneio já existente com mesmo motorista+destino+data
+    const numeroExistente = await buscarNumeroExistente({
+        motorista_id:  payload.motorista_id || null,
+        motoristaNome: payload.motoristaNome || null,
+        destino:       payload.destino,
+        data_saida:    payload.data_saida,
+    });
+    const numero = numeroExistente || await nextRomaneioNumero();
+
     const { data, error } = await supabase
         .from('carretas_romaneios')
         .insert({

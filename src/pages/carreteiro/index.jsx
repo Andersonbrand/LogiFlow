@@ -245,13 +245,18 @@ export default function CarreteiroDashboard() {
         const unsubPontos    = subscribeTabela('carretas_pontos_parada', load);
         const unsubRomCar    = subscribeTabela('carretas_romaneios', load);
         // Polling de 30s como fallback — garante que status de romaneios
-        // atualizado pelo admin apareça mesmo se o Realtime falhar
+        // atualizado pelo admin apareça mesmo se o Realtime falhar.
+        // Atualiza AMBAS as fontes: carretas_romaneios e romaneios (admin).
         const pollInterval = setInterval(async () => {
             if (!user?.id) return;
             try {
-                const roms = await fetchRomaneiosCarreteiro(user.id);
+                const [roms, romsAdmin] = await Promise.all([
+                    fetchRomaneiosCarreteiro(user.id),
+                    fetchRomaneiosPorMotorista(user.id, profile?.name).catch(() => []),
+                ]);
                 setRomaneiosCarreteiro((roms || []).filter(r => r.tipo_carga !== 'ferragem'));
                 setRomaneiosFerragem((roms || []).filter(r => r.tipo_carga === 'ferragem'));
+                setRomaneiosPrincipais(romsAdmin || []);
             } catch { /* silencioso */ }
         }, 30000);
         return () => { unsubViagens(); unsubChk(); unsubCarreg(); unsubRomaneios(); unsubPontos(); unsubRomCar(); clearInterval(pollInterval); };
