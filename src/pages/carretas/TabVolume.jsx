@@ -280,6 +280,7 @@ export default function TabVolume({ isAdmin }) {
         data_carregamento: new Date().toISOString().slice(0, 10),
         quantidade: '', empresa_origem: '', numero_pedido: '', numero_nota_fiscal: '',
         pedido_venda: '', motorista_id: '', veiculo_id: '', observacoes: '', tipo: '',
+        destino: 'Fábrica', // Retira sempre ocorre na fábrica
     });
     const [modalRetira, setModalRetira] = useState(null);
     const [formRetira, setFormRetira] = useState(emptyFormRetira());
@@ -504,6 +505,7 @@ export default function TabVolume({ isAdmin }) {
             motorista_id: r.motorista_id || '',
             veiculo_id: r.veiculo_id || '',
             observacoes: r.observacoes || '',
+            destino: r.destino || 'Fábrica',
         });
         setModalRetira({ mode: 'edit', id: r.id });
     };
@@ -516,6 +518,7 @@ export default function TabVolume({ isAdmin }) {
             data_carregamento: formRetira.data_carregamento,
             quantidade: Number(formRetira.quantidade),
             unidade_quantidade: 'saco',
+            destino: formRetira.destino || 'Fábrica', // Retira: destino padrão = Fábrica
             numero_pedido: formRetira.numero_pedido || null,
             numero_nota_fiscal: formRetira.numero_nota_fiscal || null,
             pedido_venda: formRetira.pedido_venda || null,
