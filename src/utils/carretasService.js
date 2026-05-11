@@ -1200,7 +1200,39 @@ export async function createRomaneioFerragem(payload) {
         destino:       payload.destino,
         data_saida:    payload.data_saida,
     });
-    const numero = numeroExistente || await nextRomaneioNumero();
+
+    // Se já existe um romaneio com esse número, evitar conflito de unique key:
+    // tenta gerar um número que NÃO existe em carretas_romaneios
+    let numero = numeroExistente;
+    if (!numero) {
+        // Gera novo número e verifica se já existe para evitar race condition
+        let tentativas = 0;
+        while (tentativas < 5) {
+            const candidato = await nextRomaneioNumero();
+            const { data: existe } = await supabase
+                .from('carretas_romaneios')
+                .select('id')
+                .eq('numero', candidato)
+                .maybeSingle();
+            if (!existe) { numero = candidato; break; }
+            tentativas++;
+            // Aguarda um tick e tenta novamente
+            await new Promise(r => setTimeout(r, 100));
+        }
+        if (!numero) numero = await nextRomaneioNumero(); // fallback
+    } else {
+        // Número existe mas é de outra tabela (romaneios do admin) —
+        // verificar se já existe em carretas_romaneios para evitar colisão
+        const { data: existeCarretas } = await supabase
+            .from('carretas_romaneios')
+            .select('id')
+            .eq('numero', numero)
+            .maybeSingle();
+        if (existeCarretas) {
+            // Número já usado em carretas_romaneios — gera um novo
+            numero = await nextRomaneioNumero();
+        }
+    }
 
     const { data, error } = await supabase
         .from('carretas_romaneios')

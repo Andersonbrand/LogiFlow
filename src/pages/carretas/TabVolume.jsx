@@ -512,7 +512,8 @@ export default function TabVolume({ isAdmin }) {
     const handleSaveRetira = async () => {
         if (!formRetira.data_carregamento) { showToast('Informe a data.', 'error'); return; }
         if (!formRetira.quantidade || isNaN(formRetira.quantidade)) { showToast('Informe a quantidade.', 'error'); return; }
-        const empresaOrigem = formRetira.empresa_origem ? `${formRetira.tipo || 'RETIRA'}|${formRetira.empresa_origem}` : (formRetira.tipo || 'RETIRA');
+        if (!formRetira.tipo) { showToast('Selecione o tipo de carregamento (FOB/CIF).', 'error'); return; }
+        const empresaOrigem = formRetira.empresa_origem ? `${formRetira.tipo}|${formRetira.empresa_origem}` : formRetira.tipo;
         const payload = {
             empresa_origem: empresaOrigem,
             data_carregamento: formRetira.data_carregamento,
@@ -660,9 +661,7 @@ export default function TabVolume({ isAdmin }) {
                     <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
                         <Icon name="FileDown" size={14} /> Exportar
                     </button>
-                    {isAdmin && (
-                        <Button onClick={openCreate} iconName="Plus" size="sm">Novo Carregamento</Button>
-                    )}
+{/* Botão de novo fica em cada aba — removido do header global */}
                 </div>
             </div>
 
@@ -693,11 +692,12 @@ export default function TabVolume({ isAdmin }) {
                     <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                 </div>
             ) : subAba === 'dashboard' ? (
-                <DashboardVolume totais={totais} carregamentos={carregamentos} carregamentosTerceiros={carregamentosTerceiros} mes={mes} />
+                <DashboardVolume totais={totais} carregamentos={carregamentos} carregamentosTerceiros={carregamentosTerceiros} carregamentosRetira={carregamentosRetira} mes={mes} />
             ) : subAba === 'tabela' ? (
                 <TabelaCarregamentos
                     carregamentos={carregamentos}
                     isAdmin={isAdmin}
+                    onNovo={openCreate}
                     onEdit={openEdit}
                     onDelete={handleDelete}
                 />
@@ -956,8 +956,12 @@ export default function TabVolume({ isAdmin }) {
                 >
                     <div className="flex flex-col gap-4">
                         <div className="p-3 rounded-xl text-xs font-medium flex items-center gap-2" style={{ backgroundColor: '#F0FDF4', color: '#065F46', border: '1px solid #BBF7D0' }}>
-                            🏭 Retira de cliente na fábrica — apenas volume, sem cálculo de frete ou bonificações.
+                            🏭 Retira de cliente na fábrica — registre o tipo (FOB/CIF), veículo e motorista da frota própria.
                         </div>
+                        {/* Tipo de carregamento — igual ao Registros */}
+                        <Field label="Tipo de carregamento" required>
+                            <TipoSelector value={formRetira.tipo} onChange={v => setFormRetira(f => ({ ...f, tipo: v }))} />
+                        </Field>
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Data" required>
                                 <input type="date" value={formRetira.data_carregamento} onChange={e => setFormRetira(f => ({ ...f, data_carregamento: e.target.value }))} className={inputCls} style={inputStyle} />
@@ -969,20 +973,31 @@ export default function TabVolume({ isAdmin }) {
                         <Field label="Cliente / Origem">
                             <OrigemDropdown value={formRetira.empresa_origem} onChange={v => setFormRetira(f => ({ ...f, empresa_origem: v }))} fornecedores={fornecedores} />
                         </Field>
+                        {/* Veículos e Motoristas — apenas frota própria (não terceiros) */}
                         <div className="grid grid-cols-2 gap-3">
-                            <Field label="Veículo (placa)">
+                            <Field label="Veículo da frota própria">
                                 <select value={formRetira.veiculo_id} onChange={e => setFormRetira(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
-                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
+                                    {veiculos.filter(v => !v.is_terceiro).map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
                                 </select>
                             </Field>
-                            <Field label="Motorista">
+                            <Field label="Motorista da frota própria">
                                 <select value={formRetira.motorista_id} onChange={e => setFormRetira(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {motoristas.filter(m => !m.is_terceiro).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                 </select>
                             </Field>
                         </div>
+                        {/* Destino com auto-preenchimento de frete */}
+                        <Field label="Destino">
+                            <DestinoSelect
+                                value={formRetira.destino === 'Fábrica' ? '' : (formRetira.destino || '')}
+                                onChange={v => setFormRetira(f => ({ ...f, destino: v || 'Fábrica' }))}
+                                onFreteAutoFill={v => setFormRetira(f => ({ ...f, tipo_calculo_frete: 'por_saco', valor_base_frete: String(v) }))}
+                                fretes={fretesFretas}
+                                placeholder="Destino da carga (opcional)"
+                            />
+                        </Field>
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Pedido de Venda">
                                 <input value={formRetira.pedido_venda} onChange={e => setFormRetira(f => ({ ...f, pedido_venda: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: PV-00123" />
@@ -1008,7 +1023,7 @@ export default function TabVolume({ isAdmin }) {
 }
 
 // ─── Sub-componente: Dashboard ─────────────────────────────────────────────────
-function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], mes }) {
+function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], carregamentosRetira = [], mes }) {
     const pct = v => totais.total > 0 ? ((v / totais.total) * 100).toFixed(1) : '0.0';
     const tipoEntries = Object.entries(TIPOS);
 
@@ -1019,23 +1034,69 @@ function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], m
 
     const freteTotal = carregamentos.reduce((s, r) => s + Number(r.valor_frete_calculado || 0), 0);
 
+    const [expandido, setExpandido] = React.useState(false);
+    const totalFrota     = totais.total;
+    const totalTerceiros = carregamentosTerceiros.reduce((s,r) => s + (Number(r.quantidade)||0), 0);
+    const totalRetiras   = carregamentosRetira.reduce((s,r) => s + (Number(r.quantidade)||0), 0);
+    const totalGeral     = totalFrota + totalTerceiros + totalRetiras;
+
     return (
         <div className="flex flex-col gap-6">
-            {/* Cards de resumo */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-                {/* Total */}
-                <div className="rounded-xl p-4 text-white col-span-2 lg:col-span-1 relative overflow-hidden" style={{ background: 'var(--color-primary)' }}>
-                    <div className="absolute top-0 left-0 right-0 h-1 rounded-t-xl" style={{ background: 'rgba(255,255,255,0.3)' }} />
-                    <p className="text-xs font-semibold uppercase tracking-wide opacity-75 mb-2">📦 Total Geral</p>
-                    <p className="text-3xl font-black leading-none">{fmtNum(totais.total)}</p>
-                    <p className="text-xs opacity-60 mt-1">sacos · {carregamentos.length} carreg.</p>
-                    {carregamentosTerceiros.length > 0 && (
-                        <p className="text-xs mt-1 font-medium" style={{ color: '#D97706' }}>
-                            + {carregamentosTerceiros.reduce((s,r) => s + (Number(r.quantidade)||0), 0).toLocaleString('pt-BR')} sacos terceiros = {totais.totalGeral?.toLocaleString('pt-BR')} total geral
-                        </p>
-                    )}
-                </div>
-                {/* Por tipo */}
+            {/* ── Badge de total expandível ── */}
+            <div className="rounded-2xl overflow-hidden border shadow-sm" style={{ borderColor: 'var(--color-primary)' }}>
+                <button
+                    onClick={() => setExpandido(e => !e)}
+                    className="w-full text-left px-5 py-4 text-white flex items-center justify-between gap-4"
+                    style={{ background: 'var(--color-primary)' }}>
+                    <div className="flex items-center gap-4">
+                        <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide opacity-75">📦 Volume Total Carregado — todas as origens</p>
+                            <p className="text-4xl font-black leading-none mt-1">{fmtNum(totalGeral)}</p>
+                            <p className="text-xs opacity-60 mt-1">sacos · clique para {expandido ? 'recolher' : 'detalhar'}</p>
+                        </div>
+                    </div>
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.2)' }}>
+                        <Icon name={expandido ? 'ChevronUp' : 'ChevronDown'} size={18} color="#fff" />
+                    </div>
+                </button>
+                {expandido && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x" style={{ divideColor: 'var(--color-border)' }}>
+                        <div className="px-5 py-4 flex items-center gap-3" style={{ backgroundColor: '#EFF6FF' }}>
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#DBEAFE' }}>
+                                <Icon name="Truck" size={18} color="#1D4ED8" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold uppercase" style={{ color: '#1E3A5F' }}>Frota Própria</p>
+                                <p className="text-2xl font-black" style={{ color: '#1D4ED8' }}>{fmtNum(totalFrota)}</p>
+                                <p className="text-xs" style={{ color: '#3B82F6' }}>{carregamentos.length} registros · aba Registros</p>
+                            </div>
+                        </div>
+                        <div className="px-5 py-4 flex items-center gap-3" style={{ backgroundColor: '#FFFBEB' }}>
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FEF3C7' }}>
+                                <Icon name="Users" size={18} color="#D97706" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold uppercase" style={{ color: '#92400E' }}>Terceiros</p>
+                                <p className="text-2xl font-black" style={{ color: '#D97706' }}>{fmtNum(totalTerceiros)}</p>
+                                <p className="text-xs" style={{ color: '#B45309' }}>{carregamentosTerceiros.length} registros · aba Terceiros</p>
+                            </div>
+                        </div>
+                        <div className="px-5 py-4 flex items-center gap-3" style={{ backgroundColor: '#F0FDF4' }}>
+                            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#DCFCE7' }}>
+                                <Icon name="ShoppingBag" size={18} color="#059669" />
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold uppercase" style={{ color: '#065F46' }}>Retira de Clientes</p>
+                                <p className="text-2xl font-black" style={{ color: '#059669' }}>{fmtNum(totalRetiras)}</p>
+                                <p className="text-xs" style={{ color: '#059669' }}>aba Retira de Clientes</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Cards por tipo (frota própria) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {tipoEntries.map(([key, t]) => (
                     <div key={key} className="rounded-xl p-4 relative overflow-hidden border" style={{ background: t.bg, borderColor: t.border }}>
                         <div className="absolute top-0 left-0 right-0 h-1 rounded-t-xl" style={{ background: t.bar }} />
@@ -1125,17 +1186,21 @@ function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], m
 }
 
 // ─── Sub-componente: Tabela completa ──────────────────────────────────────────
-function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete }) {
-    if (carregamentos.length === 0) {
-        return (
-            <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
-                <Icon name="Package" size={36} color="var(--color-muted-foreground)" />
-                <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento encontrado para o período</p>
-            </div>
-        );
-    }
+function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo }) {
     return (
-        <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+        <div className="flex flex-col gap-4">
+            {isAdmin && (
+                <div className="flex justify-end">
+                    <Button onClick={onNovo} iconName="Plus" size="sm">Novo Carregamento</Button>
+                </div>
+            )}
+            {carregamentos.length === 0 ? (
+                <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
+                    <Icon name="Package" size={36} color="var(--color-muted-foreground)" />
+                    <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento encontrado para o período</p>
+                </div>
+            ) : (
+            <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
             <table className="w-full text-sm min-w-[800px]">
                 <thead className="text-xs border-b" style={{ background: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                     <tr>
@@ -1172,6 +1237,8 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete }) {
                     })}
                 </tbody>
             </table>
+        </div>
+            )}
         </div>
     );
 }
