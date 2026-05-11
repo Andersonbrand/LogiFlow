@@ -345,8 +345,13 @@ export default function TabVolume({ isAdmin }) {
             if (tipo && t.hasOwnProperty(tipo)) t[tipo] += qtd;
             t.total += qtd;
         });
-        carregamentosTerceiros.forEach(r => {
-            t.totalTerceiros += Number(r.quantidade) || 0;
+        // Terceiros e Retira: somar volume de FOB Guanambi e FOB Barreiras nos badges respectivos
+        [...carregamentosTerceiros, ...carregamentosRetira].forEach(r => {
+            const qtd = Number(r.quantidade) || 0;
+            t.totalTerceiros += qtd;
+            const { tipo } = parseTipo(r);
+            if (tipo === 'ARA_GBI_FOB')  t.ARA_GBI_FOB  += qtd;
+            if (tipo === 'ARA_BARR_FOB') t.ARA_BARR_FOB += qtd;
         });
         t.totalGeral = t.total + t.totalTerceiros;
         return t;

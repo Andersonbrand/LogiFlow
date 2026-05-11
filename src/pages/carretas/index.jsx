@@ -22,6 +22,7 @@ import {
     fetchEmpresas, createEmpresa, deleteEmpresa,
     fetchCarreteiros, fetchTodosMotoristas,
     fetchAllRegistrosViagem, deleteRegistroViagem,
+    fetchPontosParada, updatePontoParada, deletePontoParada,
         CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
     aprovarChecklistComNotificacao, reprovarChecklistComNotificacao, aprovarChecklistComNotificacaoRetorno,
     fetchOrdensServico, createOrdemServico, updateOrdemServico, deleteOrdemServico,
@@ -268,14 +269,14 @@ function TabViagens({ isAdmin }) {
                                     ))}</tr>
                                 </thead>
                                 <tbody>
-                                    {carregamentos.length === 0 ? (
+                                    {carregamentosComBonus.length === 0 ? (
                                         <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                             <div className="flex flex-col items-center gap-2">
                                                 <Icon name="Package" size={28} color="var(--color-muted-foreground)" />
                                                 <span className="text-sm">Nenhum carregamento no período. Lance pela aba <strong>Volume de Carregamento</strong>.</span>
                                             </div>
                                         </td></tr>
-                                    ) : carregamentos.filter(c => !c.is_terceiro && !c.motorista?.is_terceiro).map((c, i) => (
+                                    ) : carregamentosComBonus.filter(c => !c.is_terceiro && !c.motorista?.is_terceiro).map((c, i) => (
                                         <tr key={c.id} className="border-t hover:bg-gray-50 transition-colors"
                                             style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                             <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(c.data_carregamento)}</td>
@@ -1507,14 +1508,14 @@ function TabEmpresas({ isAdmin }) {
 // ─── TAB: Bonificações (visão admin) ─────────────────────────────────────────
 // ─── Cards colapsáveis de bônus por motorista ─────────────────────────────────
 function ColapsaveisMotoristas({ motoristas }) {
-    const [abertos, setAbertos] = React.useState({});
-    const toggle = nome => setAbertos(prev => ({ ...prev, [nome]: !prev[nome] }));
+    const [aberto, setAberto] = React.useState(null); // só um card aberto por vez
+    const toggle = nome => setAberto(prev => (prev === nome ? null : nome));
 
     return (
         <div className="mb-5">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 items-start">
                 {motoristas.map(m => {
-                    const open = !!abertos[m.nome];
+                    const open = aberto === m.nome;
                     return (
                         <div
                             key={m.nome}
@@ -4749,6 +4750,280 @@ function TabHistoricoViagens({ isAdmin }) {
     );
 }
 
+// ─── TAB: Pontos de Parada (admin) ───────────────────────────────────────────
+function TabPontosParada({ isAdmin }) {
+    const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
+    const [pontos, setPontos] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [filtroMes, setFiltroMes] = useState('');
+    const [filtroMotorista, setFiltroMotorista] = useState('');
+    const [motoristas, setMotoristas] = useState([]);
+    const [editModal, setEditModal] = useState(null);
+    const [formEdit, setFormEdit] = useState({});
+    const [saving, setSaving] = useState(false);
+
+    const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
+    const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [p, m] = await Promise.all([
+                fetchPontosParada(null), // null = todos os motoristas
+                isAdmin ? fetchTodosMotoristas() : Promise.resolve([]),
+            ]);
+            setPontos(p);
+            setMotoristas(m);
+        } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    }, []); // eslint-disable-line
+    useEffect(() => { load(); }, [load]);
+
+    const TIPO_COLOR = {
+        'Fábrica': '#EFF6FF', 'Empresa': '#FEF3C7', 'Estoque': '#FEF9C3',
+        'Entrega': '#D1FAE5', 'Posto': '#EDE9FE', 'Oficina': '#FEE2E2', 'Outro': '#F3F4F6',
+    };
+    const TIPO_TEXT = {
+        'Fábrica': '#1D4ED8', 'Empresa': '#D97706', 'Estoque': '#B45309',
+        'Entrega': '#065F46', 'Posto': '#7C3AED', 'Oficina': '#B91C1C', 'Outro': '#6B7280',
+    };
+
+    const pontosFiltrados = pontos.filter(p => {
+        if (filtroMotorista && p.motorista_id !== filtroMotorista) return false;
+        if (filtroMes) {
+            const d = p.data_saida || '';
+            if (!d.startsWith(filtroMes)) return false;
+        }
+        return true;
+    });
+
+    const handleDelete = async (id) => {
+        const ok = await confirm({ title: 'Excluir ponto de parada?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deletePontoParada(id); showToast('Registro excluído.', 'success'); load(); }
+        catch (e) { showToast('Erro ao excluir: ' + e.message, 'error'); }
+    };
+
+    const openEdit = (p) => {
+        setFormEdit({
+            local: p.local || '',
+            tipo_local: p.tipo_local || 'Outro',
+            data_saida: p.data_saida || '',
+            horario_saida: p.horario_saida || '',
+            km_saida: p.km_saida ?? '',
+            data_chegada: p.data_chegada || '',
+            horario_chegada: p.horario_chegada || '',
+            km_chegada: p.km_chegada ?? '',
+            observacoes: p.observacoes || '',
+        });
+        setEditModal(p);
+    };
+
+    const handleSave = async () => {
+        if (!editModal) return;
+        setSaving(true);
+        try {
+            await updatePontoParada(editModal.id, {
+                local: formEdit.local,
+                tipo_local: formEdit.tipo_local,
+                data_saida: formEdit.data_saida || null,
+                horario_saida: formEdit.horario_saida || null,
+                km_saida: formEdit.km_saida !== '' ? Number(formEdit.km_saida) : null,
+                data_chegada: formEdit.data_chegada || null,
+                horario_chegada: formEdit.horario_chegada || null,
+                km_chegada: formEdit.km_chegada !== '' ? Number(formEdit.km_chegada) : null,
+                observacoes: formEdit.observacoes || null,
+            });
+            showToast('Ponto atualizado!', 'success');
+            setEditModal(null);
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSaving(false); }
+    };
+
+    return (
+        <div>
+            {/* Toolbar */}
+            <div className="flex flex-wrap items-center gap-3 mb-5">
+                <select
+                    value={filtroMotorista}
+                    onChange={e => setFiltroMotorista(e.target.value)}
+                    className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                    <option value="">Todos os motoristas</option>
+                    {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+                <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
+                    className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
+                {(filtroMes || filtroMotorista) && (
+                    <button onClick={() => { setFiltroMes(''); setFiltroMotorista(''); }}
+                        className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                        ✕ Limpar
+                    </button>
+                )}
+                <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors ml-auto" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                    <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
+                </button>
+            </div>
+
+            {loading ? (
+                <div className="flex justify-center py-16">
+                    <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
+                </div>
+            ) : pontosFiltrados.length === 0 ? (
+                <div className="bg-white rounded-xl border p-12 flex flex-col items-center gap-3" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
+                        <Icon name="Navigation2" size={28} color="#1D4ED8" />
+                    </div>
+                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Nenhum ponto de parada encontrado</p>
+                    <p className="text-xs text-center" style={{ color: 'var(--color-muted-foreground)' }}>
+                        Os motoristas registram os pontos de parada pelo aplicativo deles.
+                    </p>
+                </div>
+            ) : (
+                <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs" style={{ minWidth: 820 }}>
+                            <thead>
+                                <tr style={{ backgroundColor: '#1D4ED8' }}>
+                                    {['Motorista','KM/Destino','Data Saída','Hor. Saída','KM Saída','Data Chegada','Hor. Chegada','KM Chegada','Obs.','Ações'].map(h => (
+                                        <th key={h} className="px-3 py-2.5 text-left font-semibold text-white whitespace-nowrap">{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {pontosFiltrados.map((p, idx) => (
+                                    <tr key={p.id}
+                                        className="border-t transition-colors hover:bg-blue-50/30"
+                                        style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                        <td className="px-3 py-2.5">
+                                            <span className="font-medium text-xs" style={{ color: 'var(--color-text-primary)' }}>
+                                                {motoristas.find(m => m.id === p.motorista_id)?.name || '—'}
+                                            </span>
+                                            {p.veiculo?.placa && (
+                                                <p className="font-data text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{p.veiculo.placa}</p>
+                                            )}
+                                        </td>
+                                        <td className="px-3 py-2.5">
+                                            <p className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{p.local}</p>
+                                            <span className="inline-block px-1.5 py-0.5 rounded text-xs font-medium mt-0.5"
+                                                style={{ backgroundColor: TIPO_COLOR[p.tipo_local] || '#F3F4F6', color: TIPO_TEXT[p.tipo_local] || '#6B7280' }}>
+                                                {p.tipo_local}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
+                                            {p.data_saida ? FMT_DATE(p.data_saida) : '—'}
+                                        </td>
+                                        <td className="px-3 py-2.5 font-data whitespace-nowrap">{p.horario_saida || '—'}</td>
+                                        <td className="px-3 py-2.5 font-data text-right" style={{ color: '#1D4ED8' }}>
+                                            {p.km_saida != null ? Number(p.km_saida).toLocaleString('pt-BR') : '—'}
+                                        </td>
+                                        <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
+                                            {p.data_chegada ? FMT_DATE(p.data_chegada) : '—'}
+                                        </td>
+                                        <td className="px-3 py-2.5 font-data whitespace-nowrap">{p.horario_chegada || '—'}</td>
+                                        <td className="px-3 py-2.5 font-data text-right" style={{ color: '#059669' }}>
+                                            {p.km_chegada != null ? Number(p.km_chegada).toLocaleString('pt-BR') : '—'}
+                                        </td>
+                                        <td className="px-3 py-2.5 max-w-[120px] truncate" style={{ color: 'var(--color-muted-foreground)' }}
+                                            title={p.observacoes}>{p.observacoes || ''}</td>
+                                        <td className="px-2 py-2.5">
+                                            <div className="flex items-center gap-1">
+                                                <button onClick={() => openEdit(p)}
+                                                    className="p-1.5 rounded hover:bg-blue-50 transition-colors" title="Editar">
+                                                    <Icon name="Pencil" size={13} color="#1D4ED8" />
+                                                </button>
+                                                <button onClick={() => handleDelete(p.id)}
+                                                    className="p-1.5 rounded hover:bg-red-50 transition-colors" title="Excluir">
+                                                    <Icon name="Trash2" size={13} color="#DC2626" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
+                        {pontosFiltrados.length} registro{pontosFiltrados.length !== 1 ? 's' : ''}
+                    </div>
+                </div>
+            )}
+
+            {/* Modal edição */}
+            {editModal && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] overflow-hidden">
+                        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="flex items-center gap-2">
+                                <Icon name="Navigation2" size={18} color="var(--color-primary)" />
+                                <h3 className="font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Editar Ponto de Parada</h3>
+                            </div>
+                            <button onClick={() => setEditModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100">
+                                <Icon name="X" size={16} color="var(--color-muted-foreground)" />
+                            </button>
+                        </div>
+                        <div className="overflow-y-auto flex-1 p-5 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="col-span-2 flex flex-col gap-1.5">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Local</label>
+                                    <input value={formEdit.local} onChange={e => setFormEdit(f => ({ ...f, local: e.target.value }))} className={inputCls} style={inputStyle} />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Tipo</label>
+                                    <select value={formEdit.tipo_local} onChange={e => setFormEdit(f => ({ ...f, tipo_local: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        {['Fábrica','Empresa','Estoque','Entrega','Posto','Oficina','Outro'].map(t => <option key={t}>{t}</option>)}
+                                    </select>
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Observações</label>
+                                    <input value={formEdit.observacoes} onChange={e => setFormEdit(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Data Saída</label>
+                                    <input type="date" value={formEdit.data_saida} onChange={e => setFormEdit(f => ({ ...f, data_saida: e.target.value }))} className={inputCls} style={inputStyle} />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Horário Saída</label>
+                                    <input type="time" value={formEdit.horario_saida} onChange={e => setFormEdit(f => ({ ...f, horario_saida: e.target.value }))} className={inputCls} style={inputStyle} />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>KM Saída</label>
+                                    <input type="number" value={formEdit.km_saida} onChange={e => setFormEdit(f => ({ ...f, km_saida: e.target.value }))} className={inputCls} style={inputStyle} />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Data Chegada</label>
+                                    <input type="date" value={formEdit.data_chegada} onChange={e => setFormEdit(f => ({ ...f, data_chegada: e.target.value }))} className={inputCls} style={inputStyle} />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Horário Chegada</label>
+                                    <input type="time" value={formEdit.horario_chegada} onChange={e => setFormEdit(f => ({ ...f, horario_chegada: e.target.value }))} className={inputCls} style={inputStyle} />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>KM Chegada</label>
+                                    <input type="number" value={formEdit.km_chegada} onChange={e => setFormEdit(f => ({ ...f, km_chegada: e.target.value }))} className={inputCls} style={inputStyle} />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                            <button onClick={() => setEditModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>
+                                Cancelar
+                            </button>
+                            <Button onClick={handleSave} size="sm" iconName="Check" disabled={saving}>
+                                {saving ? 'Salvando...' : 'Salvar'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <Toast toast={toast} />
+            {ConfirmDialog}
+        </div>
+    );
+}
+
 // ─── Constantes da página principal ─────────────────────────────────────────
 const TABS = [
     { id: 'viagens',       label: 'Viagens',          icon: 'Navigation',    group: 'Operação' },
@@ -4758,6 +5033,7 @@ const TABS = [
     { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck',group: 'Operação' },
     { id: 'volume',        label: 'Volume de carregamento', icon: 'TrendingUp',    group: 'Operação' },
     { id: 'historico',     label: 'Histórico Rotas',   icon: 'MapPin',        group: 'Operação' },
+    { id: 'pontos_parada', label: 'Pontos de Parada',  icon: 'Navigation2',   group: 'Operação' },
     { id: 'fretes',        label: 'Fretes',             icon: 'DollarSign',    group: 'Financeiro' },
     { id: 'bonificacoes',  label: 'Bonificações',      icon: 'Award',         group: 'Financeiro' },
     { id: 'despesas',      label: 'Despesas',          icon: 'Receipt',       group: 'Financeiro' },
@@ -4862,6 +5138,7 @@ export default function CarretasPage() {
                             {tab === 'checklist'      && <TabChecklist      isAdmin={admin} profile={profile} />}
                             {tab === 'volume'         && <TabVolume         key={tab} isAdmin={admin} />}
                             {tab === 'historico'      && <TabHistoricoViagens isAdmin={admin} />}
+                            {tab === 'pontos_parada'  && <TabPontosParada     isAdmin={admin} />}
                             {tab === 'fretes'         && <TabFretes          isAdmin={admin} />}
                             {tab === 'bonificacoes'   && <TabBonificacoes   isAdmin={admin} />}
                             {tab === 'despesas'       && <TabDespesasExtras  isAdmin={admin} profile={profile} />}
