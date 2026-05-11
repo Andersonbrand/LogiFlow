@@ -4894,7 +4894,8 @@ function TabPontosParada({ isAdmin }) {
                             </thead>
                             <tbody>
                                 {pontosFiltrados.map((p, idx) => (
-                                    <tr key={p.id}
+                                    <React.Fragment key={p.id}>
+                                    <tr
                                         className="border-t transition-colors hover:bg-blue-50/30"
                                         style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
                                         <td className="px-3 py-2.5">
@@ -4941,6 +4942,28 @@ function TabPontosParada({ isAdmin }) {
                                             </div>
                                         </td>
                                     </tr>
+                                    {/* Pontos extras registrados pelo motorista */}
+                                    {p.horarios_extras && p.horarios_extras.length > 0 && p.horarios_extras.map((ex, exIdx) => (
+                                        <tr key={`${p.id}-ex-${exIdx}`} className="border-t" style={{ borderColor: '#E9D5FF', backgroundColor: '#FAF5FF' }}>
+                                            <td className="px-3 py-1.5" style={{ color: '#6D28D9' }}>
+                                                <span className="text-xs italic">↳ ponto extra</span>
+                                            </td>
+                                            <td className="px-3 py-1.5">
+                                                <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#E9D5FF', color: '#6D28D9' }}>
+                                                    {ex.local || `Extra #${exIdx + 1}`}
+                                                </span>
+                                                {ex.tipo_local && <span className="ml-1 text-xs" style={{ color: '#9CA3AF' }}>{ex.tipo_local}</span>}
+                                            </td>
+                                            <td className="px-3 py-1.5 font-data text-xs whitespace-nowrap" style={{ color: '#6D28D9' }}>{ex.data_saida ? FMT_DATE(ex.data_saida) : '—'}</td>
+                                            <td className="px-3 py-1.5 font-data text-xs" style={{ color: '#6D28D9' }}>{ex.horario_saida || '—'}</td>
+                                            <td className="px-3 py-1.5 font-data text-xs text-right" style={{ color: '#1D4ED8' }}>{ex.km_saida != null ? Number(ex.km_saida).toLocaleString('pt-BR') : '—'}</td>
+                                            <td className="px-3 py-1.5 font-data text-xs whitespace-nowrap" style={{ color: '#6D28D9' }}>{ex.data_chegada ? FMT_DATE(ex.data_chegada) : '—'}</td>
+                                            <td className="px-3 py-1.5 font-data text-xs" style={{ color: '#6D28D9' }}>{ex.horario_chegada || '—'}</td>
+                                            <td className="px-3 py-1.5 font-data text-xs text-right" style={{ color: '#059669' }}>{ex.km_chegada != null ? Number(ex.km_chegada).toLocaleString('pt-BR') : '—'}</td>
+                                            <td colSpan={2} />
+                                        </tr>
+                                    ))}
+                                    </React.Fragment>
                                 ))}
                             </tbody>
                         </table>
