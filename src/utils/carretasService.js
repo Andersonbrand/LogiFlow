@@ -1279,17 +1279,18 @@ export async function fetchFretesCidades(tipo = 'frota') {
 // ─── Helpers de frota separada ────────────────────────────────────────────────
 
 // Veículos APENAS da frota própria (is_terceiro = false ou null)
+// Veículos da frota própria (is_terceiro != true)
 export async function fetchVeiculosProprios() {
     const { data, error } = await supabase
         .from('carretas_veiculos')
         .select('*')
-        .or('is_terceiro.eq.false,is_terceiro.is.null')
+        .neq('is_terceiro', true)
         .order('placa', { ascending: true });
     if (error) throw error;
     return data || [];
 }
 
-// Veículos APENAS terceirizados (is_terceiro = true)
+// Veículos terceirizados (is_terceiro = true)
 export async function fetchVeiculosTerceiros() {
     const { data, error } = await supabase
         .from('carretas_veiculos')
@@ -1300,19 +1301,19 @@ export async function fetchVeiculosTerceiros() {
     return data || [];
 }
 
-// Motoristas APENAS da frota própria (is_terceiro = false ou null)
+// Motoristas da frota própria (is_terceiro != true)
 export async function fetchMotoristasProprios() {
     const { data, error } = await supabase
         .from('user_profiles')
         .select('id, name, role, tipo_veiculo, is_terceiro')
         .eq('role', 'motorista')
-        .or('is_terceiro.eq.false,is_terceiro.is.null')
+        .neq('is_terceiro', true)
         .order('name', { ascending: true });
     if (error) throw error;
     return data || [];
 }
 
-// Motoristas APENAS terceirizados (is_terceiro = true)
+// Motoristas terceirizados (is_terceiro = true)
 export async function fetchMotoristasTerceiros() {
     const { data, error } = await supabase
         .from('user_profiles')
