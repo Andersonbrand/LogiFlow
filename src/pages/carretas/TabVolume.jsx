@@ -10,6 +10,8 @@ import {
     fetchEmpresas,
     fetchFornecedoresCarretas, createFornecedorCarretas, deleteFornecedorCarretas,
     fetchCarretasVeiculos, fetchTodosMotoristas,
+    fetchVeiculosProprios, fetchVeiculosTerceiros,
+    fetchMotoristasProprios, fetchMotoristasTerceiros,
     calcularFrete, TIPOS_CALCULO_FRETE,
     fetchFretesCidades,
 } from 'utils/carretasService';
@@ -242,8 +244,12 @@ export default function TabVolume({ isAdmin }) {
     const [carregamentos, setCarregamentos] = useState([]);
     const [empresas, setEmpresas] = useState([]);
     const [fornecedores, setFornecedores] = useState([]);
-    const [veiculos, setVeiculos] = useState([]);
-    const [motoristas, setMotoristas] = useState([]);
+    const [veiculos, setVeiculos] = useState([]);         // todos (modal carregamento frota)
+    const [veiculosProprios, setVeiculosProprios] = useState([]);  // frota própria (modal retira)
+    const [veiculosTerceiros, setVeiculosTerceiros] = useState([]); // terceirizados (modal terceiro)
+    const [motoristas, setMotoristas] = useState([]);       // todos (modal carregamento frota)
+    const [motoristasProprios, setMotoristasProprios] = useState([]); // frota própria (modal retira)
+    const [motoristasTerceiros, setMotoristasTerceiros] = useState([]); // terceirizados (modal terceiro)
     const [loading, setLoading] = useState(true);
     const [subAba, setSubAba] = useState('dashboard'); // 'dashboard' | 'tabela' | 'terceiros' | 'retira' | 'fornecedores'
 
@@ -311,12 +317,23 @@ export default function TabVolume({ isAdmin }) {
             }
             if (empresaFiltro) filters.empresaId = empresaFiltro;
 
-            const [carr, emp, forn, ve, mot, carrTerc, fretFr, fretTerc, carrRet] = await Promise.all([
+            const [
+                carr, emp, forn,
+                ve, vePropr, veTer,
+                mot, motPropr, motTer,
+                carrTerc, fretFr, fretTerc, carrRet
+            ] = await Promise.all([
                 fetchCarregamentos({ ...filters, is_terceiro: false, is_retira: false }),
                 fetchEmpresas(),
                 fetchFornecedoresCarretas(),
+                // Veículos: todos (modal frota) + separados por tipo
                 fetchCarretasVeiculos(),
-                isAdmin ? fetchTodosMotoristas() : Promise.resolve([]),
+                fetchVeiculosProprios(),
+                fetchVeiculosTerceiros(),
+                // Motoristas: todos (modal frota) + separados por tipo
+                isAdmin ? fetchTodosMotoristas()     : Promise.resolve([]),
+                isAdmin ? fetchMotoristasProprios()  : Promise.resolve([]),
+                isAdmin ? fetchMotoristasTerceiros() : Promise.resolve([]),
                 fetchCarregamentos({ ...filters, is_terceiro: true }),
                 fetchFretesCidades('frota'),
                 fetchFretesCidades('terceiros'),
@@ -326,7 +343,11 @@ export default function TabVolume({ isAdmin }) {
             setEmpresas(emp);
             setFornecedores(forn);
             setVeiculos(ve);
+            setVeiculosProprios(vePropr);
+            setVeiculosTerceiros(veTer);
             setMotoristas(mot);
+            setMotoristasProprios(motPropr);
+            setMotoristasTerceiros(motTer);
             setCarregamentosTerceiros(carrTerc);
             setFretesFretas(fretFr);
             setFretesTerceiros(fretTerc);
@@ -709,7 +730,7 @@ export default function TabVolume({ isAdmin }) {
                     onEdit={openEditTerceiro}
                     onDelete={handleDeleteTerceiro}
                     fretosTerceiros={fretosTerceiros}
-                    motoristas={motoristas}
+                    motoristas={motoristasTerceiros}
                     mes={mes}
                 />
             ) : subAba === 'retira' ? (
@@ -719,8 +740,8 @@ export default function TabVolume({ isAdmin }) {
                     onNovo={openCreateRetira}
                     onEdit={openEditRetira}
                     onDelete={handleDeleteRetira}
-                    veiculos={veiculos}
-                    motoristas={motoristas}
+                    veiculos={veiculosTerceiros}
+                    motoristas={motoristasTerceiros}
                 />
             ) : (
                 <PainelFornecedores
@@ -761,13 +782,13 @@ export default function TabVolume({ isAdmin }) {
                             <Field label="Veículo (placa)">
                                 <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
-                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                    {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
                                 </select>
                             </Field>
                             <Field label="Motorista">
                                 <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
-                                    {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                    {motoristasProprios.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                 </select>
                             </Field>
                         </div>
@@ -885,18 +906,24 @@ export default function TabVolume({ isAdmin }) {
                         <Field label="Motorista Terceirizado">
                             <select value={formTerceiro.motorista_id} onChange={e => setFormTerceiro(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione o motorista (opcional)...</option>
-                                {motoristas.filter(m => m.is_terceiro).map(m => (
+                                {motoristasTerceiros.map(m => (
                                     <option key={m.id} value={m.id}>{m.name}</option>
                                 ))}
                             </select>
+                            {motoristasTerceiros.length === 0 && (
+                                <p className="text-xs mt-1 text-amber-600">⚠ Nenhum motorista com flag "terceirizado" cadastrado em Configurações.</p>
+                            )}
                         </Field>
                         <Field label="Placa do Veículo Terceirizado">
                             <select value={formTerceiro.veiculo_id} onChange={e => setFormTerceiro(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione a placa (opcional)...</option>
-                                {veiculos.filter(v => v.is_terceiro).map(v => (
+                                {veiculosTerceiros.map(v => (
                                     <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>
                                 ))}
                             </select>
+                            {veiculosTerceiros.length === 0 && (
+                                <p className="text-xs mt-1 text-amber-600">⚠ Nenhum veículo com flag "terceirizado" cadastrado em Veículos.</p>
+                            )}
                         </Field>
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Tipo de Cálculo do Frete">
@@ -975,16 +1002,16 @@ export default function TabVolume({ isAdmin }) {
                         </Field>
                         {/* Veículos e Motoristas — apenas frota própria (não terceiros) */}
                         <div className="grid grid-cols-2 gap-3">
-                            <Field label="Veículo da frota própria">
+                            <Field label="Veículo Terceirizado">
                                 <select value={formRetira.veiculo_id} onChange={e => setFormRetira(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
-                                    {veiculos.filter(v => !v.is_terceiro).map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
+                                    {veiculosTerceiros.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
                                 </select>
                             </Field>
-                            <Field label="Motorista da frota própria">
+                            <Field label="Motorista Terceirizado">
                                 <select value={formRetira.motorista_id} onChange={e => setFormRetira(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
-                                    {motoristas.filter(m => !m.is_terceiro).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                    {motoristasTerceiros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                 </select>
                             </Field>
                         </div>
@@ -1389,7 +1416,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
             )}
 
             {/* Filtro por motorista */}
-            {motoristas.filter(m => m.is_terceiro).length > 0 && (
+            {motoristasTerceiros.length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Filtrar:</span>
                     <button onClick={() => setFiltroMotoristaTer('')}
@@ -1399,7 +1426,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
                             : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                         Todos
                     </button>
-                    {motoristas.filter(m => m.is_terceiro).map(m => (
+                    {motoristasTerceiros.map(m => (
                         <button key={m.id} onClick={() => setFiltroMotoristaTer(prev => prev === m.id ? '' : m.id)}
                             className="px-3 py-1 rounded-full text-xs font-medium border transition-colors"
                             style={filtroMotoristaTer === m.id
