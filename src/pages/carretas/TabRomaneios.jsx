@@ -12,6 +12,7 @@ import {
     fetchFretesCidades,
 } from 'utils/carretasService';
 import { fetchMaterials } from 'utils/materialService';
+import { subscribeTabela } from 'utils/supabaseClient';
 import * as XLSX from 'xlsx';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -737,7 +738,7 @@ export default function TabRomaneios({ isAdmin }) {
                 fetchCarretasVeiculos(),
                 fetchTodosMotoristas(),
                 fetchEmpresas(),
-                fetchMaterials(),
+                fetchMaterials().catch(() => []),   // resiliente: continua mesmo sem tabela materials
                 fetchRomaneiosFerragem(),
                 fetchFretesCidades('frota'),
             ]);
@@ -748,7 +749,12 @@ export default function TabRomaneios({ isAdmin }) {
         finally { setLoading(false); }
     }, [filtroStatus, filtroMes, filtroDia]); // eslint-disable-line
 
-    useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        load();
+        // Realtime: sincroniza admin e motorista automaticamente
+        const unsub = subscribeTabela('carretas_romaneios', load);
+        return unsub;
+    }, [load]);
 
     const handleStatusChange = async (id, novoStatus) => {
         try {
