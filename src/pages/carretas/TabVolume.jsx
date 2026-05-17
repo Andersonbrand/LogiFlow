@@ -1416,7 +1416,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
             )}
 
             {/* Filtro por motorista */}
-            {motoristasTerceiros.length > 0 && (
+            {motoristas.length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Filtrar:</span>
                     <button onClick={() => setFiltroMotoristaTer('')}
@@ -1426,7 +1426,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
                             : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                         Todos
                     </button>
-                    {motoristasTerceiros.map(m => (
+                    {motoristas.map(m => (
                         <button key={m.id} onClick={() => setFiltroMotoristaTer(prev => prev === m.id ? '' : m.id)}
                             className="px-3 py-1 rounded-full text-xs font-medium border transition-colors"
                             style={filtroMotoristaTer === m.id
