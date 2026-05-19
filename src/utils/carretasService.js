@@ -929,12 +929,17 @@ async function buscarNumeroExistente({ motorista_id, motoristaNome, destino, dat
  * garantindo que não haja colisão entre romaneios do admin e do motorista.
  */
 async function nextRomaneioNumero() {
-    const [{ data: lastCarretas }, { data: lastAdmin }] = await Promise.all([
-        supabase.from('carretas_romaneios').select('numero').order('created_at', { ascending: false }).limit(1).single(),
-        supabase.from('romaneios').select('numero').order('created_at', { ascending: false }).limit(1).single(),
+    // Busca TODOS os números para garantir pegar o maior real (não apenas o último por created_at)
+    const [{ data: todosCarretas }, { data: todosAdmin }] = await Promise.all([
+        supabase.from('carretas_romaneios').select('numero'),
+        supabase.from('romaneios').select('numero'),
     ]);
     const parseNum = (str) => str ? parseInt((str || '').replace(/\D/g, ''), 10) || 0 : 0;
-    const maxN = Math.max(parseNum(lastCarretas?.numero), parseNum(lastAdmin?.numero));
+    const nums = [
+        ...(todosCarretas || []).map(r => parseNum(r.numero)),
+        ...(todosAdmin    || []).map(r => parseNum(r.numero)),
+    ];
+    const maxN = nums.length > 0 ? Math.max(...nums) : 0;
     return `ROM-${String(maxN + 1).padStart(5, '0')}`;
 }
 
@@ -967,6 +972,7 @@ export async function createRomaneio(romaneio) {
     if (!payload.motorista_id) delete payload.motorista_id;
     if (!payload.veiculo_id)   delete payload.veiculo_id;
     payload.numero = await nextRomaneioNumero();
+    payload.lancado_por_motorista = false; // criado pelo admin
     const { data, error } = await supabase
         .from('carretas_romaneios')
         .insert(payload)
@@ -1193,60 +1199,95 @@ export async function fetchRomaneiosCarreteiro(motoristaId) {
 // ═══════════════════════════════════════════════════════════════
 
 export async function createRomaneioFerragem(payload) {
-    // Tenta reaproveitar número de romaneio já existente com mesmo motorista+destino+data
-    const numeroExistente = await buscarNumeroExistente({
-        motorista_id:  payload.motorista_id || null,
-        motoristaNome: payload.motoristaNome || null,
-        destino:       payload.destino,
-        data_saida:    payload.data_saida,
-    });
+    const {
+        numero_romaneio, // número ROM informado pelo motorista (opcional)
+        ...rest
+    } = payload;
 
-    // Se já existe um romaneio com esse número, evitar conflito de unique key:
-    // tenta gerar um número que NÃO existe em carretas_romaneios
-    let numero = numeroExistente;
-    if (!numero) {
-        // Gera novo número e verifica se já existe para evitar race condition
-        let tentativas = 0;
-        while (tentativas < 5) {
-            const candidato = await nextRomaneioNumero();
-            const { data: existe } = await supabase
+    // ── Caso 1: motorista informou um número de romaneio existente ────────────
+    if (numero_romaneio?.trim()) {
+        const numeroNorm = numero_romaneio.trim().toUpperCase();
+        const { data: existente } = await supabase
+            .from('carretas_romaneios')
+            .select('id, numero, tipo_carga, motorista_id')
+            .eq('numero', numeroNorm)
+            .maybeSingle();
+
+        if (existente) {
+            // Romaneio já existe → vincula os dados do motorista a ele
+            const { data, error } = await supabase
                 .from('carretas_romaneios')
-                .select('id')
-                .eq('numero', candidato)
-                .maybeSingle();
-            if (!existe) { numero = candidato; break; }
-            tentativas++;
-            // Aguarda um tick e tenta novamente
-            await new Promise(r => setTimeout(r, 100));
+                .update({
+                    numero_nf:   rest.numero_nf,
+                    data_saida:  rest.data_saida,
+                    veiculo_id:  rest.veiculo_id,
+                    destino:     rest.destino     || existente.destino,
+                    toneladas:   rest.toneladas   ?? null,
+                    empresa:     rest.empresa     ?? null,
+                    observacoes: rest.observacoes ?? null,
+                    motorista_id: rest.motorista_id || existente.motorista_id,
+                    tipo_carga:  'ferragem',
+                    lancado_por_motorista: true,
+                })
+                .eq('id', existente.id)
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
         }
-        if (!numero) numero = await nextRomaneioNumero(); // fallback
-    } else {
-        // Número existe mas é de outra tabela (romaneios do admin) —
-        // verificar se já existe em carretas_romaneios para evitar colisão
-        const { data: existeCarretas } = await supabase
+
+        // Número informado mas não existe → cria com esse número
+        const { data: existe_num } = await supabase
+            .from('carretas_romaneios')
+            .select('id')
+            .eq('numero', numeroNorm)
+            .maybeSingle();
+        if (!existe_num) {
+            const { data, error } = await supabase
+                .from('carretas_romaneios')
+                .insert({
+                    ...rest,
+                    numero: numeroNorm,
+                    tipo_carga: 'ferragem',
+                    status: 'Aguardando',
+                    lancado_por_motorista: true,
+                })
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        }
+    }
+
+    // ── Caso 2: motorista não informou número → gera sequencial ──────────────
+    let numero = await nextRomaneioNumero();
+    // Garante unicidade contra race condition
+    for (let t = 0; t < 5; t++) {
+        const { data: existe } = await supabase
             .from('carretas_romaneios')
             .select('id')
             .eq('numero', numero)
             .maybeSingle();
-        if (existeCarretas) {
-            // Número já usado em carretas_romaneios — gera um novo
-            numero = await nextRomaneioNumero();
-        }
+        if (!existe) break;
+        await new Promise(r => setTimeout(r, 120));
+        numero = await nextRomaneioNumero();
     }
 
     const { data, error } = await supabase
         .from('carretas_romaneios')
         .insert({
-            ...payload,
+            ...rest,
             numero,
             tipo_carga: 'ferragem',
             status: 'Aguardando',
+            lancado_por_motorista: true,
         })
         .select()
         .single();
     if (error) throw error;
     return data;
 }
+
 
 export async function fetchRomaneiosFerragem(filters = {}) {
     let q = supabase

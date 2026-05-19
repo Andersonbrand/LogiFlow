@@ -855,7 +855,7 @@ export default function TabRomaneios({ isAdmin }) {
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr style={{ backgroundColor: '#059669' }}>
-                                        {['Nº ROM', 'Motorista', 'Placa', 'NF', 'Data Saída', 'Destino', 'Peso', 'Empresa', 'Status'].map(h => (
+                                        {['Nº ROM', 'Vínculo', 'Motorista', 'Placa', 'NF', 'Data Saída', 'Destino', 'Peso', 'Empresa', 'Status'].map(h => (
                                             <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-white whitespace-nowrap">{h}</th>
                                         ))}
                                     </tr>
@@ -867,6 +867,12 @@ export default function TabRomaneios({ isAdmin }) {
                                             <tr key={r.id} className="border-t hover:bg-green-50/30 transition-colors"
                                                 style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
                                                 <td className="px-3 py-3 font-data font-semibold text-xs" style={{ color: '#059669' }}>{r.numero}</td>
+                                                <td className="px-3 py-3 text-xs">
+                                                    {r.lancado_por_motorista
+                                                        ? <span className="px-2 py-0.5 rounded-full font-semibold" style={{ backgroundColor: '#DCFCE7', color: '#166534', fontSize: '10px' }}>✓ Vinculado</span>
+                                                        : <span className="px-2 py-0.5 rounded-full font-semibold" style={{ backgroundColor: '#FEF9C3', color: '#92400E', fontSize: '10px' }}>⏳ Aguard. motorista</span>
+                                                    }
+                                                </td>
                                                 <td className="px-3 py-3 text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.motorista?.name || '—'}</td>
                                                 <td className="px-3 py-3 font-data text-xs" style={{ color: 'var(--color-text-primary)' }}>{r.veiculo?.placa || '—'}</td>
                                                 <td className="px-3 py-3 font-data font-semibold text-xs" style={{ color: '#1D4ED8' }}>{r.numero_nf || '—'}</td>
@@ -1004,11 +1010,15 @@ export default function TabRomaneios({ isAdmin }) {
 
                                 {/* ── Topo: número + status + ações ── */}
                                 <div className="flex items-center justify-between px-4 py-3 gap-3 flex-wrap">
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 flex-wrap">
                                         <button onClick={() => setDetailModal(r)}
                                             className="font-bold font-data text-blue-700 hover:underline text-sm whitespace-nowrap">
                                             {r.numero}
                                         </button>
+                                        {r.lancado_por_motorista
+                                            ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#DCFCE7', color: '#166534' }}>✓ Motorista vinculado</span>
+                                            : <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#FEF9C3', color: '#92400E' }}>⏳ Aguard. motorista</span>
+                                        }
                                         <select
                                             value={r.status}
                                             onChange={e => handleStatusChange(r.id, e.target.value)}

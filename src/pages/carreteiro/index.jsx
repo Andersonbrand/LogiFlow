@@ -19,6 +19,7 @@ import {
     fetchCarregamentos, fetchBonificacoesExtras,
     fetchPontosParada, createPontoParada, updatePontoParada, deletePontoParada,
     fetchRomaneiosCarreteiro,
+    fetchRomaneios,
     createRomaneioFerragem,
     updateRomaneio, deleteRomaneio,
     fetchEmpresas,
@@ -127,10 +128,11 @@ export default function CarreteiroDashboard() {
     const [modalFerragem, setModalFerragem] = useState(false);
     const [editandoFerragemId, setEditandoFerragemId] = useState(null); // null = criar, string = editar
     const [formFerragem, setFormFerragem] = useState({
-        numero_nf: '', veiculo_id: '',
+        numero_romaneio: '', numero_nf: '', veiculo_id: '',
         data_saida: new Date().toISOString().split('T')[0],
         destino: '', toneladas: '', empresa: '', observacoes: '',
     });
+    const [romsAbertos, setRomsAbertos] = useState([]); // ROMs do admin para vincular
     const [salvandoFerragem, setSalvandoFerragem] = useState(false);
     const [modalAbast, setModalAbast]   = useState(false);
     const [modalCheck, setModalCheck]   = useState(false);
@@ -227,9 +229,14 @@ export default function CarreteiroDashboard() {
             } catch { setPontosParada([]); }
             // Carrega romaneios do admin vinculados a este motorista
             try {
-                const roms = await fetchRomaneiosCarreteiro(user.id);
+                const [roms, romsAdminAbertos] = await Promise.all([
+                    fetchRomaneiosCarreteiro(user.id),
+                    fetchRomaneios({ status: 'Aguardando' }).catch(() => []),
+                ]);
                 setRomaneiosCarreteiro((roms || []).filter(r => r.tipo_carga !== 'ferragem'));
                 setRomaneiosFerragem((roms || []).filter(r => r.tipo_carga === 'ferragem'));
+                // ROMs criados pelo admin que ainda não têm motorista vinculado
+                setRomsAbertos((romsAdminAbertos || []).filter(r => !r.motorista_id || r.motorista_id === user.id));
             } catch { setRomaneiosCarreteiro([]); setRomaneiosFerragem([]); }
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -1184,7 +1191,7 @@ export default function CarreteiroDashboard() {
                                                     </div>
                                                     <Icon name="ChevronRight" size={18} color="#1D4ED8" />
                                                 </button>
-                                                <button onClick={() => { setFormFerragem({ numero_nf: '', veiculo_id: '', data_saida: new Date().toISOString().split('T')[0], destino: '', toneladas: '', empresa: '', observacoes: '' }); setModalFerragem(true); }}
+                                                <button onClick={() => { setFormFerragem({ numero_romaneio: '', numero_nf: '', veiculo_id: '', data_saida: new Date().toISOString().split('T')[0], destino: '', toneladas: '', empresa: '', observacoes: '' }); setModalFerragem(true); }}
                                                     className="flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:shadow-md active:scale-[0.99]"
                                                     style={{ borderColor: '#D1FAE5', backgroundColor: '#ECFDF5' }}>
                                                     <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#059669' }}>
@@ -1700,6 +1707,41 @@ export default function CarreteiroDashboard() {
                             <Icon name="Info" size={14} color="#065F46" />
                             <p className="text-xs" style={{ color: '#065F46' }}>Este romaneio ficará visível para conferência do administrador.</p>
                         </div>
+                        {/* Vincular a ROM existente do admin */}
+                        <Field label="Nº do Romaneio (opcional)">
+                            {romsAbertos.length > 0 ? (
+                                <select
+                                    value={formFerragem.numero_romaneio}
+                                    onChange={e => {
+                                        const num = e.target.value;
+                                        const rom = romsAbertos.find(r => r.numero === num);
+                                        setFormFerragem(f => ({
+                                            ...f,
+                                            numero_romaneio: num,
+                                            destino: rom?.destino || f.destino,
+                                            empresa: rom?.empresa_origem || f.empresa,
+                                        }));
+                                    }}
+                                    className={inputCls} style={inputStyle}>
+                                    <option value="">Deixar em branco (gera número automático)</option>
+                                    {romsAbertos.map(r => (
+                                        <option key={r.id} value={r.numero}>
+                                            {r.numero} — {r.destino || 'Sem destino'} — {r.empresa_origem || ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <input
+                                    value={formFerragem.numero_romaneio}
+                                    onChange={e => setFormFerragem(f => ({ ...f, numero_romaneio: e.target.value }))}
+                                    className={inputCls} style={inputStyle}
+                                    placeholder="Ex: ROM-00001 (se o admin já criou)"
+                                />
+                            )}
+                            <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>
+                                Se o administrador já criou o romaneio, selecione para vincular. Caso contrário, será gerado automaticamente.
+                            </p>
+                        </Field>
                         <div className="grid grid-cols-2 gap-4">
                             <Field label="Nº da Nota Fiscal" required>
                                 <input value={formFerragem.numero_nf} onChange={e => setFormFerragem(f => ({ ...f, numero_nf: e.target.value }))}
@@ -1765,6 +1807,7 @@ export default function CarreteiroDashboard() {
                                     ));
                                 } else {
                                     await createRomaneioFerragem({
+                                        numero_romaneio: formFerragem.numero_romaneio?.trim() || null,
                                         numero_nf:    formFerragem.numero_nf,
                                         data_saida:   formFerragem.data_saida,
                                         veiculo_id:   formFerragem.veiculo_id,
