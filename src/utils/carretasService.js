@@ -1211,6 +1211,7 @@ export async function createRomaneioFerragem(payload) {
             .from('carretas_romaneios')
             .select('id, numero, tipo_carga, motorista_id')
             .eq('numero', numeroNorm)
+            .limit(1)
             .maybeSingle();
 
         if (existente) {
@@ -1237,26 +1238,19 @@ export async function createRomaneioFerragem(payload) {
         }
 
         // Número informado mas não existe → cria com esse número
-        const { data: existe_num } = await supabase
+        const { data, error } = await supabase
             .from('carretas_romaneios')
-            .select('id')
-            .eq('numero', numeroNorm)
-            .maybeSingle();
-        if (!existe_num) {
-            const { data, error } = await supabase
-                .from('carretas_romaneios')
-                .insert({
-                    ...rest,
-                    numero: numeroNorm,
-                    tipo_carga: 'ferragem',
-                    status: 'Aguardando',
-                    lancado_por_motorista: true,
-                })
-                .select()
-                .single();
-            if (error) throw error;
-            return data;
-        }
+            .insert({
+                ...rest,
+                numero: numeroNorm,
+                tipo_carga: 'ferragem',
+                status: 'Aguardando',
+                lancado_por_motorista: true,
+            })
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
     }
 
     // ── Caso 2: motorista não informou número → gera sequencial ──────────────
@@ -1267,6 +1261,7 @@ export async function createRomaneioFerragem(payload) {
             .from('carretas_romaneios')
             .select('id')
             .eq('numero', numero)
+            .limit(1)
             .maybeSingle();
         if (!existe) break;
         await new Promise(r => setTimeout(r, 120));
