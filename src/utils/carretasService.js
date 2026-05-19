@@ -1232,9 +1232,11 @@ export async function createRomaneioFerragem(payload) {
                 })
                 .eq('id', existente.id)
                 .select()
-                .single();
+                .maybeSingle();
             if (error) throw error;
-            return data;
+            // RLS pode filtrar o select pós-update (motorista não vê rows do admin)
+            // Nesse caso data é null mas o update foi bem-sucedido — busca pelo id
+            return data ?? (await supabase.from('carretas_romaneios').select().eq('id', existente.id).limit(1).maybeSingle()).data;
         }
 
         // Número informado mas não existe → cria com esse número
@@ -1248,7 +1250,7 @@ export async function createRomaneioFerragem(payload) {
                 lancado_por_motorista: true,
             })
             .select()
-            .single();
+            .maybeSingle();
         if (error) throw error;
         return data;
     }
@@ -1278,7 +1280,7 @@ export async function createRomaneioFerragem(payload) {
             lancado_por_motorista: true,
         })
         .select()
-        .single();
+        .maybeSingle();
     if (error) throw error;
     return data;
 }
