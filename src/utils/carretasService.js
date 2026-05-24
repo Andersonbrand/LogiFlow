@@ -955,9 +955,8 @@ export async function fetchRomaneios(filters = {}) {
                 material:material_id(id, nome, peso, unidade, percentual_frete, categoria_frete)
             )
         `)
-        .order('created_at', { ascending: false })
-        .or('lancado_por_motorista.eq.false,lancado_por_motorista.is.null') // Exclui os vinculados pelo motorista
-        .neq('tipo_carga', 'ferragem');
+        .order('created_at', { ascending: false });
+    // Admin vê TODOS os romaneios — base para DRE e cálculos financeiros
     if (filters.status)      q = q.eq('status', filters.status);
     if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
     if (filters.dataInicio)  q = q.gte('data_saida', filters.dataInicio);
