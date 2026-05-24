@@ -956,7 +956,8 @@ export async function fetchRomaneios(filters = {}) {
             )
         `)
         .order('created_at', { ascending: false })
-        .neq('tipo_carga', 'ferragem'); // Romaneios de ferragem são lançados pelo motorista — ficam na guia própria
+        .or('lancado_por_motorista.eq.false,lancado_por_motorista.is.null') // Exclui os vinculados pelo motorista
+        .neq('tipo_carga', 'ferragem');
     if (filters.status)      q = q.eq('status', filters.status);
     if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
     if (filters.dataInicio)  q = q.gte('data_saida', filters.dataInicio);
@@ -1185,6 +1186,7 @@ export async function fetchRomaneiosCarreteiro(motoristaId) {
         .select(`
             id, numero, status, tipo_carga, data_saida, data_chegada, destino,
             toneladas, empresa, valor_frete, aprovado, observacoes, numero_nf,
+            lancado_por_motorista,
             veiculo:veiculo_id(id, placa, modelo),
             carretas_romaneio_itens(id, descricao, quantidade, unidade, peso_total)
         `)
@@ -1207,12 +1209,12 @@ export async function createRomaneioFerragem(payload) {
     // ── Caso 1: motorista informou um número de romaneio existente ────────────
     if (numero_romaneio?.trim()) {
         const numeroNorm = numero_romaneio.trim().toUpperCase();
-        const { data: existente } = await supabase
+        const { data: rowsExist } = await supabase
             .from('carretas_romaneios')
             .select('id, numero, tipo_carga, motorista_id')
             .eq('numero', numeroNorm)
-            .limit(1)
-            .maybeSingle();
+            .limit(1);
+        const existente = rowsExist?.[0] ?? null;
 
         if (existente) {
             // Romaneio já existe → vincula os dados do motorista a ele
@@ -1232,11 +1234,9 @@ export async function createRomaneioFerragem(payload) {
                 })
                 .eq('id', existente.id)
                 .select()
-                .maybeSingle();
+                .single();
             if (error) throw error;
-            // RLS pode filtrar o select pós-update (motorista não vê rows do admin)
-            // Nesse caso data é null mas o update foi bem-sucedido — busca pelo id
-            return data ?? (await supabase.from('carretas_romaneios').select().eq('id', existente.id).limit(1).maybeSingle()).data;
+            return data;
         }
 
         // Número informado mas não existe → cria com esse número
@@ -1252,6 +1252,7 @@ export async function createRomaneioFerragem(payload) {
             .select()
             .maybeSingle();
         if (error) throw error;
+        if (!data) throw new Error('Registro bloqueado por política de acesso. Execute a migration fix_rls_motorista_ferragem.sql no Supabase.');
         return data;
     }
 
@@ -1282,11 +1283,14 @@ export async function createRomaneioFerragem(payload) {
         .select()
         .maybeSingle();
     if (error) throw error;
+    if (!data) throw new Error('Registro bloqueado por política de acesso. Execute a migration fix_rls_motorista_ferragem.sql no Supabase.');
     return data;
 }
 
 
 export async function fetchRomaneiosFerragem(filters = {}) {
+    // Busca romaneios que OU têm tipo_carga='ferragem' OU foram lançados pelo motorista
+    // Garante que registros vinculados pelo motorista sempre apareçam nesta aba
     let q = supabase
         .from('carretas_romaneios')
         .select(`
@@ -1294,7 +1298,7 @@ export async function fetchRomaneiosFerragem(filters = {}) {
             motorista:motorista_id(id, name),
             veiculo:veiculo_id(id, placa, modelo)
         `)
-        .eq('tipo_carga', 'ferragem')
+        .or('tipo_carga.eq.ferragem,lancado_por_motorista.eq.true')
         .order('created_at', { ascending: false });
     if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
     if (filters.status)      q = q.eq('status', filters.status);

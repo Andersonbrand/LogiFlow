@@ -233,10 +233,16 @@ export default function CarreteiroDashboard() {
                     fetchRomaneiosCarreteiro(user.id),
                     fetchRomaneios({ status: 'Aguardando' }).catch(() => []),
                 ]);
-                setRomaneiosCarreteiro((roms || []).filter(r => r.tipo_carga !== 'ferragem'));
-                setRomaneiosFerragem((roms || []).filter(r => r.tipo_carga === 'ferragem'));
-                // ROMs criados pelo admin que ainda não têm motorista vinculado
-                setRomsAbertos((romsAdminAbertos || []).filter(r => !r.motorista_id || r.motorista_id === user.id));
+                setRomaneiosCarreteiro((roms || []).filter(r =>
+                    r.tipo_carga !== 'ferragem' && !r.lancado_por_motorista
+                ));
+                setRomaneiosFerragem((roms || []).filter(r =>
+                    r.tipo_carga === 'ferragem' || r.lancado_por_motorista
+                ));
+                // ROMs do admin disponíveis para vincular (sem motorista ainda ou do próprio motorista)
+                setRomsAbertos((romsAdminAbertos || []).filter(r =>
+                    !r.motorista_id || r.motorista_id === user.id
+                ));
             } catch { setRomaneiosCarreteiro([]); setRomaneiosFerragem([]); }
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
