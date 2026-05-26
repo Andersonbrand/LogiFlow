@@ -441,7 +441,6 @@ export default function Romaneios() {
                             </div>
                         </div>
                     )}
-                </div>
                     </>)} {/* fim guia romaneios */}
 
                     {/* ═══ GUIA RASCUNHOS ═══ */}
@@ -498,6 +497,7 @@ export default function Romaneios() {
                             }}
                         />
                     )}
+                </div>{/* fim max-w-screen-2xl */}
             </main>
 
             <RomaneioFormModal
