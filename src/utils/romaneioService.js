@@ -38,6 +38,7 @@ export async function fetchRomaneios() {
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
                 materials(id, nome, unidade, peso, categoria_frete, percentual_frete))
         `)
+        .eq('is_rascunho', false)
         .order('created_at', { ascending: false })
         .limit(200);
     if (error) { console.error('[romaneioService] fetchRomaneios error:', error); throw error; }
@@ -392,3 +393,126 @@ export async function fetchRomaneiosPorMotorista(motoristaId, nomeMotorista) {
     return data || [];
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RASCUNHOS DE ROMANEIO
+// Usam a mesma tabela `romaneios` com is_rascunho = true.
+// Têm pedidos em `romaneio_pedidos` e itens em `romaneio_itens` — mesmo fluxo.
+// Na promoção: is_rascunho → false, número sequencial gerado, status → 'Aguardando'.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function fetchRascunhos() {
+    const { data, error } = await supabase
+        .from('romaneios')
+        .select(`
+            id, numero, motorista, motorista_id, placa, destino, status,
+            peso_total, saida, observacoes, vehicle_id,
+            valor_frete, valor_frete_calculado, valor_total_carga,
+            is_rascunho, sugestao_veiculo, created_at,
+            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado, empresa),
+            romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
+                materials(id, nome, unidade, peso, categoria_frete, percentual_frete))
+        `)
+        .eq('is_rascunho', true)
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createRascunho(romaneio, itens = []) {
+    const numero = 'RASC-' + Date.now();
+    const payload = {
+        ...buildPayload(romaneio),
+        numero,
+        status:       'Rascunho',
+        is_rascunho:  true,
+        sugestao_veiculo: romaneio.sugestao_veiculo || null,
+    };
+
+    const { data: romData, error } = await supabase
+        .from('romaneios').insert(payload).select('id').single();
+    if (error) throw error;
+    const romId = romData.id;
+
+    const pedidosMeta = romaneio._pedidos || [];
+    const pedidoIdMap = {};
+    if (pedidosMeta.length > 0) {
+        const { data: pd, error: pe } = await supabase
+            .from('romaneio_pedidos')
+            .insert(pedidosMeta.map(p => ({ ...p, romaneio_id: romId })))
+            .select('id');
+        if (pe) throw pe;
+        (pd || []).forEach((p, i) => { pedidoIdMap[i] = p.id; });
+    }
+
+    if (itens.length > 0) {
+        const { error: ie } = await supabase.from('romaneio_itens').insert(
+            itens.map(i => ({
+                romaneio_id: romId,
+                material_id: i.material_id,
+                quantidade:  i.quantidade,
+                peso_total:  i.peso_total,
+                pedido_id:   pedidoIdMap[i.pedido_index] || null,
+            }))
+        );
+        if (ie) throw ie;
+    }
+    return fetchRomaneioById(romId);
+}
+
+export async function updateRascunho(id, romaneio, itens) {
+    // Substitui pedidos
+    await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
+    const pedidoIdMap = {};
+    const pedidosMeta = romaneio._pedidos || [];
+    if (pedidosMeta.length > 0) {
+        const { data: pd, error: pe } = await supabase
+            .from('romaneio_pedidos')
+            .insert(pedidosMeta.map(p => ({ ...p, romaneio_id: id })))
+            .select('id');
+        if (pe) throw pe;
+        (pd || []).forEach((p, i) => { pedidoIdMap[i] = p.id; });
+    }
+
+    // Substitui itens
+    if (itens !== undefined) {
+        await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
+        if (itens.length > 0) {
+            const { error: ie } = await supabase.from('romaneio_itens').insert(
+                itens.map(i => ({
+                    romaneio_id: id,
+                    material_id: i.material_id,
+                    quantidade:  i.quantidade,
+                    peso_total:  i.peso_total,
+                    pedido_id:   pedidoIdMap[i.pedido_index] || null,
+                }))
+            );
+            if (ie) throw ie;
+        }
+    }
+
+    const { error } = await supabase.from('romaneios').update({
+        ...buildPayload(romaneio),
+        sugestao_veiculo: romaneio.sugestao_veiculo || null,
+    }).eq('id', id);
+    if (error) throw error;
+    return fetchRomaneioById(id);
+}
+
+export async function deleteRascunho(id) {
+    const { error } = await supabase.from('romaneios').delete().eq('id', id);
+    if (error) throw error;
+}
+
+// Promove rascunho → romaneio oficial:
+// gera número sequencial real, limpa is_rascunho, seta status 'Aguardando'
+// todos os pedidos e itens já existem na tabela — nada é movido
+export async function promoverRascunho(id) {
+    const numero = await nextNumeroGlobal();
+    const { error } = await supabase
+        .from('romaneios')
+        .update({ numero, is_rascunho: false, status: 'Aguardando' })
+        .eq('id', id);
+    if (error) throw error;
+    return fetchRomaneioById(id);
+}
