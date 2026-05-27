@@ -655,7 +655,7 @@ function RascunhoCard({ r, onEdit, onDelete, onPromover }) {
                 <div className="mx-5 mb-4 p-3 rounded-xl border flex items-start gap-2" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
                     <Icon name="Cpu" size={14} color="#059669" />
                     <div>
-                        <p className="text-xs font-semibold mb-0.5" style={{ color: '#065F46' }}>Sugestão de veículo (IA)</p>
+                        <p className="text-xs font-semibold mb-0.5" style={{ color: '#065F46' }}>Sugestão de veículo</p>
                         <p className="text-xs leading-relaxed" style={{ color: '#059669' }}>{r.sugestao_veiculo}</p>
                     </div>
                 </div>
@@ -738,27 +738,85 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
         return { valorCarga, frete, peso };
     }, [pedidos]);
 
-    // Chama a Edge Function sugerir-veiculo (evita CORS e expõe API key)
+    // Sugestão de veículo — lógica local gratuita (sem API paga)
+    // Analisa capacidade dos veículos disponíveis vs peso total da carga
     const sugerirVeiculo = async () => {
         setAiLoading(true);
+        await new Promise(r => setTimeout(r, 600)); // simula "pensando"
         try {
-            const { supabase } = await import('utils/supabaseClient');
-            const { data, error } = await supabase.functions.invoke('sugerir-veiculo', {
-                body: {
-                    pesoTotal:    totais.peso,
-                    valorCarga:   totais.valorCarga,
-                    destino:      form.destino,
-                    nPedidos:     pedidos.filter(p => p.numero_pedido).length,
-                    pedidosResumo: pedidos.filter(p => p.numero_pedido).map(p => `#${p.numero_pedido} (${p.categoria_frete}, ${brl(p.valor_pedido)})`).join(', '),
-                    veiculos:     (vehicles || []).filter(v => v.status !== 'Em Manutenção').map(v =>
-                        `${v.placa} (${v.modelo || ''}, cap: ${v.capacidade_peso || v.capacidade_carga || '?'} kg, status: ${v.status || 'Disponível'})`
-                    ),
-                },
+            const disponiveis = (vehicles || []).filter(v =>
+                v.status !== 'Em Manutenção' && v.status !== 'Inativo'
+            );
+
+            if (disponiveis.length === 0) {
+                setAiSugestao('Nenhum veículo disponível no momento. Verifique o cadastro de veículos.');
+                return;
+            }
+
+            const peso = totais.peso;
+            const frete = totais.frete;
+            const nPedidos = pedidos.filter(p => p.numero_pedido).length;
+
+            // Função para extrair capacidade do veículo
+            const getCap = v => Number(v.capacidade_peso || v.capacidade_carga || v.tara || 0);
+
+            // Ordena: primeiro os que cabem a carga (cap >= peso), depois os maiores
+            const ordenados = [...disponiveis].sort((a, b) => {
+                const capA = getCap(a), capB = getCap(b);
+                const aFit = capA >= peso, bFit = capB >= peso;
+                if (aFit && !bFit) return -1;
+                if (!aFit && bFit) return 1;
+                // Ambos cabem: prefere o menor (mais eficiente)
+                if (aFit && bFit) return capA - capB;
+                // Nenhum cabe: prefere o maior
+                return capB - capA;
             });
-            if (error) throw error;
-            setAiSugestao(data?.sugestao || 'Não foi possível gerar sugestão.');
+
+            const melhor = ordenados[0];
+            const cap = getCap(melhor);
+            const ocup = cap > 0 ? Math.round((peso / cap) * 100) : null;
+            const status = melhor.status || 'Disponível';
+
+            let linhas = [];
+
+            // Veículo recomendado
+            linhas.push(`✅ Veículo recomendado: ${melhor.placa}${melhor.modelo ? ` — ${melhor.modelo}` : ''} (${status})`);
+
+            if (cap > 0) {
+                if (peso > 0) {
+                    linhas.push(`📦 Carga: ${peso.toLocaleString('pt-BR')} kg de ${cap.toLocaleString('pt-BR')} kg de capacidade (${ocup}% de ocupação)`);
+                    if (ocup >= 95) linhas.push('⚠️  Carga próxima do limite — verifique o peso com o motorista antes de carregar.');
+                    else if (ocup >= 70) linhas.push('✔️  Ocupação boa. Veículo bem aproveitado para esta viagem.');
+                    else if (ocup < 40) linhas.push('ℹ️  Baixa ocupação. Considere consolidar com outra carga para reduzir custo por kg.');
+                } else {
+                    linhas.push('ℹ️  Peso não informado — adicione materiais para calcular a ocupação.');
+                }
+            }
+
+            if (frete > 0) linhas.push(`💰 Frete estimado: ${brl(frete)}`);
+            if (nPedidos > 0) linhas.push(`📋 ${nPedidos} pedido${nPedidos > 1 ? 's' : ''} vinculado${nPedidos > 1 ? 's' : ''} a esta carga.`);
+
+            // Alternativas
+            const alternativas = ordenados.slice(1, 3).filter(v => getCap(v) >= peso);
+            if (alternativas.length > 0) {
+                linhas.push('');
+                linhas.push('🔄 Alternativas disponíveis:');
+                alternativas.forEach(v => {
+                    const c = getCap(v);
+                    const o = c > 0 && peso > 0 ? ` — ${Math.round((peso/c)*100)}% ocupação` : '';
+                    linhas.push(`  • ${v.placa}${v.modelo ? ` (${v.modelo})` : ''}${o}`);
+                });
+            }
+
+            // Alerta se nenhum veículo cabe a carga
+            if (peso > 0 && cap > 0 && cap < peso) {
+                linhas.push('');
+                linhas.push(`⚠️  Atenção: nenhum veículo disponível tem capacidade suficiente para ${peso.toLocaleString('pt-BR')} kg. Verifique o cadastro ou divida a carga.`);
+            }
+
+            setAiSugestao(linhas.join('\n'));
         } catch (e) {
-            setAiSugestao('Erro ao consultar IA: ' + (e.message || String(e)));
+            setAiSugestao('Erro ao gerar sugestão: ' + (e.message || String(e)));
         } finally { setAiLoading(false); }
     };
 
@@ -794,13 +852,13 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
     };
 
     const inputCls   = 'w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all';
-    const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-background)' };
+    const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: '#ffffff' };
 
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
             style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
             onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-3xl" style={{ maxHeight: 'calc(100vh - 32px)', backgroundColor: 'var(--color-surface)' }}>
+            <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-3xl" style={{ maxHeight: 'calc(100vh - 32px)', backgroundColor: '#ffffff' }}>
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
@@ -822,7 +880,7 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                     {[
                         { id: 'dados',   label: 'Identificação',               icon: 'FileText'    },
                         { id: 'pedidos', label: `Pedidos (${pedidos.length})`, icon: 'ShoppingCart' },
-                        { id: 'ia',      label: 'Sugestão IA',                 icon: 'Cpu'         },
+                        { id: 'ia',      label: 'Sugestão Veículo',            icon: 'Truck'       },
                     ].map(t => (
                         <button key={t.id} onClick={() => setTab(t.id)}
                             className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors"
@@ -1024,15 +1082,15 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                             <div className="p-4 rounded-xl border" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
                                 <div className="flex items-center justify-between mb-3">
                                     <div>
-                                        <p className="text-sm font-semibold" style={{ color: '#065F46' }}>🤖 Sugestão de Veículo via IA</p>
-                                        <p className="text-xs mt-0.5" style={{ color: '#059669' }}>A IA analisa peso, pedidos e veículos disponíveis para recomendar o melhor para a viagem.</p>
+                                        <p className="text-sm font-semibold" style={{ color: '#065F46' }}>🚛 Sugestão de Veículo</p>
+                                        <p className="text-xs mt-0.5" style={{ color: '#059669' }}>Analisa peso, pedidos e veículos disponíveis para recomendar o melhor para esta viagem.</p>
                                     </div>
                                     <button onClick={sugerirVeiculo} disabled={aiLoading}
                                         className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-60 flex-shrink-0 ml-3"
                                         style={{ backgroundColor: '#059669' }}>
                                         {aiLoading
                                             ? <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> Consultando...</>
-                                            : <><Icon name="Cpu" size={13} color="white" /> Sugerir veículo</>}
+                                            : <><Icon name="Truck" size={13} color="white" /> Sugerir veículo</>}
                                     </button>
                                 </div>
                                 {aiSugestao ? (

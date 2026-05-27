@@ -82,8 +82,9 @@ export async function fetchMotoristas() {
 export async function fetchMotoristasComId() {
     const { data } = await supabase
         .from('user_profiles')
-        .select('id, name')
-        .in('role', ['motorista', 'carreteiro'])
+        .select('id, name, tipo_veiculo')
+        .eq('role', 'motorista')          // apenas motoristas de caminhão
+        .neq('tipo_veiculo', 'carreta')   // exclui motoristas de carreta
         .order('name');
     return data || [];
 }
