@@ -9,8 +9,8 @@ import RomaneioFormModal from './components/RomaneioFormModal';
 import RomaneioDetailModal from './components/RomaneioDetailModal';
 import RomaneioImportModal  from './components/RomaneioImportModal';
 import { exportRomaneiosToExcel } from 'utils/excelUtils';
-import { fetchRomaneios, createRomaneio, updateRomaneio, updateRomaneioStatus, deleteRomaneio, duplicateRomaneio, sincronizarStatusVeiculo, fetchRascunhos, createRascunho, updateRascunho, deleteRascunho, promoverRascunho } from 'utils/romaneioService';
-import { FRETE_CATEGORIAS, calcularFretePedido, getCategoriaConfig } from 'utils/freteConfig';
+import { fetchRomaneios, createRomaneio, updateRomaneio, updateRomaneioStatus, deleteRomaneio, duplicateRomaneio, sincronizarStatusVeiculo, fetchRascunhos, createRascunho, updateRascunho, deleteRascunho, promoverRascunho, fetchMotoristasComId } from 'utils/romaneioService';
+import { FRETE_CATEGORIAS, getCategoriaConfig } from 'utils/freteConfig';
 import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { fetchMaterials } from 'utils/materialService';
 import { fetchVehicles } from 'utils/vehicleService';
@@ -28,11 +28,12 @@ const STATUS_COLORS = {
 const ALL_STATUS = ['Todos', 'Aguardando', 'Carregando', 'Em Trânsito', 'Finalizado', 'Cancelado'];
 
 export default function Romaneios() {
-    const [guia, setGuia]             = useState('romaneios'); // 'romaneios' | 'rascunhos'
+    const [guia, setGuia]             = useState('romaneios');
     const [romaneios, setRomaneios]   = useState([]);
     const [rascunhos, setRascunhos]   = useState([]);
     const [materials, setMaterials]   = useState([]);
     const [vehicles, setVehicles]     = useState([]);
+    const [motoristasComId, setMotoristasComId] = useState([]);
     const [rascunhoModal, setRascunhoModal] = useState({ open: false, rascunho: null });
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -65,11 +66,13 @@ export default function Romaneios() {
     const load = useCallback(async () => {
         try {
             setLoading(true);
-            const [rom, mat, veh, rasc] = await Promise.all([fetchRomaneios(), fetchMaterials(), fetchVehicles(), fetchRascunhos().catch(() => [])]);
-            setRomaneios(rom);
-            setMaterials(mat);
-            setVehicles(veh);
-            setRascunhos(rasc);
+            const [rom, mat, veh, rasc, mots] = await Promise.all([
+                fetchRomaneios(), fetchMaterials(), fetchVehicles(),
+                fetchRascunhos().catch(() => []),
+                fetchMotoristasComId().catch(() => []),
+            ]);
+            setRomaneios(rom); setMaterials(mat); setVehicles(veh);
+            setRascunhos(rasc); setMotoristasComId(mots);
         } catch (err) {
             showToast('Erro ao carregar dados: ' + err.message, 'error');
         } finally {
@@ -207,7 +210,7 @@ export default function Romaneios() {
                         </div>
                     </div>
 
-                    {/* Sub-abas Romaneios / Rascunhos */}
+                    {/* Sub-abas */}
                     <div className="flex gap-1 mb-5 p-1 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB', width: 'fit-content' }}>
                         {[
                             { id: 'romaneios', label: 'Romaneios',  icon: 'FileText',      color: 'var(--color-primary)', bg: '#DBEAFE', count: romaneios.length },
@@ -448,7 +451,6 @@ export default function Romaneios() {
                         <GuiaRascunhos
                             rascunhos={rascunhos}
                             loading={loading}
-                            vehicles={vehicles}
                             onNew={() => setRascunhoModal({ open: true, rascunho: null })}
                             onEdit={r => setRascunhoModal({ open: true, rascunho: r })}
                             onDelete={async id => {
@@ -458,46 +460,31 @@ export default function Romaneios() {
                                 catch (e) { showToast('Erro: ' + e.message, 'error'); }
                             }}
                             onPromover={async id => {
-                                const ok = await confirm({
-                                    title: 'Promover para Romaneio oficial?',
-                                    message: 'O rascunho receberá um número sequencial e ficará disponível como romaneio em "Aguardando". Todos os pedidos e itens já lançados serão mantidos.',
-                                    confirmLabel: 'Promover',
-                                    variant: 'primary',
-                                });
+                                const ok = await confirm({ title: 'Promover para Romaneio oficial?', message: 'O rascunho receberá um número sequencial (ex: ROM-003) e ficará disponível em "Aguardando". Todos os pedidos e itens já lançados são mantidos.', confirmLabel: 'Promover', variant: 'primary' });
                                 if (!ok) return;
-                                try {
-                                    const rom = await promoverRascunho(id);
-                                    showToast(`Romaneio ${rom.numero} criado!`, 'success');
-                                    load();
-                                    setGuia('romaneios');
-                                } catch (e) { showToast('Erro ao promover: ' + e.message, 'error'); }
+                                try { const rom = await promoverRascunho(id); showToast(`Romaneio ${rom.numero} criado!`, 'success'); load(); setGuia('romaneios'); }
+                                catch (e) { showToast('Erro ao promover: ' + e.message, 'error'); }
                             }}
                         />
                     )}
 
                     {rascunhoModal.open && (
                         <RascunhoFormModal
-                            isOpen={rascunhoModal.open}
                             rascunho={rascunhoModal.rascunho}
                             vehicles={vehicles}
                             materials={materials}
+                            motoristasComId={motoristasComId}
                             onClose={() => setRascunhoModal({ open: false, rascunho: null })}
                             onSave={async (payload, itens) => {
                                 try {
-                                    if (rascunhoModal.rascunho) {
-                                        await updateRascunho(rascunhoModal.rascunho.id, payload, itens);
-                                        showToast('Rascunho atualizado!');
-                                    } else {
-                                        await createRascunho(payload, itens);
-                                        showToast('Rascunho criado!');
-                                    }
-                                    setRascunhoModal({ open: false, rascunho: null });
-                                    load();
+                                    if (rascunhoModal.rascunho) { await updateRascunho(rascunhoModal.rascunho.id, payload, itens); showToast('Rascunho atualizado!'); }
+                                    else { await createRascunho(payload, itens); showToast('Rascunho criado!'); }
+                                    setRascunhoModal({ open: false, rascunho: null }); load();
                                 } catch (err) { showToast('Erro: ' + err.message, 'error'); }
                             }}
                         />
                     )}
-                </div>{/* fim max-w-screen-2xl */}
+                </div>
             </main>
 
             <RomaneioFormModal
@@ -550,27 +537,25 @@ function EmptyState({ onNew }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GUIA RASCUNHOS — lista com cards, badges de resumo, botão promover
+// GUIA RASCUNHOS
 // ═══════════════════════════════════════════════════════════════════════════════
+const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
 function GuiaRascunhos({ rascunhos, loading, onNew, onEdit, onDelete, onPromover }) {
     if (loading) return (
         <div className="flex justify-center py-12">
-            <svg className="animate-spin h-8 w-8" style={{ color: '#D97706' }} fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
+            <div className="animate-spin h-8 w-8 rounded-full border-4" style={{ borderColor: '#D97706', borderTopColor: 'transparent' }} />
         </div>
     );
-
     return (
         <div>
             <div className="flex items-start gap-3 p-3 rounded-xl border mb-5" style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }}>
-                <Icon name="Info" size={14} color="#92400E" style={{ marginTop: 2 }} />
+                <Icon name="Info" size={14} color="#92400E" style={{ marginTop: 2, flexShrink: 0 }} />
                 <p className="text-xs" style={{ color: '#92400E' }}>
-                    Rascunhos são romaneios em formação. Adicione pedidos cumulativos com seus materiais, valores e fretes calculados automaticamente. Quando a carga estiver pronta, clique em <strong>Promover</strong> — o romaneio oficial é criado com número sequencial e todos os dados já lançados são aproveitados.
+                    Rascunhos são romaneios em formação. Adicione pedidos cumulativos com materiais e fretes calculados automaticamente.
+                    Quando a carga estiver pronta, clique em <strong>Promover</strong> — o romaneio oficial é criado com número sequencial e todos os dados são aproveitados.
                 </p>
             </div>
-
             {rascunhos.length === 0 ? (
                 <div className="bg-white rounded-xl border shadow-card p-12 flex flex-col items-center gap-3 text-center" style={{ borderColor: 'var(--color-border)' }}>
                     <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#FFFBEB' }}>
@@ -591,19 +576,15 @@ function GuiaRascunhos({ rascunhos, loading, onNew, onEdit, onDelete, onPromover
     );
 }
 
-const brl = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
 function RascunhoCard({ r, onEdit, onDelete, onPromover }) {
-    const pedidos = r.romaneio_pedidos || [];
-    const itens   = r.romaneio_itens   || [];
-    const pesoTotal    = itens.reduce((s, i) => s + (Number(i.peso_total) || 0), 0);
-    const freteTotal   = Number(r.valor_frete_calculado || r.valor_frete || 0);
-    const valorCarga   = Number(r.valor_total_carga || 0);
-    const nPedidos     = pedidos.length;
+    const pedidos  = r.romaneio_pedidos || [];
+    const itens    = r.romaneio_itens   || [];
+    const pesoTotal  = itens.reduce((s, i) => s + (Number(i.peso_total) || 0), 0);
+    const freteTotal = Number(r.valor_frete_calculado || r.valor_frete || 0);
+    const valorCarga = Number(r.valor_total_carga || 0);
 
     return (
         <div className="bg-white rounded-2xl border shadow-sm overflow-hidden" style={{ borderColor: '#FDE68A' }}>
-            {/* Header */}
             <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-b" style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }}>
                 <div className="flex items-center gap-3 min-w-0">
                     <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FEF3C7' }}>
@@ -617,31 +598,25 @@ function RascunhoCard({ r, onEdit, onDelete, onPromover }) {
                     </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                    <button onClick={() => onEdit(r)}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-amber-50 transition-colors"
-                        style={{ borderColor: '#FDE68A', color: '#92400E' }}>
+                    <button onClick={() => onEdit(r)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-amber-50 transition-colors" style={{ borderColor: '#FDE68A', color: '#92400E' }}>
                         <Icon name="Pencil" size={12} color="#92400E" /> Editar
                     </button>
-                    <button onClick={() => onDelete(r.id)}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-red-50 transition-colors"
-                        style={{ borderColor: '#FECACA', color: '#DC2626' }}>
+                    <button onClick={() => onDelete(r.id)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-red-50 transition-colors" style={{ borderColor: '#FECACA', color: '#DC2626' }}>
                         <Icon name="Trash2" size={12} color="#DC2626" /> Excluir
                     </button>
-                    <button onClick={() => onPromover(r.id)}
-                        className="flex items-center gap-1 px-4 py-1.5 rounded-xl text-xs font-semibold text-white hover:opacity-90 transition-opacity"
-                        style={{ backgroundColor: '#059669' }}>
+                    <button onClick={() => onPromover(r.id)} className="flex items-center gap-1 px-4 py-1.5 rounded-xl text-xs font-semibold text-white hover:opacity-90 transition-opacity" style={{ backgroundColor: '#059669' }}>
                         <Icon name="ArrowRightCircle" size={12} color="white" /> Promover para Romaneio
                     </button>
                 </div>
             </div>
 
-            {/* Badges de resumo */}
+            {/* Badges resumo */}
             <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
-                    { icon: 'FileText',   label: 'Pedidos',      value: nPedidos > 0 ? `${nPedidos} pedido${nPedidos > 1 ? 's' : ''}` : '—',   color: '#D97706', bg: '#FFFBEB' },
-                    { icon: 'Scale',      label: 'Peso Total',   value: pesoTotal > 0 ? `${pesoTotal.toLocaleString('pt-BR')} kg` : '—',         color: '#7C3AED', bg: '#FAF5FF' },
-                    { icon: 'DollarSign', label: 'Frete Total',  value: freteTotal > 0 ? brl(freteTotal) : '—',                                  color: '#059669', bg: '#ECFDF5' },
-                    { icon: 'BarChart2',  label: 'Valor Carga',  value: valorCarga > 0 ? brl(valorCarga) : '—',                                  color: '#1D4ED8', bg: '#EFF6FF' },
+                    { icon: 'FileText',   label: 'Pedidos',     value: pedidos.length > 0 ? `${pedidos.length} pedido${pedidos.length > 1 ? 's' : ''}` : '—', color: '#D97706', bg: '#FFFBEB' },
+                    { icon: 'Scale',      label: 'Peso Total',  value: pesoTotal > 0 ? `${pesoTotal.toLocaleString('pt-BR')} kg` : '—',                        color: '#7C3AED', bg: '#FAF5FF' },
+                    { icon: 'DollarSign', label: 'Frete Total', value: freteTotal > 0 ? brl(freteTotal) : '—',                                                  color: '#059669', bg: '#ECFDF5' },
+                    { icon: 'BarChart2',  label: 'Valor Carga', value: valorCarga > 0 ? brl(valorCarga) : '—',                                                  color: '#1D4ED8', bg: '#EFF6FF' },
                 ].map(b => (
                     <div key={b.label} className="flex items-center gap-2 p-3 rounded-xl" style={{ backgroundColor: b.bg }}>
                         <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: b.color + '22' }}>
@@ -655,20 +630,18 @@ function RascunhoCard({ r, onEdit, onDelete, onPromover }) {
                 ))}
             </div>
 
-            {/* Chips de pedidos */}
+            {/* Chips pedidos */}
             {pedidos.length > 0 && (
                 <div className="px-5 pb-4">
                     <p className="text-xs font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>PEDIDOS VINCULADOS</p>
                     <div className="flex flex-wrap gap-2">
                         {pedidos.map((p, i) => {
-                            const pct = FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0;
+                            const pct  = (FRETE_CATEGORIAS || []).find(f => f.categoria === p.categoria_frete)?.percentual || 0;
                             const frete = Number(p.valor_pedido || 0) * pct;
                             return (
-                                <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs"
-                                    style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}>
+                                <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}>
                                     {p.numero_pedido && <span className="font-semibold" style={{ color: '#92400E' }}>#{p.numero_pedido}</span>}
                                     {p.empresa && <span style={{ color: '#B45309' }}>{p.empresa}</span>}
-                                    {p.categoria_frete && <span style={{ color: '#6B7280' }}>{p.categoria_frete}</span>}
                                     {frete > 0 && <span className="font-medium" style={{ color: '#059669' }}>{brl(frete)}</span>}
                                 </div>
                             );
@@ -692,141 +665,145 @@ function RascunhoCard({ r, onEdit, onDelete, onPromover }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MODAL DE RASCUNHO — reutiliza a mesma lógica de pedidos do RomaneioFormModal
+// MODAL DE RASCUNHO
 // ═══════════════════════════════════════════════════════════════════════════════
-function RascunhoFormModal({ isOpen, rascunho, vehicles, materials, onClose, onSave }) {
+function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onClose, onSave }) {
     const isEdit = !!rascunho;
-    const { toast, showToast: show } = useToast();
 
-    const EMPTY_FORM = { motorista: '', motorista_id: '', placa: '', destino: '', saida: '', vehicle_id: '', observacoes: '' };
-    const EMPTY_PEDIDO = { numero_pedido: '', cidade_destino: '', valor_pedido: '', categoria_frete: 'Ferragens', empresa: 'Comercial Araguaia', itens: [] };
+    const EMPTY_FORM    = { motorista: '', motorista_id: '', placa: '', vehicle_id: '', destino: '', saida: '', observacoes: '' };
+    const EMPTY_PEDIDO  = () => ({ numero_pedido: '', empresa: 'Comercial Araguaia', valor_pedido: '', categoria_frete: 'Ferragens', cidade_destino: '', itens: [] });
+    const EMPTY_ITEM    = () => ({ material_id: '', quantidade: '1', peso_unit: '', peso_total: '' });
 
     const [form, setForm]       = useState(EMPTY_FORM);
-    const [pedidos, setPedidos] = useState([{ ...EMPTY_PEDIDO }]);
+    const [pedidos, setPedidos] = useState([EMPTY_PEDIDO()]);
     const [tab, setTab]         = useState('dados');
-    const [loading, setLoading] = useState(false);
+    const [saving, setSaving]   = useState(false);
     const [aiLoading, setAiLoading] = useState(false);
     const [aiSugestao, setAiSugestao] = useState('');
-    const [motoristas, setMotoristas] = useState([]);
 
     useEffect(() => {
-        import('utils/romaneioService').then(m => m.fetchMotoristas().then(setMotoristas));
-    }, []);
-
-    useEffect(() => {
-        if (!isOpen) return;
-        if (isEdit && rascunho) {
-            setForm({
-                motorista:    rascunho.motorista    || '',
-                motorista_id: rascunho.motorista_id || '',
-                placa:        rascunho.placa        || '',
-                destino:      rascunho.destino      || '',
-                saida:        rascunho.saida        || '',
-                vehicle_id:   rascunho.vehicle_id   || '',
-                observacoes:  rascunho.observacoes  || '',
-            });
+        if (rascunho) {
+            setForm({ motorista: rascunho.motorista || '', motorista_id: rascunho.motorista_id || '', placa: rascunho.placa || '', vehicle_id: rascunho.vehicle_id || '', destino: rascunho.destino || '', saida: rascunho.saida || '', observacoes: rascunho.observacoes || '' });
             const peds = rascunho.romaneio_pedidos || [];
-            setPedidos(peds.length > 0 ? peds.map(p => ({ ...p, itens: [] })) : [{ ...EMPTY_PEDIDO }]);
+            setPedidos(peds.length > 0 ? peds.map(p => ({
+                numero_pedido: p.numero_pedido || '', empresa: p.empresa || 'Comercial Araguaia',
+                valor_pedido: String(p.valor_pedido || ''), categoria_frete: p.categoria_frete || 'Ferragens',
+                cidade_destino: p.cidade_destino || '',
+                itens: (rascunho.romaneio_itens || []).filter(i => i.pedido_id === p.id).map(i => ({
+                    material_id: i.material_id || '', quantidade: String(i.quantidade || 1),
+                    peso_unit: i.materials?.peso ? String(i.materials.peso) : '',
+                    peso_total: i.peso_total != null ? String(i.peso_total) : '',
+                })),
+            })) : [EMPTY_PEDIDO()]);
             setAiSugestao(rascunho.sugestao_veiculo || '');
         } else {
-            setForm(EMPTY_FORM);
-            setPedidos([{ ...EMPTY_PEDIDO }]);
-            setAiSugestao('');
+            setForm(EMPTY_FORM); setPedidos([EMPTY_PEDIDO()]); setAiSugestao('');
         }
         setTab('dados');
-    }, [isOpen, rascunho]); // eslint-disable-line
+    }, [rascunho]); // eslint-disable-line
 
     const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
-    const updatePedido = (idx, k, v) => setPedidos(prev => prev.map((p, i) => i !== idx ? p : { ...p, [k]: v }));
-    const addPedido    = () => setPedidos(p => [...p, { ...EMPTY_PEDIDO }]);
-    const removePedido = (idx) => setPedidos(p => p.filter((_, i) => i !== idx));
+
+    const updPedido = (idx, patch) => setPedidos(p => p.map((x, i) => i === idx ? { ...x, ...patch } : x));
+    const addPedido = () => setPedidos(p => [...p, EMPTY_PEDIDO()]);
+    const delPedido = idx => setPedidos(p => p.filter((_, i) => i !== idx));
+
+    const updItem = (pIdx, iIdx, patch) => setPedidos(p => p.map((ped, pi) => {
+        if (pi !== pIdx) return ped;
+        const newItens = ped.itens.map((it, ii) => {
+            if (ii !== iIdx) return it;
+            const merged = { ...it, ...patch };
+            // auto peso_total when material peso_unit is known
+            if ((patch.material_id !== undefined || patch.quantidade !== undefined) && merged.peso_unit && !merged._manualPeso) {
+                merged.peso_total = String(Number(merged.peso_unit) * Number(merged.quantidade || 1));
+            }
+            if (patch.material_id !== undefined) {
+                const mat = (materials || []).find(m => m.id === patch.material_id);
+                if (mat?.peso) { merged.peso_unit = String(mat.peso); merged.peso_total = String(Number(mat.peso) * Number(merged.quantidade || 1)); }
+            }
+            return merged;
+        });
+        return { ...ped, itens: newItens };
+    }));
+    const addItem = pIdx => setPedidos(p => p.map((ped, pi) => pi === pIdx ? { ...ped, itens: [...ped.itens, EMPTY_ITEM()] } : ped));
+    const delItem = (pIdx, iIdx) => setPedidos(p => p.map((ped, pi) => pi === pIdx ? { ...ped, itens: ped.itens.filter((_, ii) => ii !== iIdx) } : ped));
 
     const totais = React.useMemo(() => {
-        const valorTotalCarga = pedidos.reduce((a, p) => a + Number(p.valor_pedido || 0), 0);
-        const freteCalculado  = pedidos.reduce((a, p) => {
-            const pct = FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05;
-            return a + Number(p.valor_pedido || 0) * pct;
+        const valorCarga  = pedidos.reduce((s, p) => s + Number(p.valor_pedido || 0), 0);
+        const frete       = pedidos.reduce((s, p) => {
+            const pct = (FRETE_CATEGORIAS || []).find(f => f.categoria === p.categoria_frete)?.percentual || 0;
+            return s + Number(p.valor_pedido || 0) * pct;
         }, 0);
-        const pesoTotal = pedidos.flatMap(p => p.itens || []).reduce((a, i) => a + Number(i.peso_total || 0), 0);
-        return { valorTotalCarga, freteCalculado, pesoTotal };
+        const peso = pedidos.flatMap(p => p.itens).reduce((s, i) => s + Number(i.peso_total || 0), 0);
+        return { valorCarga, frete, peso };
     }, [pedidos]);
 
+    // Chama a Edge Function sugerir-veiculo (evita CORS e expõe API key)
     const sugerirVeiculo = async () => {
-        if (totais.pesoTotal <= 0 && totais.valorTotalCarga <= 0) { show('Adicione pedidos com valor para obter sugestão', 'error'); return; }
         setAiLoading(true);
         try {
-            const veiculosInfo = vehicles.filter(v => v.status !== 'Em Manutenção').map(v =>
-                `${v.placa} (${v.modelo || ''}, cap: ${v.capacidade_peso || v.capacidade_carga || '?'} kg, status: ${v.status || 'Disponível'})`
-            ).join('; ');
-
-            const resp = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: 'claude-sonnet-4-20250514',
-                    max_tokens: 1000,
-                    messages: [{
-                        role: 'user',
-                        content: `Você é especialista em logística de transporte rodoviário. Com base nos dados abaixo, sugira o MELHOR veículo DISPONÍVEL para essa viagem, justificando brevemente em 2-3 frases em português.
-
-Peso total estimado: ${totais.pesoTotal > 0 ? totais.pesoTotal.toLocaleString('pt-BR') + ' kg' : 'não informado'}
-Valor total da carga: ${brl(totais.valorTotalCarga)}
-Destino: ${form.destino || 'não informado'}
-Pedidos: ${pedidos.filter(p => p.numero_pedido).map(p => `#${p.numero_pedido} (${p.categoria_frete}, ${brl(p.valor_pedido)})`).join(', ') || 'não numerados'}
-
-Veículos disponíveis: ${veiculosInfo || 'nenhum cadastrado'}
-
-Considere: capacidade de carga vs peso real, tipo de composição, disponibilidade. Se nenhum for adequado, informe.`
-                    }],
-                }),
+            const { supabase } = await import('utils/supabaseClient');
+            const { data, error } = await supabase.functions.invoke('sugerir-veiculo', {
+                body: {
+                    pesoTotal:    totais.peso,
+                    valorCarga:   totais.valorCarga,
+                    destino:      form.destino,
+                    nPedidos:     pedidos.filter(p => p.numero_pedido).length,
+                    pedidosResumo: pedidos.filter(p => p.numero_pedido).map(p => `#${p.numero_pedido} (${p.categoria_frete}, ${brl(p.valor_pedido)})`).join(', '),
+                    veiculos:     (vehicles || []).filter(v => v.status !== 'Em Manutenção').map(v =>
+                        `${v.placa} (${v.modelo || ''}, cap: ${v.capacidade_peso || v.capacidade_carga || '?'} kg, status: ${v.status || 'Disponível'})`
+                    ),
+                },
             });
-            const data = await resp.json();
-            const text = (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
-            setAiSugestao(text || 'Não foi possível gerar sugestão.');
-        } catch (e) { setAiSugestao('Erro ao consultar IA: ' + e.message); }
-        finally { setAiLoading(false); }
+            if (error) throw error;
+            setAiSugestao(data?.sugestao || 'Não foi possível gerar sugestão.');
+        } catch (e) {
+            setAiSugestao('Erro ao consultar IA: ' + (e.message || String(e)));
+        } finally { setAiLoading(false); }
     };
 
     const handleSave = async () => {
-        if (!form.destino.trim()) { show('Destino é obrigatório', 'error'); setTab('dados'); return; }
-        setLoading(true);
+        if (!form.destino.trim()) { alert('Destino é obrigatório'); setTab('dados'); return; }
+        setSaving(true);
         try {
-            const allItens = pedidos.flatMap((p, pIdx) =>
-                (p.itens || []).map(i => ({ material_id: i.material_id, quantidade: i.quantidade, peso_total: i.peso_total, pedido_index: pIdx }))
+            const allItens = pedidos.flatMap((ped, pIdx) =>
+                ped.itens.filter(i => i.material_id).map(i => ({
+                    material_id: i.material_id, quantidade: Number(i.quantidade) || 1,
+                    peso_total: i.peso_total ? Number(i.peso_total) : null,
+                    pedido_index: pIdx,
+                }))
             );
             await onSave({
                 ...form,
-                peso_total:            totais.pesoTotal,
-                valor_frete:           totais.freteCalculado,
-                valor_frete_calculado: totais.freteCalculado,
-                valor_total_carga:     totais.valorTotalCarga,
-                sugestao_veiculo:      aiSugestao || null,
-                _pedidos: pedidos.map(p => ({
-                    numero_pedido:    p.numero_pedido   || '',
-                    cidade_destino:   p.cidade_destino  || form.destino,
-                    valor_pedido:     Number(p.valor_pedido || 0),
-                    categoria_frete:  p.categoria_frete || 'Outros',
-                    empresa:          p.empresa         || 'Comercial Araguaia',
-                    percentual_frete: FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05,
-                    frete_calculado:  Number(p.valor_pedido || 0) * (FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05),
+                peso_total:            totais.peso      || null,
+                valor_frete:           totais.frete     || null,
+                valor_frete_calculado: totais.frete     || null,
+                valor_total_carga:     totais.valorCarga || null,
+                sugestao_veiculo:      aiSugestao       || null,
+                _pedidos: pedidos.filter(p => p.numero_pedido || p.valor_pedido).map(p => ({
+                    numero_pedido:   p.numero_pedido || '',
+                    cidade_destino:  p.cidade_destino || form.destino,
+                    valor_pedido:    Number(p.valor_pedido || 0),
+                    categoria_frete: p.categoria_frete || 'Outros',
+                    empresa:         p.empresa || '',
+                    percentual_frete: (FRETE_CATEGORIAS || []).find(f => f.categoria === p.categoria_frete)?.percentual || 0,
+                    frete_calculado:  Number(p.valor_pedido || 0) * ((FRETE_CATEGORIAS || []).find(f => f.categoria === p.categoria_frete)?.percentual || 0),
                 })),
             }, allItens);
-        } finally { setLoading(false); }
+        } finally { setSaving(false); }
     };
 
-    if (!isOpen) return null;
-
-    const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
-    const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
+    const inputCls   = 'w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all';
+    const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-background)' };
 
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
             style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
             onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-3xl" style={{ maxHeight: 'calc(100vh - 32px)' }}>
+            <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-3xl" style={{ maxHeight: 'calc(100vh - 32px)', backgroundColor: 'var(--color-surface)' }}>
 
                 {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                     <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#FFFBEB' }}>
                             <Icon name="ClipboardList" size={18} color="#D97706" />
@@ -843,172 +820,219 @@ Considere: capacidade de carga vs peso real, tipo de composição, disponibilida
                 {/* Tabs */}
                 <div className="flex border-b flex-shrink-0 px-5 pt-3 gap-1" style={{ borderColor: 'var(--color-border)' }}>
                     {[
-                        { id: 'dados',    label: 'Identificação', icon: 'FileText' },
-                        { id: 'pedidos',  label: `Pedidos (${pedidos.length})`, icon: 'ShoppingCart' },
-                        { id: 'veiculo',  label: 'Sugestão IA', icon: 'Cpu' },
+                        { id: 'dados',   label: 'Identificação',               icon: 'FileText'    },
+                        { id: 'pedidos', label: `Pedidos (${pedidos.length})`, icon: 'ShoppingCart' },
+                        { id: 'ia',      label: 'Sugestão IA',                 icon: 'Cpu'         },
                     ].map(t => (
                         <button key={t.id} onClick={() => setTab(t.id)}
                             className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors"
-                            style={tab === t.id
-                                ? { borderColor: '#D97706', color: '#D97706' }
-                                : { borderColor: 'transparent', color: 'var(--color-muted-foreground)' }}>
+                            style={tab === t.id ? { borderColor: '#D97706', color: '#D97706' } : { borderColor: 'transparent', color: 'var(--color-muted-foreground)' }}>
                             <Icon name={t.icon} size={13} color={tab === t.id ? '#D97706' : 'var(--color-muted-foreground)'} />
                             {t.label}
                         </button>
                     ))}
                 </div>
 
-                <div className="p-5 overflow-y-auto flex-1">
+                {/* Body */}
+                <div className="p-5 overflow-y-auto flex-1 space-y-4">
 
-                    {/* Tab: Identificação */}
+                    {/* ── ABA: Identificação ── */}
                     {tab === 'dados' && (
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Motorista</label>
-                                    <select value={form.motorista_id} onChange={e => {
-                                        const m = motoristas.find(x => x.id === e.target.value);
-                                        setF('motorista_id', e.target.value);
-                                        setF('motorista', m?.name || '');
-                                    }} className={inputCls} style={inputStyle}>
-                                        <option value="">Selecione ou preencha abaixo...</option>
-                                        {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Motorista (texto livre)</label>
-                                    <input value={form.motorista} onChange={e => setF('motorista', e.target.value)} className={inputCls} style={inputStyle} placeholder="Nome do motorista" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Destino <span className="text-red-500">*</span></label>
-                                    <input value={form.destino} onChange={e => setF('destino', e.target.value)} className={inputCls} style={inputStyle} placeholder="Cidade / Endereço de entrega" />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Placa do Veículo</label>
-                                    <select value={form.vehicle_id} onChange={e => {
-                                        const v = vehicles.find(x => x.id === e.target.value || String(x.id) === e.target.value);
-                                        setF('vehicle_id', e.target.value);
-                                        setF('placa', v?.placa || '');
-                                    }} className={inputCls} style={inputStyle}>
-                                        <option value="">A definir...</option>
-                                        {vehicles.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo || ''}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de Saída</label>
-                                    <input type="datetime-local" value={form.saida} onChange={e => setF('saida', e.target.value)} className={inputCls} style={inputStyle} />
-                                </div>
-                            </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {/* Motorista — select dos cadastrados */}
                             <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Motorista</label>
+                                <select value={form.motorista_id} onChange={e => {
+                                    const m = motoristasComId.find(x => x.id === e.target.value);
+                                    setF('motorista_id', e.target.value);
+                                    setF('motorista', m?.name || '');
+                                }} className={inputCls} style={inputStyle}>
+                                    <option value="">Selecione o motorista...</option>
+                                    {motoristasComId.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                </select>
+                            </div>
+
+                            {/* Destino */}
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Destino <span style={{ color: '#DC2626' }}>*</span></label>
+                                <input value={form.destino} onChange={e => setF('destino', e.target.value)} className={inputCls} style={inputStyle} placeholder="Cidade / Endereço" />
+                            </div>
+
+                            {/* Veículo */}
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Veículo (opcional)</label>
+                                <select value={form.vehicle_id} onChange={e => {
+                                    const v = vehicles.find(x => x.id === e.target.value || String(x.id) === e.target.value);
+                                    setF('vehicle_id', e.target.value);
+                                    setF('placa', v?.placa || '');
+                                }} className={inputCls} style={inputStyle}>
+                                    <option value="">A definir...</option>
+                                    {vehicles.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo || ''}</option>)}
+                                </select>
+                            </div>
+
+                            {/* Data saída */}
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de Saída</label>
+                                <input type="datetime-local" value={form.saida} onChange={e => setF('saida', e.target.value)} className={inputCls} style={inputStyle} />
+                            </div>
+
+                            {/* Observações */}
+                            <div className="sm:col-span-2">
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Observações</label>
                                 <textarea value={form.observacoes} onChange={e => setF('observacoes', e.target.value)} rows={2} className={inputCls} style={inputStyle} placeholder="Informações adicionais..." />
                             </div>
                         </div>
                     )}
 
-                    {/* Tab: Pedidos */}
+                    {/* ── ABA: Pedidos ── */}
                     {tab === 'pedidos' && (
                         <div className="space-y-4">
                             <div className="flex justify-end">
-                                <button onClick={addPedido} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white" style={{ backgroundColor: '#D97706' }}>
+                                <button onClick={addPedido} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ backgroundColor: '#D97706' }}>
                                     <Icon name="Plus" size={12} color="white" /> Adicionar pedido
                                 </button>
                             </div>
 
-                            {pedidos.map((p, idx) => {
-                                const pct = FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0;
-                                const fretePedido = Number(p.valor_pedido || 0) * pct;
-                                const cfg = getCategoriaConfig(p.categoria_frete);
+                            {pedidos.map((ped, pIdx) => {
+                                const pct   = (FRETE_CATEGORIAS || []).find(f => f.categoria === ped.categoria_frete)?.percentual || 0;
+                                const frete = Number(ped.valor_pedido || 0) * pct;
                                 return (
-                                    <div key={idx} className="bg-white rounded-xl border p-4" style={{ borderColor: 'var(--color-border)' }}>
-                                        <div className="flex items-center justify-between mb-3">
+                                    <div key={pIdx} className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                                        {/* Cabeçalho pedido */}
+                                        <div className="flex items-center justify-between px-4 py-2 border-b" style={{ backgroundColor: 'var(--color-subtle)', borderColor: 'var(--color-border)' }}>
                                             <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: cfg?.bg || '#F3F4F6', color: cfg?.cor || '#374151' }}>
-                                                    Pedido #{idx + 1}
+                                                <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+                                                    Pedido #{pIdx + 1}
                                                 </span>
-                                                {p.numero_pedido && <span className="text-xs font-mono font-semibold" style={{ color: 'var(--color-primary)' }}>#{p.numero_pedido}</span>}
-                                                {fretePedido > 0 && (
-                                                    <span className="text-xs font-semibold" style={{ color: '#059669' }}>
-                                                        Frete: {brl(fretePedido)} ({(pct * 100).toFixed(0)}%)
-                                                    </span>
-                                                )}
+                                                {ped.numero_pedido && <span className="text-xs font-mono font-semibold" style={{ color: 'var(--color-primary)' }}>#{ped.numero_pedido}</span>}
+                                                {frete > 0 && <span className="text-xs font-semibold" style={{ color: '#059669' }}>Frete: {brl(frete)} ({(pct * 100).toFixed(0)}%)</span>}
                                             </div>
                                             {pedidos.length > 1 && (
-                                                <button onClick={() => removePedido(idx)} className="text-xs flex items-center gap-1" style={{ color: '#DC2626' }}>
+                                                <button onClick={() => delPedido(pIdx)} className="text-xs flex items-center gap-1" style={{ color: '#DC2626' }}>
                                                     <Icon name="X" size={12} color="#DC2626" /> Remover
                                                 </button>
                                             )}
                                         </div>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                            <div>
-                                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Nº do Pedido</label>
-                                                <input value={p.numero_pedido} onChange={e => updatePedido(idx, 'numero_pedido', e.target.value)} className={inputCls} style={inputStyle} placeholder="Ex: 37443" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Empresa</label>
-                                                <select value={p.empresa} onChange={e => updatePedido(idx, 'empresa', e.target.value)} className={inputCls} style={inputStyle}>
-                                                    {['Comercial Araguaia', 'Aços Confiance', 'Confiance'].map(e => <option key={e} value={e}>{e}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Valor do Pedido (R$)</label>
-                                                <input type="number" step="0.01" min="0" value={p.valor_pedido} onChange={e => updatePedido(idx, 'valor_pedido', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Categoria de Frete</label>
-                                                <select value={p.categoria_frete} onChange={e => updatePedido(idx, 'categoria_frete', e.target.value)} className={inputCls} style={inputStyle}>
-                                                    {FRETE_CATEGORIAS.map(f => <option key={f.categoria} value={f.categoria}>{f.label} ({(f.percentual * 100).toFixed(0)}%)</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Cidade Destino do Pedido</label>
-                                                <input value={p.cidade_destino} onChange={e => updatePedido(idx, 'cidade_destino', e.target.value)} className={inputCls} style={inputStyle} placeholder={form.destino || 'Cidade'} />
-                                            </div>
-                                            <div className="flex items-end">
-                                                <div className="w-full p-2.5 rounded-lg border" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
-                                                    <p className="text-xs" style={{ color: '#065F46' }}>Frete calculado</p>
-                                                    <p className="text-sm font-bold" style={{ color: '#059669' }}>{brl(fretePedido)}</p>
+
+                                        <div className="p-4 space-y-3">
+                                            {/* Campos do pedido */}
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Nº do Pedido</label>
+                                                    <input value={ped.numero_pedido} onChange={e => updPedido(pIdx, { numero_pedido: e.target.value })} className={inputCls} style={inputStyle} placeholder="Ex: 37443" />
                                                 </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Empresa</label>
+                                                    <select value={ped.empresa} onChange={e => updPedido(pIdx, { empresa: e.target.value })} className={inputCls} style={inputStyle}>
+                                                        {['Comercial Araguaia', 'Aços Confiance', 'Confiance'].map(e => <option key={e} value={e}>{e}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Valor do Pedido (R$)</label>
+                                                    <input type="number" step="0.01" min="0" value={ped.valor_pedido} onChange={e => updPedido(pIdx, { valor_pedido: e.target.value })} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Categoria de Frete</label>
+                                                    <select value={ped.categoria_frete} onChange={e => updPedido(pIdx, { categoria_frete: e.target.value })} className={inputCls} style={inputStyle}>
+                                                        {(FRETE_CATEGORIAS || []).map(f => <option key={f.categoria} value={f.categoria}>{f.label || f.categoria} ({(f.percentual * 100).toFixed(0)}%)</option>)}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Cidade Destino do Pedido</label>
+                                                    <input value={ped.cidade_destino} onChange={e => updPedido(pIdx, { cidade_destino: e.target.value })} className={inputCls} style={inputStyle} placeholder={form.destino || 'Cidade'} />
+                                                </div>
+                                                <div className="flex items-end">
+                                                    <div className="w-full p-2.5 rounded-lg border" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
+                                                        <p className="text-xs" style={{ color: '#065F46' }}>Frete calculado</p>
+                                                        <p className="text-sm font-bold" style={{ color: '#059669' }}>{brl(frete)}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Itens / Materiais do pedido */}
+                                            <div className="rounded-lg border p-3" style={{ borderColor: '#E9D5FF', backgroundColor: '#FAF5FF' }}>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <p className="text-xs font-semibold" style={{ color: '#6D28D9' }}>📦 Materiais / Itens</p>
+                                                    <button onClick={() => addItem(pIdx)} className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-white" style={{ backgroundColor: '#7C3AED' }}>
+                                                        <Icon name="Plus" size={11} color="white" /> Adicionar
+                                                    </button>
+                                                </div>
+                                                {ped.itens.length === 0 ? (
+                                                    <p className="text-xs text-center py-2" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum material adicionado</p>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        {ped.itens.map((item, iIdx) => {
+                                                            const mat = (materials || []).find(m => m.id === item.material_id);
+                                                            return (
+                                                                <div key={iIdx} className="grid grid-cols-4 gap-2 items-end bg-white rounded-lg p-2 border" style={{ borderColor: '#DDD6FE' }}>
+                                                                    <div className="col-span-2">
+                                                                        <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Material</label>
+                                                                        <select value={item.material_id} onChange={e => updItem(pIdx, iIdx, { material_id: e.target.value })} className={inputCls} style={{ ...inputStyle, fontSize: '11px', padding: '6px 8px' }}>
+                                                                            <option value="">Selecione...</option>
+                                                                            {(materials || []).map(m => <option key={m.id} value={m.id}>{m.nome} {m.peso ? `(${m.peso}kg/${m.unidade})` : ''}</option>)}
+                                                                        </select>
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Qtd ({mat?.unidade || 'un'})</label>
+                                                                        <input type="number" min="1" value={item.quantidade} onChange={e => updItem(pIdx, iIdx, { quantidade: e.target.value })} className={inputCls} style={{ ...inputStyle, fontSize: '12px', padding: '6px 8px' }} />
+                                                                    </div>
+                                                                    <div className="flex items-end gap-1">
+                                                                        <div className="flex-1">
+                                                                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Peso (kg)</label>
+                                                                            <input type="number" min="0" step="0.1" value={item.peso_total} onChange={e => updItem(pIdx, iIdx, { peso_total: e.target.value, _manualPeso: true })} className={inputCls} style={{ ...inputStyle, fontSize: '12px', padding: '6px 8px' }} placeholder="auto" />
+                                                                        </div>
+                                                                        <button onClick={() => delItem(pIdx, iIdx)} className="mb-0.5 p-1.5 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0">
+                                                                            <Icon name="X" size={12} color="#DC2626" />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                                {ped.itens.length > 0 && (
+                                                    <p className="text-xs mt-2 font-medium" style={{ color: '#6D28D9' }}>
+                                                        Peso do pedido: <strong>{ped.itens.reduce((s, i) => s + Number(i.peso_total || 0), 0).toLocaleString('pt-BR')} kg</strong>
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
                                 );
                             })}
 
-                            {/* Resumo total */}
-                            <div className="grid grid-cols-3 gap-3 mt-2">
+                            {/* Resumo totais */}
+                            <div className="grid grid-cols-3 gap-3">
                                 {[
-                                    { label: 'Frete Total', value: brl(totais.freteCalculado), color: '#059669', bg: '#ECFDF5' },
-                                    { label: 'Valor Total Carga', value: brl(totais.valorTotalCarga), color: '#1D4ED8', bg: '#EFF6FF' },
-                                    { label: `${pedidos.filter(p => p.numero_pedido).length} pedido(s)`, value: pedidos.filter(p => p.numero_pedido).map(p => `#${p.numero_pedido}`).join(', ') || '—', color: '#D97706', bg: '#FFFBEB' },
+                                    { label: 'Frete Total', value: brl(totais.frete), color: '#059669', bg: '#ECFDF5' },
+                                    { label: 'Valor Carga', value: brl(totais.valorCarga), color: '#1D4ED8', bg: '#EFF6FF' },
+                                    { label: 'Peso Total', value: totais.peso > 0 ? `${totais.peso.toLocaleString('pt-BR')} kg` : '—', color: '#7C3AED', bg: '#FAF5FF' },
                                 ].map(s => (
                                     <div key={s.label} className="p-3 rounded-xl border text-center" style={{ backgroundColor: s.bg, borderColor: s.color + '44' }}>
                                         <p className="text-xs mb-1" style={{ color: s.color }}>{s.label}</p>
-                                        <p className="text-sm font-bold truncate" style={{ color: s.color }}>{s.value}</p>
+                                        <p className="text-sm font-bold" style={{ color: s.color }}>{s.value}</p>
                                     </div>
                                 ))}
                             </div>
                         </div>
                     )}
 
-                    {/* Tab: Sugestão IA */}
-                    {tab === 'veiculo' && (
+                    {/* ── ABA: Sugestão IA ── */}
+                    {tab === 'ia' && (
                         <div className="space-y-4">
                             <div className="p-4 rounded-xl border" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
                                 <div className="flex items-center justify-between mb-3">
                                     <div>
                                         <p className="text-sm font-semibold" style={{ color: '#065F46' }}>🤖 Sugestão de Veículo via IA</p>
-                                        <p className="text-xs mt-0.5" style={{ color: '#059669' }}>
-                                            A IA analisa o peso total da carga, os pedidos e os veículos disponíveis para recomendar o melhor para a viagem.
-                                        </p>
+                                        <p className="text-xs mt-0.5" style={{ color: '#059669' }}>A IA analisa peso, pedidos e veículos disponíveis para recomendar o melhor para a viagem.</p>
                                     </div>
                                     <button onClick={sugerirVeiculo} disabled={aiLoading}
                                         className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white disabled:opacity-60 flex-shrink-0 ml-3"
                                         style={{ backgroundColor: '#059669' }}>
                                         {aiLoading
                                             ? <><div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> Consultando...</>
-                                            : <><Icon name="Cpu" size={13} color="white" /> Sugerir veículo</>
-                                        }
+                                            : <><Icon name="Cpu" size={13} color="white" /> Sugerir veículo</>}
                                     </button>
                                 </div>
                                 {aiSugestao ? (
@@ -1016,19 +1040,15 @@ Considere: capacidade de carga vs peso real, tipo de composição, disponibilida
                                         <p className="text-xs leading-relaxed" style={{ color: '#065F46' }}>{aiSugestao}</p>
                                     </div>
                                 ) : (
-                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                        Adicione pedidos na aba anterior e clique em "Sugerir veículo".
-                                    </p>
+                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Adicione pedidos e clique em "Sugerir veículo".</p>
                                 )}
                             </div>
-
-                            {/* Resumo para decisão */}
-                            <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB' }}>
+                            <div className="p-4 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-subtle)' }}>
                                 <p className="text-xs font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>RESUMO DA CARGA</p>
-                                <div className="grid grid-cols-2 gap-3 text-xs">
-                                    <div><span style={{ color: 'var(--color-muted-foreground)' }}>Peso total:</span> <strong>{totais.pesoTotal > 0 ? `${totais.pesoTotal.toLocaleString('pt-BR')} kg` : '—'}</strong></div>
-                                    <div><span style={{ color: 'var(--color-muted-foreground)' }}>Frete total:</span> <strong style={{ color: '#059669' }}>{brl(totais.freteCalculado)}</strong></div>
-                                    <div><span style={{ color: 'var(--color-muted-foreground)' }}>Valor carga:</span> <strong>{brl(totais.valorTotalCarga)}</strong></div>
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div><span style={{ color: 'var(--color-muted-foreground)' }}>Peso total:</span> <strong>{totais.peso > 0 ? `${totais.peso.toLocaleString('pt-BR')} kg` : '—'}</strong></div>
+                                    <div><span style={{ color: 'var(--color-muted-foreground)' }}>Frete total:</span> <strong style={{ color: '#059669' }}>{brl(totais.frete)}</strong></div>
+                                    <div><span style={{ color: 'var(--color-muted-foreground)' }}>Valor carga:</span> <strong>{brl(totais.valorCarga)}</strong></div>
                                     <div><span style={{ color: 'var(--color-muted-foreground)' }}>Nº pedidos:</span> <strong>{pedidos.filter(p => p.numero_pedido).length}</strong></div>
                                 </div>
                             </div>
@@ -1037,21 +1057,19 @@ Considere: capacidade de carga vs peso real, tipo de composição, disponibilida
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-end gap-3 p-5 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="flex items-center justify-end gap-3 px-5 py-4 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                     <button onClick={onClose} className="px-4 py-2 rounded-xl border text-sm font-medium" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
                         Cancelar
                     </button>
-                    <button onClick={handleSave} disabled={loading}
+                    <button onClick={handleSave} disabled={saving}
                         className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-60"
                         style={{ backgroundColor: '#D97706' }}>
-                        {loading
+                        {saving
                             ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Salvando...</>
-                            : <><Icon name="Save" size={14} color="white" /> {isEdit ? 'Salvar Alterações' : 'Criar Rascunho'}</>
-                        }
+                            : <><Icon name="Save" size={14} color="white" /> {isEdit ? 'Salvar Alterações' : 'Criar Rascunho'}</>}
                     </button>
                 </div>
             </div>
-            <Toast toast={toast} />
         </div>
     );
 }

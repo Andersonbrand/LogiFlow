@@ -171,15 +171,21 @@ async function buscarNumeroExistente({ motorista_id, motoristaNome, destino, sai
     return null;
 }
 
-/** Gera próximo número sequencial global, considerando as duas tabelas. */
+/** Gera próximo número sequencial global, considerando as duas tabelas.
+ *  Exclui rascunhos (is_rascunho=true) e números RASC-* para não poluir a sequência. */
 async function nextNumeroGlobal() {
-    const [{ data: lastAdmin }, { data: lastCarretas }] = await Promise.all([
-        supabase.from('romaneios').select('numero').order('created_at', { ascending: false }).limit(1).single(),
-        supabase.from('carretas_romaneios').select('numero').order('created_at', { ascending: false }).limit(1).single(),
+    const parseNum = (str) => {
+        if (!str || str.startsWith('RASC-')) return 0;
+        return parseInt(str.replace(/\D/g, ''), 10) || 0;
+    };
+    const [{ data: adminRows }, { data: carretasRows }] = await Promise.all([
+        supabase.from('romaneios').select('numero').eq('is_rascunho', false).order('created_at', { ascending: false }).limit(50),
+        supabase.from('carretas_romaneios').select('numero').order('created_at', { ascending: false }).limit(50),
     ]);
-    const parseNum = (str) => str ? parseInt((str || '').replace(/\D/g, ''), 10) || 0 : 0;
-    const maxN = Math.max(parseNum(lastAdmin?.numero), parseNum(lastCarretas?.numero));
-    return `ROM-${String(maxN + 1).padStart(5, '0')}`;
+    const maxAdmin    = Math.max(0, ...(adminRows    || []).map(r => parseNum(r.numero)));
+    const maxCarretas = Math.max(0, ...(carretasRows || []).map(r => parseNum(r.numero)));
+    const maxN = Math.max(maxAdmin, maxCarretas);
+    return `ROM-${String(maxN + 1).padStart(3, '0')}`;
 }
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -396,9 +402,6 @@ export async function fetchRomaneiosPorMotorista(motoristaId, nomeMotorista) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RASCUNHOS DE ROMANEIO
-// Usam a mesma tabela `romaneios` com is_rascunho = true.
-// Têm pedidos em `romaneio_pedidos` e itens em `romaneio_itens` — mesmo fluxo.
-// Na promoção: is_rascunho → false, número sequencial gerado, status → 'Aguardando'.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function fetchRascunhos() {
@@ -424,11 +427,10 @@ export async function createRascunho(romaneio, itens = []) {
     const payload = {
         ...buildPayload(romaneio),
         numero,
-        status:       'Rascunho',
-        is_rascunho:  true,
+        status:      'Rascunho',
+        is_rascunho: true,
         sugestao_veiculo: romaneio.sugestao_veiculo || null,
     };
-
     const { data: romData, error } = await supabase
         .from('romaneios').insert(payload).select('id').single();
     if (error) throw error;
@@ -444,15 +446,14 @@ export async function createRascunho(romaneio, itens = []) {
         if (pe) throw pe;
         (pd || []).forEach((p, i) => { pedidoIdMap[i] = p.id; });
     }
-
     if (itens.length > 0) {
         const { error: ie } = await supabase.from('romaneio_itens').insert(
             itens.map(i => ({
                 romaneio_id: romId,
-                material_id: i.material_id,
-                quantidade:  i.quantidade,
-                peso_total:  i.peso_total,
-                pedido_id:   pedidoIdMap[i.pedido_index] || null,
+                material_id: i.material_id || null,
+                quantidade:  Number(i.quantidade) || 1,
+                peso_total:  i.peso_total != null ? Number(i.peso_total) : null,
+                pedido_id:   pedidoIdMap[i.pedido_index] ?? null,
             }))
         );
         if (ie) throw ie;
@@ -461,7 +462,6 @@ export async function createRascunho(romaneio, itens = []) {
 }
 
 export async function updateRascunho(id, romaneio, itens) {
-    // Substitui pedidos
     await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
     const pedidoIdMap = {};
     const pedidosMeta = romaneio._pedidos || [];
@@ -473,24 +473,21 @@ export async function updateRascunho(id, romaneio, itens) {
         if (pe) throw pe;
         (pd || []).forEach((p, i) => { pedidoIdMap[i] = p.id; });
     }
-
-    // Substitui itens
     if (itens !== undefined) {
         await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
         if (itens.length > 0) {
             const { error: ie } = await supabase.from('romaneio_itens').insert(
                 itens.map(i => ({
                     romaneio_id: id,
-                    material_id: i.material_id,
-                    quantidade:  i.quantidade,
-                    peso_total:  i.peso_total,
-                    pedido_id:   pedidoIdMap[i.pedido_index] || null,
+                    material_id: i.material_id || null,
+                    quantidade:  Number(i.quantidade) || 1,
+                    peso_total:  i.peso_total != null ? Number(i.peso_total) : null,
+                    pedido_id:   pedidoIdMap[i.pedido_index] ?? null,
                 }))
             );
             if (ie) throw ie;
         }
     }
-
     const { error } = await supabase.from('romaneios').update({
         ...buildPayload(romaneio),
         sugestao_veiculo: romaneio.sugestao_veiculo || null,
@@ -504,9 +501,6 @@ export async function deleteRascunho(id) {
     if (error) throw error;
 }
 
-// Promove rascunho → romaneio oficial:
-// gera número sequencial real, limpa is_rascunho, seta status 'Aguardando'
-// todos os pedidos e itens já existem na tabela — nada é movido
 export async function promoverRascunho(id) {
     const numero = await nextNumeroGlobal();
     const { error } = await supabase
