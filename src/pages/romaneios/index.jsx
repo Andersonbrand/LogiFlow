@@ -1017,7 +1017,7 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                                                     </button>
                                                 </div>
                                                 {ped.itens.length === 0 ? (
-                                                    <p className="text-xs text-center py-2" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum material adicionado</p>
+                                                    <div className="flex flex-col items-center justify-center py-4 gap-1"><Icon name="Package" size={18} color="var(--color-muted-foreground)" /><p className="text-xs text-center" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum material adicionado</p></div>
                                                 ) : (
                                                     <div className="space-y-2">
                                                         {ped.itens.map((item, iIdx) => {
@@ -1038,7 +1038,7 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                                                                     <div className="flex items-end gap-1">
                                                                         <div className="flex-1">
                                                                             <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Peso (kg)</label>
-                                                                            <input type="number" min="0" step="0.1" value={item.peso_total} onChange={e => updItem(pIdx, iIdx, { peso_total: e.target.value, _manualPeso: true })} className={inputCls} style={{ ...inputStyle, fontSize: '12px', padding: '6px 8px' }} placeholder="auto" />
+                                                                            <input type="number" min="0" step="0.1" value={item.peso_total !== '' ? item.peso_total : (item.peso_unit && item.quantidade ? String(Math.round(Number(item.peso_unit) * Number(item.quantidade) * 100) / 100) : '')} onChange={e => updItem(pIdx, iIdx, { peso_total: e.target.value, _manualPeso: true })} className={inputCls} style={{ ...inputStyle, fontSize: '12px', padding: '6px 8px' }} placeholder="auto" />
                                                                         </div>
                                                                         <button onClick={() => delItem(pIdx, iIdx)} className="mb-0.5 p-1.5 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0">
                                                                             <Icon name="X" size={12} color="#DC2626" />

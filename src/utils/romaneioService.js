@@ -175,17 +175,17 @@ async function buscarNumeroExistente({ motorista_id, motoristaNome, destino, sai
 /** Gera próximo número sequencial global, considerando as duas tabelas.
  *  Exclui rascunhos (is_rascunho=true) e números RASC-* para não poluir a sequência. */
 async function nextNumeroGlobal() {
+    // Usa APENAS a tabela `romaneios` — a sequência de carretas é independente
     const parseNum = (str) => {
         if (!str || str.startsWith('RASC-')) return 0;
         return parseInt(str.replace(/\D/g, ''), 10) || 0;
     };
-    const [{ data: adminRows }, { data: carretasRows }] = await Promise.all([
-        supabase.from('romaneios').select('numero').eq('is_rascunho', false).order('created_at', { ascending: false }).limit(50),
-        supabase.from('carretas_romaneios').select('numero').order('created_at', { ascending: false }).limit(50),
-    ]);
-    const maxAdmin    = Math.max(0, ...(adminRows    || []).map(r => parseNum(r.numero)));
-    const maxCarretas = Math.max(0, ...(carretasRows || []).map(r => parseNum(r.numero)));
-    const maxN = Math.max(maxAdmin, maxCarretas);
+    const { data: rows } = await supabase
+        .from('romaneios')
+        .select('numero')
+        .eq('is_rascunho', false)
+        .not('numero', 'is', null);
+    const maxN = Math.max(0, ...(rows || []).map(r => parseNum(r.numero)));
     return `ROM-${String(maxN + 1).padStart(3, '0')}`;
 }
 
@@ -263,9 +263,10 @@ export async function updateRomaneio(id, romaneio, itens) {
     const pedidoIdMap = {};
     const pedidosMeta = romaneio._pedidos || [];
     if (pedidosMeta.length > 0) {
+        // Remove o campo `id` para evitar conflito com registros antigos após o DELETE
         const { data: pd, error: pe } = await supabase
             .from('romaneio_pedidos')
-            .insert(pedidosMeta.map(p => ({ ...p, romaneio_id: id })))
+            .insert(pedidosMeta.map(({ id: _omit, ...p }) => ({ ...p, romaneio_id: id })))
             .select('id');
         if (pe) throw pe;
         (pd || []).forEach((p, i) => { pedidoIdMap[i] = p.id; });
@@ -467,9 +468,10 @@ export async function updateRascunho(id, romaneio, itens) {
     const pedidoIdMap = {};
     const pedidosMeta = romaneio._pedidos || [];
     if (pedidosMeta.length > 0) {
+        // Remove o campo `id` para evitar conflito com registros antigos após o DELETE
         const { data: pd, error: pe } = await supabase
             .from('romaneio_pedidos')
-            .insert(pedidosMeta.map(p => ({ ...p, romaneio_id: id })))
+            .insert(pedidosMeta.map(({ id: _omit, ...p }) => ({ ...p, romaneio_id: id })))
             .select('id');
         if (pe) throw pe;
         (pd || []).forEach((p, i) => { pedidoIdMap[i] = p.id; });
