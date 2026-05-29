@@ -713,13 +713,24 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
         const newItens = ped.itens.map((it, ii) => {
             if (ii !== iIdx) return it;
             const merged = { ...it, ...patch };
-            // auto peso_total when material peso_unit is known
-            if ((patch.material_id !== undefined || patch.quantidade !== undefined) && merged.peso_unit && !merged._manualPeso) {
-                merged.peso_total = String(Number(merged.peso_unit) * Number(merged.quantidade || 1));
-            }
+            // Se material mudou: busca peso_unit e calcula peso_total imediatamente
             if (patch.material_id !== undefined) {
                 const mat = (materials || []).find(m => m.id === patch.material_id);
-                if (mat?.peso) { merged.peso_unit = String(mat.peso); merged.peso_total = String(Number(mat.peso) * Number(merged.quantidade || 1)); }
+                if (mat?.peso) {
+                    merged.peso_unit  = String(mat.peso);
+                    merged.peso_total = String(Math.round(Number(mat.peso) * Number(merged.quantidade || 1) * 1000) / 1000);
+                } else {
+                    merged.peso_unit  = '';
+                    if (!merged._manualPeso) merged.peso_total = '';
+                }
+            }
+            // Se quantidade mudou e temos peso_unit: recalcula (se não foi editado manualmente)
+            if (patch.quantidade !== undefined && merged.peso_unit && !merged._manualPeso) {
+                merged.peso_total = String(Math.round(Number(merged.peso_unit) * Number(merged.quantidade || 1) * 1000) / 1000);
+            }
+            // Garante que peso_total nunca fique '' se temos peso_unit e quantidade
+            if (!merged._manualPeso && merged.peso_unit && merged.quantidade && merged.peso_total === '') {
+                merged.peso_total = String(Math.round(Number(merged.peso_unit) * Number(merged.quantidade) * 1000) / 1000);
             }
             return merged;
         });
@@ -734,7 +745,13 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
             const pct = (FRETE_CATEGORIAS || []).find(f => f.categoria === p.categoria_frete)?.percentual || 0;
             return s + Number(p.valor_pedido || 0) * pct;
         }, 0);
-        const peso = pedidos.flatMap(p => p.itens).reduce((s, i) => s + Number(i.peso_total || 0), 0);
+        const peso = pedidos.flatMap(p => p.itens).reduce((s, i) => {
+            // Usa peso_total do state; se vazio, calcula na hora com peso_unit × quantidade
+            const pt = i.peso_total !== '' && i.peso_total != null
+                ? Number(i.peso_total)
+                : (i.peso_unit && i.quantidade ? Number(i.peso_unit) * Number(i.quantidade) : 0);
+            return s + pt;
+        }, 0);
         return { valorCarga, frete, peso };
     }, [pedidos]);
 

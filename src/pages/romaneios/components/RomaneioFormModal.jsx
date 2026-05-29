@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 import Autocomplete from 'components/ui/Autocomplete';
@@ -63,6 +63,8 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
 
     // Novo pedido sendo montado
     const [novoPedido, setNovoPedido]   = useState(EMPTY_PEDIDO);
+    // Guard: rastreia o id do romaneio já carregado — evita re-população por Realtime
+    const loadedRomaneioIdRef = useRef(null);
     const [novoItem, setNovoItem]       = useState({ material_id:'', quantidade:1, comprimento_telha:'' });
     const [expandedPedido, setExpanded] = useState(null); // índice do pedido expandido
     const [paradas, setParadas]         = useState([]);   // cidades intermediárias
@@ -84,7 +86,15 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
     }, []);
 
     useEffect(() => {
-        if (!isOpen) return;
+        if (!isOpen) {
+            loadedRomaneioIdRef.current = null;
+            return;
+        }
+        // Se o modal já está aberto com este mesmo romaneio, não re-popular
+        // Isso previne que o Realtime cause duplicação de pedidos durante o save
+        const incomingId = editingRomaneio?.id ?? '__new__';
+        if (loadedRomaneioIdRef.current === incomingId) return;
+        loadedRomaneioIdRef.current = incomingId;
         if (editingRomaneio) {
             setForm({
                 motorista:         editingRomaneio.motorista         || '',
@@ -152,7 +162,8 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         setPrecoDiesel('6.50');
         setUsarPedagio(true);
         setPedagioPor100km('8.00');
-    }, [isOpen, editingRomaneio]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, editingRomaneio?.id]);
 
     const calcularCombustivel = (vehicleId, distanciaKm) => {
         const veh = vehicles.find(v => String(v.id) === String(vehicleId));
