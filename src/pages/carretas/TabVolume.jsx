@@ -11,7 +11,7 @@ import {
     fetchFornecedoresCarretas, createFornecedorCarretas, deleteFornecedorCarretas,
     fetchCarretasVeiculos, fetchTodosMotoristas,
     fetchVeiculosProprios, fetchVeiculosTerceiros,
-    fetchMotoristasProprios, fetchMotoristasTerceiros,
+    fetchMotoristasProprios, fetchMotoristasTerceiros, fetchCarreteirosPropriosOnly,
     calcularFrete, TIPOS_CALCULO_FRETE,
     fetchFretesCidades,
 } from 'utils/carretasService';
@@ -332,7 +332,7 @@ export default function TabVolume({ isAdmin }) {
                 fetchVeiculosTerceiros(),
                 // Motoristas: todos (modal frota) + separados por tipo
                 isAdmin ? fetchTodosMotoristas()     : Promise.resolve([]),
-                isAdmin ? fetchMotoristasProprios()  : Promise.resolve([]),
+                isAdmin ? fetchCarreteirosPropriosOnly()  : Promise.resolve([]),
                 isAdmin ? fetchMotoristasTerceiros() : Promise.resolve([]),
                 fetchCarregamentos({ ...filters, is_terceiro: true }),
                 fetchFretesCidades('frota'),

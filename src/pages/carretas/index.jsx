@@ -37,6 +37,7 @@ import {
     fetchBonificacoesExtras, createBonificacaoExtra, updateBonificacaoExtra, deleteBonificacaoExtra,
     pagarBoletoCarreta, pagarParcelaCartaoCarreta,
     revogarBoletoCarreta, revogarParcelaCartaoCarreta,
+    fetchVeiculosProprios, fetchMotoristasProprios,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
 import { exportDiariaModelo, exportDiariasRomaneiosModelo } from 'utils/excelUtils';
@@ -123,8 +124,28 @@ function TabViagens({ isAdmin }) {
     const [registrosMotoristas, setRegistrosMotoristas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [abaViagens, setAbaViagens] = useState('carregamentos'); // 'carregamentos' | 'motoristas'
-    const [filtroMes, setFiltroMes] = useState('');
-    const [filtroDia, setFiltroDia] = useState('');
+
+    // Iniciar no mês atual; persistir seleção na sessão (limpa ao recarregar)
+    const mesAtualStr = (() => {
+        const h = new Date();
+        return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`;
+    })();
+    const [filtroMes, setFiltroMes] = useState(() => {
+        try { return sessionStorage.getItem('viagens_filtroMes') || mesAtualStr; } catch { return mesAtualStr; }
+    });
+    const [filtroDia, setFiltroDia] = useState(() => {
+        try { return sessionStorage.getItem('viagens_filtroDia') || ''; } catch { return ''; }
+    });
+
+    // Persiste na sessão quando muda
+    const handleSetFiltroMes = (v) => {
+        setFiltroMes(v);
+        try { if (v) sessionStorage.setItem('viagens_filtroMes', v); else sessionStorage.removeItem('viagens_filtroMes'); } catch {}
+    };
+    const handleSetFiltroDia = (v) => {
+        setFiltroDia(v);
+        try { if (v) sessionStorage.setItem('viagens_filtroDia', v); else sessionStorage.removeItem('viagens_filtroDia'); } catch {}
+    };
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -224,12 +245,12 @@ function TabViagens({ isAdmin }) {
                             </button>
                         ))}
                     </div>
-                    <input type="month" value={filtroMes} onChange={e => { setFiltroMes(e.target.value); setFiltroDia(''); }}
+                    <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); handleSetFiltroDia(''); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
-                    <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); setFiltroMes(''); }}
+                    <input type="date" value={filtroDia} onChange={e => { handleSetFiltroDia(e.target.value); handleSetFiltroMes(''); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
                     {(filtroMes || filtroDia) && (
-                        <button onClick={() => { setFiltroMes(''); setFiltroDia(''); }}
+                        <button onClick={() => { handleSetFiltroMes(''); handleSetFiltroDia(''); }}
                             className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
@@ -3365,7 +3386,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
     useEffect(() => {
         (async () => {
             try {
-                const [e, m, v] = await Promise.all([fetchEmpresas(), fetchTodosMotoristas(), fetchCarretasVeiculos()]);
+                const [e, m, v] = await Promise.all([fetchEmpresas(), fetchTodosMotoristas(), fetchVeiculosProprios()]);
                 setEmpresas(e); setMotoristas(m.filter(m => m.tipo_veiculo === 'carreta' || m.role === 'carreteiro')); setVeiculos(v);
             } catch { /* silencioso */ }
         })();
@@ -3816,7 +3837,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                                     </div>
                                     <span className="text-xs font-medium" style={{ color: 'var(--color-muted-foreground)' }}>{k.l}</span>
                                 </div>
-                                <p className="text-xl font-bold font-data" style={{ color: k.c }}>{k.v}</p>
+                                <p className="text-lg font-bold font-data leading-tight break-all" style={{ color: k.c }}>{k.v}</p>
                                 <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>{k.sub}</p>
                             </div>
                         ))}

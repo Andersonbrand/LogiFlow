@@ -733,15 +733,28 @@ export default function TabRomaneios({ isAdmin }) {
                     Number(filtroMes.split('-')[1]), 0
                 ).getDate()).padStart(2, '0');
             }
-            const [r, v, m, e, mat, rf, fr] = await Promise.all([
+            const [r, v, m, e, matResult, rf, fr] = await Promise.all([
                 fetchRomaneios(f),
                 fetchCarretasVeiculos(),
                 fetchTodosMotoristas(),
                 fetchEmpresas(),
-                fetchMaterials().catch(() => []),   // resiliente: continua mesmo sem tabela materials
+                fetchMaterials().catch(err => { console.warn('[TabRomaneios] fetchMaterials falhou:', err); return []; }),
                 fetchRomaneiosFerragem(),
                 fetchFretesCidades('frota'),
             ]);
+            // Enriquece materiais com dados do join dos romaneios (garante peso mesmo se catalog parcial)
+            const matMap = {};
+            (matResult || []).forEach(mat => { matMap[mat.id] = mat; });
+            (r || []).forEach(rom => {
+                (rom.itens || []).forEach(it => {
+                    if (it.material_id && it.material && !matMap[it.material_id]) {
+                        matMap[it.material_id] = it.material;
+                    } else if (it.material_id && it.material && matMap[it.material_id] && !matMap[it.material_id].peso && it.material.peso) {
+                        matMap[it.material_id] = { ...matMap[it.material_id], peso: it.material.peso };
+                    }
+                });
+            });
+            const mat = Object.values(matMap).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
             setRomaneios(r); setVeiculos(v); setMotoristas(m); setEmpresas(e); setMateriais(mat);
             setRomaneiosFerragem(rf || []);
             setFretesFretas(fr || []);

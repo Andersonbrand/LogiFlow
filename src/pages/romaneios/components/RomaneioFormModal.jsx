@@ -120,22 +120,51 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             // Rebuild pedidos from romaneio_pedidos if editing
             const pedidosExistentes = editingRomaneio.romaneio_pedidos || [];
             if (pedidosExistentes.length > 0) {
-                setPedidos(pedidosExistentes.map(p => ({
-                    id: p.id,
-                    numero_pedido:   p.numero_pedido,
-                    cidade_destino:  p.cidade_destino || '',
-                    valor_pedido:    String(p.valor_pedido || ''),
-                    categoria_frete: p.categoria_frete || 'Ferragens',
-                    empresa:         p.empresa || 'Comercial Araguaia',
-                    itens: (editingRomaneio.romaneio_itens || [])
+                // Deduplicar pedidos por id, mantendo apenas a primeira ocorrência
+                const seenPedidoIds = new Set();
+                const pedidosUnicos = pedidosExistentes.filter(p => {
+                    const key = p.id || `${p.numero_pedido}|${p.valor_pedido}`;
+                    if (seenPedidoIds.has(key)) return false;
+                    seenPedidoIds.add(key);
+                    return true;
+                });
+                const todosItens = editingRomaneio.romaneio_itens || [];
+                const itensVinculados = new Set();
+                const pedidosMapped = pedidosUnicos.map(p => {
+                    const itensDoPedido = todosItens
                         .filter(i => i.pedido_id === p.id)
-                        .map(i => ({
-                            material_id: i.material_id, quantidade: i.quantidade,
-                            peso_total: i.peso_total,
-                            nome: i.materials?.nome || '', unidade: i.materials?.unidade || '',
-                            peso_unit: i.materials?.peso || 0,
-                        })),
-                })));
+                        .map(i => {
+                            itensVinculados.add(i.id);
+                            return {
+                                material_id: i.material_id, quantidade: i.quantidade,
+                                peso_total: i.peso_total,
+                                nome: i.materials?.nome || '', unidade: i.materials?.unidade || '',
+                                peso_unit: i.materials?.peso || 0,
+                            };
+                        });
+                    return {
+                        id: p.id,
+                        numero_pedido:   p.numero_pedido,
+                        cidade_destino:  p.cidade_destino || '',
+                        valor_pedido:    String(p.valor_pedido || ''),
+                        categoria_frete: p.categoria_frete || 'Ferragens',
+                        empresa:         p.empresa || 'Comercial Araguaia',
+                        itens: itensDoPedido,
+                    };
+                });
+                // Itens órfãos (sem pedido_id válido): adicionar ao primeiro pedido
+                const itensOrfaos = todosItens
+                    .filter(i => !itensVinculados.has(i.id))
+                    .map(i => ({
+                        material_id: i.material_id, quantidade: i.quantidade,
+                        peso_total: i.peso_total,
+                        nome: i.materials?.nome || '', unidade: i.materials?.unidade || '',
+                        peso_unit: i.materials?.peso || 0,
+                    }));
+                if (itensOrfaos.length > 0 && pedidosMapped.length > 0) {
+                    pedidosMapped[0].itens = [...pedidosMapped[0].itens, ...itensOrfaos];
+                }
+                setPedidos(pedidosMapped);
             } else {
                 // Legacy: no pedidos — show items as one default pedido
                 const itensHerdados = (editingRomaneio.romaneio_itens || []).map(i => ({

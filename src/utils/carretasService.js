@@ -1354,6 +1354,19 @@ export async function fetchMotoristasProprios() {
     return data || [];
 }
 
+// Apenas carreteiros da frota própria (tipo_veiculo = 'carreta' e não terceirizado)
+export async function fetchCarreteirosPropriosOnly() {
+    const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, name, role, tipo_veiculo, is_terceiro')
+        .eq('role', 'motorista')
+        .eq('tipo_veiculo', 'carreta')
+        .neq('is_terceiro', true)
+        .order('name', { ascending: true });
+    if (error) throw error;
+    return data || [];
+}
+
 // Motoristas terceirizados (is_terceiro = true)
 export async function fetchMotoristasTerceiros() {
     const { data, error } = await supabase
