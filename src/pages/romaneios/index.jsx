@@ -708,14 +708,20 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
     const addPedido = () => setPedidos(p => [...p, EMPTY_PEDIDO()]);
     const delPedido = idx => setPedidos(p => p.filter((_, i) => i !== idx));
 
+    // useRef garante que materials sempre aponta para a versão mais recente
+    // sem criar stale closure (o problema que causava peso_total não calcular)
+    const materialsRef = React.useRef(materials);
+    React.useEffect(() => { materialsRef.current = materials; }, [materials]);
+
     const updItem = (pIdx, iIdx, patch) => setPedidos(p => p.map((ped, pi) => {
         if (pi !== pIdx) return ped;
+        const mats = materialsRef.current || [];
         const newItens = ped.itens.map((it, ii) => {
             if (ii !== iIdx) return it;
             const merged = { ...it, ...patch };
             // Se material mudou: busca peso_unit e calcula peso_total imediatamente
             if (patch.material_id !== undefined) {
-                const mat = (materials || []).find(m => m.id === patch.material_id);
+                const mat = mats.find(m => String(m.id) === String(patch.material_id));
                 if (mat?.peso) {
                     merged.peso_unit  = String(mat.peso);
                     merged.peso_total = String(Math.round(Number(mat.peso) * Number(merged.quantidade || 1) * 1000) / 1000);
@@ -724,7 +730,7 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                     if (!merged._manualPeso) merged.peso_total = '';
                 }
             }
-            // Se quantidade mudou e temos peso_unit: recalcula (se não foi editado manualmente)
+            // Se quantidade mudou e temos peso_unit: recalcula (se não editado manualmente)
             if (patch.quantidade !== undefined && merged.peso_unit && !merged._manualPeso) {
                 merged.peso_total = String(Math.round(Number(merged.peso_unit) * Number(merged.quantidade || 1) * 1000) / 1000);
             }

@@ -286,7 +286,7 @@ export default function TabVolume({ isAdmin }) {
         data_carregamento: new Date().toISOString().slice(0, 10),
         quantidade: '', empresa_origem: '', numero_pedido: '', numero_nota_fiscal: '',
         pedido_venda: '', motorista_id: '', veiculo_id: '', observacoes: '', tipo: '',
-        destino: 'Fábrica', // Retira sempre ocorre na fábrica
+        destino: 'Fábrica', nome_cliente: '', // Retira sempre ocorre na fábrica
     });
     const [modalRetira, setModalRetira] = useState(null);
     const [formRetira, setFormRetira] = useState(emptyFormRetira());
@@ -519,6 +519,7 @@ export default function TabVolume({ isAdmin }) {
             tipo: tipo || '',
             data_carregamento: r.data_carregamento || new Date().toISOString().slice(0, 10),
             quantidade: r.quantidade || '',
+            nome_cliente: r.nome_cliente || '',
             empresa_origem: nome || '',
             numero_pedido: r.numero_pedido || '',
             numero_nota_fiscal: r.numero_nota_fiscal || '',
@@ -544,6 +545,7 @@ export default function TabVolume({ isAdmin }) {
             numero_pedido: formRetira.numero_pedido || null,
             numero_nota_fiscal: formRetira.numero_nota_fiscal || null,
             pedido_venda: formRetira.pedido_venda || null,
+            nome_cliente: formRetira.nome_cliente || null,
             motorista_id: formRetira.motorista_id || null,
             veiculo_id: formRetira.veiculo_id || null,
             observacoes: formRetira.observacoes || null,
@@ -1008,23 +1010,15 @@ export default function TabVolume({ isAdmin }) {
                                     {veiculosTerceiros.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
                                 </select>
                             </Field>
-                            <Field label="Motorista Terceirizado">
-                                <select value={formRetira.motorista_id} onChange={e => setFormRetira(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione...</option>
-                                    {motoristasTerceiros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                </select>
+                            <Field label="Nome do Cliente">
+                                <input
+                                    value={formRetira.nome_cliente || ''}
+                                    onChange={e => setFormRetira(f => ({ ...f, nome_cliente: e.target.value }))}
+                                    className={inputCls} style={inputStyle}
+                                    placeholder="Nome do cliente que retirou"
+                                />
                             </Field>
                         </div>
-                        {/* Destino com auto-preenchimento de frete */}
-                        <Field label="Destino">
-                            <DestinoSelect
-                                value={formRetira.destino === 'Fábrica' ? '' : (formRetira.destino || '')}
-                                onChange={v => setFormRetira(f => ({ ...f, destino: v || 'Fábrica' }))}
-                                onFreteAutoFill={v => setFormRetira(f => ({ ...f, tipo_calculo_frete: 'por_saco', valor_base_frete: String(v) }))}
-                                fretes={fretesFretas}
-                                placeholder="Destino da carga (opcional)"
-                            />
-                        </Field>
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Pedido de Venda">
                                 <input value={formRetira.pedido_venda} onChange={e => setFormRetira(f => ({ ...f, pedido_venda: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: PV-00123" />
@@ -1051,7 +1045,7 @@ export default function TabVolume({ isAdmin }) {
 
 // ─── Sub-componente: Dashboard ─────────────────────────────────────────────────
 function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], carregamentosRetira = [], mes }) {
-    const pct = v => totais.total > 0 ? ((v / totais.total) * 100).toFixed(1) : '0.0';
+    const pct = v => totais.totalGeral > 0 ? ((v / totais.totalGeral) * 100).toFixed(1) : '0.0';
     const tipoEntries = Object.entries(TIPOS);
 
     // Barras de progresso empilhadas

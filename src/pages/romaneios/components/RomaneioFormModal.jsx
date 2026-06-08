@@ -90,11 +90,12 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             loadedRomaneioIdRef.current = null;
             return;
         }
-        // Se o modal já está aberto com este mesmo romaneio, não re-popular
-        // Isso previne que o Realtime cause duplicação de pedidos durante o save
-        const incomingId = editingRomaneio?.id ?? '__new__';
-        if (loadedRomaneioIdRef.current === incomingId) return;
-        loadedRomaneioIdRef.current = incomingId;
+        // Guard: usa id|numero como chave — evita re-população por Realtime durante save
+        // Mas permite re-popular quando romaneio muda de verdade (ex: promoção de rascunho
+        // muda o número de RASC-xxx para ROM-001, então o guard libera corretamente)
+        const incomingKey = `${editingRomaneio?.id ?? '__new__'}|${editingRomaneio?.numero ?? ''}`;
+        if (loadedRomaneioIdRef.current === incomingKey) return;
+        loadedRomaneioIdRef.current = incomingKey;
         if (editingRomaneio) {
             setForm({
                 motorista:         editingRomaneio.motorista         || '',
