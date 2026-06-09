@@ -6,7 +6,7 @@ import { useToast } from 'utils/useToast';
 import { useConfirm } from 'components/ui/ConfirmDialog';
 import {
     fetchRomaneios, createRomaneio, updateRomaneio, deleteRomaneio,
-    fetchCarretasVeiculos, fetchTodosMotoristas, fetchEmpresas,
+    fetchCarretasVeiculos, fetchTodosMotoristas, fetchCarreteirosPropriosOnly, fetchEmpresas,
     STATUS_ROMANEIO, STATUS_ROMANEIO_COLORS,
     fetchRomaneiosFerragem,
     fetchFretesCidades,
@@ -135,7 +135,7 @@ function StatusBadge({ status }) {
 
 // ─── Linha de item do romaneio ─────────────────────────────────────────────────
 function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
-    const mat = materiais.find(m => m.id === item.material_id);
+    const mat = materiais.find(m => String(m.id) === String(item.material_id));
 
     // Peso unitário: prioriza o armazenado no item (confiável), fallback no cadastro do material
     const pesoUnit = item.peso_unit && Number(item.peso_unit) > 0
@@ -165,14 +165,14 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                     value={item.material_id || ''}
                     onChange={e => {
                         const mid = e.target.value;
-                        const m = materiais.find(x => x.id === mid);
+                        const m = materiais.find(x => String(x.id) === String(mid));
                         const pu = m?.peso && Number(m.peso) > 0 ? Number(m.peso) : null;
                         const qtd = Number(item.quantidade || 1);
                         onUpdate(index, {
                             material_id: mid,
                             descricao:   m?.nome    || '',
                             unidade:     m?.unidade || item.unidade,
-                            peso_unit:   pu ? String(pu) : '',   // armazena no item para uso offline
+                            peso_unit:   pu ? String(pu) : '',
                             _pesoManual: false,
                             peso_total:  pu ? String(pu * qtd) : '',
                         });
@@ -736,7 +736,7 @@ export default function TabRomaneios({ isAdmin }) {
             const [r, v, m, e, matResult, rf, fr] = await Promise.all([
                 fetchRomaneios(f),
                 fetchCarretasVeiculos(),
-                fetchTodosMotoristas(),
+                fetchCarreteirosPropriosOnly(),
                 fetchEmpresas(),
                 fetchMaterials().catch(err => { console.warn('[TabRomaneios] fetchMaterials falhou:', err); return []; }),
                 fetchRomaneiosFerragem(),

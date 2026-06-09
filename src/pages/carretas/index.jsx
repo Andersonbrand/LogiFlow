@@ -37,7 +37,8 @@ import {
     fetchBonificacoesExtras, createBonificacaoExtra, updateBonificacaoExtra, deleteBonificacaoExtra,
     pagarBoletoCarreta, pagarParcelaCartaoCarreta,
     revogarBoletoCarreta, revogarParcelaCartaoCarreta,
-    fetchVeiculosProprios, fetchMotoristasProprios,
+    fetchVeiculosProprios, fetchMotoristasProprios, fetchCarreteirosPropriosOnly,
+    updateAbastecimento,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
 import { exportDiariaModelo, exportDiariasRomaneiosModelo } from 'utils/excelUtils';
@@ -185,11 +186,34 @@ function TabViagens({ isAdmin }) {
         const orig = (c.empresa_origem || '').toUpperCase();
         return orig.startsWith('CIF_') || orig.includes('|CIF_');
     };
-    const carregamentosComBonus = useMemo(() =>
-        carregamentos
+
+    const [pesquisa, setPesquisa] = useState('');
+
+    const carregamentosComBonus = useMemo(() => {
+        const base = carregamentos
             .filter(c => !isCIF(c))
-            .map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }))
-    , [carregamentos]); // eslint-disable-line
+            .map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }));
+        if (!pesquisa.trim()) return base;
+        const q = pesquisa.trim().toLowerCase();
+        return base.filter(c =>
+            (c.numero_pedido || '').toLowerCase().includes(q) ||
+            (c.numero_nota_fiscal || '').toLowerCase().includes(q) ||
+            (c.motorista?.name || '').toLowerCase().includes(q) ||
+            (c.destino || '').toLowerCase().includes(q) ||
+            (c.veiculo?.placa || '').toLowerCase().includes(q)
+        );
+    }, [carregamentos, pesquisa]); // eslint-disable-line
+
+    const registrosMotoristasFiltrados = useMemo(() => {
+        if (!pesquisa.trim()) return registrosMotoristas;
+        const q = pesquisa.trim().toLowerCase();
+        return registrosMotoristas.filter(r =>
+            (r.motorista?.name || '').toLowerCase().includes(q) ||
+            (r.numero_nota_fiscal || '').toLowerCase().includes(q) ||
+            (r.destino || '').toLowerCase().includes(q) ||
+            (r.veiculo?.placa || '').toLowerCase().includes(q)
+        );
+    }, [registrosMotoristas, pesquisa]);
 
     const exportar = () => {
         const wb = XLSX.utils.book_new();
@@ -255,6 +279,21 @@ function TabViagens({ isAdmin }) {
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
                     )}
+                    {/* ── Barra de pesquisa ── */}
+                    <div className="relative">
+                        <Icon name="Search" size={13} color="var(--color-muted-foreground)"
+                            style={{ position:'absolute', left:'9px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} />
+                        <input
+                            type="text" value={pesquisa} onChange={e => setPesquisa(e.target.value)}
+                            placeholder="Pedido, NF, motorista, destino, placa..."
+                            className="pl-7 pr-7 py-2 rounded-lg border text-xs"
+                            style={{ borderColor:'var(--color-border)', backgroundColor:'var(--color-background)', color:'var(--color-text-primary)', minWidth:'260px' }}
+                        />
+                        {pesquisa && (
+                            <button onClick={() => setPesquisa('')}
+                                style={{ position:'absolute', right:'7px', top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'var(--color-muted-foreground)', fontSize:'13px', lineHeight:1 }}>✕</button>
+                        )}
+                    </div>
                 </div>
                 <div className="flex gap-2">
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
@@ -336,14 +375,14 @@ function TabViagens({ isAdmin }) {
                                         ))}</tr>
                                     </thead>
                                     <tbody>
-                                        {registrosMotoristas.length === 0 ? (
+                                        {registrosMotoristasFiltrados.length === 0 ? (
                                             <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                                 <div className="flex flex-col items-center gap-2">
                                                     <Icon name="Truck" size={28} color="var(--color-muted-foreground)" />
-                                                    <span className="text-sm">Nenhum registro lançado pelos motoristas ainda</span>
+                                                    <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum registro lançado pelos motoristas ainda'}</span>
                                                 </div>
                                             </td></tr>
-                                        ) : registrosMotoristas.map((r, i) => (
+                                        ) : registrosMotoristasFiltrados.map((r, i) => (
                                             <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors"
                                                 style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                 <td className="px-3 py-3 font-medium whitespace-nowrap">{r.motorista?.name || '—'}</td>
@@ -519,6 +558,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
     const [postos, setPostos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(false);
+    const [editingId, setEditingId] = useState(null);
     const [modalPostos, setModalPostos] = useState(false);
     const [editPosto, setEditPosto] = useState(null);
     const [formPosto, setFormPosto] = useState({ nome: '', cidade: '', cnpj: '', preco_diesel: '', preco_arla: '' });
@@ -536,7 +576,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
             } else if (filtro.dia) {
                 f.dataInicio = filtro.dia; f.dataFim = filtro.dia;
             } else if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
-            const [a, v, m, p] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchTodosMotoristas(), fetchPostos().catch(() => [])]);
+            const [a, v, m, p] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchCarreteirosPropriosOnly(), fetchPostos().catch(() => [])]);
             setAbast(a); setVeiculos(v); setMotoristas(m); setPostos(p);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -551,15 +591,36 @@ function TabAbastecimentos({ isAdmin, profile }) {
         valorTotal:   abast.reduce((s, a) => s + Number(a.valor_total   || 0), 0),
     }), [abast]);
 
+    const handleEdit = (a) => {
+        setForm({
+            motorista_id: a.motorista_id || '',
+            veiculo_id: a.veiculo_id || '',
+            data_abastecimento: a.data_abastecimento || new Date().toISOString().split('T')[0],
+            horario: a.horario || '',
+            posto_id: a.posto_id || '',
+            litros_diesel: a.litros_diesel != null ? String(a.litros_diesel) : '',
+            valor_diesel: a.valor_diesel != null ? String(a.valor_diesel) : '',
+            litros_arla: a.litros_arla != null ? String(a.litros_arla) : '',
+            valor_arla: a.valor_arla != null ? String(a.valor_arla) : '',
+            cupom_fiscal: a.cupom_fiscal || '',
+            observacoes: a.observacoes || '',
+        });
+        setEditingId(a.id);
+        setModal(true);
+    };
+
     const handleSubmit = async () => {
         if (!form.veiculo_id || !form.motorista_id || !form.data_abastecimento) { showToast('Preencha veículo, motorista e data', 'error'); return; }
         if (!form.cupom_fiscal?.trim()) { showToast('Informe o N° do cupom fiscal', 'error'); return; }
         const payload = { ...form };
         if (!payload.posto_id) delete payload.posto_id;
-        // nome do posto para exibição legacy
         const posto = postos.find(p => p.id === form.posto_id);
         if (posto) payload.posto = posto.nome;
-        try { await createAbastecimento(payload); showToast('Abastecimento registrado!', 'success'); setModal(false); load(); }
+        try {
+            if (editingId) { await updateAbastecimento(editingId, payload); showToast('Abastecimento atualizado!', 'success'); }
+            else { await createAbastecimento(payload); showToast('Abastecimento registrado!', 'success'); }
+            setModal(false); setEditingId(null); load();
+        }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
@@ -672,7 +733,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                         </button>
                     )}
                     <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}><Icon name="FileDown" size={14} /> Exportar</button>
-                    <Button onClick={() => { setForm({ motorista_id: isAdmin ? '' : (profile?.id || ''), veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '' }); setModal(true); }} iconName="Plus" size="sm">Registrar</Button>
+                    <Button onClick={() => { setForm({ motorista_id: isAdmin ? '' : (profile?.id || ''), veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '' }); setEditingId(null); setModal(true); }} iconName="Plus" size="sm">Registrar</Button>
                 </div>
             </div>
 
@@ -718,7 +779,12 @@ function TabAbastecimentos({ isAdmin, profile }) {
                                     <td className="px-3 py-3 font-data text-right text-emerald-600">{Number(a.litros_arla || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                                     <td className="px-3 py-3 font-data text-right text-emerald-700">{BRL(a.valor_arla)}</td>
                                     <td className="px-3 py-3 font-data text-right font-semibold text-purple-600">{BRL(a.valor_total)}</td>
-                                    <td className="px-3 py-3">{isAdmin && <button onClick={() => handleDelete(a.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}</td>
+                                    <td className="px-3 py-3">
+                                        <div className="flex items-center gap-1">
+                                            {isAdmin && <button onClick={() => handleEdit(a)} className="p-1.5 rounded hover:bg-blue-50" title="Editar"><Icon name="Pencil" size={13} color="#2563EB" /></button>}
+                                            {isAdmin && <button onClick={() => handleDelete(a.id)} className="p-1.5 rounded hover:bg-red-50" title="Excluir"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
+                                        </div>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -741,8 +807,8 @@ function TabAbastecimentos({ isAdmin, profile }) {
 
             {/* Modal registrar abastecimento */}
             {modal && (
-                <ModalOverlay onClose={() => setModal(false)}>
-                    <ModalHeader title="Registrar Abastecimento" icon="Fuel" onClose={() => setModal(false)} />
+                <ModalOverlay onClose={() => { setModal(false); setEditingId(null); }}>
+                    <ModalHeader title={editingId ? 'Editar Abastecimento' : 'Registrar Abastecimento'} icon="Fuel" onClose={() => { setModal(false); setEditingId(null); }} />
                     <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                         {isAdmin && (
                             <Field label="Motorista" required>
@@ -960,7 +1026,7 @@ function TabChecklist({ isAdmin, profile }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [c, v, m] = await Promise.all([fetchChecklists(filtro === 'pendentes' ? { pendente: true } : {}), fetchCarretasVeiculos(), fetchTodosMotoristas()]);
+            const [c, v, m] = await Promise.all([fetchChecklists(filtro === 'pendentes' ? { pendente: true } : {}), fetchCarretasVeiculos(), fetchCarreteirosPropriosOnly()]);
             setChecklists(c); setVeiculos(v); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -1648,7 +1714,7 @@ function TabBonificacoes({ isAdmin }) {
             const [c, e, m] = await Promise.all([
                 fetchCarregamentos(fCarr),
                 fetchBonificacoesExtras(f),
-                fetchTodosMotoristas(),
+                fetchCarreteirosPropriosOnly(),
             ]);
             setCarregamentos(c); setExtras(e); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -1665,7 +1731,7 @@ function TabBonificacoes({ isAdmin }) {
 
     const carregamentosComBonus = useMemo(() =>
         carregamentos
-            .filter(c => !isCIF(c))
+            .filter(c => !isCIF(c) && c.motorista_id) // exclui CIF e carregamentos sem motorista (retira/terceiros)
             .map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }))
     , [carregamentos]); // eslint-disable-line
 
@@ -3164,7 +3230,7 @@ function TabDiarias({ isAdmin, profile }) {
                 f.dataInicio = filtro.mes + '-01';
                 f.dataFim    = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0');
             }
-            const [d, m, v] = await Promise.all([fetchDiarias(f), fetchTodosMotoristas(), fetchViagens({})]);
+            const [d, m, v] = await Promise.all([fetchDiarias(f), fetchCarreteirosPropriosOnly(), fetchViagens({})]);
             setDiarias(d);
             setMotoristas(m.filter(x => x.tipo_veiculo === 'carreta' || x.role === 'carreteiro'));
             setViagens(v);
@@ -5068,6 +5134,185 @@ function TabPontosParada({ isAdmin }) {
     );
 }
 
+// ─── TAB: Detector de Duplicatas ─────────────────────────────────────────────
+function TabDuplicatas() {
+    const { showToast } = useToast ? useToast() : { showToast: () => {} };
+    const [mes, setMes]           = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`; });
+    const [loading, setLoading]   = useState(false);
+    const [resultado, setResultado] = useState(null); // null | { total, dups, placaMap, all }
+
+    const detectar = async () => {
+        setLoading(true); setResultado(null);
+        try {
+            const { supabase } = await import('utils/supabaseClient');
+            const [yr, mo] = mes.split('-');
+            const lastDay  = new Date(+yr, +mo, 0).getDate();
+            const ini = `${mes}-01`, fim = `${mes}-${String(lastDay).padStart(2,'0')}`;
+
+            // Busca paginada
+            let all = [], offset = 0;
+            while (true) {
+                const { data, error } = await supabase
+                    .from('carretas_carregamentos')
+                    .select('id, data_carregamento, numero_nota_fiscal, numero_pedido, destino, quantidade, empresa_origem, veiculo_id, motorista_id, is_terceiro, is_retira')
+                    .gte('data_carregamento', ini).lte('data_carregamento', fim)
+                    .order('data_carregamento', { ascending: true })
+                    .range(offset, offset + 999);
+                if (error) throw error;
+                all = all.concat(data || []);
+                if ((data || []).length < 1000) break;
+                offset += 1000;
+            }
+
+            // Placas
+            const vids = [...new Set(all.map(r => r.veiculo_id).filter(Boolean))];
+            let placaMap = {};
+            if (vids.length) {
+                const { data: vs } = await supabase.from('carretas_veiculos').select('id, placa').in('id', vids);
+                (vs || []).forEach(v => { placaMap[v.id] = v.placa; });
+            }
+
+            // Detecta grupos duplicados
+            const groups = {};
+            all.forEach(r => {
+                const placa = placaMap[r.veiculo_id] || '';
+                const nf    = (r.numero_nota_fiscal || '').trim();
+                const ped   = (r.numero_pedido || '').trim();
+                const dest  = (r.destino || '').trim().toLowerCase();
+                if (!nf || !ped || !dest || !placa) return;
+                const key = `${placa}|||${dest}|||${nf}|||${ped}`;
+                if (!groups[key]) groups[key] = [];
+                groups[key].push({ ...r, _placa: placa });
+            });
+            const dups = Object.values(groups).filter(g => g.length > 1);
+            setResultado({ total: all.length, dups, placaMap });
+        } catch (e) {
+            alert('Erro: ' + e.message);
+        } finally { setLoading(false); }
+    };
+
+    const totalExtras = resultado ? resultado.dups.reduce((s, g) => s + g.length - 1, 0) : 0;
+    const totalSacos  = resultado ? resultado.dups.reduce((s, g) => s + (Number(g[0].quantidade)||0) * (g.length - 1), 0) : 0;
+
+    const exportCSV = () => {
+        if (!resultado?.dups.length) return;
+        const lines = ['Placa,Data,Destino,NF,Pedido,Sacos,Ocorrencias,ID_manter,IDs_remover'];
+        resultado.dups.forEach(g => {
+            const r0 = g[0];
+            lines.push([r0._placa, r0.data_carregamento, `"${r0.destino||''}"`, r0.numero_nota_fiscal, r0.numero_pedido, r0.quantidade, g.length, r0.id, `"${g.slice(1).map(x=>x.id).join(' | ')}"`].join(','));
+        });
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = `duplicatas_${mes}.csv`; a.click();
+    };
+
+    const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+    const fmt  = n => Number(n||0).toLocaleString('pt-BR');
+
+    return (
+        <div>
+            <div className="mb-5">
+                <h2 className="text-lg font-semibold mb-1" style={{ color: 'var(--color-text-primary)' }}>Detector de Duplicatas</h2>
+                <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Busca carregamentos com mesma <strong>placa + destino + NF + pedido</strong> no mesmo mês.</p>
+            </div>
+
+            {/* Toolbar */}
+            <div className="flex flex-wrap gap-3 items-end mb-5">
+                <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Mês</label>
+                    <input type="month" value={mes} onChange={e => setMes(e.target.value)}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                </div>
+                <button
+                    onClick={detectar} disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors"
+                    style={{ backgroundColor: loading ? '#93C5FD' : 'var(--color-primary)', cursor: loading ? 'not-allowed' : 'pointer' }}>
+                    {loading
+                        ? <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> Analisando...</>
+                        : <><Icon name="Search" size={15} color="#fff" /> Detectar duplicatas</>}
+                </button>
+                {resultado?.dups.length > 0 && (
+                    <button onClick={exportCSV}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50"
+                        style={{ borderColor: 'var(--color-border)' }}>
+                        <Icon name="FileDown" size={14} /> Exportar CSV
+                    </button>
+                )}
+            </div>
+
+            {/* KPIs */}
+            {resultado && (
+                <>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                        {[
+                            { l: 'Total no mês', v: fmt(resultado.total), c: 'var(--color-text-primary)', bg: 'var(--color-muted)' },
+                            { l: 'Grupos duplicados', v: fmt(resultado.dups.length), c: resultado.dups.length ? '#DC2626' : '#16A34A', bg: resultado.dups.length ? '#FEF2F2' : '#F0FDF4' },
+                            { l: 'Registros extras', v: fmt(totalExtras), c: totalExtras ? '#DC2626' : '#16A34A', bg: totalExtras ? '#FEF2F2' : '#F0FDF4' },
+                            { l: 'Sacos duplicados', v: fmt(totalSacos), c: totalSacos ? '#DC2626' : '#16A34A', bg: totalSacos ? '#FEF2F2' : '#F0FDF4' },
+                        ].map(k => (
+                            <div key={k.l} className="rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)', backgroundColor: k.bg }}>
+                                <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>{k.l}</p>
+                                <p className="text-2xl font-bold font-data" style={{ color: k.c }}>{k.v}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    {resultado.dups.length === 0 ? (
+                        <div className="rounded-xl border p-6 text-center" style={{ borderColor: '#BBF7D0', backgroundColor: '#F0FDF4' }}>
+                            <Icon name="CheckCircle2" size={32} color="#16A34A" />
+                            <p className="mt-2 font-semibold" style={{ color: '#166534' }}>Nenhuma duplicata encontrada!</p>
+                            <p className="text-sm mt-1" style={{ color: '#166534' }}>Todos os registros possuem combinações únicas de placa + destino + NF + pedido.</p>
+                        </div>
+                    ) : (
+                        <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#FEF2F2' }}>
+                                <Icon name="AlertTriangle" size={16} color="#DC2626" />
+                                <span className="text-sm font-semibold text-red-700">{resultado.dups.length} grupo(s) com duplicatas — sugestão: manter o primeiro registro (mais antigo) e remover os extras</span>
+                            </div>
+                            <table className="w-full text-sm min-w-[900px]">
+                                <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                    <tr>
+                                        {['Placa','Data','Destino','NF','Pedido','Sacos','Empresa Orig.','Ocorr.','IDs (manter → extras)'].map(h => (
+                                            <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {resultado.dups.map((g, gi) => {
+                                        const r0 = g[0];
+                                        return (
+                                            <tr key={gi} className="border-t" style={{ borderColor: '#FEE2E2', backgroundColor: gi % 2 === 0 ? '#FFF7F7' : '#fff' }}>
+                                                <td className="px-3 py-3 font-data font-semibold whitespace-nowrap">{r0._placa}</td>
+                                                <td className="px-3 py-3 whitespace-nowrap">{FMT(r0.data_carregamento)}</td>
+                                                <td className="px-3 py-3 max-w-[140px] truncate">{r0.destino || '—'}</td>
+                                                <td className="px-3 py-3 font-data whitespace-nowrap">{r0.numero_nota_fiscal || '—'}</td>
+                                                <td className="px-3 py-3 font-data whitespace-nowrap">{r0.numero_pedido || '—'}</td>
+                                                <td className="px-3 py-3 font-data text-right">{fmt(r0.quantidade)}</td>
+                                                <td className="px-3 py-3 text-xs">{r0.empresa_origem || '—'}</td>
+                                                <td className="px-3 py-3 text-center">
+                                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: '#FEE2E2', color: '#991B1B' }}>{g.length}×</span>
+                                                </td>
+                                                <td className="px-3 py-3">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="text-xs font-mono" style={{ color: '#1D4ED8' }}>✓ {r0.id.slice(0,12)}…</span>
+                                                        {g.slice(1).map(x => (
+                                                            <span key={x.id} className="text-xs font-mono" style={{ color: '#DC2626' }}>✕ {x.id.slice(0,12)}…</span>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}
+
 // ─── Constantes da página principal ─────────────────────────────────────────
 const TABS = [
     { id: 'viagens',       label: 'Viagens',          icon: 'Navigation',    group: 'Operação' },
@@ -5085,6 +5330,7 @@ const TABS = [
     { id: 'financeiro',    label: 'Rel. Financeiro',   icon: 'BarChart3',     group: 'Financeiro' },
     { id: 'ordens',        label: 'Ordens de Serviço', icon: 'Wrench',        group: 'Gestão' },
     { id: 'empresas',      label: 'Empresas',          icon: 'Building2',     group: 'Gestão' },
+    { id: 'duplicatas',    label: 'Duplicatas',        icon: 'AlertTriangle', group: 'Gestão' },
 ];
 
 const GRUPOS = ['Operação', 'Financeiro', 'Gestão'];
@@ -5129,7 +5375,7 @@ export default function CarretasPage() {
                         style={{ color: 'var(--color-muted-foreground)', fontSize: 10 }}>
                         {grupo}
                     </p>
-                    {TABS.filter(t => t.group === grupo).map(t => (
+                    {TABS.filter(t => t.group === grupo && (t.id !== 'duplicatas' || admin)).map(t => (
                         <SidebarItem key={t.id} t={t} />
                     ))}
                 </div>
@@ -5190,6 +5436,7 @@ export default function CarretasPage() {
                             {tab === 'financeiro'     && <TabRelatorioFinanceiro isAdmin={admin} />}
                             {tab === 'ordens'          && <TabOrdensServico  isAdmin={admin} profile={profile} />}
                             {tab === 'empresas'       && <TabEmpresas       isAdmin={admin} />}
+                            {tab === 'duplicatas'     && admin && <TabDuplicatas />}
                             
                         </div>
                     </div>
