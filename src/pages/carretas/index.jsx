@@ -5255,7 +5255,6 @@ function TabDuplicatas() {
     const detectar = async () => {
         setLoading(true); setResultado(null);
         try {
-            const { supabase } = await import('utils/supabaseClient');
             const [yr, mo] = mes.split('-');
             const lastDay  = new Date(+yr, +mo, 0).getDate();
             const ini = `${mes}-01`, fim = `${mes}-${String(lastDay).padStart(2,'0')}`;

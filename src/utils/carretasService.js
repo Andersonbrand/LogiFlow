@@ -380,6 +380,14 @@ function isCIF(empresa_origem) {
     return s.startsWith('CIF_') || s.includes('|CIF_');
 }
 
+// Extrai o nome da coluna de um erro de schema cache do PostgREST
+// Ex: "Could not find the 'nome_cliente' column of 'carretas_carregamentos' in the schema cache"
+function _missingColumnFromError(error) {
+    const msg = error?.message || '';
+    const m = msg.match(/Could not find the '([^']+)' column/);
+    return m ? m[1] : null;
+}
+
 export async function createCarregamento(carregamento) {
     const payload = sanitizeUuids(carregamento);
     // CIF não gera frete calculado
@@ -390,13 +398,25 @@ export async function createCarregamento(carregamento) {
         payload._consumoVeiculo
     );
     delete payload._consumoVeiculo;
-    const { data, error } = await supabase
-        .from('carretas_carregamentos')
-        .insert({ ...payload, valor_frete_calculado: valorFrete })
-        .select()
-        .single();
-    if (error) throw error;
-    return data;
+
+    let insertPayload = { ...payload, valor_frete_calculado: valorFrete };
+    for (let attempt = 0; attempt < 5; attempt++) {
+        const { data, error } = await supabase
+            .from('carretas_carregamentos')
+            .insert(insertPayload)
+            .select()
+            .single();
+        if (!error) return data;
+        const missing = _missingColumnFromError(error);
+        if (missing && missing in insertPayload) {
+            // Coluna ainda não existe no banco (migração pendente) — remove e tenta novamente
+            const { [missing]: _omit, ...rest } = insertPayload;
+            insertPayload = rest;
+            continue;
+        }
+        throw error;
+    }
+    throw new Error('Falha ao salvar carregamento após múltiplas tentativas.');
 }
 
 export async function updateCarregamento(id, updates) {
@@ -409,14 +429,25 @@ export async function updateCarregamento(id, updates) {
         payload._consumoVeiculo
     );
     delete payload._consumoVeiculo;
-    const { data, error } = await supabase
-        .from('carretas_carregamentos')
-        .update({ ...payload, valor_frete_calculado: valorFrete, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .select()
-        .single();
-    if (error) throw error;
-    return data;
+
+    let updatePayload = { ...payload, valor_frete_calculado: valorFrete, updated_at: new Date().toISOString() };
+    for (let attempt = 0; attempt < 5; attempt++) {
+        const { data, error } = await supabase
+            .from('carretas_carregamentos')
+            .update(updatePayload)
+            .eq('id', id)
+            .select()
+            .single();
+        if (!error) return data;
+        const missing = _missingColumnFromError(error);
+        if (missing && missing in updatePayload) {
+            const { [missing]: _omit, ...rest } = updatePayload;
+            updatePayload = rest;
+            continue;
+        }
+        throw error;
+    }
+    throw new Error('Falha ao atualizar carregamento após múltiplas tentativas.');
 }
 
 export async function deleteCarregamento(id) {
