@@ -590,13 +590,6 @@ function TabAbastecimentos({ isAdmin, profile }) {
     const [abast, setAbast] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
-    const [pesquisa, setPesquisa] = useState('');
-    const motoristasFiltrados = useMemo(() => {
-        if (!pesquisa.trim()) return motoristas;
-        const q = pesquisa.toLowerCase();
-        return motoristas.filter(m => (m.name ||
-            '').toLowerCase().includes(q));
-    }, [motoristas, pesquisa]); // eslint-disable-line
 
     const [postos, setPostos] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -4945,21 +4938,11 @@ function TabPontosParada({ isAdmin }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
     const [pontos, setPontos] = useState([]);
-    const [pesquisa, setPesquisa] = useState('');
-    const pontosFiltrados = useMemo(() => {
-        if (!pesquisa.trim()) return pontos;
-        const q = pesquisa.toLowerCase();
-        return pontos.filter(p => (p.nome ||
-            '').toLowerCase().includes(q) ||
-            (p.cidade ||
-            '').toLowerCase().includes(q) ||
-            (p.estado ||
-            '').toLowerCase().includes(q));
-    }, [pontos, pesquisa]); // eslint-disable-line
 
     const [loading, setLoading] = useState(true);
     const [filtroMes, setFiltroMes] = useState('');
     const [filtroMotorista, setFiltroMotorista] = useState('');
+    const [pesquisa, setPesquisa] = useState('');
     const [motoristas, setMotoristas] = useState([]);
     const [editModal, setEditModal] = useState(null);
     const [formEdit, setFormEdit] = useState({});
