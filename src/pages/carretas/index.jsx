@@ -4982,11 +4982,14 @@ function TabPontosParada({ isAdmin }) {
         }
         if (pesquisa.trim()) {
             const q = pesquisa.toLowerCase();
+            const motoristaNome = motoristas.find(m => m.id === p.motorista_id)?.name || '';
+            const extrasTexto = (p.extras || []).map(ex => `${ex.local || ''} ${ex.tipo_local || ''}`).join(' ');
             return (
-                (p.nome || '').toLowerCase().includes(q) ||
-                (p.cidade || '').toLowerCase().includes(q) ||
-                (p.estado || '').toLowerCase().includes(q) ||
-                (p.motorista?.name || '').toLowerCase().includes(q)
+                (p.local || '').toLowerCase().includes(q) ||
+                (p.tipo_local || '').toLowerCase().includes(q) ||
+                (p.veiculo?.placa || '').toLowerCase().includes(q) ||
+                motoristaNome.toLowerCase().includes(q) ||
+                extrasTexto.toLowerCase().includes(q)
             );
         }
         return true;
@@ -5056,7 +5059,7 @@ function TabPontosParada({ isAdmin }) {
                         ✕ Limpar
                     </button>
                 )}
-                <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Nome, cidade, motorista..." width="210px" />
+                <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Local, tipo, placa, motorista..." width="220px" />
                 <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors ml-auto" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                     <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                 </button>
@@ -5244,7 +5247,7 @@ function TabPontosParada({ isAdmin }) {
 
 // ─── TAB: Detector de Duplicatas ─────────────────────────────────────────────
 function TabDuplicatas() {
-    const { showToast } = useToast ? useToast() : { showToast: () => {} };
+    const { toast, showToast } = useToast();
     const [mes, setMes]           = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`; });
     const [loading, setLoading]   = useState(false);
     const [resultado, setResultado] = useState(null); // null | { total, dups, placaMap, all }
@@ -5293,9 +5296,38 @@ function TabDuplicatas() {
                 groups[key].push({ ...r, _placa: placa });
             });
             const dups = Object.values(groups).filter(g => g.length > 1);
-            setResultado({ total: all.length, dups, placaMap });
+
+            // Detecta POSSÍVEIS duplicatas: mesmo número de pedido OU mesma NF,
+            // mesmo que placa/destino difiram (ex: erro de digitação)
+            const dupKeySet = new Set(Object.keys(groups).filter(k => groups[k].length > 1));
+            const porPedido = {}, porNF = {};
+            all.forEach(r => {
+                const placa = placaMap[r.veiculo_id] || '';
+                const nf    = (r.numero_nota_fiscal || '').trim();
+                const ped   = (r.numero_pedido || '').trim();
+                const dest  = (r.destino || '').trim().toLowerCase();
+                const item  = { ...r, _placa: placa };
+                if (ped) { if (!porPedido[ped]) porPedido[ped] = []; porPedido[ped].push(item); }
+                if (nf)  { if (!porNF[nf])  porNF[nf]  = []; porNF[nf].push(item); }
+            });
+            const possiveis = [];
+            const vistos = new Set();
+            const addPossivel = (lista, tipo) => {
+                if (lista.length < 2) return;
+                // ignora se já é uma duplicata exata (placa+destino+NF+pedido iguais)
+                const placas = new Set(lista.map(x => `${x._placa}|||${(x.destino||'').trim().toLowerCase()}|||${(x.numero_nota_fiscal||'').trim()}|||${(x.numero_pedido||'').trim()}`));
+                if (placas.size === 1) return; // já capturado como duplicata exata
+                const sig = lista.map(x => x.id).sort().join(',');
+                if (vistos.has(sig)) return;
+                vistos.add(sig);
+                possiveis.push({ tipo, itens: lista });
+            };
+            Object.entries(porPedido).forEach(([ped, lista]) => addPossivel(lista, `Pedido ${ped}`));
+            Object.entries(porNF).forEach(([nf, lista]) => addPossivel(lista, `NF ${nf}`));
+
+            setResultado({ total: all.length, dups, possiveis, placaMap });
         } catch (e) {
-            alert('Erro: ' + e.message);
+            showToast('Erro: ' + e.message, 'error');
         } finally { setLoading(false); }
     };
 
@@ -5351,12 +5383,13 @@ function TabDuplicatas() {
             {/* KPIs */}
             {resultado && (
                 <>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
                         {[
                             { l: 'Total no mês', v: fmt(resultado.total), c: 'var(--color-text-primary)', bg: 'var(--color-muted)' },
                             { l: 'Grupos duplicados', v: fmt(resultado.dups.length), c: resultado.dups.length ? '#DC2626' : '#16A34A', bg: resultado.dups.length ? '#FEF2F2' : '#F0FDF4' },
                             { l: 'Registros extras', v: fmt(totalExtras), c: totalExtras ? '#DC2626' : '#16A34A', bg: totalExtras ? '#FEF2F2' : '#F0FDF4' },
                             { l: 'Sacos duplicados', v: fmt(totalSacos), c: totalSacos ? '#DC2626' : '#16A34A', bg: totalSacos ? '#FEF2F2' : '#F0FDF4' },
+                            { l: 'Possíveis duplicatas', v: fmt(resultado.possiveis?.length || 0), c: resultado.possiveis?.length ? '#D97706' : '#16A34A', bg: resultado.possiveis?.length ? '#FFFBEB' : '#F0FDF4' },
                         ].map(k => (
                             <div key={k.l} className="rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)', backgroundColor: k.bg }}>
                                 <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>{k.l}</p>
@@ -5365,13 +5398,13 @@ function TabDuplicatas() {
                         ))}
                     </div>
 
-                    {resultado.dups.length === 0 ? (
+                    {resultado.dups.length === 0 && (!resultado.possiveis || resultado.possiveis.length === 0) ? (
                         <div className="rounded-xl border p-6 text-center" style={{ borderColor: '#BBF7D0', backgroundColor: '#F0FDF4' }}>
                             <Icon name="CheckCircle2" size={32} color="#16A34A" />
                             <p className="mt-2 font-semibold" style={{ color: '#166534' }}>Nenhuma duplicata encontrada!</p>
-                            <p className="text-sm mt-1" style={{ color: '#166534' }}>Todos os registros possuem combinações únicas de placa + destino + NF + pedido.</p>
+                            <p className="text-sm mt-1" style={{ color: '#166534' }}>Todos os registros possuem combinações únicas de placa + destino + NF + pedido, e não há pedidos/NFs repetidos entre registros diferentes.</p>
                         </div>
-                    ) : (
+                    ) : resultado.dups.length > 0 ? (
                         <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#FEF2F2' }}>
                                 <Icon name="AlertTriangle" size={16} color="#DC2626" />
@@ -5414,9 +5447,49 @@ function TabDuplicatas() {
                                 </tbody>
                             </table>
                         </div>
+                    ) : null}
+
+                    {/* ── Alertas: possíveis duplicatas (mesmo pedido OU mesma NF, mas placa/destino diferem) ── */}
+                    {resultado.possiveis?.length > 0 && (
+                        <div className="bg-white rounded-xl border shadow-sm overflow-x-auto mt-4" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#FFFBEB' }}>
+                                <Icon name="AlertTriangle" size={16} color="#D97706" />
+                                <span className="text-sm font-semibold" style={{ color: '#92400E' }}>
+                                    {resultado.possiveis.length} alerta(s) — registros com o mesmo número de pedido ou NF, mas placa/destino diferentes. Pode ser erro de digitação ou registro duplicado com dado trocado.
+                                </span>
+                            </div>
+                            <table className="w-full text-sm min-w-[900px]">
+                                <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                    <tr>
+                                        {['Critério','Placa','Data','Destino','NF','Pedido','Sacos','Empresa Orig.'].map(h => (
+                                            <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {resultado.possiveis.map((p, pi) => (
+                                        p.itens.map((r, ri) => (
+                                            <tr key={`${pi}-${r.id}`} className="border-t" style={{ borderColor: '#FEF3C7', backgroundColor: pi % 2 === 0 ? '#FFFDF5' : '#fff' }}>
+                                                {ri === 0 && (
+                                                    <td className="px-3 py-3 font-semibold whitespace-nowrap" style={{ color: '#92400E' }} rowSpan={p.itens.length}>{p.tipo}</td>
+                                                )}
+                                                <td className="px-3 py-3 font-data font-semibold whitespace-nowrap">{r._placa || '—'}</td>
+                                                <td className="px-3 py-3 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
+                                                <td className="px-3 py-3 max-w-[140px] truncate">{r.destino || '—'}</td>
+                                                <td className="px-3 py-3 font-data whitespace-nowrap">{r.numero_nota_fiscal || '—'}</td>
+                                                <td className="px-3 py-3 font-data whitespace-nowrap">{r.numero_pedido || '—'}</td>
+                                                <td className="px-3 py-3 font-data text-right">{fmt(r.quantidade)}</td>
+                                                <td className="px-3 py-3 text-xs">{r.empresa_origem || '—'}</td>
+                                            </tr>
+                                        ))
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </>
             )}
+            <Toast toast={toast} />
         </div>
     );
 }
