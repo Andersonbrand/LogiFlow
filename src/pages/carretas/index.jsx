@@ -114,6 +114,28 @@ function Field({ label, children, required }) {
 const inputCls = "w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500";
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
 
+// ─── SearchInput — campo de busca reutilizável ────────────────────────────────
+function SearchInput({ value, onChange, placeholder = 'Buscar...', width = '260px' }) {
+    return (
+        <div className="relative flex-shrink-0" style={{ minWidth: width }}>
+            <Icon name="Search" size={13} color="var(--color-muted-foreground)"
+                style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+            <input
+                type="text"
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                placeholder={placeholder}
+                className="w-full pl-7 pr-7 py-2 rounded-lg border text-xs outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)', color: 'var(--color-text-primary)' }}
+            />
+            {value && (
+                <button onClick={() => onChange('')}
+                    style={{ position: 'absolute', right: '7px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted-foreground)', fontSize: '13px', lineHeight: 1 }}>✕</button>
+            )}
+        </div>
+    );
+}
+
 // ─── TAB: Viagens ────────────────────────────────────────────────────────────
 // ─── TAB: Viagens (Resumo de Carregamentos + Registros Motoristas) ────────────
 // Fonte principal: carretas_carregamentos (lançados via aba Volume)
@@ -460,19 +482,32 @@ function TabVeiculos({ isAdmin }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
+    const [pesquisa, setPesquisa] = useState('');
+    const veiculosFiltrados = useMemo(() => {
+        if (!pesquisa.trim()) return veiculos;
+        const q = pesquisa.toLowerCase();
+        return veiculos.filter(v =>
+            (v.placa || '').toLowerCase().includes(q) ||
+            (v.marca || '').toLowerCase().includes(q) ||
+            (v.modelo || '').toLowerCase().includes(q) ||
+            (v.tipo_composicao || '').toLowerCase().includes(q)
+        );
+    }, [veiculos, pesquisa]);
+
     return (
         <div>
-            <div className="flex justify-end mb-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+                <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Buscar por placa, marca, modelo..." width="280px" />
                 {isAdmin && <Button onClick={openCreate} iconName="Plus" size="sm">Novo Veículo</Button>}
             </div>
             {loading ? <div className="flex justify-center py-16"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {veiculos.length === 0 ? (
+                    {veiculosFiltrados.length === 0 ? (
                         <div className="col-span-3 flex flex-col items-center justify-center py-12 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
                             <Icon name="Truck" size={32} color="var(--color-muted-foreground)" />
-                            <span className="text-sm">Nenhum veículo cadastrado</span>
+                            <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum veículo cadastrado'}</span>
                         </div>
-                    ) : veiculos.map(v => (
+                    ) : veiculosFiltrados.map(v => (
                         <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm hover:shadow-md transition-shadow" style={{ borderColor: v.is_terceiro ? '#FDE68A' : 'var(--color-border)' }}>
                             <div className="flex items-start justify-between mb-3">
                                 <div>
@@ -555,6 +590,14 @@ function TabAbastecimentos({ isAdmin, profile }) {
     const [abast, setAbast] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
+    const [pesquisa, setPesquisa] = useState('');
+    const motoristasFiltrados = useMemo(() => {
+        if (!pesquisa.trim()) return motoristas;
+        const q = pesquisa.toLowerCase();
+        return motoristas.filter(m => (m.name ||
+            '').toLowerCase().includes(q));
+    }, [motoristas, pesquisa]); // eslint-disable-line
+
     const [postos, setPostos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(false);
@@ -590,6 +633,18 @@ function TabAbastecimentos({ isAdmin, profile }) {
         valorArla:    abast.reduce((s, a) => s + Number(a.valor_arla    || 0), 0),
         valorTotal:   abast.reduce((s, a) => s + Number(a.valor_total   || 0), 0),
     }), [abast]);
+
+    const [pesquisa, setPesquisa] = useState('');
+    const abastFiltrados = useMemo(() => {
+        if (!pesquisa.trim()) return abast;
+        const q = pesquisa.toLowerCase();
+        return abast.filter(a =>
+            (a.motorista?.name || '').toLowerCase().includes(q) ||
+            (a.veiculo?.placa  || '').toLowerCase().includes(q) ||
+            (a.posto_rel?.nome || a.posto || '').toLowerCase().includes(q) ||
+            (a.cupom_fiscal    || '').toLowerCase().includes(q)
+        );
+    }, [abast, pesquisa]);
 
     const handleEdit = (a) => {
         setForm({
@@ -700,7 +755,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
     return (
         <div>
             <div className="flex flex-wrap gap-2 items-center justify-between mb-5">
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 items-center">
                     {isAdmin && (
                         <select value={filtro.motoristaId} onChange={e => setFiltro(f => ({ ...f, motoristaId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                             <option value="">Todos motoristas</option>
@@ -721,6 +776,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
                     )}
+                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, placa, posto, cupom..." width="230px" />
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     {/* item 4: botão atualizar */}
@@ -762,13 +818,13 @@ function TabAbastecimentos({ isAdmin, profile }) {
                             <tr>{['Data','Motorista','Placa','Posto','Diesel (L)','R$ Diesel','Arla (L)','R$ Arla','Total',''].map(h => <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {abast.length === 0 ? <tr><td colSpan={10} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                            {abastFiltrados.length === 0 ? <tr><td colSpan={10} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                 <div className="flex flex-col items-center gap-2">
                                     <Icon name="Fuel" size={28} color="var(--color-muted-foreground)" />
-                                    <span className="text-sm">Nenhum abastecimento registrado</span>
+                                    <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum abastecimento registrado'}</span>
                                 </div>
                             </td></tr>
-                            : abast.map((a, i) => (
+                            : abastFiltrados.map((a, i) => (
                                 <tr key={a.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(a.data_abastecimento)}</td>
                                     <td className="px-3 py-3 whitespace-nowrap">{a.motorista?.name || '—'}</td>
@@ -1007,6 +1063,20 @@ function TabChecklist({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
     const [checklists, setChecklists] = useState([]);
+    const [pesquisa, setPesquisa] = useState('');
+    const checklistsFiltrados = useMemo(() => {
+        if (!pesquisa.trim()) return checklists;
+        const q = pesquisa.toLowerCase();
+        return checklists.filter(c => (c.motorista?.name ||
+            '').toLowerCase().includes(q) ||
+            (c.veiculo?.placa ||
+            '').toLowerCase().includes(q) ||
+            (c.tipo ||
+            '').toLowerCase().includes(q) ||
+            (c.status ||
+            '').toLowerCase().includes(q));
+    }, [checklists, pesquisa]); // eslint-disable-line
+
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -1101,23 +1171,23 @@ function TabChecklist({ isAdmin, profile }) {
                                 style={filtro === v ? { backgroundColor: 'var(--color-primary)', color: '#fff' } : { backgroundColor: 'white', color: 'var(--color-muted-foreground)' }}>{l}</button>
                         ))}
                     </div>
-                    {/* item 4: refresh */}
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
+                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, placa, tipo..." width="220px" />
                 </div>
                 <Button onClick={() => { setForm({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' }); setFotoPreview(null); setModal(true); }} iconName="ClipboardCheck" size="sm">Novo Checklist</Button>
             </div>
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
                 <div className="flex flex-col gap-4">
-                    {checklists.length === 0 && (
+                    {checklistsFiltrados.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-12 gap-2 bg-white rounded-xl border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                             <Icon name="ClipboardCheck" size={32} color="var(--color-muted-foreground)" />
-                            <span className="text-sm">Nenhum checklist encontrado</span>
+                            <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum checklist encontrado'}</span>
                         </div>
                     )}
-                    {checklists.map(c => {
+                    {checklistsFiltrados.map(c => {
                         const itens = c.itens || {};
                         const ok = Object.values(itens).filter(Boolean).length;
                         const total = CHECKLIST_ITENS.length;
@@ -1812,6 +1882,28 @@ function TabBonificacoes({ isAdmin }) {
         showToast('Exportado!', 'success');
     };
 
+    const [pesquisa, setPesquisa] = useState('');
+
+    const carregamentosBonosFiltrados = useMemo(() => {
+        if (!pesquisa.trim()) return carregamentosComBonus;
+        const q = pesquisa.toLowerCase();
+        return carregamentosComBonus.filter(c =>
+            (c.motorista?.name || '').toLowerCase().includes(q) ||
+            (c.destino || '').toLowerCase().includes(q) ||
+            (c.numero_nota_fiscal || '').toLowerCase().includes(q) ||
+            (c.veiculo?.placa || '').toLowerCase().includes(q)
+        );
+    }, [carregamentosComBonus, pesquisa]);
+
+    const extrasFiltrados = useMemo(() => {
+        if (!pesquisa.trim()) return extras;
+        const q = pesquisa.toLowerCase();
+        return extras.filter(e =>
+            (e.motorista?.name || '').toLowerCase().includes(q) ||
+            (e.observacao || '').toLowerCase().includes(q)
+        );
+    }, [extras, pesquisa]);
+
     const carreteiros = motoristas.filter(m => m.tipo_veiculo === 'carreta' || m.role === 'carreteiro');
 
     return (
@@ -1835,7 +1927,8 @@ function TabBonificacoes({ isAdmin }) {
                             title="Limpar data">✕ Data</button>
                     )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, destino, NF, placa..." width="240px" />
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
@@ -1844,8 +1937,6 @@ function TabBonificacoes({ isAdmin }) {
                     </button>
                 </div>
             </div>
-
-            {/* ── KPIs ── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
                 {[
                     { l: 'Carregamentos',   v: totais.totalViagens,                       c: '#1D4ED8', bg: '#EFF6FF', i: 'Package' },
@@ -1901,14 +1992,14 @@ function TabBonificacoes({ isAdmin }) {
                                     <tr>{['Motorista','Placa','Destino','Data','Nota Fiscal','Qtd (sacos)','Bônus'].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                                 </thead>
                                 <tbody>
-                                    {carregamentosComBonus.length === 0
+                                    {carregamentosBonosFiltrados.length === 0
                                         ? <tr><td colSpan={7} className="text-center py-10" style={{ color: 'var(--color-muted-foreground)' }}>
                                             <div className="flex flex-col items-center gap-2">
                                                 <Icon name="Package" size={24} color="var(--color-muted-foreground)" />
-                                                <span className="text-sm">Nenhum carregamento no período</span>
+                                                <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum carregamento no período'}</span>
                                             </div>
                                           </td></tr>
-                                        : carregamentosComBonus.map((c, i) => (
+                                        : carregamentosBonosFiltrados.map((c, i) => (
                                             <tr key={c.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                 <td className="px-4 py-3 font-medium">{c.motorista?.name || '—'}</td>
                                                 <td className="px-4 py-3 font-data text-xs">{c.veiculo?.placa || '—'}</td>
@@ -1942,14 +2033,14 @@ function TabBonificacoes({ isAdmin }) {
                                         <tr>{['Motorista','Data','Valor','Observação','Criado por',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                                     </thead>
                                     <tbody>
-                                        {extras.length === 0
+                                        {extrasFiltrados.length === 0
                                             ? <tr><td colSpan={6} className="text-center py-10" style={{ color: 'var(--color-muted-foreground)' }}>
                                                 <div className="flex flex-col items-center gap-2">
                                                     <Icon name="Award" size={24} color="var(--color-muted-foreground)" />
-                                                    <span className="text-sm">Nenhuma bonificação extra no período</span>
+                                                    <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma bonificação extra no período'}</span>
                                                 </div>
                                               </td></tr>
-                                            : extras.map((e, i) => (
+                                            : extrasFiltrados.map((e, i) => (
                                                 <tr key={e.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                     <td className="px-4 py-3 font-medium">{e.motorista?.name || '—'}</td>
                                                     <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(e.data)}</td>
@@ -2675,6 +2766,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
                     )}
+                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Categoria, descrição, placa..." width="220px" />
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
@@ -2730,13 +2822,13 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             <tr>{['Data','Placa','Categoria','Fornecedor','Descrição','NF','Pagamento','Valor',''].map(h => <th key={h} className="px-3 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {despesas.length === 0 ? <tr><td colSpan={9} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                            {despesasFiltradas.length === 0 ? <tr><td colSpan={9} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                 <div className="flex flex-col items-center gap-2">
                                     <Icon name="Receipt" size={28} color="var(--color-muted-foreground)" />
-                                    <span className="text-sm">Nenhuma despesa registrada</span>
+                                    <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma despesa registrada'}</span>
                                 </div>
                             </td></tr>
-                            : despesas.map((d, i) => (
+                            : despesasFiltradas.map((d, i) => (
                                 <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(d.data_despesa)}</td>
                                     <td className="px-3 py-3 font-data">{d.veiculo?.placa || '—'}</td>
@@ -3318,6 +3410,7 @@ function TabDiarias({ isAdmin, profile }) {
                     <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
                         <Icon name="FileDown" size={14} /> Exportar
                     </button>
+                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, destino, motivo..." width="220px" />
                     <Button onClick={openCreate} iconName="Plus" size="sm">Nova Diária</Button>
                 </div>
             </div>
@@ -3345,13 +3438,13 @@ function TabDiarias({ isAdmin, profile }) {
                             <tr>{['Data','Motorista','Viagem','Dias','Valor/Dia','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {diarias.length === 0 ? <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                            {diariasFiltradas.length === 0 ? <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                 <div className="flex flex-col items-center gap-2">
                                     <Icon name="CalendarDays" size={28} color="var(--color-muted-foreground)" />
-                                    <span className="text-sm">Nenhuma diária registrada</span>
+                                    <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma diária registrada'}</span>
                                 </div>
                             </td></tr>
-                            : diarias.map((d, i) => (
+                            : diariasFiltradas.map((d, i) => (
                                 <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(d.data_inicio)}</td>
                                     <td className="px-4 py-3 font-medium">{d.motorista?.name || '—'}</td>
@@ -4235,6 +4328,7 @@ function TabOrdensServico({ isAdmin, profile }) {
                     </select>
                 </div>
                 <div className="flex gap-2 items-center">
+                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Placa, tipo, descrição..." width="210px" />
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
@@ -4244,13 +4338,13 @@ function TabOrdensServico({ isAdmin, profile }) {
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
                 <div className="flex flex-col gap-3">
-                    {ordens.length === 0 && (
+                    {ordensFiltradas.length === 0 && (
                         <div className="bg-white rounded-xl border flex flex-col items-center justify-center p-10 gap-2" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                             <Icon name="Wrench" size={32} color="var(--color-muted-foreground)" />
-                            <span className="text-sm">Nenhuma ordem de serviço</span>
+                            <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma ordem de serviço'}</span>
                         </div>
                     )}
-                    {ordens.map(o => {
+                    {ordensFiltradas.map(o => {
                         const sc = STATUS_COLORS_OS[o.status] || STATUS_COLORS_OS['Pendente'];
                         return (
                             <div key={o.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
@@ -4528,12 +4622,20 @@ function TabHistoricoViagens({ isAdmin }) {
 
     // ── Filtro de motorista selecionado ───────────────────────────────────────
     const dadosFiltrados = useMemo(() => {
-        if (!filtroMotorista) return porMotorista;
-        return porMotorista.filter(m => {
+        let base = porMotorista;
+        if (filtroMotorista) {
             const mot = motoristas.find(x => x.id === filtroMotorista);
-            return m.nome === mot?.name;
-        });
-    }, [porMotorista, filtroMotorista, motoristas]);
+            base = base.filter(m => m.nome === mot?.name);
+        }
+        if (pesquisa.trim()) {
+            const q = pesquisa.toLowerCase();
+            base = base.filter(m =>
+                (m.nome || '').toLowerCase().includes(q) ||
+                m.destinos.some(d => (d.cidade || '').toLowerCase().includes(q))
+            );
+        }
+        return base;
+    }, [porMotorista, filtroMotorista, motoristas, pesquisa]);
 
     // ── Exportar Excel ────────────────────────────────────────────────────────
     const exportar = () => {
@@ -4638,6 +4740,7 @@ function TabHistoricoViagens({ isAdmin }) {
                     </select>
                 </div>
                 <div className="flex gap-2">
+                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, destino..." width="210px" />
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
@@ -4842,6 +4945,18 @@ function TabPontosParada({ isAdmin }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
     const [pontos, setPontos] = useState([]);
+    const [pesquisa, setPesquisa] = useState('');
+    const pontosFiltrados = useMemo(() => {
+        if (!pesquisa.trim()) return pontos;
+        const q = pesquisa.toLowerCase();
+        return pontos.filter(p => (p.nome ||
+            '').toLowerCase().includes(q) ||
+            (p.cidade ||
+            '').toLowerCase().includes(q) ||
+            (p.estado ||
+            '').toLowerCase().includes(q));
+    }, [pontos, pesquisa]); // eslint-disable-line
+
     const [loading, setLoading] = useState(true);
     const [filtroMes, setFiltroMes] = useState('');
     const [filtroMotorista, setFiltroMotorista] = useState('');
@@ -4881,6 +4996,15 @@ function TabPontosParada({ isAdmin }) {
         if (filtroMes) {
             const d = p.data_saida || '';
             if (!d.startsWith(filtroMes)) return false;
+        }
+        if (pesquisa.trim()) {
+            const q = pesquisa.toLowerCase();
+            return (
+                (p.nome || '').toLowerCase().includes(q) ||
+                (p.cidade || '').toLowerCase().includes(q) ||
+                (p.estado || '').toLowerCase().includes(q) ||
+                (p.motorista?.name || '').toLowerCase().includes(q)
+            );
         }
         return true;
     });
@@ -4949,6 +5073,7 @@ function TabPontosParada({ isAdmin }) {
                         ✕ Limpar
                     </button>
                 )}
+                <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Nome, cidade, motorista..." width="210px" />
                 <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors ml-auto" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                     <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                 </button>
