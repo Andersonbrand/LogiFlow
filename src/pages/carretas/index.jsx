@@ -5247,6 +5247,7 @@ function TabPontosParada({ isAdmin }) {
 
 // ─── TAB: Detector de Duplicatas ─────────────────────────────────────────────
 function TabDuplicatas() {
+    const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
     const { toast, showToast } = useToast();
     const [mes, setMes]           = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`; });
     const [loading, setLoading]   = useState(false);

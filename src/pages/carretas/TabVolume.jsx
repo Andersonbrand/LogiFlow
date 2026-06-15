@@ -1530,7 +1530,7 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                     <table className="w-full text-sm min-w-[750px]">
                         <thead className="text-xs border-b" style={{ background: '#F0FDF4', borderColor: '#BBF7D0', color: '#065F46' }}>
                             <tr>
-                                {['Data', 'Cliente/Origem', 'Motorista', 'Placa', 'Pedido Venda', 'NF', 'Nº Pedido', 'Qtd (sacos)', ''].map(h => (
+                                {['Data', 'Cliente/Origem', 'Cliente', 'Placa', 'Pedido Venda', 'NF', 'Nº Pedido', 'Qtd (sacos)', ''].map(h => (
                                     <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
@@ -1543,7 +1543,7 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                                         style={{ borderColor: '#BBF7D0', background: i % 2 === 0 ? '#fff' : '#F0FDF4' }}>
                                         <td className="px-3 py-2.5 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
                                         <td className="px-3 py-2.5 text-xs font-medium max-w-[140px] truncate">{nome || r.empresa_origem || '—'}</td>
-                                        <td className="px-3 py-2.5 text-xs">{r.motorista?.name || '—'}</td>
+                                        <td className="px-3 py-2.5 text-xs font-medium">{r.nome_cliente || r.motorista?.name || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs">{r.veiculo?.placa || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs font-semibold" style={{ color: '#059669' }}>{r.pedido_venda || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>
