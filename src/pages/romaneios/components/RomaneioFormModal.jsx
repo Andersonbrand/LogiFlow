@@ -120,12 +120,19 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             // Rebuild pedidos from romaneio_pedidos if editing
             const pedidosExistentes = editingRomaneio.romaneio_pedidos || [];
             if (pedidosExistentes.length > 0) {
-                // Deduplicar pedidos por id, mantendo apenas a primeira ocorrência
-                const seenPedidoIds = new Set();
+                // Deduplicar pedidos: por id E por conteúdo (numero_pedido + valor_pedido + cidade_destino)
+                // Pedidos antigos podem ter ids diferentes mas serem duplicatas reais
+                // (criados por um bug anterior que inseria 2x ao salvar)
+                const seenIds = new Set();
+                const seenContent = new Set();
                 const pedidosUnicos = pedidosExistentes.filter(p => {
-                    const key = p.id || `${p.numero_pedido}|${p.valor_pedido}`;
-                    if (seenPedidoIds.has(key)) return false;
-                    seenPedidoIds.add(key);
+                    if (p.id) {
+                        if (seenIds.has(p.id)) return false;
+                        seenIds.add(p.id);
+                    }
+                    const contentKey = `${(p.numero_pedido || '').trim()}|${p.valor_pedido}|${(p.cidade_destino || '').trim().toLowerCase()}`;
+                    if (contentKey !== '||' && seenContent.has(contentKey)) return false;
+                    seenContent.add(contentKey);
                     return true;
                 });
                 const todosItens = editingRomaneio.romaneio_itens || [];

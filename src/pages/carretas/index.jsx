@@ -2520,6 +2520,18 @@ function TabDespesasExtras({ isAdmin, profile }) {
     }, [filtro]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
+    const [pesquisa, setPesquisa] = useState('');
+    const despesasFiltradas = useMemo(() => {
+        if (!pesquisa.trim()) return despesas;
+        const q = pesquisa.toLowerCase();
+        return despesas.filter(d =>
+            (d.categoria || '').toLowerCase().includes(q) ||
+            (d.descricao || '').toLowerCase().includes(q) ||
+            (d.fornecedor || '').toLowerCase().includes(q) ||
+            (d.veiculo?.placa || '').toLowerCase().includes(q)
+        );
+    }, [despesas, pesquisa]);
+
     const totalPeriodo = useMemo(() => despesas.reduce((s, d) => s + Number(d.valor || 0), 0), [despesas]);
     const totalPorCategoria = useMemo(() => {
         const acc = {};
@@ -3347,12 +3359,23 @@ function TabDiarias({ isAdmin, profile }) {
             }
             const [d, m, v] = await Promise.all([fetchDiarias(f), fetchCarreteirosPropriosOnly(), fetchViagens({})]);
             setDiarias(d);
-            setMotoristas(m.filter(x => x.tipo_veiculo === 'carreta' || x.role === 'carreteiro'));
+            setMotoristas(m); // fetchCarreteirosPropriosOnly já filtra apenas carreteiros próprios
             setViagens(v);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtro]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+
+    const [pesquisa, setPesquisa] = useState('');
+    const diariasFiltradas = useMemo(() => {
+        if (!pesquisa.trim()) return diarias;
+        const q = pesquisa.toLowerCase();
+        return diarias.filter(d =>
+            (d.motorista?.name || '').toLowerCase().includes(q) ||
+            (d.destino || '').toLowerCase().includes(q) ||
+            (d.descricao || '').toLowerCase().includes(q)
+        );
+    }, [diarias, pesquisa]);
 
     const totais = useMemo(() => ({
         total: diarias.reduce((s, d) => s + Number(d.valor_total || 0), 0),
@@ -4300,6 +4323,18 @@ function TabOrdensServico({ isAdmin, profile }) {
     }, [filtroStatus]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
+    const [pesquisa, setPesquisa] = useState('');
+    const ordensFiltradas = useMemo(() => {
+        if (!pesquisa.trim()) return ordens;
+        const q = pesquisa.toLowerCase();
+        return ordens.filter(o =>
+            (o.veiculo?.placa || '').toLowerCase().includes(q) ||
+            (o.descricao || '').toLowerCase().includes(q) ||
+            (o.mecanico?.name || '').toLowerCase().includes(q) ||
+            (o.prioridade || '').toLowerCase().includes(q)
+        );
+    }, [ordens, pesquisa]);
+
     const handlePdfChange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -4527,6 +4562,7 @@ function TabHistoricoViagens({ isAdmin }) {
     const [filtroMotorista, setFiltroMotorista] = useState('');
     const [filtroVeiculo, setFiltroVeiculo]     = useState('');
     const [filtroPeriodo, setFiltroPeriodo]     = useState('12'); // meses
+    const [pesquisa, setPesquisa] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
