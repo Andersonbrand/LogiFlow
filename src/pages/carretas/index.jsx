@@ -37,8 +37,7 @@ import {
     fetchBonificacoesExtras, createBonificacaoExtra, updateBonificacaoExtra, deleteBonificacaoExtra,
     pagarBoletoCarreta, pagarParcelaCartaoCarreta,
     revogarBoletoCarreta, revogarParcelaCartaoCarreta,
-    fetchVeiculosProprios, fetchMotoristasProprios, fetchCarreteirosPropriosOnly,
-    updateAbastecimento,
+    fetchVeiculosProprios, fetchMotoristasProprios,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
 import { exportDiariaModelo, exportDiariasRomaneiosModelo } from 'utils/excelUtils';
@@ -114,28 +113,6 @@ function Field({ label, children, required }) {
 const inputCls = "w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500";
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
 
-// ─── SearchInput — campo de busca reutilizável ────────────────────────────────
-function SearchInput({ value, onChange, placeholder = 'Buscar...', width = '260px' }) {
-    return (
-        <div className="relative flex-shrink-0" style={{ minWidth: width }}>
-            <Icon name="Search" size={13} color="var(--color-muted-foreground)"
-                style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-            <input
-                type="text"
-                value={value}
-                onChange={e => onChange(e.target.value)}
-                placeholder={placeholder}
-                className="w-full pl-7 pr-7 py-2 rounded-lg border text-xs outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)', color: 'var(--color-text-primary)' }}
-            />
-            {value && (
-                <button onClick={() => onChange('')}
-                    style={{ position: 'absolute', right: '7px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted-foreground)', fontSize: '13px', lineHeight: 1 }}>✕</button>
-            )}
-        </div>
-    );
-}
-
 // ─── TAB: Viagens ────────────────────────────────────────────────────────────
 // ─── TAB: Viagens (Resumo de Carregamentos + Registros Motoristas) ────────────
 // Fonte principal: carretas_carregamentos (lançados via aba Volume)
@@ -208,34 +185,11 @@ function TabViagens({ isAdmin }) {
         const orig = (c.empresa_origem || '').toUpperCase();
         return orig.startsWith('CIF_') || orig.includes('|CIF_');
     };
-
-    const [pesquisa, setPesquisa] = useState('');
-
-    const carregamentosComBonus = useMemo(() => {
-        const base = carregamentos
+    const carregamentosComBonus = useMemo(() =>
+        carregamentos
             .filter(c => !isCIF(c))
-            .map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }));
-        if (!pesquisa.trim()) return base;
-        const q = pesquisa.trim().toLowerCase();
-        return base.filter(c =>
-            (c.numero_pedido || '').toLowerCase().includes(q) ||
-            (c.numero_nota_fiscal || '').toLowerCase().includes(q) ||
-            (c.motorista?.name || '').toLowerCase().includes(q) ||
-            (c.destino || '').toLowerCase().includes(q) ||
-            (c.veiculo?.placa || '').toLowerCase().includes(q)
-        );
-    }, [carregamentos, pesquisa]); // eslint-disable-line
-
-    const registrosMotoristasFiltrados = useMemo(() => {
-        if (!pesquisa.trim()) return registrosMotoristas;
-        const q = pesquisa.trim().toLowerCase();
-        return registrosMotoristas.filter(r =>
-            (r.motorista?.name || '').toLowerCase().includes(q) ||
-            (r.numero_nota_fiscal || '').toLowerCase().includes(q) ||
-            (r.destino || '').toLowerCase().includes(q) ||
-            (r.veiculo?.placa || '').toLowerCase().includes(q)
-        );
-    }, [registrosMotoristas, pesquisa]);
+            .map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }))
+    , [carregamentos]); // eslint-disable-line
 
     const exportar = () => {
         const wb = XLSX.utils.book_new();
@@ -301,21 +255,6 @@ function TabViagens({ isAdmin }) {
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
                     )}
-                    {/* ── Barra de pesquisa ── */}
-                    <div className="relative">
-                        <Icon name="Search" size={13} color="var(--color-muted-foreground)"
-                            style={{ position:'absolute', left:'9px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none' }} />
-                        <input
-                            type="text" value={pesquisa} onChange={e => setPesquisa(e.target.value)}
-                            placeholder="Pedido, NF, motorista, destino, placa..."
-                            className="pl-7 pr-7 py-2 rounded-lg border text-xs"
-                            style={{ borderColor:'var(--color-border)', backgroundColor:'var(--color-background)', color:'var(--color-text-primary)', minWidth:'260px' }}
-                        />
-                        {pesquisa && (
-                            <button onClick={() => setPesquisa('')}
-                                style={{ position:'absolute', right:'7px', top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', color:'var(--color-muted-foreground)', fontSize:'13px', lineHeight:1 }}>✕</button>
-                        )}
-                    </div>
                 </div>
                 <div className="flex gap-2">
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
@@ -397,14 +336,14 @@ function TabViagens({ isAdmin }) {
                                         ))}</tr>
                                     </thead>
                                     <tbody>
-                                        {registrosMotoristasFiltrados.length === 0 ? (
+                                        {registrosMotoristas.length === 0 ? (
                                             <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                                 <div className="flex flex-col items-center gap-2">
                                                     <Icon name="Truck" size={28} color="var(--color-muted-foreground)" />
-                                                    <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum registro lançado pelos motoristas ainda'}</span>
+                                                    <span className="text-sm">Nenhum registro lançado pelos motoristas ainda</span>
                                                 </div>
                                             </td></tr>
-                                        ) : registrosMotoristasFiltrados.map((r, i) => (
+                                        ) : registrosMotoristas.map((r, i) => (
                                             <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors"
                                                 style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                 <td className="px-3 py-3 font-medium whitespace-nowrap">{r.motorista?.name || '—'}</td>
@@ -482,32 +421,19 @@ function TabVeiculos({ isAdmin }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
-    const [pesquisa, setPesquisa] = useState('');
-    const veiculosFiltrados = useMemo(() => {
-        if (!pesquisa.trim()) return veiculos;
-        const q = pesquisa.toLowerCase();
-        return veiculos.filter(v =>
-            (v.placa || '').toLowerCase().includes(q) ||
-            (v.marca || '').toLowerCase().includes(q) ||
-            (v.modelo || '').toLowerCase().includes(q) ||
-            (v.tipo_composicao || '').toLowerCase().includes(q)
-        );
-    }, [veiculos, pesquisa]);
-
     return (
         <div>
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-                <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Buscar por placa, marca, modelo..." width="280px" />
+            <div className="flex justify-end mb-5">
                 {isAdmin && <Button onClick={openCreate} iconName="Plus" size="sm">Novo Veículo</Button>}
             </div>
             {loading ? <div className="flex justify-center py-16"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {veiculosFiltrados.length === 0 ? (
+                    {veiculos.length === 0 ? (
                         <div className="col-span-3 flex flex-col items-center justify-center py-12 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
                             <Icon name="Truck" size={32} color="var(--color-muted-foreground)" />
-                            <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum veículo cadastrado'}</span>
+                            <span className="text-sm">Nenhum veículo cadastrado</span>
                         </div>
-                    ) : veiculosFiltrados.map(v => (
+                    ) : veiculos.map(v => (
                         <div key={v.id} className="bg-white rounded-xl border p-4 shadow-sm hover:shadow-md transition-shadow" style={{ borderColor: v.is_terceiro ? '#FDE68A' : 'var(--color-border)' }}>
                             <div className="flex items-start justify-between mb-3">
                                 <div>
@@ -590,11 +516,9 @@ function TabAbastecimentos({ isAdmin, profile }) {
     const [abast, setAbast] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
-
     const [postos, setPostos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(false);
-    const [editingId, setEditingId] = useState(null);
     const [modalPostos, setModalPostos] = useState(false);
     const [editPosto, setEditPosto] = useState(null);
     const [formPosto, setFormPosto] = useState({ nome: '', cidade: '', cnpj: '', preco_diesel: '', preco_arla: '' });
@@ -612,7 +536,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
             } else if (filtro.dia) {
                 f.dataInicio = filtro.dia; f.dataFim = filtro.dia;
             } else if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
-            const [a, v, m, p] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchCarreteirosPropriosOnly(), fetchPostos().catch(() => [])]);
+            const [a, v, m, p] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchTodosMotoristas(), fetchPostos().catch(() => [])]);
             setAbast(a); setVeiculos(v); setMotoristas(m); setPostos(p);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -627,48 +551,15 @@ function TabAbastecimentos({ isAdmin, profile }) {
         valorTotal:   abast.reduce((s, a) => s + Number(a.valor_total   || 0), 0),
     }), [abast]);
 
-    const [pesquisa, setPesquisa] = useState('');
-    const abastFiltrados = useMemo(() => {
-        if (!pesquisa.trim()) return abast;
-        const q = pesquisa.toLowerCase();
-        return abast.filter(a =>
-            (a.motorista?.name || '').toLowerCase().includes(q) ||
-            (a.veiculo?.placa  || '').toLowerCase().includes(q) ||
-            (a.posto_rel?.nome || a.posto || '').toLowerCase().includes(q) ||
-            (a.cupom_fiscal    || '').toLowerCase().includes(q)
-        );
-    }, [abast, pesquisa]);
-
-    const handleEdit = (a) => {
-        setForm({
-            motorista_id: a.motorista_id || '',
-            veiculo_id: a.veiculo_id || '',
-            data_abastecimento: a.data_abastecimento || new Date().toISOString().split('T')[0],
-            horario: a.horario || '',
-            posto_id: a.posto_id || '',
-            litros_diesel: a.litros_diesel != null ? String(a.litros_diesel) : '',
-            valor_diesel: a.valor_diesel != null ? String(a.valor_diesel) : '',
-            litros_arla: a.litros_arla != null ? String(a.litros_arla) : '',
-            valor_arla: a.valor_arla != null ? String(a.valor_arla) : '',
-            cupom_fiscal: a.cupom_fiscal || '',
-            observacoes: a.observacoes || '',
-        });
-        setEditingId(a.id);
-        setModal(true);
-    };
-
     const handleSubmit = async () => {
         if (!form.veiculo_id || !form.motorista_id || !form.data_abastecimento) { showToast('Preencha veículo, motorista e data', 'error'); return; }
         if (!form.cupom_fiscal?.trim()) { showToast('Informe o N° do cupom fiscal', 'error'); return; }
         const payload = { ...form };
         if (!payload.posto_id) delete payload.posto_id;
+        // nome do posto para exibição legacy
         const posto = postos.find(p => p.id === form.posto_id);
         if (posto) payload.posto = posto.nome;
-        try {
-            if (editingId) { await updateAbastecimento(editingId, payload); showToast('Abastecimento atualizado!', 'success'); }
-            else { await createAbastecimento(payload); showToast('Abastecimento registrado!', 'success'); }
-            setModal(false); setEditingId(null); load();
-        }
+        try { await createAbastecimento(payload); showToast('Abastecimento registrado!', 'success'); setModal(false); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDelete = async (id) => {
@@ -748,7 +639,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
     return (
         <div>
             <div className="flex flex-wrap gap-2 items-center justify-between mb-5">
-                <div className="flex flex-wrap gap-2 items-center">
+                <div className="flex flex-wrap gap-2">
                     {isAdmin && (
                         <select value={filtro.motoristaId} onChange={e => setFiltro(f => ({ ...f, motoristaId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                             <option value="">Todos motoristas</option>
@@ -769,7 +660,6 @@ function TabAbastecimentos({ isAdmin, profile }) {
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
                     )}
-                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, placa, posto, cupom..." width="230px" />
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     {/* item 4: botão atualizar */}
@@ -782,7 +672,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                         </button>
                     )}
                     <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}><Icon name="FileDown" size={14} /> Exportar</button>
-                    <Button onClick={() => { setForm({ motorista_id: isAdmin ? '' : (profile?.id || ''), veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '' }); setEditingId(null); setModal(true); }} iconName="Plus" size="sm">Registrar</Button>
+                    <Button onClick={() => { setForm({ motorista_id: isAdmin ? '' : (profile?.id || ''), veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '' }); setModal(true); }} iconName="Plus" size="sm">Registrar</Button>
                 </div>
             </div>
 
@@ -811,13 +701,13 @@ function TabAbastecimentos({ isAdmin, profile }) {
                             <tr>{['Data','Motorista','Placa','Posto','Diesel (L)','R$ Diesel','Arla (L)','R$ Arla','Total',''].map(h => <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {abastFiltrados.length === 0 ? <tr><td colSpan={10} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                            {abast.length === 0 ? <tr><td colSpan={10} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                 <div className="flex flex-col items-center gap-2">
                                     <Icon name="Fuel" size={28} color="var(--color-muted-foreground)" />
-                                    <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum abastecimento registrado'}</span>
+                                    <span className="text-sm">Nenhum abastecimento registrado</span>
                                 </div>
                             </td></tr>
-                            : abastFiltrados.map((a, i) => (
+                            : abast.map((a, i) => (
                                 <tr key={a.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(a.data_abastecimento)}</td>
                                     <td className="px-3 py-3 whitespace-nowrap">{a.motorista?.name || '—'}</td>
@@ -828,12 +718,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                                     <td className="px-3 py-3 font-data text-right text-emerald-600">{Number(a.litros_arla || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                                     <td className="px-3 py-3 font-data text-right text-emerald-700">{BRL(a.valor_arla)}</td>
                                     <td className="px-3 py-3 font-data text-right font-semibold text-purple-600">{BRL(a.valor_total)}</td>
-                                    <td className="px-3 py-3">
-                                        <div className="flex items-center gap-1">
-                                            {isAdmin && <button onClick={() => handleEdit(a)} className="p-1.5 rounded hover:bg-blue-50" title="Editar"><Icon name="Pencil" size={13} color="#2563EB" /></button>}
-                                            {isAdmin && <button onClick={() => handleDelete(a.id)} className="p-1.5 rounded hover:bg-red-50" title="Excluir"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
-                                        </div>
-                                    </td>
+                                    <td className="px-3 py-3">{isAdmin && <button onClick={() => handleDelete(a.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -856,8 +741,8 @@ function TabAbastecimentos({ isAdmin, profile }) {
 
             {/* Modal registrar abastecimento */}
             {modal && (
-                <ModalOverlay onClose={() => { setModal(false); setEditingId(null); }}>
-                    <ModalHeader title={editingId ? 'Editar Abastecimento' : 'Registrar Abastecimento'} icon="Fuel" onClose={() => { setModal(false); setEditingId(null); }} />
+                <ModalOverlay onClose={() => setModal(false)}>
+                    <ModalHeader title="Registrar Abastecimento" icon="Fuel" onClose={() => setModal(false)} />
                     <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                         {isAdmin && (
                             <Field label="Motorista" required>
@@ -1056,20 +941,6 @@ function TabChecklist({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
     const [checklists, setChecklists] = useState([]);
-    const [pesquisa, setPesquisa] = useState('');
-    const checklistsFiltrados = useMemo(() => {
-        if (!pesquisa.trim()) return checklists;
-        const q = pesquisa.toLowerCase();
-        return checklists.filter(c => (c.motorista?.name ||
-            '').toLowerCase().includes(q) ||
-            (c.veiculo?.placa ||
-            '').toLowerCase().includes(q) ||
-            (c.tipo ||
-            '').toLowerCase().includes(q) ||
-            (c.status ||
-            '').toLowerCase().includes(q));
-    }, [checklists, pesquisa]); // eslint-disable-line
-
     const [veiculos, setVeiculos] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -1089,7 +960,7 @@ function TabChecklist({ isAdmin, profile }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [c, v, m] = await Promise.all([fetchChecklists(filtro === 'pendentes' ? { pendente: true } : {}), fetchCarretasVeiculos(), fetchCarreteirosPropriosOnly()]);
+            const [c, v, m] = await Promise.all([fetchChecklists(filtro === 'pendentes' ? { pendente: true } : {}), fetchCarretasVeiculos(), fetchTodosMotoristas()]);
             setChecklists(c); setVeiculos(v); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -1164,23 +1035,23 @@ function TabChecklist({ isAdmin, profile }) {
                                 style={filtro === v ? { backgroundColor: 'var(--color-primary)', color: '#fff' } : { backgroundColor: 'white', color: 'var(--color-muted-foreground)' }}>{l}</button>
                         ))}
                     </div>
+                    {/* item 4: refresh */}
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
-                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, placa, tipo..." width="220px" />
                 </div>
                 <Button onClick={() => { setForm({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' }); setFotoPreview(null); setModal(true); }} iconName="ClipboardCheck" size="sm">Novo Checklist</Button>
             </div>
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
                 <div className="flex flex-col gap-4">
-                    {checklistsFiltrados.length === 0 && (
+                    {checklists.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-12 gap-2 bg-white rounded-xl border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                             <Icon name="ClipboardCheck" size={32} color="var(--color-muted-foreground)" />
-                            <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum checklist encontrado'}</span>
+                            <span className="text-sm">Nenhum checklist encontrado</span>
                         </div>
                     )}
-                    {checklistsFiltrados.map(c => {
+                    {checklists.map(c => {
                         const itens = c.itens || {};
                         const ok = Object.values(itens).filter(Boolean).length;
                         const total = CHECKLIST_ITENS.length;
@@ -1777,7 +1648,7 @@ function TabBonificacoes({ isAdmin }) {
             const [c, e, m] = await Promise.all([
                 fetchCarregamentos(fCarr),
                 fetchBonificacoesExtras(f),
-                fetchCarreteirosPropriosOnly(),
+                fetchTodosMotoristas(),
             ]);
             setCarregamentos(c); setExtras(e); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -1794,7 +1665,7 @@ function TabBonificacoes({ isAdmin }) {
 
     const carregamentosComBonus = useMemo(() =>
         carregamentos
-            .filter(c => !isCIF(c) && c.motorista_id) // exclui CIF e carregamentos sem motorista (retira/terceiros)
+            .filter(c => !isCIF(c))
             .map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino) }))
     , [carregamentos]); // eslint-disable-line
 
@@ -1875,28 +1746,6 @@ function TabBonificacoes({ isAdmin }) {
         showToast('Exportado!', 'success');
     };
 
-    const [pesquisa, setPesquisa] = useState('');
-
-    const carregamentosBonosFiltrados = useMemo(() => {
-        if (!pesquisa.trim()) return carregamentosComBonus;
-        const q = pesquisa.toLowerCase();
-        return carregamentosComBonus.filter(c =>
-            (c.motorista?.name || '').toLowerCase().includes(q) ||
-            (c.destino || '').toLowerCase().includes(q) ||
-            (c.numero_nota_fiscal || '').toLowerCase().includes(q) ||
-            (c.veiculo?.placa || '').toLowerCase().includes(q)
-        );
-    }, [carregamentosComBonus, pesquisa]);
-
-    const extrasFiltrados = useMemo(() => {
-        if (!pesquisa.trim()) return extras;
-        const q = pesquisa.toLowerCase();
-        return extras.filter(e =>
-            (e.motorista?.name || '').toLowerCase().includes(q) ||
-            (e.observacao || '').toLowerCase().includes(q)
-        );
-    }, [extras, pesquisa]);
-
     const carreteiros = motoristas.filter(m => m.tipo_veiculo === 'carreta' || m.role === 'carreteiro');
 
     return (
@@ -1920,8 +1769,7 @@ function TabBonificacoes({ isAdmin }) {
                             title="Limpar data">✕ Data</button>
                     )}
                 </div>
-                <div className="flex gap-2 items-center">
-                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, destino, NF, placa..." width="240px" />
+                <div className="flex gap-2">
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
@@ -1930,6 +1778,8 @@ function TabBonificacoes({ isAdmin }) {
                     </button>
                 </div>
             </div>
+
+            {/* ── KPIs ── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
                 {[
                     { l: 'Carregamentos',   v: totais.totalViagens,                       c: '#1D4ED8', bg: '#EFF6FF', i: 'Package' },
@@ -1985,14 +1835,14 @@ function TabBonificacoes({ isAdmin }) {
                                     <tr>{['Motorista','Placa','Destino','Data','Nota Fiscal','Qtd (sacos)','Bônus'].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                                 </thead>
                                 <tbody>
-                                    {carregamentosBonosFiltrados.length === 0
+                                    {carregamentosComBonus.length === 0
                                         ? <tr><td colSpan={7} className="text-center py-10" style={{ color: 'var(--color-muted-foreground)' }}>
                                             <div className="flex flex-col items-center gap-2">
                                                 <Icon name="Package" size={24} color="var(--color-muted-foreground)" />
-                                                <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum carregamento no período'}</span>
+                                                <span className="text-sm">Nenhum carregamento no período</span>
                                             </div>
                                           </td></tr>
-                                        : carregamentosBonosFiltrados.map((c, i) => (
+                                        : carregamentosComBonus.map((c, i) => (
                                             <tr key={c.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                 <td className="px-4 py-3 font-medium">{c.motorista?.name || '—'}</td>
                                                 <td className="px-4 py-3 font-data text-xs">{c.veiculo?.placa || '—'}</td>
@@ -2026,14 +1876,14 @@ function TabBonificacoes({ isAdmin }) {
                                         <tr>{['Motorista','Data','Valor','Observação','Criado por',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                                     </thead>
                                     <tbody>
-                                        {extrasFiltrados.length === 0
+                                        {extras.length === 0
                                             ? <tr><td colSpan={6} className="text-center py-10" style={{ color: 'var(--color-muted-foreground)' }}>
                                                 <div className="flex flex-col items-center gap-2">
                                                     <Icon name="Award" size={24} color="var(--color-muted-foreground)" />
-                                                    <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma bonificação extra no período'}</span>
+                                                    <span className="text-sm">Nenhuma bonificação extra no período</span>
                                                 </div>
                                               </td></tr>
-                                            : extrasFiltrados.map((e, i) => (
+                                            : extras.map((e, i) => (
                                                 <tr key={e.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                     <td className="px-4 py-3 font-medium">{e.motorista?.name || '—'}</td>
                                                     <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(e.data)}</td>
@@ -2759,7 +2609,6 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
                     )}
-                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Categoria, descrição, placa..." width="220px" />
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
@@ -2815,13 +2664,13 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             <tr>{['Data','Placa','Categoria','Fornecedor','Descrição','NF','Pagamento','Valor',''].map(h => <th key={h} className="px-3 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {despesasFiltradas.length === 0 ? <tr><td colSpan={9} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                            {despesas.length === 0 ? <tr><td colSpan={9} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                 <div className="flex flex-col items-center gap-2">
                                     <Icon name="Receipt" size={28} color="var(--color-muted-foreground)" />
-                                    <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma despesa registrada'}</span>
+                                    <span className="text-sm">Nenhuma despesa registrada</span>
                                 </div>
                             </td></tr>
-                            : despesasFiltradas.map((d, i) => (
+                            : despesas.map((d, i) => (
                                 <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(d.data_despesa)}</td>
                                     <td className="px-3 py-3 font-data">{d.veiculo?.placa || '—'}</td>
@@ -3315,7 +3164,7 @@ function TabDiarias({ isAdmin, profile }) {
                 f.dataInicio = filtro.mes + '-01';
                 f.dataFim    = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0');
             }
-            const [d, m, v] = await Promise.all([fetchDiarias(f), fetchCarreteirosPropriosOnly(), fetchViagens({})]);
+            const [d, m, v] = await Promise.all([fetchDiarias(f), fetchTodosMotoristas(), fetchViagens({})]);
             setDiarias(d);
             setMotoristas(m.filter(x => x.tipo_veiculo === 'carreta' || x.role === 'carreteiro'));
             setViagens(v);
@@ -3403,7 +3252,6 @@ function TabDiarias({ isAdmin, profile }) {
                     <button onClick={exportar} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
                         <Icon name="FileDown" size={14} /> Exportar
                     </button>
-                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, destino, motivo..." width="220px" />
                     <Button onClick={openCreate} iconName="Plus" size="sm">Nova Diária</Button>
                 </div>
             </div>
@@ -3431,13 +3279,13 @@ function TabDiarias({ isAdmin, profile }) {
                             <tr>{['Data','Motorista','Viagem','Dias','Valor/Dia','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {diariasFiltradas.length === 0 ? <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                            {diarias.length === 0 ? <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                 <div className="flex flex-col items-center gap-2">
                                     <Icon name="CalendarDays" size={28} color="var(--color-muted-foreground)" />
-                                    <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma diária registrada'}</span>
+                                    <span className="text-sm">Nenhuma diária registrada</span>
                                 </div>
                             </td></tr>
-                            : diariasFiltradas.map((d, i) => (
+                            : diarias.map((d, i) => (
                                 <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(d.data_inicio)}</td>
                                     <td className="px-4 py-3 font-medium">{d.motorista?.name || '—'}</td>
@@ -3746,7 +3594,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
         // Aba 3 — Abastecimentos (diesel e arla separados)
         const rowsAbst = [
             ['Data', 'Motorista', 'Placa', 'Posto', 'Diesel (L)', 'R$ Diesel', 'Arla (L)', 'R$ Arla', 'Total R$'],
-            .....(dados._abastecimentos || []).map(a => [
+            ...(dados._abastecimentos || []).map(a => [
                 FMT_DATE(a.data_abastecimento), a.motorista?.name || '', a.veiculo?.placa || '',
                 a.posto || '', Number(a.litros_diesel || 0), Number(a.valor_diesel || 0),
                 Number(a.litros_arla || 0), Number(a.valor_arla || 0), Number(a.valor_total || 0),
@@ -4321,7 +4169,6 @@ function TabOrdensServico({ isAdmin, profile }) {
                     </select>
                 </div>
                 <div className="flex gap-2 items-center">
-                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Placa, tipo, descrição..." width="210px" />
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
@@ -4331,13 +4178,13 @@ function TabOrdensServico({ isAdmin, profile }) {
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
                 <div className="flex flex-col gap-3">
-                    {ordensFiltradas.length === 0 && (
+                    {ordens.length === 0 && (
                         <div className="bg-white rounded-xl border flex flex-col items-center justify-center p-10 gap-2" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                             <Icon name="Wrench" size={32} color="var(--color-muted-foreground)" />
-                            <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma ordem de serviço'}</span>
+                            <span className="text-sm">Nenhuma ordem de serviço</span>
                         </div>
                     )}
-                    {ordensFiltradas.map(o => {
+                    {ordens.map(o => {
                         const sc = STATUS_COLORS_OS[o.status] || STATUS_COLORS_OS['Pendente'];
                         return (
                             <div key={o.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
@@ -4615,20 +4462,12 @@ function TabHistoricoViagens({ isAdmin }) {
 
     // ── Filtro de motorista selecionado ───────────────────────────────────────
     const dadosFiltrados = useMemo(() => {
-        let base = porMotorista;
-        if (filtroMotorista) {
+        if (!filtroMotorista) return porMotorista;
+        return porMotorista.filter(m => {
             const mot = motoristas.find(x => x.id === filtroMotorista);
-            base = base.filter(m => m.nome === mot?.name);
-        }
-        if (pesquisa.trim()) {
-            const q = pesquisa.toLowerCase();
-            base = base.filter(m =>
-                (m.nome || '').toLowerCase().includes(q) ||
-                m.destinos.some(d => (d.cidade || '').toLowerCase().includes(q))
-            );
-        }
-        return base;
-    }, [porMotorista, filtroMotorista, motoristas, pesquisa]);
+            return m.nome === mot?.name;
+        });
+    }, [porMotorista, filtroMotorista, motoristas]);
 
     // ── Exportar Excel ────────────────────────────────────────────────────────
     const exportar = () => {
@@ -4733,7 +4572,6 @@ function TabHistoricoViagens({ isAdmin }) {
                     </select>
                 </div>
                 <div className="flex gap-2">
-                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, destino..." width="210px" />
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
@@ -4938,11 +4776,9 @@ function TabPontosParada({ isAdmin }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
     const [pontos, setPontos] = useState([]);
-
     const [loading, setLoading] = useState(true);
     const [filtroMes, setFiltroMes] = useState('');
     const [filtroMotorista, setFiltroMotorista] = useState('');
-    const [pesquisa, setPesquisa] = useState('');
     const [motoristas, setMotoristas] = useState([]);
     const [editModal, setEditModal] = useState(null);
     const [formEdit, setFormEdit] = useState({});
@@ -4979,18 +4815,6 @@ function TabPontosParada({ isAdmin }) {
         if (filtroMes) {
             const d = p.data_saida || '';
             if (!d.startsWith(filtroMes)) return false;
-        }
-        if (pesquisa.trim()) {
-            const q = pesquisa.toLowerCase();
-            const motoristaNome = motoristas.find(m => m.id === p.motorista_id)?.name || '';
-            const extrasTexto = (p.extras || []).map(ex => `${ex.local || ''} ${ex.tipo_local || ''}`).join(' ');
-            return (
-                (p.local || '').toLowerCase().includes(q) ||
-                (p.tipo_local || '').toLowerCase().includes(q) ||
-                (p.veiculo?.placa || '').toLowerCase().includes(q) ||
-                motoristaNome.toLowerCase().includes(q) ||
-                extrasTexto.toLowerCase().includes(q)
-            );
         }
         return true;
     });
@@ -5059,7 +4883,6 @@ function TabPontosParada({ isAdmin }) {
                         ✕ Limpar
                     </button>
                 )}
-                <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Local, tipo, placa, motorista..." width="220px" />
                 <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors ml-auto" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                     <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                 </button>
@@ -5245,255 +5068,6 @@ function TabPontosParada({ isAdmin }) {
     );
 }
 
-// ─── TAB: Detector de Duplicatas ─────────────────────────────────────────────
-function TabDuplicatas() {
-    const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
-    const { toast, showToast } = useToast();
-    const [mes, setMes]           = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`; });
-    const [loading, setLoading]   = useState(false);
-    const [resultado, setResultado] = useState(null); // null | { total, dups, placaMap, all }
-
-    const detectar = async () => {
-        setLoading(true); setResultado(null);
-        try {
-            const [yr, mo] = mes.split('-');
-            const lastDay  = new Date(+yr, +mo, 0).getDate();
-            const ini = `${mes}-01`, fim = `${mes}-${String(lastDay).padStart(2,'0')}`;
-
-            // Busca paginada
-            let all = [], offset = 0;
-            while (true) {
-                const { data, error } = await supabase
-                    .from('carretas_carregamentos')
-                    .select('id, data_carregamento, numero_nota_fiscal, numero_pedido, destino, quantidade, empresa_origem, veiculo_id, motorista_id, is_terceiro, is_retira')
-                    .gte('data_carregamento', ini).lte('data_carregamento', fim)
-                    .order('data_carregamento', { ascending: true })
-                    .range(offset, offset + 999);
-                if (error) throw error;
-                all = all.concat(data || []);
-                if ((data || []).length < 1000) break;
-                offset += 1000;
-            }
-
-            // Placas
-            const vids = [...new Set(all.map(r => r.veiculo_id).filter(Boolean))];
-            let placaMap = {};
-            if (vids.length) {
-                const { data: vs } = await supabase.from('carretas_veiculos').select('id, placa').in('id', vids);
-                (vs || []).forEach(v => { placaMap[v.id] = v.placa; });
-            }
-
-            // Detecta grupos duplicados
-            const groups = {};
-            all.forEach(r => {
-                const placa = placaMap[r.veiculo_id] || '';
-                const nf    = (r.numero_nota_fiscal || '').trim();
-                const ped   = (r.numero_pedido || '').trim();
-                const dest  = (r.destino || '').trim().toLowerCase();
-                if (!nf || !ped || !dest || !placa) return;
-                const key = `${placa}|||${dest}|||${nf}|||${ped}`;
-                if (!groups[key]) groups[key] = [];
-                groups[key].push({ ...r, _placa: placa });
-            });
-            const dups = Object.values(groups).filter(g => g.length > 1);
-
-            // Detecta POSSÍVEIS duplicatas: mesmo número de pedido OU mesma NF,
-            // mesmo que placa/destino difiram (ex: erro de digitação)
-            const dupKeySet = new Set(Object.keys(groups).filter(k => groups[k].length > 1));
-            const porPedido = {}, porNF = {};
-            all.forEach(r => {
-                const placa = placaMap[r.veiculo_id] || '';
-                const nf    = (r.numero_nota_fiscal || '').trim();
-                const ped   = (r.numero_pedido || '').trim();
-                const dest  = (r.destino || '').trim().toLowerCase();
-                const item  = { ...r, _placa: placa };
-                if (ped) { if (!porPedido[ped]) porPedido[ped] = []; porPedido[ped].push(item); }
-                if (nf)  { if (!porNF[nf])  porNF[nf]  = []; porNF[nf].push(item); }
-            });
-            const possiveis = [];
-            const vistos = new Set();
-            const addPossivel = (lista, tipo) => {
-                if (lista.length < 2) return;
-                // ignora se já é uma duplicata exata (placa+destino+NF+pedido iguais)
-                const placas = new Set(lista.map(x => `${x._placa}|||${(x.destino||'').trim().toLowerCase()}|||${(x.numero_nota_fiscal||'').trim()}|||${(x.numero_pedido||'').trim()}`));
-                if (placas.size === 1) return; // já capturado como duplicata exata
-                const sig = lista.map(x => x.id).sort().join(',');
-                if (vistos.has(sig)) return;
-                vistos.add(sig);
-                possiveis.push({ tipo, itens: lista });
-            };
-            Object.entries(porPedido).forEach(([ped, lista]) => addPossivel(lista, `Pedido ${ped}`));
-            Object.entries(porNF).forEach(([nf, lista]) => addPossivel(lista, `NF ${nf}`));
-
-            setResultado({ total: all.length, dups, possiveis, placaMap });
-        } catch (e) {
-            showToast('Erro: ' + e.message, 'error');
-        } finally { setLoading(false); }
-    };
-
-    const totalExtras = resultado ? resultado.dups.reduce((s, g) => s + g.length - 1, 0) : 0;
-    const totalSacos  = resultado ? resultado.dups.reduce((s, g) => s + (Number(g[0].quantidade)||0) * (g.length - 1), 0) : 0;
-
-    const exportCSV = () => {
-        if (!resultado?.dups.length) return;
-        const lines = ['Placa,Data,Destino,NF,Pedido,Sacos,Ocorrencias,ID_manter,IDs_remover'];
-        resultado.dups.forEach(g => {
-            const r0 = g[0];
-            lines.push([r0._placa, r0.data_carregamento, `"${r0.destino||''}"`, r0.numero_nota_fiscal, r0.numero_pedido, r0.quantidade, g.length, r0.id, `"${g.slice(1).map(x=>x.id).join(' | ')}"`].join(','));
-        });
-        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-        a.download = `duplicatas_${mes}.csv`; a.click();
-    };
-
-    const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
-    const fmt  = n => Number(n||0).toLocaleString('pt-BR');
-
-    return (
-        <div>
-            <div className="mb-5">
-                <h2 className="text-lg font-semibold mb-1" style={{ color: 'var(--color-text-primary)' }}>Detector de Duplicatas</h2>
-                <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Busca carregamentos com mesma <strong>placa + destino + NF + pedido</strong> no mesmo mês.</p>
-            </div>
-
-            {/* Toolbar */}
-            <div className="flex flex-wrap gap-3 items-end mb-5">
-                <div>
-                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Mês</label>
-                    <input type="month" value={mes} onChange={e => setMes(e.target.value)}
-                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
-                </div>
-                <button
-                    onClick={detectar} disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors"
-                    style={{ backgroundColor: loading ? '#93C5FD' : 'var(--color-primary)', cursor: loading ? 'not-allowed' : 'pointer' }}>
-                    {loading
-                        ? <><div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> Analisando...</>
-                        : <><Icon name="Search" size={15} color="#fff" /> Detectar duplicatas</>}
-                </button>
-                {resultado?.dups.length > 0 && (
-                    <button onClick={exportCSV}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50"
-                        style={{ borderColor: 'var(--color-border)' }}>
-                        <Icon name="FileDown" size={14} /> Exportar CSV
-                    </button>
-                )}
-            </div>
-
-            {/* KPIs */}
-            {resultado && (
-                <>
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
-                        {[
-                            { l: 'Total no mês', v: fmt(resultado.total), c: 'var(--color-text-primary)', bg: 'var(--color-muted)' },
-                            { l: 'Grupos duplicados', v: fmt(resultado.dups.length), c: resultado.dups.length ? '#DC2626' : '#16A34A', bg: resultado.dups.length ? '#FEF2F2' : '#F0FDF4' },
-                            { l: 'Registros extras', v: fmt(totalExtras), c: totalExtras ? '#DC2626' : '#16A34A', bg: totalExtras ? '#FEF2F2' : '#F0FDF4' },
-                            { l: 'Sacos duplicados', v: fmt(totalSacos), c: totalSacos ? '#DC2626' : '#16A34A', bg: totalSacos ? '#FEF2F2' : '#F0FDF4' },
-                            { l: 'Possíveis duplicatas', v: fmt(resultado.possiveis?.length || 0), c: resultado.possiveis?.length ? '#D97706' : '#16A34A', bg: resultado.possiveis?.length ? '#FFFBEB' : '#F0FDF4' },
-                        ].map(k => (
-                            <div key={k.l} className="rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)', backgroundColor: k.bg }}>
-                                <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>{k.l}</p>
-                                <p className="text-2xl font-bold font-data" style={{ color: k.c }}>{k.v}</p>
-                            </div>
-                        ))}
-                    </div>
-
-                    {resultado.dups.length === 0 && (!resultado.possiveis || resultado.possiveis.length === 0) ? (
-                        <div className="rounded-xl border p-6 text-center" style={{ borderColor: '#BBF7D0', backgroundColor: '#F0FDF4' }}>
-                            <Icon name="CheckCircle2" size={32} color="#16A34A" />
-                            <p className="mt-2 font-semibold" style={{ color: '#166534' }}>Nenhuma duplicata encontrada!</p>
-                            <p className="text-sm mt-1" style={{ color: '#166534' }}>Todos os registros possuem combinações únicas de placa + destino + NF + pedido, e não há pedidos/NFs repetidos entre registros diferentes.</p>
-                        </div>
-                    ) : resultado.dups.length > 0 ? (
-                        <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#FEF2F2' }}>
-                                <Icon name="AlertTriangle" size={16} color="#DC2626" />
-                                <span className="text-sm font-semibold text-red-700">{resultado.dups.length} grupo(s) com duplicatas — sugestão: manter o primeiro registro (mais antigo) e remover os extras</span>
-                            </div>
-                            <table className="w-full text-sm min-w-[900px]">
-                                <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                    <tr>
-                                        {['Placa','Data','Destino','NF','Pedido','Sacos','Empresa Orig.','Ocorr.','IDs (manter → extras)'].map(h => (
-                                            <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {resultado.dups.map((g, gi) => {
-                                        const r0 = g[0];
-                                        return (
-                                            <tr key={gi} className="border-t" style={{ borderColor: '#FEE2E2', backgroundColor: gi % 2 === 0 ? '#FFF7F7' : '#fff' }}>
-                                                <td className="px-3 py-3 font-data font-semibold whitespace-nowrap">{r0._placa}</td>
-                                                <td className="px-3 py-3 whitespace-nowrap">{FMT(r0.data_carregamento)}</td>
-                                                <td className="px-3 py-3 max-w-[140px] truncate">{r0.destino || '—'}</td>
-                                                <td className="px-3 py-3 font-data whitespace-nowrap">{r0.numero_nota_fiscal || '—'}</td>
-                                                <td className="px-3 py-3 font-data whitespace-nowrap">{r0.numero_pedido || '—'}</td>
-                                                <td className="px-3 py-3 font-data text-right">{fmt(r0.quantidade)}</td>
-                                                <td className="px-3 py-3 text-xs">{r0.empresa_origem || '—'}</td>
-                                                <td className="px-3 py-3 text-center">
-                                                    <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: '#FEE2E2', color: '#991B1B' }}>{g.length}×</span>
-                                                </td>
-                                                <td className="px-3 py-3">
-                                                    <div className="flex flex-col gap-1">
-                                                        <span className="text-xs font-mono" style={{ color: '#1D4ED8' }}>✓ {r0.id.slice(0,12)}…</span>
-                                                        {g.slice(1).map(x => (
-                                                            <span key={x.id} className="text-xs font-mono" style={{ color: '#DC2626' }}>✕ {x.id.slice(0,12)}…</span>
-                                                        ))}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : null}
-
-                    {/* ── Alertas: possíveis duplicatas (mesmo pedido OU mesma NF, mas placa/destino diferem) ── */}
-                    {resultado.possiveis?.length > 0 && (
-                        <div className="bg-white rounded-xl border shadow-sm overflow-x-auto mt-4" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#FFFBEB' }}>
-                                <Icon name="AlertTriangle" size={16} color="#D97706" />
-                                <span className="text-sm font-semibold" style={{ color: '#92400E' }}>
-                                    {resultado.possiveis.length} alerta(s) — registros com o mesmo número de pedido ou NF, mas placa/destino diferentes. Pode ser erro de digitação ou registro duplicado com dado trocado.
-                                </span>
-                            </div>
-                            <table className="w-full text-sm min-w-[900px]">
-                                <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                    <tr>
-                                        {['Critério','Placa','Data','Destino','NF','Pedido','Sacos','Empresa Orig.'].map(h => (
-                                            <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {resultado.possiveis.map((p, pi) => (
-                                        p.itens.map((r, ri) => (
-                                            <tr key={`${pi}-${r.id}`} className="border-t" style={{ borderColor: '#FEF3C7', backgroundColor: pi % 2 === 0 ? '#FFFDF5' : '#fff' }}>
-                                                {ri === 0 && (
-                                                    <td className="px-3 py-3 font-semibold whitespace-nowrap" style={{ color: '#92400E' }} rowSpan={p.itens.length}>{p.tipo}</td>
-                                                )}
-                                                <td className="px-3 py-3 font-data font-semibold whitespace-nowrap">{r._placa || '—'}</td>
-                                                <td className="px-3 py-3 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
-                                                <td className="px-3 py-3 max-w-[140px] truncate">{r.destino || '—'}</td>
-                                                <td className="px-3 py-3 font-data whitespace-nowrap">{r.numero_nota_fiscal || '—'}</td>
-                                                <td className="px-3 py-3 font-data whitespace-nowrap">{r.numero_pedido || '—'}</td>
-                                                <td className="px-3 py-3 font-data text-right">{fmt(r.quantidade)}</td>
-                                                <td className="px-3 py-3 text-xs">{r.empresa_origem || '—'}</td>
-                                            </tr>
-                                        ))
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    )}
-                </>
-            )}
-            <Toast toast={toast} />
-        </div>
-    );
-}
-
 // ─── Constantes da página principal ─────────────────────────────────────────
 const TABS = [
     { id: 'viagens',       label: 'Viagens',          icon: 'Navigation',    group: 'Operação' },
@@ -5511,7 +5085,6 @@ const TABS = [
     { id: 'financeiro',    label: 'Rel. Financeiro',   icon: 'BarChart3',     group: 'Financeiro' },
     { id: 'ordens',        label: 'Ordens de Serviço', icon: 'Wrench',        group: 'Gestão' },
     { id: 'empresas',      label: 'Empresas',          icon: 'Building2',     group: 'Gestão' },
-    { id: 'duplicatas',    label: 'Duplicatas',        icon: 'AlertTriangle', group: 'Gestão' },
 ];
 
 const GRUPOS = ['Operação', 'Financeiro', 'Gestão'];
@@ -5556,7 +5129,7 @@ export default function CarretasPage() {
                         style={{ color: 'var(--color-muted-foreground)', fontSize: 10 }}>
                         {grupo}
                     </p>
-                    {TABS.filter(t => t.group === grupo && (t.id !== 'duplicatas' || admin)).map(t => (
+                    {TABS.filter(t => t.group === grupo).map(t => (
                         <SidebarItem key={t.id} t={t} />
                     ))}
                 </div>
@@ -5617,7 +5190,6 @@ export default function CarretasPage() {
                             {tab === 'financeiro'     && <TabRelatorioFinanceiro isAdmin={admin} />}
                             {tab === 'ordens'          && <TabOrdensServico  isAdmin={admin} profile={profile} />}
                             {tab === 'empresas'       && <TabEmpresas       isAdmin={admin} />}
-                            {tab === 'duplicatas'     && admin && <TabDuplicatas />}
                             
                         </div>
                     </div>
