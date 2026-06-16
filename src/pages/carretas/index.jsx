@@ -3703,7 +3703,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             ['Receita Total de Fretes', dados.receitaTotal, ''],
             ['  → Carregamentos', dados.receitaCarregamentos || 0, ''],
             ['  → Romaneios de Carga', dados.receitaRomaneios || 0, ''],
-            ...Object.entries(dados.receitaPorEmpresa).map(([nome, val]) => [`  → Por empresa: ${nome}`, val, '']),
+            .....Object.entries(dados.receitaPorEmpresa).map(([nome, val]) => [`  → Por empresa: ${nome}`, val, '']),
             ['', '', ''],
             ['DESPESAS', '', ''],
             ['Combustível — Diesel', dados.valorDiesel, ''],
@@ -3714,7 +3714,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             ['Bônus Motoristas', dados.bonusTotal, ''],
             ['Diárias de Motoristas', dados.totalDiariasLancadas, ''],
             ['Despesas Extras (veículos)', dados.totalDespesasExtras, ''],
-            ...Object.entries(dados.despesasPorCategoria).map(([cat, val]) => [`  → ${cat}`, val, '']),
+            .....Object.entries(dados.despesasPorCategoria).map(([cat, val]) => [`  → ${cat}`, val, '']),
             ['Total Despesas', dados.despesaTotal, ''],
             ['', '', ''],
             ['MARGENS', '', ''],
@@ -3746,7 +3746,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
         // Aba 3 — Abastecimentos (diesel e arla separados)
         const rowsAbst = [
             ['Data', 'Motorista', 'Placa', 'Posto', 'Diesel (L)', 'R$ Diesel', 'Arla (L)', 'R$ Arla', 'Total R$'],
-            ...(dados._abastecimentos || []).map(a => [
+            .....(dados._abastecimentos || []).map(a => [
                 FMT_DATE(a.data_abastecimento), a.motorista?.name || '', a.veiculo?.placa || '',
                 a.posto || '', Number(a.litros_diesel || 0), Number(a.valor_diesel || 0),
                 Number(a.litros_arla || 0), Number(a.valor_arla || 0), Number(a.valor_total || 0),
