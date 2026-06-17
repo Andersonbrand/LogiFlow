@@ -1208,17 +1208,44 @@ function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], c
 
 // ─── Sub-componente: Tabela completa ──────────────────────────────────────────
 function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo }) {
+    const [pesquisa, setPesquisa] = useState('');
+    const carregamentosFiltrados = carregamentos.filter(r => {
+        if (!pesquisa.trim()) return true;
+        const q = pesquisa.toLowerCase();
+        return (
+            (r.numero_pedido || '').toLowerCase().includes(q) ||
+            (r.numero_nota_fiscal || '').toLowerCase().includes(q) ||
+            (r.motorista?.name || '').toLowerCase().includes(q) ||
+            (r.destino || '').toLowerCase().includes(q) ||
+            (r.veiculo?.placa || '').toLowerCase().includes(q)
+        );
+    });
+
     return (
         <div className="flex flex-col gap-4">
-            {isAdmin && (
-                <div className="flex justify-end">
-                    <Button onClick={onNovo} iconName="Plus" size="sm">Novo Carregamento</Button>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="relative flex-shrink-0" style={{ minWidth: '260px' }}>
+                    <Icon name="Search" size={13} color="var(--color-muted-foreground)"
+                        style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                    <input
+                        type="text"
+                        value={pesquisa}
+                        onChange={e => setPesquisa(e.target.value)}
+                        placeholder="Pedido, NF, motorista, destino, placa..."
+                        className="w-full pl-7 pr-7 py-2 rounded-lg border text-xs outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                        style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)', color: 'var(--color-text-primary)' }}
+                    />
+                    {pesquisa && (
+                        <button onClick={() => setPesquisa('')}
+                            style={{ position: 'absolute', right: '7px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted-foreground)', fontSize: '13px', lineHeight: 1 }}>✕</button>
+                    )}
                 </div>
-            )}
-            {carregamentos.length === 0 ? (
+                {isAdmin && <Button onClick={onNovo} iconName="Plus" size="sm">Novo Carregamento</Button>}
+            </div>
+            {carregamentosFiltrados.length === 0 ? (
                 <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                     <Icon name="Package" size={36} color="var(--color-muted-foreground)" />
-                    <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento encontrado para o período</p>
+                    <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum carregamento encontrado para o período'}</p>
                 </div>
             ) : (
             <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
@@ -1231,7 +1258,7 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo 
                     </tr>
                 </thead>
                 <tbody>
-                    {carregamentos.map((r, i) => {
+                    {carregamentosFiltrados.map((r, i) => {
                         const { tipo, nome } = parseTipo(r);
                         return (
                             <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', background: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
@@ -1530,7 +1557,7 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                     <table className="w-full text-sm min-w-[750px]">
                         <thead className="text-xs border-b" style={{ background: '#F0FDF4', borderColor: '#BBF7D0', color: '#065F46' }}>
                             <tr>
-                                {['Data', 'Cliente/Origem', 'Cliente', 'Placa', 'Pedido Venda', 'NF', 'Nº Pedido', 'Qtd (sacos)', ''].map(h => (
+                                {['Data', 'Cliente/Origem', 'Motorista', 'Placa', 'Pedido Venda', 'NF', 'Nº Pedido', 'Qtd (sacos)', ''].map(h => (
                                     <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
@@ -1543,7 +1570,7 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                                         style={{ borderColor: '#BBF7D0', background: i % 2 === 0 ? '#fff' : '#F0FDF4' }}>
                                         <td className="px-3 py-2.5 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
                                         <td className="px-3 py-2.5 text-xs font-medium max-w-[140px] truncate">{nome || r.empresa_origem || '—'}</td>
-                                        <td className="px-3 py-2.5 text-xs font-medium">{r.nome_cliente || r.motorista?.name || '—'}</td>
+                                        <td className="px-3 py-2.5 text-xs">{r.motorista?.name || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs">{r.veiculo?.placa || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs font-semibold" style={{ color: '#059669' }}>{r.pedido_venda || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>

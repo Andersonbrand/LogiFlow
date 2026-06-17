@@ -24,7 +24,24 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
     const podeExportar = aprovado || isAdmin();
 
     const s = STATUS_COLORS[romaneio.status] || STATUS_COLORS['Aguardando'];
-    const pedidos = romaneio.romaneio_pedidos || [];
+
+    // Deduplicar pedidos para exibição (mesma lógica usada no modal de edição):
+    // por id E por conteúdo (numero_pedido + valor_pedido + cidade_destino),
+    // já que registros antigos podem ter ids diferentes mas serem duplicatas reais.
+    const pedidosBrutos = romaneio.romaneio_pedidos || [];
+    const seenIds = new Set();
+    const seenContent = new Set();
+    const pedidos = pedidosBrutos.filter(p => {
+        if (p.id) {
+            if (seenIds.has(p.id)) return false;
+            seenIds.add(p.id);
+        }
+        const contentKey = `${(p.numero_pedido || '').trim()}|${p.valor_pedido}|${(p.cidade_destino || '').trim().toLowerCase()}`;
+        if (contentKey !== '||' && seenContent.has(contentKey)) return false;
+        seenContent.add(contentKey);
+        return true;
+    });
+
     const itens   = romaneio.romaneio_itens   || [];
     const pesoTotal = n(romaneio.peso_total) || itens.reduce((a,i)=>a+n(i.peso_total),0);
 
