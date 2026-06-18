@@ -257,6 +257,8 @@ export async function fetchChecklists(filters = {}) {
 
     if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
     if (filters.pendente)    q = q.eq('aprovado', false);
+    if (filters.dataInicio)  q = q.gte('created_at', filters.dataInicio);
+    if (filters.dataFim)     q = q.lte('created_at', filters.dataFim + 'T23:59:59');
 
     const { data, error } = await q;
     if (error) throw error;
@@ -659,6 +661,8 @@ export async function fetchOrdensServico(filters = {}) {
         .order('created_at', { ascending: false });
     if (filters.mecanicoId) q = q.eq('mecanico_id', filters.mecanicoId);
     if (filters.status)     q = q.eq('status', filters.status);
+    if (filters.dataInicio) q = q.gte('created_at', filters.dataInicio);
+    if (filters.dataFim)    q = q.lte('created_at', filters.dataFim + 'T23:59:59');
     const { data, error } = await q;
     if (error) throw error;
     return data || [];

@@ -15,6 +15,28 @@ import { fetchMaterials } from 'utils/materialService';
 import { subscribeTabela } from 'utils/supabaseClient';
 import * as XLSX from 'xlsx';
 
+// ─── SearchInput — campo de busca reutilizável (local a este arquivo) ────────
+function SearchInput({ value, onChange, placeholder = 'Buscar...', width = '260px' }) {
+    return (
+        <div className="relative flex-shrink-0" style={{ minWidth: width }}>
+            <Icon name="Search" size={13} color="var(--color-muted-foreground)"
+                style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+            <input
+                type="text"
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                placeholder={placeholder}
+                className="w-full pl-7 pr-7 py-2 rounded-lg border text-xs outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)', color: 'var(--color-text-primary)' }}
+            />
+            {value && (
+                <button onClick={() => onChange('')}
+                    style={{ position: 'absolute', right: '7px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted-foreground)', fontSize: '13px', lineHeight: 1 }}>✕</button>
+            )}
+        </div>
+    );
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT_DATE = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -714,8 +736,43 @@ export default function TabRomaneios({ isAdmin }) {
     const [modal, setModal]             = useState(null);
     const [detailModal, setDetailModal] = useState(null);
     const [filtroStatus, setFiltroStatus] = useState('');
-    const [filtroMes, setFiltroMes]       = useState('');
+    const mesAtualRomaneios = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; })();
+    const [filtroMes, setFiltroMes] = useState(() => {
+        try { return sessionStorage.getItem('carretas_romaneios_filtroMes') ?? mesAtualRomaneios; } catch { return mesAtualRomaneios; }
+    });
+    const handleSetFiltroMes = (v) => {
+        setFiltroMes(v);
+        try { sessionStorage.setItem('carretas_romaneios_filtroMes', v); } catch {}
+    };
     const [filtroDia, setFiltroDia]       = useState(''); // dia específico (YYYY-MM-DD)
+    const [pesquisa, setPesquisa] = useState('');
+
+    const romaneiosFiltrados = useMemo(() => {
+        if (!pesquisa.trim()) return romaneios;
+        const q = pesquisa.toLowerCase();
+        return romaneios.filter(r =>
+            (r.numero || '').toLowerCase().includes(q) ||
+            (r.motorista?.name || '').toLowerCase().includes(q) ||
+            (r.veiculo?.placa || '').toLowerCase().includes(q) ||
+            (r.destino || '').toLowerCase().includes(q) ||
+            (r.empresa || '').toLowerCase().includes(q) ||
+            (r.numero_nf || '').toLowerCase().includes(q) ||
+            (r.numero_pedido || '').toLowerCase().includes(q)
+        );
+    }, [romaneios, pesquisa]);
+
+    const romaneiosFerragemFiltrados = useMemo(() => {
+        if (!pesquisa.trim()) return romaneiosFerragem;
+        const q = pesquisa.toLowerCase();
+        return romaneiosFerragem.filter(r =>
+            (r.numero || '').toLowerCase().includes(q) ||
+            (r.motorista?.name || '').toLowerCase().includes(q) ||
+            (r.veiculo?.placa || '').toLowerCase().includes(q) ||
+            (r.destino || '').toLowerCase().includes(q) ||
+            (r.empresa || '').toLowerCase().includes(q) ||
+            (r.numero_nf || '').toLowerCase().includes(q)
+        );
+    }, [romaneiosFerragem, pesquisa]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -853,14 +910,17 @@ export default function TabRomaneios({ isAdmin }) {
                         <Icon name="Info" size={14} color="#065F46" />
                         <p className="text-xs" style={{ color: '#065F46' }}>Romaneios de ferragens registrados pelos motoristas carreteiros. Use para conferência e acompanhamento.</p>
                     </div>
+                    <div className="mb-4">
+                        <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Nº, motorista, placa, NF, destino..." width="260px" />
+                    </div>
                     {loading ? (
                         <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: '#059669', borderTopColor: 'transparent' }} /></div>
-                    ) : romaneiosFerragem.length === 0 ? (
+                    ) : romaneiosFerragemFiltrados.length === 0 ? (
                         <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-3" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#ECFDF5' }}>
                                 <Icon name="FileText" size={28} color="#059669" />
                             </div>
-                            <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Nenhum romaneio de ferragens</p>
+                            <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum romaneio de ferragens'}</p>
                             <p className="text-xs text-center" style={{ color: 'var(--color-muted-foreground)' }}>Quando um motorista registrar um romaneio de ferragens, ele aparecerá aqui.</p>
                         </div>
                     ) : (
@@ -874,7 +934,7 @@ export default function TabRomaneios({ isAdmin }) {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {romaneiosFerragem.map((r, idx) => {
+                                    {romaneiosFerragemFiltrados.map((r, idx) => {
                                         const sc = STATUS_ROMANEIO_COLORS[r.status] || { bg: '#F3F4F6', text: '#6B7280' };
                                         return (
                                             <tr key={r.id} className="border-t hover:bg-green-50/30 transition-colors"
@@ -915,7 +975,7 @@ export default function TabRomaneios({ isAdmin }) {
                                 </tbody>
                             </table>
                             <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
-                                {romaneiosFerragem.length} romaneio{romaneiosFerragem.length !== 1 ? 's' : ''} de ferragens
+                                {romaneiosFerragemFiltrados.length} romaneio{romaneiosFerragemFiltrados.length !== 1 ? 's' : ''} de ferragens
                             </div>
                         </div>
                     )}
@@ -932,20 +992,21 @@ export default function TabRomaneios({ isAdmin }) {
                         <option value="">Todos os status</option>
                         {STATUS_ROMANEIO.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <input type="month" value={filtroMes} onChange={e => { setFiltroMes(e.target.value); setFiltroDia(''); }}
+                    <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltroDia(''); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}
                         title="Filtrar por mês" />
-                    <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); setFiltroMes(''); }}
+                    <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); handleSetFiltroMes(''); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}
                         title="Filtrar por dia específico" />
                     {(filtroMes || filtroDia) && (
-                        <button onClick={() => { setFiltroMes(''); setFiltroDia(''); }}
+                        <button onClick={() => { handleSetFiltroMes(''); setFiltroDia(''); }}
                             className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors"
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar filtro de data">
                             ✕ Data
                         </button>
                     )}
+                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Nº, motorista, placa, NF, destino..." width="240px" />
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <button onClick={load}
@@ -994,13 +1055,13 @@ export default function TabRomaneios({ isAdmin }) {
                     <div className="animate-spin h-7 w-7 rounded-full border-4"
                         style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                 </div>
-            ) : romaneios.length === 0 ? (
+            ) : romaneiosFiltrados.length === 0 ? (
                 <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                     <Icon name="FileText" size={40} color="var(--color-muted-foreground)" />
                     <p className="text-sm font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
-                        Nenhum romaneio cadastrado
+                        {pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum romaneio cadastrado'}
                     </p>
-                    {isAdmin && (
+                    {isAdmin && !pesquisa && (
                         <button onClick={() => setModal({ mode: 'create' })}
                             className="mt-2 flex items-center gap-2 mx-auto px-4 py-2 rounded-lg text-sm font-medium text-white"
                             style={{ backgroundColor: 'var(--color-primary)' }}>
@@ -1010,7 +1071,7 @@ export default function TabRomaneios({ isAdmin }) {
                 </div>
             ) : (
                 <div className="flex flex-col gap-3">
-                    {romaneios.map(r => {
+                    {romaneiosFiltrados.map(r => {
                         const statusCfg = STATUS_ROMANEIO_COLORS[r.status] || STATUS_ROMANEIO_COLORS['Aguardando'];
                         const materiais_nomes = (r.itens || [])
                             .map(it => it.material?.nome || it.descricao || '')

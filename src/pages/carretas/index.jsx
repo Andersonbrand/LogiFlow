@@ -1088,6 +1088,14 @@ function TabChecklist({ isAdmin, profile }) {
     const [savingManut, setSavingManut] = useState(false);
     const [savingAprovar, setSavingAprovar] = useState(false);
     const [filtro, setFiltro] = useState('pendentes');
+    const mesAtualChecklist = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; })();
+    const [filtroMes, setFiltroMes] = useState(() => {
+        try { return sessionStorage.getItem('carretas_checklist_filtroMes') ?? mesAtualChecklist; } catch { return mesAtualChecklist; }
+    });
+    const handleSetFiltroMes = (v) => {
+        setFiltroMes(v);
+        try { sessionStorage.setItem('carretas_checklist_filtroMes', v); } catch {}
+    };
     const [form, setForm] = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
     const [fotoPreview, setFotoPreview] = useState(null);
     const [modalFoto, setModalFoto] = useState(null); // url para visualizar
@@ -1096,11 +1104,18 @@ function TabChecklist({ isAdmin, profile }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [c, v, m] = await Promise.all([fetchChecklists(filtro === 'pendentes' ? { pendente: true } : {}), fetchCarretasVeiculos(), fetchCarreteirosPropriosOnly()]);
+            const f = filtro === 'pendentes' ? { pendente: true } : {};
+            if (filtroMes) {
+                const [yr, mo] = filtroMes.split('-');
+                const lastDay = new Date(Number(yr), Number(mo), 0).getDate();
+                f.dataInicio = `${filtroMes}-01`;
+                f.dataFim    = `${filtroMes}-${String(lastDay).padStart(2, '0')}`;
+            }
+            const [c, v, m] = await Promise.all([fetchChecklists(f), fetchCarretasVeiculos(), fetchCarreteirosPropriosOnly()]);
             setChecklists(c); setVeiculos(v); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filtro]); // eslint-disable-line
+    }, [filtro, filtroMes]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
     // Converte foto para base64 para armazenar (ou pode ser URL do Storage)
@@ -1174,6 +1189,8 @@ function TabChecklist({ isAdmin, profile }) {
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
+                    <input type="month" value={filtroMes} onChange={e => handleSetFiltroMes(e.target.value)}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
                     <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, placa, tipo..." width="220px" />
                 </div>
                 <Button onClick={() => { setForm({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' }); setFotoPreview(null); setModal(true); }} iconName="ClipboardCheck" size="sm">Novo Checklist</Button>
@@ -1780,7 +1797,14 @@ function TabBonificacoes({ isAdmin }) {
     const [extras,        setExtras]        = useState([]);
     const [motoristas,    setMotoristas]    = useState([]);
     const [filtroMotorista, setFiltroMotorista] = useState('');
-    const [filtroMes,       setFiltroMes]       = useState('');
+    const mesAtualBonif = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; })();
+    const [filtroMes, setFiltroMes] = useState(() => {
+        try { return sessionStorage.getItem('carretas_bonif_filtroMes') ?? mesAtualBonif; } catch { return mesAtualBonif; }
+    });
+    const handleSetFiltroMes = (v) => {
+        setFiltroMes(v);
+        try { sessionStorage.setItem('carretas_bonif_filtroMes', v); } catch {}
+    };
     const [filtroDia,       setFiltroDia]       = useState('');
     const [loading,  setLoading]  = useState(true);
     const [subTab,   setSubTab]   = useState('viagens'); // 'viagens' | 'extras'
@@ -1939,12 +1963,12 @@ function TabBonificacoes({ isAdmin }) {
                         <option value="">Todos motoristas</option>
                         {carreteiros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
-                    <input type="month" value={filtroMes} onChange={e => { setFiltroMes(e.target.value); setFiltroDia(''); }}
+                    <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltroDia(''); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
-                    <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); setFiltroMes(''); }}
+                    <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); handleSetFiltroMes(''); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
                     {(filtroMes || filtroDia) && (
-                        <button onClick={() => { setFiltroMes(''); setFiltroDia(''); }}
+                        <button onClick={() => { handleSetFiltroMes(''); setFiltroDia(''); }}
                             className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
@@ -2451,7 +2475,16 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const [modal, setModal]         = useState(null);
     const [showFornecedores, setShowFornecedores] = useState(false);
     const [modalBaixa, setModalBaixa] = useState(null);
-    const [filtro, setFiltro]       = useState({ veiculoId: '', categoria: '', mes: '' });
+    const mesAtualDespesas = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; })();
+    const [filtro, setFiltro]       = useState(() => {
+        let mes = mesAtualDespesas;
+        try { mes = sessionStorage.getItem('carretas_despesas_filtroMes') ?? mesAtualDespesas; } catch {}
+        return { veiculoId: '', categoria: '', mes };
+    });
+    const handleSetFiltroMes = (mes) => {
+        setFiltro(f => ({ ...f, mes }));
+        try { sessionStorage.setItem('carretas_despesas_filtroMes', mes); } catch {}
+    };
     const [categoriasExtras, setCategoriasExtras] = useState(() => {
         try { return JSON.parse(localStorage.getItem('carretas_categorias_extras') || '[]'); } catch { return []; }
     });
@@ -2791,12 +2824,12 @@ function TabDespesasExtras({ isAdmin, profile }) {
                         <option value="">Todas categorias</option>
                         {todasCategorias.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value, dia: '' }))}
+                    <input type="month" value={filtro.mes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltro(f => ({ ...f, dia: '' })); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
-                    <input type="date" value={filtro.dia || ''} onChange={e => setFiltro(f => ({ ...f, dia: e.target.value, mes: '' }))}
+                    <input type="date" value={filtro.dia || ''} onChange={e => { setFiltro(f => ({ ...f, dia: e.target.value })); handleSetFiltroMes(''); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
                     {(filtro.mes || filtro.dia) && (
-                        <button onClick={() => setFiltro(f => ({ ...f, mes: '', dia: '' }))}
+                        <button onClick={() => { handleSetFiltroMes(''); setFiltro(f => ({ ...f, dia: '' })); }}
                             className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
@@ -3340,7 +3373,16 @@ function TabDiarias({ isAdmin, profile }) {
     const [viagens, setViagens]     = useState([]);
     const [loading, setLoading]     = useState(true);
     const [modal, setModal]         = useState(null);
-    const [filtro, setFiltro]       = useState({ motoristaId: '', mes: '' });
+    const mesAtualDiarias = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; })();
+    const [filtro, setFiltro]       = useState(() => {
+        let mes = mesAtualDiarias;
+        try { mes = sessionStorage.getItem('carretas_diarias_filtroMes') ?? mesAtualDiarias; } catch {}
+        return { motoristaId: '', mes };
+    });
+    const handleSetFiltroMes = (mes) => {
+        setFiltro(f => ({ ...f, mes }));
+        try { sessionStorage.setItem('carretas_diarias_filtroMes', mes); } catch {}
+    };
     const [form, setForm] = useState({
         motorista_id: '', viagem_id: '', data_inicio: new Date().toISOString().split('T')[0],
         quantidade_dias: '1', valor_dia: '', descricao: '',
@@ -3438,12 +3480,12 @@ function TabDiarias({ isAdmin, profile }) {
                         <option value="">Todos motoristas</option>
                         {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
-                    <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value, dia: '' }))}
+                    <input type="month" value={filtro.mes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltro(f => ({ ...f, dia: '' })); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
-                    <input type="date" value={filtro.dia || ''} onChange={e => setFiltro(f => ({ ...f, dia: e.target.value, mes: '' }))}
+                    <input type="date" value={filtro.dia || ''} onChange={e => { setFiltro(f => ({ ...f, dia: e.target.value })); handleSetFiltroMes(''); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
                     {(filtro.mes || filtro.dia) && (
-                        <button onClick={() => setFiltro(f => ({ ...f, mes: '', dia: '' }))}
+                        <button onClick={() => { handleSetFiltroMes(''); setFiltro(f => ({ ...f, dia: '' })); }}
                             className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
@@ -4290,6 +4332,14 @@ function TabOrdensServico({ isAdmin, profile }) {
     const [mecanicos, setMecanicos] = useState([]);
     const [loading, setLoading]   = useState(true);
     const [filtroStatus, setFiltroStatus] = useState('');
+    const mesAtualOS = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; })();
+    const [filtroMes, setFiltroMes] = useState(() => {
+        try { return sessionStorage.getItem('carretas_os_filtroMes') ?? mesAtualOS; } catch { return mesAtualOS; }
+    });
+    const handleSetFiltroMes = (v) => {
+        setFiltroMes(v);
+        try { sessionStorage.setItem('carretas_os_filtroMes', v); } catch {}
+    };
     const [modal, setModal]       = useState(false);
     const [pdfFile, setPdfFile]   = useState(null);
     const [uploading, setUploading] = useState(false);
@@ -4312,15 +4362,22 @@ function TabOrdensServico({ isAdmin, profile }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
+            const f = filtroStatus ? { status: filtroStatus } : {};
+            if (filtroMes) {
+                const [yr, mo] = filtroMes.split('-');
+                const lastDay = new Date(Number(yr), Number(mo), 0).getDate();
+                f.dataInicio = `${filtroMes}-01`;
+                f.dataFim    = `${filtroMes}-${String(lastDay).padStart(2, '0')}`;
+            }
             const [o, v, m] = await Promise.all([
-                fetchOrdensServico(filtroStatus ? { status: filtroStatus } : {}),
+                fetchOrdensServico(f),
                 fetchCarretasVeiculos(),
                 fetchMecanicos(),
             ]);
             setOrdens(o); setVeiculos(v); setMecanicos(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filtroStatus]); // eslint-disable-line
+    }, [filtroStatus, filtroMes]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
     const [pesquisa, setPesquisa] = useState('');
@@ -4384,6 +4441,14 @@ function TabOrdensServico({ isAdmin, profile }) {
                         <option value="">Todos os status</option>
                         {STATUS_OS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
+                    <input type="month" value={filtroMes} onChange={e => handleSetFiltroMes(e.target.value)}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
+                    {filtroMes && (
+                        <button onClick={() => handleSetFiltroMes('')}
+                            className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                            title="Limpar mês">✕ Mês</button>
+                    )}
                 </div>
                 <div className="flex gap-2 items-center">
                     <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Placa, tipo, descrição..." width="210px" />
@@ -4561,24 +4626,40 @@ function TabHistoricoViagens({ isAdmin }) {
     const [loading, setLoading]     = useState(true);
     const [filtroMotorista, setFiltroMotorista] = useState('');
     const [filtroVeiculo, setFiltroVeiculo]     = useState('');
-    const [filtroPeriodo, setFiltroPeriodo]     = useState('12'); // meses
+    const [filtroPeriodo, setFiltroPeriodo]     = useState('12'); // meses (usado quando filtroMes vazio)
+    const mesAtualHistorico = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; })();
+    const [filtroMes, setFiltroMes] = useState(() => {
+        try { return sessionStorage.getItem('historico_filtroMes') ?? mesAtualHistorico; } catch { return mesAtualHistorico; }
+    });
+    const handleSetFiltroMes = (v) => {
+        setFiltroMes(v);
+        try { sessionStorage.setItem('historico_filtroMes', v); } catch {}
+    };
     const [pesquisa, setPesquisa] = useState('');
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const mesesAtras = new Date();
-            mesesAtras.setMonth(mesesAtras.getMonth() - Number(filtroPeriodo));
-            const dataInicio = mesesAtras.toISOString().slice(0, 10);
+            let dataInicio, dataFim;
+            if (filtroMes) {
+                const [yr, mo] = filtroMes.split('-');
+                const lastDay = new Date(Number(yr), Number(mo), 0).getDate();
+                dataInicio = `${filtroMes}-01`;
+                dataFim    = `${filtroMes}-${String(lastDay).padStart(2, '0')}`;
+            } else {
+                const mesesAtras = new Date();
+                mesesAtras.setMonth(mesesAtras.getMonth() - Number(filtroPeriodo));
+                dataInicio = mesesAtras.toISOString().slice(0, 10);
+            }
 
-            const filtros = { dataInicio };
+            const filtros = { dataInicio, ...(dataFim ? { dataFim } : {}) };
             if (filtroMotorista) filtros.motoristaId = filtroMotorista;
             if (filtroVeiculo)   filtros.veiculoId   = filtroVeiculo;
 
             const [v, roms, carr, m, ve] = await Promise.all([
                 fetchViagens(filtros),
-                fetchRomaneios({ dataInicio }),
-                fetchCarregamentos({ dataInicio, is_terceiro: false, ...(filtroMotorista ? { motoristaId: filtroMotorista } : {}), ...(filtroVeiculo ? { veiculoId: filtroVeiculo } : {}) }),
+                fetchRomaneios({ dataInicio, ...(dataFim ? { dataFim } : {}) }),
+                fetchCarregamentos({ dataInicio, ...(dataFim ? { dataFim } : {}), is_terceiro: false, ...(filtroMotorista ? { motoristaId: filtroMotorista } : {}), ...(filtroVeiculo ? { veiculoId: filtroVeiculo } : {}) }),
                 fetchTodosMotoristas(),
                 fetchCarretasVeiculos(),
             ]);
@@ -4620,7 +4701,7 @@ function TabHistoricoViagens({ isAdmin }) {
             setViagens(combinados); setMotoristas(m); setVeiculos(ve);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filtroMotorista, filtroVeiculo, filtroPeriodo]); // eslint-disable-line
+    }, [filtroMotorista, filtroVeiculo, filtroPeriodo, filtroMes]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
 
@@ -4789,8 +4870,18 @@ function TabHistoricoViagens({ isAdmin }) {
                         <option value="">Todas as placas</option>
                         {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                     </select>
-                    <select value={filtroPeriodo} onChange={e => setFiltroPeriodo(e.target.value)}
-                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                    <input type="month" value={filtroMes} onChange={e => handleSetFiltroMes(e.target.value)}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês específico" />
+                    {filtroMes && (
+                        <button onClick={() => handleSetFiltroMes('')}
+                            className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                            title="Limpar mês e usar período relativo">✕ Mês</button>
+                    )}
+                    <select value={filtroPeriodo} onChange={e => { setFiltroPeriodo(e.target.value); handleSetFiltroMes(''); }}
+                        disabled={!!filtroMes}
+                        className="px-3 py-2 rounded-lg border text-sm" style={{ ...inputStyle, opacity: filtroMes ? 0.5 : 1 }}
+                        title={filtroMes ? 'Limpe o filtro de mês para usar período relativo' : 'Período relativo'}>
                         <option value="3">Últimos 3 meses</option>
                         <option value="6">Últimos 6 meses</option>
                         <option value="12">Último ano</option>
@@ -5006,7 +5097,14 @@ function TabPontosParada({ isAdmin }) {
     const [pontos, setPontos] = useState([]);
 
     const [loading, setLoading] = useState(true);
-    const [filtroMes, setFiltroMes] = useState('');
+    const mesAtualPontos = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; })();
+    const [filtroMes, setFiltroMes] = useState(() => {
+        try { return sessionStorage.getItem('carretas_pontos_filtroMes') ?? mesAtualPontos; } catch { return mesAtualPontos; }
+    });
+    const handleSetFiltroMes = (v) => {
+        setFiltroMes(v);
+        try { sessionStorage.setItem('carretas_pontos_filtroMes', v); } catch {}
+    };
     const [filtroMotorista, setFiltroMotorista] = useState('');
     const [pesquisa, setPesquisa] = useState('');
     const [motoristas, setMotoristas] = useState([]);
@@ -5116,10 +5214,10 @@ function TabPontosParada({ isAdmin }) {
                     <option value="">Todos os motoristas</option>
                     {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
-                <input type="month" value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
+                <input type="month" value={filtroMes} onChange={e => handleSetFiltroMes(e.target.value)}
                     className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
                 {(filtroMes || filtroMotorista) && (
-                    <button onClick={() => { setFiltroMes(''); setFiltroMotorista(''); }}
+                    <button onClick={() => { handleSetFiltroMes(''); setFiltroMotorista(''); }}
                         className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
                         style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                         ✕ Limpar
