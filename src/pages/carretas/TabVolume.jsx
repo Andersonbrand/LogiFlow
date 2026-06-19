@@ -32,7 +32,8 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 // ─── Campo de pesquisa padrão (usado em Registros, Terceiros e Retira de Clientes) ─
 function SearchInput({ value, onChange, placeholder, className = '', style }) {
     return (
-        <div className={`relative ${className}`} style={style}>
+        <div className={`relative ${className}`}
+            style={{ width: '100%', minWidth: '260px', maxWidth: '420px', flexShrink: 0, ...style }}>
             <Icon name="Search" size={14} color="var(--color-muted-foreground)"
                 style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
             <input
@@ -1247,8 +1248,7 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo 
         <div className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <SearchInput value={pesquisa} onChange={setPesquisa}
-                    placeholder="Pedido, NF, motorista, destino, placa..."
-                    className="flex-shrink-0" style={{ minWidth: '260px', maxWidth: '420px', flex: '1 1 260px' }} />
+                    placeholder="Pedido, NF, motorista, destino, placa..." />
                 {isAdmin && <Button onClick={onNovo} iconName="Plus" size="sm">Novo Carregamento</Button>}
             </div>
             {carregamentosFiltrados.length === 0 ? (

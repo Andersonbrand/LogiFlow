@@ -257,12 +257,25 @@ export async function updateRomaneio(id, romaneio, itens) {
     // ── 1. Pedidos e itens ANTES de atualizar o romaneio ─────────────────────
     // Assim quando o Realtime disparar (após o UPDATE abaixo), o fetch
     // já encontra os dados de pedidos/itens consistentes e não duplica.
+    //
+    // ORDEM IMPORTA: romaneio_itens.pedido_id tem foreign key para
+    // romaneio_pedidos.id. Por isso os ITENS precisam ser apagados ANTES dos
+    // PEDIDOS — apagar o pedido enquanto ainda existe um item apontando para
+    // ele viola a constraint "romaneio_itens_pedido_id_fkey". Esse erro só
+    // passou a aparecer depois que a política de DELETE foi habilitada via
+    // RLS; antes disso o DELETE de pedidos era bloqueado silenciosamente e
+    // nunca chegava a tentar violar a foreign key.
+    //
+    // O erro é checado explicitamente em cada etapa. Sem isso, uma falha de
+    // RLS/FK seria engolida silenciosamente e os dados "excluídos" continuariam
+    // no banco mesmo após salvar.
 
-    // Substitui pedidos
-    // IMPORTANTE: o erro é checado explicitamente. Sem isso, uma falha de RLS
-    // (política de DELETE ausente) é engolida silenciosamente — o DELETE não
-    // remove nenhuma linha, nenhum erro é lançado pelo Supabase, e os pedidos
-    // "excluídos" continuam no banco mesmo após salvar.
+    // Apaga itens antigos primeiro — os pedidos serão recriados com novos
+    // IDs de qualquer forma, então os itens antigos perderiam a referência.
+    const { error: delItensErr } = await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
+    if (delItensErr) throw new Error('Falha ao remover itens antigos do romaneio: ' + delItensErr.message);
+
+    // Agora sim, com os itens já removidos, pode apagar os pedidos com segurança
     const { error: delPedidosErr } = await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
     if (delPedidosErr) throw new Error('Falha ao remover pedidos antigos do romaneio: ' + delPedidosErr.message);
 
@@ -278,22 +291,18 @@ export async function updateRomaneio(id, romaneio, itens) {
         (pd || []).forEach((p, i) => { pedidoIdMap[i] = p.id; });
     }
 
-    // Substitui itens
-    if (itens !== undefined) {
-        const { error: delItensErr } = await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
-        if (delItensErr) throw new Error('Falha ao remover itens antigos do romaneio: ' + delItensErr.message);
-        if (itens.length > 0) {
-            const { error: ie } = await supabase.from('romaneio_itens').insert(
-                itens.map(i => ({
-                    romaneio_id: id,
-                    material_id: i.material_id,
-                    quantidade:  i.quantidade,
-                    peso_total:  i.peso_total,
-                    pedido_id:   pedidoIdMap[i.pedido_index] || null,
-                }))
-            );
-            if (ie) throw ie;
-        }
+    // Reinsere itens, vinculando ao novo pedido_id quando aplicável
+    if (itens !== undefined && itens.length > 0) {
+        const { error: ie } = await supabase.from('romaneio_itens').insert(
+            itens.map(i => ({
+                romaneio_id: id,
+                material_id: i.material_id,
+                quantidade:  i.quantidade,
+                peso_total:  i.peso_total,
+                pedido_id:   pedidoIdMap[i.pedido_index] || null,
+            }))
+        );
+        if (ie) throw ie;
     }
 
     // ── 2. Atualiza o romaneio por último — Realtime só dispara aqui ──────────
@@ -473,6 +482,11 @@ export async function createRascunho(romaneio, itens = []) {
 }
 
 export async function updateRascunho(id, romaneio, itens) {
+    // Mesma ordem de updateRomaneio: itens (filhos) antes de pedidos (pais),
+    // pois romaneio_itens.pedido_id referencia romaneio_pedidos.id.
+    const { error: delItensErr } = await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
+    if (delItensErr) throw new Error('Falha ao remover itens antigos do rascunho: ' + delItensErr.message);
+
     const { error: delPedidosErr } = await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
     if (delPedidosErr) throw new Error('Falha ao remover pedidos antigos do rascunho: ' + delPedidosErr.message);
 
@@ -487,21 +501,17 @@ export async function updateRascunho(id, romaneio, itens) {
         if (pe) throw pe;
         (pd || []).forEach((p, i) => { pedidoIdMap[i] = p.id; });
     }
-    if (itens !== undefined) {
-        const { error: delItensErr } = await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
-        if (delItensErr) throw new Error('Falha ao remover itens antigos do rascunho: ' + delItensErr.message);
-        if (itens.length > 0) {
-            const { error: ie } = await supabase.from('romaneio_itens').insert(
-                itens.map(i => ({
-                    romaneio_id: id,
-                    material_id: i.material_id || null,
-                    quantidade:  Number(i.quantidade) || 1,
-                    peso_total:  i.peso_total != null ? Number(i.peso_total) : null,
-                    pedido_id:   pedidoIdMap[i.pedido_index] ?? null,
-                }))
-            );
-            if (ie) throw ie;
-        }
+    if (itens !== undefined && itens.length > 0) {
+        const { error: ie } = await supabase.from('romaneio_itens').insert(
+            itens.map(i => ({
+                romaneio_id: id,
+                material_id: i.material_id || null,
+                quantidade:  Number(i.quantidade) || 1,
+                peso_total:  i.peso_total != null ? Number(i.peso_total) : null,
+                pedido_id:   pedidoIdMap[i.pedido_index] ?? null,
+            }))
+        );
+        if (ie) throw ie;
     }
     const { error } = await supabase.from('romaneios').update({
         ...buildPayload(romaneio),
