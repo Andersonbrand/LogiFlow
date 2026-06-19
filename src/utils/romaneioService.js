@@ -259,7 +259,13 @@ export async function updateRomaneio(id, romaneio, itens) {
     // já encontra os dados de pedidos/itens consistentes e não duplica.
 
     // Substitui pedidos
-    await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
+    // IMPORTANTE: o erro é checado explicitamente. Sem isso, uma falha de RLS
+    // (política de DELETE ausente) é engolida silenciosamente — o DELETE não
+    // remove nenhuma linha, nenhum erro é lançado pelo Supabase, e os pedidos
+    // "excluídos" continuam no banco mesmo após salvar.
+    const { error: delPedidosErr } = await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
+    if (delPedidosErr) throw new Error('Falha ao remover pedidos antigos do romaneio: ' + delPedidosErr.message);
+
     const pedidoIdMap = {};
     const pedidosMeta = romaneio._pedidos || [];
     if (pedidosMeta.length > 0) {
@@ -274,7 +280,8 @@ export async function updateRomaneio(id, romaneio, itens) {
 
     // Substitui itens
     if (itens !== undefined) {
-        await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
+        const { error: delItensErr } = await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
+        if (delItensErr) throw new Error('Falha ao remover itens antigos do romaneio: ' + delItensErr.message);
         if (itens.length > 0) {
             const { error: ie } = await supabase.from('romaneio_itens').insert(
                 itens.map(i => ({
@@ -334,8 +341,10 @@ export async function updateRomaneioStatus(id, status) {
 export async function deleteRomaneio(id) {
     // Apaga registros dependentes antes (respeita foreign key constraints)
     await supabase.from('notifications').delete().eq('romaneio_id', id);
-    await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
-    await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
+    const { error: itensErr } = await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
+    if (itensErr) throw new Error('Falha ao remover itens do romaneio: ' + itensErr.message);
+    const { error: pedidosErr } = await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
+    if (pedidosErr) throw new Error('Falha ao remover pedidos do romaneio: ' + pedidosErr.message);
     const { error } = await supabase.from('romaneios').delete().eq('id', id);
     if (error) throw error;
 }
@@ -464,7 +473,9 @@ export async function createRascunho(romaneio, itens = []) {
 }
 
 export async function updateRascunho(id, romaneio, itens) {
-    await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
+    const { error: delPedidosErr } = await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
+    if (delPedidosErr) throw new Error('Falha ao remover pedidos antigos do rascunho: ' + delPedidosErr.message);
+
     const pedidoIdMap = {};
     const pedidosMeta = romaneio._pedidos || [];
     if (pedidosMeta.length > 0) {
@@ -477,7 +488,8 @@ export async function updateRascunho(id, romaneio, itens) {
         (pd || []).forEach((p, i) => { pedidoIdMap[i] = p.id; });
     }
     if (itens !== undefined) {
-        await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
+        const { error: delItensErr } = await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
+        if (delItensErr) throw new Error('Falha ao remover itens antigos do rascunho: ' + delItensErr.message);
         if (itens.length > 0) {
             const { error: ie } = await supabase.from('romaneio_itens').insert(
                 itens.map(i => ({

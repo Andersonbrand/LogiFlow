@@ -29,6 +29,28 @@ const fmtNum = v => Number(v || 0).toLocaleString('pt-BR');
 const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
 
+// ─── Campo de pesquisa padrão (usado em Registros, Terceiros e Retira de Clientes) ─
+function SearchInput({ value, onChange, placeholder, className = '', style }) {
+    return (
+        <div className={`relative ${className}`} style={style}>
+            <Icon name="Search" size={14} color="var(--color-muted-foreground)"
+                style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+            <input
+                type="text"
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                placeholder={placeholder}
+                className="w-full pl-8 pr-8 py-2.5 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)', color: 'var(--color-text-primary)' }}
+            />
+            {value && (
+                <button type="button" onClick={() => onChange('')}
+                    style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted-foreground)', fontSize: '13px', lineHeight: 1 }}>✕</button>
+            )}
+        </div>
+    );
+}
+
 // ─── Tipo de volume ────────────────────────────────────────────────────────────
 const TIPOS = {
     ARA_GBI_FOB:  { label: 'FOB · Guanambi',  short: 'FOB GBI',  bg: '#EFF6FF', color: '#1E3A5F', border: '#BFDBFE', bar: '#1E3A5F' },
@@ -1224,22 +1246,9 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo 
     return (
         <div className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="relative flex-shrink-0" style={{ minWidth: '260px' }}>
-                    <Icon name="Search" size={13} color="var(--color-muted-foreground)"
-                        style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-                    <input
-                        type="text"
-                        value={pesquisa}
-                        onChange={e => setPesquisa(e.target.value)}
-                        placeholder="Pedido, NF, motorista, destino, placa..."
-                        className="w-full pl-7 pr-7 py-2 rounded-lg border text-xs outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                        style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)', color: 'var(--color-text-primary)' }}
-                    />
-                    {pesquisa && (
-                        <button onClick={() => setPesquisa('')}
-                            style={{ position: 'absolute', right: '7px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted-foreground)', fontSize: '13px', lineHeight: 1 }}>✕</button>
-                    )}
-                </div>
+                <SearchInput value={pesquisa} onChange={setPesquisa}
+                    placeholder="Pedido, NF, motorista, destino, placa..."
+                    className="flex-shrink-0" style={{ minWidth: '260px', maxWidth: '420px', flex: '1 1 260px' }} />
                 {isAdmin && <Button onClick={onNovo} iconName="Plus" size="sm">Novo Carregamento</Button>}
             </div>
             {carregamentosFiltrados.length === 0 ? (
@@ -1393,12 +1402,8 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
                     <Button onClick={onNovo} iconName="Plus" size="sm">Novo Carregamento Terceiro</Button>
                 )}
             </div>
-            <input
-                value={buscaTer} onChange={e => setBuscaTer(e.target.value)}
-                placeholder="Buscar por NF, pedido, motorista, destino, placa..."
-                className="px-3 py-2 rounded-lg border text-sm w-full"
-                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
-            />
+            <SearchInput value={buscaTer} onChange={setBuscaTer}
+                placeholder="Buscar por NF, pedido, motorista, destino, placa..." />
 
             {/* Cards de resumo do mês */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1569,12 +1574,8 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                     <Button onClick={onNovo} iconName="Plus" size="sm">Nova Retira</Button>
                 )}
             </div>
-            <input
-                value={buscaRetira} onChange={e => setBuscaRetira(e.target.value)}
-                placeholder="Buscar por NF, pedido, cliente, placa..."
-                className="px-3 py-2 rounded-lg border text-sm w-full"
-                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
-            />
+            <SearchInput value={buscaRetira} onChange={setBuscaRetira}
+                placeholder="Buscar por NF, pedido, cliente, placa..." />
 
             {/* Cards de resumo */}
             <div className="grid grid-cols-2 gap-3">
@@ -1603,7 +1604,7 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                     <table className="w-full text-sm min-w-[750px]">
                         <thead className="text-xs border-b" style={{ background: '#F0FDF4', borderColor: '#BBF7D0', color: '#065F46' }}>
                             <tr>
-                                {['Data', 'Cliente/Origem', 'Motorista', 'Placa', 'Pedido Venda', 'NF', 'Nº Pedido', 'Qtd (sacos)', ''].map(h => (
+                                {['Data', 'Cliente/Origem', 'Cliente', 'Placa', 'Pedido Venda', 'NF', 'Nº Pedido', 'Qtd (sacos)', ''].map(h => (
                                     <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
@@ -1616,7 +1617,7 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                                         style={{ borderColor: '#BBF7D0', background: i % 2 === 0 ? '#fff' : '#F0FDF4' }}>
                                         <td className="px-3 py-2.5 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
                                         <td className="px-3 py-2.5 text-xs font-medium max-w-[140px] truncate">{nome || r.empresa_origem || '—'}</td>
-                                        <td className="px-3 py-2.5 text-xs">{r.motorista?.name || '—'}</td>
+                                        <td className="px-3 py-2.5 text-xs">{r.nome_cliente || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs">{r.veiculo?.placa || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs font-semibold" style={{ color: '#059669' }}>{r.pedido_venda || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>

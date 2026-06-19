@@ -35,6 +35,7 @@ export default function Romaneios() {
     const [vehicles, setVehicles]     = useState([]);
     const [motoristasComId, setMotoristasComId] = useState([]);
     const [rascunhoModal, setRascunhoModal] = useState({ open: false, rascunho: null });
+    const [resumoCidadeOpen, setResumoCidadeOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState('Todos');
@@ -204,13 +205,18 @@ export default function Romaneios() {
                                     <span className="hidden xs:inline sm:inline">Novo </span>Romaneio
                                 </Button>
                             </>)}
-                            {guia === 'rascunhos' && (
+                            {guia === 'rascunhos' && (<>
+                                <Button variant="outline" iconName="MapPin" iconSize={15}
+                                    onClick={() => setResumoCidadeOpen(true)}
+                                    disabled={rascunhos.length === 0}>
+                                    <span className="hidden sm:inline">Materiais por </span>Cidade
+                                </Button>
                                 <Button variant="default" iconName="Plus" iconSize={16}
                                     onClick={() => setRascunhoModal({ open: true, rascunho: null })}
                                     style={{ backgroundColor: '#D97706' }}>
                                     Novo Rascunho
                                 </Button>
-                            )}
+                            </>)}
                         </div>
                     </div>
 
@@ -488,6 +494,12 @@ export default function Romaneios() {
                             }}
                         />
                     )}
+                    {resumoCidadeOpen && (
+                        <ResumoMateriaisCidadeModal
+                            rascunhos={rascunhos}
+                            onClose={() => setResumoCidadeOpen(false)}
+                        />
+                    )}
                 </div>
             </main>
 
@@ -664,6 +676,143 @@ function RascunhoCard({ r, onEdit, onDelete, onPromover }) {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RESUMO DE MATERIAIS POR CIDADE (agregado entre TODOS os rascunhos)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Agrupa os itens (materiais) de todos os rascunhos pela cidade de destino do
+ *  pedido ao qual cada item pertence (cai para o destino do rascunho quando o
+ *  pedido não tem cidade própria definida), somando quantidade e peso por
+ *  material dentro de cada cidade. */
+function buildResumoPorCidade(rascunhos) {
+    const cidades = {};
+    (rascunhos || []).forEach(r => {
+        const pedidos = r.romaneio_pedidos || [];
+        const itens   = r.romaneio_itens   || [];
+        const cidadePorPedido = {};
+        pedidos.forEach(p => {
+            cidadePorPedido[p.id] = (p.cidade_destino || r.destino || '').trim() || 'Cidade não informada';
+        });
+        const cidadeFallback = (r.destino || '').trim() || 'Cidade não informada';
+
+        itens.forEach(i => {
+            const cidade  = (i.pedido_id && cidadePorPedido[i.pedido_id]) || cidadeFallback;
+            const matNome = i.materials?.nome    || 'Material não identificado';
+            const unidade = i.materials?.unidade || '';
+            const matKey  = i.material_id || matNome;
+            const qtd     = Number(i.quantidade) || 0;
+            const peso    = Number(i.peso_total) || 0;
+
+            if (!cidades[cidade]) cidades[cidade] = { materiais: {}, pesoTotal: 0, qtdTotal: 0, rascunhosIds: new Set() };
+            const c = cidades[cidade];
+            if (!c.materiais[matKey]) c.materiais[matKey] = { nome: matNome, unidade, quantidade: 0, peso: 0 };
+            c.materiais[matKey].quantidade += qtd;
+            c.materiais[matKey].peso       += peso;
+            c.pesoTotal += peso;
+            c.qtdTotal  += qtd;
+            c.rascunhosIds.add(r.id);
+        });
+    });
+
+    return Object.entries(cidades)
+        .map(([cidade, dados]) => ({
+            cidade,
+            pesoTotal:    dados.pesoTotal,
+            qtdTotal:     dados.qtdTotal,
+            numRascunhos: dados.rascunhosIds.size,
+            materiais:    Object.values(dados.materiais).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+        }))
+        .sort((a, b) => a.cidade.localeCompare(b.cidade, 'pt-BR'));
+}
+
+function ResumoMateriaisCidadeModal({ rascunhos, onClose }) {
+    const resumo = useMemo(() => buildResumoPorCidade(rascunhos), [rascunhos]);
+    const semDados = resumo.length === 0;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FFFBEB' }}>
+                            <Icon name="MapPin" size={18} color="#D97706" />
+                        </div>
+                        <div className="min-w-0">
+                            <h3 className="text-base font-bold truncate" style={{ color: 'var(--color-text-primary)' }}>Materiais por Cidade</h3>
+                            <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Totais somados de todos os rascunhos em formação, agrupados por cidade</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 flex-shrink-0">
+                        <Icon name="X" size={18} color="var(--color-muted-foreground)" />
+                    </button>
+                </div>
+
+                {/* Conteúdo */}
+                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+                    {semDados ? (
+                        <div className="flex flex-col items-center gap-2 py-12 text-center">
+                            <Icon name="PackageSearch" size={32} color="var(--color-muted-foreground)" />
+                            <p className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum material lançado nos rascunhos ainda.</p>
+                            <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Adicione pedidos com materiais em um rascunho para ver o resumo aqui.</p>
+                        </div>
+                    ) : resumo.map(c => (
+                        <div key={c.cidade} className="rounded-xl border overflow-hidden" style={{ borderColor: '#FDE68A' }}>
+                            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3" style={{ backgroundColor: '#FFFBEB' }}>
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <Icon name="MapPin" size={14} color="#D97706" />
+                                    <p className="text-sm font-bold truncate" style={{ color: '#92400E' }}>{c.cidade}</p>
+                                    <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+                                        {c.numRascunhos} rascunho{c.numRascunhos > 1 ? 's' : ''}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-4 text-xs flex-shrink-0">
+                                    <span style={{ color: '#92400E' }}><strong>{c.qtdTotal.toLocaleString('pt-BR')}</strong> un.</span>
+                                    <span style={{ color: '#92400E' }}><strong>{c.pesoTotal.toLocaleString('pt-BR')}</strong> kg</span>
+                                </div>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                    <thead style={{ backgroundColor: '#FFFDF5', color: 'var(--color-muted-foreground)' }}>
+                                        <tr>
+                                            <th className="text-left px-4 py-2 font-medium">Material</th>
+                                            <th className="text-right px-4 py-2 font-medium">Quantidade</th>
+                                            <th className="text-right px-4 py-2 font-medium">Peso (kg)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {c.materiais.map(m => (
+                                            <tr key={m.nome} className="border-t" style={{ borderColor: '#FDE68A' }}>
+                                                <td className="px-4 py-2">{m.nome}</td>
+                                                <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{m.quantidade.toLocaleString('pt-BR')}{m.unidade ? ` ${m.unidade}` : ''}</td>
+                                                <td className="px-4 py-2 text-right font-mono whitespace-nowrap">{m.peso > 0 ? m.peso.toLocaleString('pt-BR') : '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr className="border-t font-semibold" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}>
+                                            <td className="px-4 py-2" style={{ color: '#92400E' }}>Total — {c.cidade}</td>
+                                            <td className="px-4 py-2 text-right font-mono whitespace-nowrap" style={{ color: '#92400E' }}>{c.qtdTotal.toLocaleString('pt-BR')}</td>
+                                            <td className="px-4 py-2 text-right font-mono whitespace-nowrap" style={{ color: '#92400E' }}>{c.pesoTotal.toLocaleString('pt-BR')}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Footer */}
+                <div className="flex justify-end px-5 py-3 border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                    <button onClick={onClose} className="px-4 py-2 rounded-xl border text-sm font-medium" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                        Fechar
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
