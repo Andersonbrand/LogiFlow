@@ -103,6 +103,10 @@ export default function Romaneios() {
             if (formModal.romaneio) {
                 const updated = await updateRomaneio(formModal.romaneio.id, payload, itens);
                 setRomaneios(prev => prev.map(r => r.id === updated.id ? updated : r));
+                // Atualiza o detail modal se estiver aberto para o mesmo romaneio
+                if (detailModal.open && detailModal.romaneio?.id === updated.id) {
+                    setDetailModal(prev => ({ ...prev, romaneio: updated }));
+                }
                 showToast(`Romaneio ${updated.numero} atualizado!`);
             } else {
                 const created = await createRomaneio(payload, itens);

@@ -1360,9 +1360,26 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
         return Object.values(map).sort((a, b) => b.frete - a.frete);
     })();
 
-    const carr = filtroMotoristaTer
+    const [buscaTer, setBuscaTer] = useState('');
+
+    const carrBase = filtroMotoristaTer
         ? carregamentos.filter(r => r.motorista_id === filtroMotoristaTer)
         : carregamentos;
+
+    const carr = buscaTer
+        ? carrBase.filter(r => {
+            const q = buscaTer.toLowerCase();
+            const { nome } = parseTipo(r);
+            return (
+                (r.numero_nota_fiscal || '').toLowerCase().includes(q) ||
+                (r.numero_pedido || '').toLowerCase().includes(q) ||
+                (r.motorista?.name || '').toLowerCase().includes(q) ||
+                (r.destino || '').toLowerCase().includes(q) ||
+                (r.veiculo?.placa || '').toLowerCase().includes(q) ||
+                (nome || '').toLowerCase().includes(q)
+            );
+        })
+        : carrBase;
 
     return (
         <div className="flex flex-col gap-4">
@@ -1376,6 +1393,12 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
                     <Button onClick={onNovo} iconName="Plus" size="sm">Novo Carregamento Terceiro</Button>
                 )}
             </div>
+            <input
+                value={buscaTer} onChange={e => setBuscaTer(e.target.value)}
+                placeholder="Buscar por NF, pedido, motorista, destino, placa..."
+                className="px-3 py-2 rounded-lg border text-sm w-full"
+                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
+            />
 
             {/* Cards de resumo do mês */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1515,7 +1538,24 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
 
 // ─── Sub-componente: Retira de Clientes na Fábrica ───────────────────────────
 function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veiculos, motoristas }) {
-    const totalSacos = carregamentos.reduce((s, r) => s + (Number(r.quantidade) || 0), 0);
+    const [buscaRetira, setBuscaRetira] = useState('');
+
+    const itensRetira = buscaRetira
+        ? carregamentos.filter(r => {
+            const q = buscaRetira.toLowerCase();
+            const { nome } = parseTipo(r);
+            return (
+                (r.numero_nota_fiscal || '').toLowerCase().includes(q) ||
+                (r.numero_pedido || '').toLowerCase().includes(q) ||
+                (r.nome_cliente || '').toLowerCase().includes(q) ||
+                (r.destino || '').toLowerCase().includes(q) ||
+                (r.veiculo?.placa || '').toLowerCase().includes(q) ||
+                (nome || r.empresa_origem || '').toLowerCase().includes(q)
+            );
+        })
+        : carregamentos;
+
+    const totalSacos = itensRetira.reduce((s, r) => s + (Number(r.quantidade) || 0), 0);
 
     return (
         <div className="flex flex-col gap-4">
@@ -1529,6 +1569,12 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                     <Button onClick={onNovo} iconName="Plus" size="sm">Nova Retira</Button>
                 )}
             </div>
+            <input
+                value={buscaRetira} onChange={e => setBuscaRetira(e.target.value)}
+                placeholder="Buscar por NF, pedido, cliente, placa..."
+                className="px-3 py-2 rounded-lg border text-sm w-full"
+                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
+            />
 
             {/* Cards de resumo */}
             <div className="grid grid-cols-2 gap-3">
@@ -1563,7 +1609,7 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                             </tr>
                         </thead>
                         <tbody>
-                            {carregamentos.map((r, i) => {
+                            {itensRetira.map((r, i) => {
                                 const { nome } = parseTipo(r);
                                 return (
                                     <tr key={r.id} className="border-t hover:bg-green-50 transition-colors"
