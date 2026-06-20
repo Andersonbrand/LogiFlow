@@ -209,7 +209,7 @@ export default function Romaneios() {
                                 <Button variant="outline" iconName="MapPin" iconSize={15}
                                     onClick={() => setResumoCidadeOpen(true)}
                                     disabled={rascunhos.length === 0}>
-                                    <span className="hidden sm:inline">Materiais por </span>Cidade
+                                    <span className="hidden sm:inline">Materiais por </span>Carga
                                 </Button>
                                 <Button variant="default" iconName="Plus" iconSize={16}
                                     onClick={() => setRascunhoModal({ open: true, rascunho: null })}
@@ -681,78 +681,71 @@ function RascunhoCard({ r, onEdit, onDelete, onPromover }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// RESUMO DE MATERIAIS POR CIDADE (agrupado por cidade e, dentro de cada
-// cidade, separado por rascunho — cada carga mantém seu próprio total)
+// RESUMO DE MATERIAIS POR CARGA (agrupado por carga/rascunho e, dentro de
+// cada carga, separado por cidade de destino — cada cidade soma os totais
+// de todos os pedidos daquela carga que vão para ela)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** Agrupa os itens (materiais) de todos os rascunhos pela cidade de destino do
- *  pedido ao qual cada item pertence (cai para o destino do rascunho quando o
- *  pedido não tem cidade própria definida). Dentro de cada cidade, os itens
- *  ficam separados POR RASCUNHO — ou seja, se dois rascunhos diferentes têm o
- *  mesmo material para a mesma cidade, cada um aparece com seu próprio total
- *  (não são somados juntos), além de um total geral da cidade ao final. */
-function buildResumoPorCidade(rascunhos) {
-    const cidades = {}; // cidade -> Map(rascunhoId -> { ...resumo do rascunho })
+/** Para cada rascunho (carga), agrupa seus itens pela cidade de destino do
+ *  pedido ao qual cada item pertence (cai para o destino do rascunho quando
+ *  o pedido não tem cidade própria definida). Dentro de uma mesma carga, se
+ *  vários pedidos vão para a mesma cidade, os materiais desses pedidos são
+ *  somados juntos (mesmo material em pedidos diferentes da mesma cidade =
+ *  total único). Cargas diferentes NUNCA são somadas entre si — cada carga
+ *  é seu próprio bloco, exatamente na ordem em que aparecem nos rascunhos. */
+function buildResumoPorCarga(rascunhos) {
+    return (rascunhos || [])
+        .map((r, idx) => {
+            const pedidos = r.romaneio_pedidos || [];
+            const itens   = r.romaneio_itens   || [];
+            const cidadePorPedido = {};
+            pedidos.forEach(p => {
+                cidadePorPedido[p.id] = (p.cidade_destino || r.destino || '').trim() || 'Cidade não informada';
+            });
+            const cidadeFallback = (r.destino || '').trim() || 'Cidade não informada';
 
-    (rascunhos || []).forEach(r => {
-        const pedidos = r.romaneio_pedidos || [];
-        const itens   = r.romaneio_itens   || [];
-        const cidadePorPedido = {};
-        pedidos.forEach(p => {
-            cidadePorPedido[p.id] = (p.cidade_destino || r.destino || '').trim() || 'Cidade não informada';
-        });
-        const cidadeFallback = (r.destino || '').trim() || 'Cidade não informada';
+            const cidadesMap = new Map(); // cidade -> { materiais: {}, pesoTotal, qtdTotal }
+            itens.forEach(i => {
+                const cidade  = (i.pedido_id && cidadePorPedido[i.pedido_id]) || cidadeFallback;
+                const matNome = i.materials?.nome    || 'Material não identificado';
+                const unidade = i.materials?.unidade || '';
+                const matKey  = i.material_id || matNome;
+                const qtd     = Number(i.quantidade) || 0;
+                const peso    = Number(i.peso_total) || 0;
 
-        itens.forEach(i => {
-            const cidade  = (i.pedido_id && cidadePorPedido[i.pedido_id]) || cidadeFallback;
-            const matNome = i.materials?.nome    || 'Material não identificado';
-            const unidade = i.materials?.unidade || '';
-            const matKey  = i.material_id || matNome;
-            const qtd     = Number(i.quantidade) || 0;
-            const peso    = Number(i.peso_total) || 0;
+                if (!cidadesMap.has(cidade)) cidadesMap.set(cidade, { materiais: {}, pesoTotal: 0, qtdTotal: 0 });
+                const cEntry = cidadesMap.get(cidade);
+                if (!cEntry.materiais[matKey]) cEntry.materiais[matKey] = { nome: matNome, unidade, quantidade: 0, peso: 0 };
+                cEntry.materiais[matKey].quantidade += qtd;
+                cEntry.materiais[matKey].peso       += peso;
+                cEntry.pesoTotal += peso;
+                cEntry.qtdTotal  += qtd;
+            });
 
-            if (!cidades[cidade]) cidades[cidade] = new Map();
-            const rascunhosDaCidade = cidades[cidade];
-            if (!rascunhosDaCidade.has(r.id)) {
-                rascunhosDaCidade.set(r.id, {
-                    rascunhoId: r.id,
-                    motorista:  r.motorista || '',
-                    placa:      r.placa || '',
-                    materiais:  {},
-                    pesoTotal:  0,
-                    qtdTotal:   0,
-                });
-            }
-            const rEntry = rascunhosDaCidade.get(r.id);
-            if (!rEntry.materiais[matKey]) rEntry.materiais[matKey] = { nome: matNome, unidade, quantidade: 0, peso: 0 };
-            rEntry.materiais[matKey].quantidade += qtd;
-            rEntry.materiais[matKey].peso       += peso;
-            rEntry.pesoTotal += peso;
-            rEntry.qtdTotal  += qtd;
-        });
-    });
+            const cidades = Array.from(cidadesMap.entries())
+                .map(([cidade, dados]) => ({
+                    cidade,
+                    pesoTotal: dados.pesoTotal,
+                    qtdTotal:  dados.qtdTotal,
+                    materiais: Object.values(dados.materiais).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+                }))
+                .sort((a, b) => a.cidade.localeCompare(b.cidade, 'pt-BR'));
 
-    return Object.entries(cidades)
-        .map(([cidade, rascunhosMap]) => {
-            const rascunhosArr = Array.from(rascunhosMap.values())
-                .map((r, idx) => ({
-                    ...r,
-                    indice: idx + 1,
-                    materiais: Object.values(r.materiais).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
-                }));
             return {
-                cidade,
-                rascunhos:      rascunhosArr,
-                numRascunhos:   rascunhosArr.length,
-                qtdTotalCidade:  rascunhosArr.reduce((s, r) => s + r.qtdTotal, 0),
-                pesoTotalCidade: rascunhosArr.reduce((s, r) => s + r.pesoTotal, 0),
+                rascunhoId:    r.id,
+                indice:        idx + 1,
+                motorista:     r.motorista || '',
+                placa:         r.placa || '',
+                cidades,
+                qtdTotalCarga:  cidades.reduce((s, c) => s + c.qtdTotal, 0),
+                pesoTotalCarga: cidades.reduce((s, c) => s + c.pesoTotal, 0),
             };
         })
-        .sort((a, b) => a.cidade.localeCompare(b.cidade, 'pt-BR'));
+        .filter(c => c.cidades.length > 0); // esconde rascunhos sem nenhum item lançado
 }
 
 function ResumoMateriaisCidadeModal({ rascunhos, onClose }) {
-    const resumo = useMemo(() => buildResumoPorCidade(rascunhos), [rascunhos]);
+    const resumo = useMemo(() => buildResumoPorCarga(rascunhos), [rascunhos]);
     const semDados = resumo.length === 0;
 
     return (
@@ -765,8 +758,8 @@ function ResumoMateriaisCidadeModal({ rascunhos, onClose }) {
                             <Icon name="MapPin" size={18} color="#D97706" />
                         </div>
                         <div className="min-w-0">
-                            <h3 className="text-base font-bold truncate" style={{ color: 'var(--color-text-primary)' }}>Materiais por Cidade</h3>
-                            <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Agrupado por cidade — cada rascunho (carga) mantém seu próprio total</p>
+                            <h3 className="text-base font-bold truncate" style={{ color: 'var(--color-text-primary)' }}>Materiais por Carga</h3>
+                            <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Cada carga (rascunho), separada por cidade de destino</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 flex-shrink-0">
@@ -783,29 +776,33 @@ function ResumoMateriaisCidadeModal({ rascunhos, onClose }) {
                             <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Adicione pedidos com materiais em um rascunho para ver o resumo aqui.</p>
                         </div>
                     ) : resumo.map(c => (
-                        <div key={c.cidade} className="rounded-xl border overflow-hidden" style={{ borderColor: '#FDE68A' }}>
-                            {/* Cabeçalho da cidade */}
+                        <div key={c.rascunhoId} className="rounded-xl border overflow-hidden" style={{ borderColor: '#FDE68A' }}>
+                            {/* Cabeçalho da carga */}
                             <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3" style={{ backgroundColor: '#FFFBEB' }}>
                                 <div className="flex items-center gap-2 min-w-0">
-                                    <Icon name="MapPin" size={14} color="#D97706" />
-                                    <p className="text-sm font-bold truncate" style={{ color: '#92400E' }}>{c.cidade}</p>
-                                    <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
-                                        {c.numRascunhos} rascunho{c.numRascunhos > 1 ? 's' : ''}
-                                    </span>
+                                    <Icon name="Package" size={14} color="#D97706" />
+                                    <p className="text-sm font-bold truncate" style={{ color: '#92400E' }}>
+                                        Carga {c.indice}{c.motorista ? ` — ${c.motorista}` : ''}{c.placa ? ` (${c.placa})` : ''}
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-4 text-xs flex-shrink-0">
+                                    <span style={{ color: '#92400E' }}><strong>{c.qtdTotalCarga.toLocaleString('pt-BR')}</strong> un.</span>
+                                    <span style={{ color: '#92400E' }}><strong>{c.pesoTotalCarga.toLocaleString('pt-BR')}</strong> kg</span>
                                 </div>
                             </div>
 
-                            {/* Um bloco por rascunho — totais NÃO são somados entre rascunhos aqui */}
+                            {/* Um bloco por cidade dentro da carga */}
                             <div className="divide-y" style={{ borderColor: '#FDE68A' }}>
-                                {c.rascunhos.map(r => (
-                                    <div key={r.rascunhoId}>
+                                {c.cidades.map(cid => (
+                                    <div key={cid.cidade}>
                                         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2" style={{ backgroundColor: '#FFFDF5' }}>
-                                            <p className="text-xs font-semibold" style={{ color: '#B45309' }}>
-                                                Carga {r.indice}{r.motorista ? ` — ${r.motorista}` : ''}{r.placa ? ` (${r.placa})` : ''}
-                                            </p>
+                                            <div className="flex items-center gap-1.5">
+                                                <Icon name="MapPin" size={12} color="#B45309" />
+                                                <p className="text-xs font-semibold" style={{ color: '#B45309' }}>{cid.cidade}</p>
+                                            </div>
                                             <div className="flex items-center gap-3 text-xs">
-                                                <span style={{ color: '#B45309' }}><strong>{r.qtdTotal.toLocaleString('pt-BR')}</strong> un.</span>
-                                                <span style={{ color: '#B45309' }}><strong>{r.pesoTotal.toLocaleString('pt-BR')}</strong> kg</span>
+                                                <span style={{ color: '#B45309' }}><strong>{cid.qtdTotal.toLocaleString('pt-BR')}</strong> un.</span>
+                                                <span style={{ color: '#B45309' }}><strong>{cid.pesoTotal.toLocaleString('pt-BR')}</strong> kg</span>
                                             </div>
                                         </div>
                                         <div className="overflow-x-auto">
@@ -818,7 +815,7 @@ function ResumoMateriaisCidadeModal({ rascunhos, onClose }) {
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {r.materiais.map(m => (
+                                                    {cid.materiais.map(m => (
                                                         <tr key={m.nome} className="border-t" style={{ borderColor: '#FDF1D6' }}>
                                                             <td className="px-4 py-1.5">{m.nome}</td>
                                                             <td className="px-4 py-1.5 text-right font-mono whitespace-nowrap">{m.quantidade.toLocaleString('pt-BR')}{m.unidade ? ` ${m.unidade}` : ''}</td>
@@ -830,15 +827,6 @@ function ResumoMateriaisCidadeModal({ rascunhos, onClose }) {
                                         </div>
                                     </div>
                                 ))}
-                            </div>
-
-                            {/* Total geral da cidade — soma de todas as cargas acima, só para visão geral */}
-                            <div className="flex items-center justify-between px-4 py-2.5 border-t" style={{ borderColor: '#FDE68A', backgroundColor: '#FEF3C7' }}>
-                                <p className="text-xs font-bold" style={{ color: '#92400E' }}>Total geral — {c.cidade} (todas as cargas)</p>
-                                <div className="flex items-center gap-4 text-xs font-bold" style={{ color: '#92400E' }}>
-                                    <span>{c.qtdTotalCidade.toLocaleString('pt-BR')} un.</span>
-                                    <span>{c.pesoTotalCidade.toLocaleString('pt-BR')} kg</span>
-                                </div>
                             </div>
                         </div>
                     ))}
