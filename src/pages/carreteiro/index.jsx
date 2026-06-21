@@ -114,7 +114,13 @@ export default function CarreteiroDashboard() {
     const [romaneiosFerragem, setRomaneiosFerragem] = useState([]);
     const [modalRegistro, setModalRegistro] = useState(false);
     const [editandoRegistroId, setEditandoRegistroId] = useState(null);
-    const [formRegistro, setFormRegistro] = useState({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' });
+    const emptyRegistro = () => ({
+        data_carregamento: new Date().toISOString().split('T')[0],
+        numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '',
+        local_carregamento: '', // '' = viagem normal (fábrica) | 'Estoque' = carregamento no estoque
+        tipo_cimento: '',       // só usado quando local_carregamento === 'Estoque': 'Montes Claros' | 'Liz' | 'Ambas'
+    });
+    const [formRegistro, setFormRegistro] = useState(emptyRegistro());
     const [modalPonto, setModalPonto] = useState(false);
     const [editandoPontoId, setEditandoPontoId] = useState(null);
     const [formPonto, setFormPonto] = useState({
@@ -451,6 +457,8 @@ export default function CarreteiroDashboard() {
             destino: r.destino || '',
             data_descarga: r.data_descarga || '',
             observacoes: r.observacoes || '',
+            local_carregamento: r.local_carregamento || '',
+            tipo_cimento: r.tipo_cimento || '',
         });
         setModalRegistro(true);
     };
@@ -1185,7 +1193,7 @@ export default function CarreteiroDashboard() {
                                         <div>
                                             {/* Dois botões de ação separados */}
                                             <div className="grid grid-cols-1 gap-3 mb-5">
-                                                <button onClick={() => { setEditandoRegistroId(null); setFormRegistro({ data_carregamento: new Date().toISOString().split('T')[0], numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '' }); setModalRegistro(true); }}
+                                                <button onClick={() => { setEditandoRegistroId(null); setFormRegistro(emptyRegistro()); setModalRegistro(true); }}
                                                     className="flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:shadow-md active:scale-[0.99]"
                                                     style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
                                                     <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#1D4ED8' }}>
@@ -1216,10 +1224,17 @@ export default function CarreteiroDashboard() {
                                                     <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>Viagens de Cimento</p>
                                                     <div className="flex flex-col gap-2">
                                                         {registros.map(r => (
-                                                            <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                            <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: r.local_carregamento === 'Estoque' ? '#FDE68A' : 'var(--color-border)' }}>
                                                                 <div className="flex items-start justify-between mb-2">
                                                                     <div>
-                                                                        <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
+                                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                                            <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
+                                                                            {r.local_carregamento === 'Estoque' && (
+                                                                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+                                                                                    📦 Estoque
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                         <p className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{r.veiculo?.placa || '—'}</p>
                                                                     </div>
                                                                     <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
@@ -1227,8 +1242,12 @@ export default function CarreteiroDashboard() {
                                                                     </span>
                                                                 </div>
                                                                 <div className="flex flex-wrap gap-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                    {r.numero_nota_fiscal && <span>NF: <strong>{r.numero_nota_fiscal}</strong></span>}
-                                                                    {r.data_descarga && <span>Descarga: <strong>{new Date(r.data_descarga + 'T00:00:00').toLocaleDateString('pt-BR')}</strong></span>}
+                                                                    {r.local_carregamento === 'Estoque'
+                                                                        ? (r.tipo_cimento && <span>Cimento: <strong>{r.tipo_cimento}</strong></span>)
+                                                                        : <>
+                                                                            {r.numero_nota_fiscal && <span>NF: <strong>{r.numero_nota_fiscal}</strong></span>}
+                                                                            {r.data_descarga && <span>Descarga: <strong>{new Date(r.data_descarga + 'T00:00:00').toLocaleDateString('pt-BR')}</strong></span>}
+                                                                        </>}
                                                                 </div>
                                                                 {r.observacoes && <p className="text-xs mt-2 text-gray-500">{r.observacoes}</p>}
                                                                 <div className="flex justify-end gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
@@ -1656,13 +1675,36 @@ export default function CarreteiroDashboard() {
                             <button onClick={() => { setModalRegistro(false); setEditandoRegistroId(null); }} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
                         </div>
                         <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
+                            {/* Tipo de lançamento */}
+                            <div className="sm:col-span-2">
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Tipo de lançamento</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button type="button"
+                                        onClick={() => setFormRegistro(f => ({ ...f, local_carregamento: '' }))}
+                                        className="px-3 py-2.5 rounded-xl text-xs font-bold text-left border-2 transition-all"
+                                        style={{
+                                            background: formRegistro.local_carregamento !== 'Estoque' ? '#EFF6FF' : '#fff',
+                                            borderColor: formRegistro.local_carregamento !== 'Estoque' ? '#1D4ED8' : 'var(--color-border)',
+                                            color: formRegistro.local_carregamento !== 'Estoque' ? '#1D4ED8' : 'var(--color-muted-foreground)',
+                                        }}>
+                                        🏭 Viagem Normal
+                                    </button>
+                                    <button type="button"
+                                        onClick={() => setFormRegistro(f => ({ ...f, local_carregamento: 'Estoque' }))}
+                                        className="px-3 py-2.5 rounded-xl text-xs font-bold text-left border-2 transition-all"
+                                        style={{
+                                            background: formRegistro.local_carregamento === 'Estoque' ? '#FFFBEB' : '#fff',
+                                            borderColor: formRegistro.local_carregamento === 'Estoque' ? '#D97706' : 'var(--color-border)',
+                                            color: formRegistro.local_carregamento === 'Estoque' ? '#D97706' : 'var(--color-muted-foreground)',
+                                        }}>
+                                        📦 Carregamento no Estoque
+                                    </button>
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de carregamento <span className="text-red-500">*</span></label>
                                 <input type="date" value={formRegistro.data_carregamento} onChange={e => setFormRegistro(f => ({ ...f, data_carregamento: e.target.value }))} className={inputCls} style={inputStyle} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Nº da Nota Fiscal</label>
-                                <input value={formRegistro.numero_nota_fiscal} onChange={e => setFormRegistro(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Placa do veículo <span className="text-red-500">*</span></label>
@@ -1671,14 +1713,34 @@ export default function CarreteiroDashboard() {
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </select>
                             </div>
-                            <div>
+                            <div className={formRegistro.local_carregamento === 'Estoque' ? 'sm:col-span-2' : ''}>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Destino da carga <span className="text-red-500">*</span></label>
-                                <input value={formRegistro.destino} onChange={e => setFormRegistro(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Estoque ou cidade" />
+                                <input value={formRegistro.destino} onChange={e => setFormRegistro(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Cidade de destino" />
                             </div>
-                            <div className="sm:col-span-2">
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de descarga</label>
-                                <input type="date" value={formRegistro.data_descarga} onChange={e => setFormRegistro(f => ({ ...f, data_descarga: e.target.value }))} className={inputCls} style={inputStyle} />
-                            </div>
+
+                            {formRegistro.local_carregamento === 'Estoque' ? (
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Tipo de cimento <span className="text-red-500">*</span></label>
+                                    <select value={formRegistro.tipo_cimento} onChange={e => setFormRegistro(f => ({ ...f, tipo_cimento: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione...</option>
+                                        <option value="Montes Claros">Montes Claros</option>
+                                        <option value="Liz">Liz</option>
+                                        <option value="Ambas">Ambas (Montes Claros + Liz)</option>
+                                    </select>
+                                </div>
+                            ) : (
+                                <>
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Nº da Nota Fiscal</label>
+                                        <input value={formRegistro.numero_nota_fiscal} onChange={e => setFormRegistro(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de descarga</label>
+                                        <input type="date" value={formRegistro.data_descarga} onChange={e => setFormRegistro(f => ({ ...f, data_descarga: e.target.value }))} className={inputCls} style={inputStyle} />
+                                    </div>
+                                </>
+                            )}
+
                             <div className="sm:col-span-2">
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Observações</label>
                                 <textarea value={formRegistro.observacoes} onChange={e => setFormRegistro(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
@@ -1687,13 +1749,28 @@ export default function CarreteiroDashboard() {
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => { setModalRegistro(false); setEditandoRegistroId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <Button onClick={async () => {
-                                if (!formRegistro.data_carregamento || !formRegistro.destino) { showToast('Data e destino são obrigatórios', 'error'); return; }
+                                const isEstoque = formRegistro.local_carregamento === 'Estoque';
+                                // Placa era exibida como obrigatória (*) mas não era validada — corrigido aqui.
+                                if (!formRegistro.data_carregamento || !formRegistro.destino || !formRegistro.veiculo_id) {
+                                    showToast('Data, placa e destino são obrigatórios', 'error'); return;
+                                }
+                                if (isEstoque && !formRegistro.tipo_cimento) {
+                                    showToast('Selecione o tipo de cimento', 'error'); return;
+                                }
+                                const payload = {
+                                    ...formRegistro,
+                                    // Limpa campos que não fazem sentido para o tipo escolhido
+                                    numero_nota_fiscal: isEstoque ? null : (formRegistro.numero_nota_fiscal || null),
+                                    data_descarga:      isEstoque ? null : (formRegistro.data_descarga || null),
+                                    tipo_cimento:        isEstoque ? formRegistro.tipo_cimento : null,
+                                    local_carregamento:  isEstoque ? 'Estoque' : null,
+                                };
                                 try {
                                     if (editandoRegistroId) {
-                                        await updateRegistroViagem(editandoRegistroId, { ...formRegistro });
+                                        await updateRegistroViagem(editandoRegistroId, payload);
                                         showToast('Viagem atualizada!', 'success');
                                     } else {
-                                        await createRegistroViagem({ ...formRegistro, motorista_id: user.id });
+                                        await createRegistroViagem({ ...payload, motorista_id: user.id });
                                         showToast('Viagem registrada!', 'success');
                                     }
                                     setEditandoRegistroId(null);
@@ -1701,6 +1778,7 @@ export default function CarreteiroDashboard() {
                                 } catch (e) { showToast('Erro: ' + e.message, 'error'); }
                             }} size="sm" iconName="Check" className="w-full sm:w-auto">{editandoRegistroId ? 'Salvar' : 'Registrar'}</Button>
                         </div>
+
                     </div>
                 </div>
             )}

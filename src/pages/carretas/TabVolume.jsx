@@ -58,6 +58,7 @@ const TIPOS = {
     ARA_BARR_FOB: { label: 'FOB · Barreiras', short: 'FOB Barr', bg: '#F5F3FF', color: '#7C3AED', border: '#DDD6FE', bar: '#7C3AED' },
     CIF_GBI:      { label: 'CIF · Guanambi',  short: 'CIF GBI',  bg: '#ECFDF5', color: '#059669', border: '#A7F3D0', bar: '#059669' },
     CIF_BARR:     { label: 'CIF · Barreiras', short: 'CIF Barr', bg: '#FFFBEB', color: '#D97706', border: '#FDE68A', bar: '#D97706' },
+    ESTOQUE:      { label: 'Carregamento no Estoque', short: 'Estoque', bg: '#FFF7ED', color: '#C2410C', border: '#FED7AA', bar: '#C2410C' },
 };
 
 function parseTipo(row) {
@@ -117,23 +118,28 @@ function Field({ label, required, children }) {
 }
 
 // ─── Selector de Tipo ─────────────────────────────────────────────────────────
-function TipoSelector({ value, onChange }) {
+function TipoSelector({ value, onChange, options }) {
+    const keys = options || Object.keys(TIPOS);
     return (
         <div className="grid grid-cols-2 gap-2">
-            {Object.entries(TIPOS).map(([key, t]) => (
-                <button
-                    key={key}
-                    type="button"
-                    onClick={() => onChange(key)}
-                    className="px-3 py-2.5 rounded-xl text-xs font-bold text-left border-2 transition-all"
-                    style={{
-                        background: value === key ? t.bg : '#fff',
-                        borderColor: value === key ? t.color : 'var(--color-border)',
-                        color: value === key ? t.color : 'var(--color-muted-foreground)',
-                    }}>
-                    {t.label}
-                </button>
-            ))}
+            {keys.map(key => {
+                const t = TIPOS[key];
+                if (!t) return null;
+                return (
+                    <button
+                        key={key}
+                        type="button"
+                        onClick={() => onChange(key)}
+                        className="px-3 py-2.5 rounded-xl text-xs font-bold text-left border-2 transition-all"
+                        style={{
+                            background: value === key ? t.bg : '#fff',
+                            borderColor: value === key ? t.color : 'var(--color-border)',
+                            color: value === key ? t.color : 'var(--color-muted-foreground)',
+                        }}>
+                        {t.label}
+                    </button>
+                );
+            })}
         </div>
     );
 }
@@ -281,7 +287,7 @@ export default function TabVolume({ isAdmin }) {
         tipo: '', data_carregamento: new Date().toISOString().slice(0, 10),
         quantidade: '', unidade_quantidade: 'saco', empresa_origem: '',
         veiculo_id: '', motorista_id: '', empresa_id: '', numero_pedido: '', numero_nota_fiscal: '',
-        destino: '', observacoes: '',
+        destino: '', observacoes: '', tipo_cimento: '',
         tipo_calculo_frete: 'por_saco', valor_base_frete: '',
     });
     const [modal, setModal] = useState(null); // null | { mode: 'create'|'edit', id?: string }
@@ -383,10 +389,11 @@ export default function TabVolume({ isAdmin }) {
 
     // ── Cálculo de totais ─────────────────────────────────────────────────────
     const totais = (() => {
-        const t = { ARA_GBI_FOB: 0, ARA_BARR_FOB: 0, CIF_GBI: 0, CIF_BARR: 0, total: 0, totalTerceiros: 0 };
+        const t = { ARA_GBI_FOB: 0, ARA_BARR_FOB: 0, CIF_GBI: 0, CIF_BARR: 0, ESTOQUE: 0, total: 0, totalTerceiros: 0 };
         carregamentos.forEach(r => {
-            const qtd = Number(r.quantidade) || 0;
             const { tipo } = parseTipo(r);
+            if (tipo === 'ESTOQUE') return; // Carregamento no Estoque não conta como volume no dashboard
+            const qtd = Number(r.quantidade) || 0;
             if (tipo && t.hasOwnProperty(tipo)) t[tipo] += qtd;
             t.total += qtd;
         });
@@ -419,6 +426,7 @@ export default function TabVolume({ isAdmin }) {
             numero_nota_fiscal: r.numero_nota_fiscal || '',
             destino: r.destino || '',
             observacoes: r.observacoes || '',
+            tipo_cimento: r.tipo_cimento || '',
             tipo_calculo_frete: r.tipo_calculo_frete || 'por_saco',
             valor_base_frete: r.valor_base_frete || '',
         });
@@ -426,26 +434,41 @@ export default function TabVolume({ isAdmin }) {
     };
 
     const handleSave = async () => {
+        const isEstoque = form.tipo === 'ESTOQUE';
         if (!form.tipo) { showToast('Selecione o tipo de carregamento.', 'error'); return; }
         if (!form.data_carregamento) { showToast('Informe a data.', 'error'); return; }
-        if (!form.quantidade || isNaN(form.quantidade)) { showToast('Informe a quantidade.', 'error'); return; }
+        // Carregamento no Estoque dispensa quantidade/frete/fornecedor, mas exige
+        // destino, placa, motorista e tipo de cimento. Motorista é obrigatório aqui
+        // porque o cálculo de bônus (calcularBonusCarreteiro, igual à aba
+        // Bonificações) só considera carregamentos com motorista_id preenchido.
+        if (isEstoque) {
+            if (!form.destino) { showToast('Informe o destino.', 'error'); return; }
+            if (!form.veiculo_id) { showToast('Selecione o veículo (placa).', 'error'); return; }
+            if (!form.motorista_id) { showToast('Selecione o motorista (necessário para gerar o bônus da viagem).', 'error'); return; }
+            if (!form.tipo_cimento) { showToast('Selecione o tipo de cimento.', 'error'); return; }
+        } else if (!form.quantidade || isNaN(form.quantidade)) {
+            showToast('Informe a quantidade.', 'error'); return;
+        }
 
-        const empresaOrigem = form.empresa_origem ? `${form.tipo}|${form.empresa_origem}` : form.tipo;
+        const empresaOrigem = isEstoque
+            ? 'ESTOQUE'
+            : (form.empresa_origem ? `${form.tipo}|${form.empresa_origem}` : form.tipo);
         const payload = {
             empresa_origem: empresaOrigem,
             data_carregamento: form.data_carregamento,
-            quantidade: Number(form.quantidade),
+            quantidade: isEstoque ? (form.quantidade ? Number(form.quantidade) : null) : Number(form.quantidade),
             unidade_quantidade: form.unidade_quantidade || 'saco',
-            empresa_id: form.empresa_id || null,
-            tipo_calculo_frete: form.tipo_calculo_frete || 'por_saco',
-            valor_base_frete: form.valor_base_frete ? Number(form.valor_base_frete) : null,
+            empresa_id: isEstoque ? null : (form.empresa_id || null),
+            tipo_calculo_frete: isEstoque ? null : (form.tipo_calculo_frete || 'por_saco'),
+            valor_base_frete: isEstoque ? null : (form.valor_base_frete ? Number(form.valor_base_frete) : null),
             _consumoVeiculo: veiculoSelecionado?.media_consumo,
             veiculo_id: form.veiculo_id || null,
             motorista_id: form.motorista_id || null,
-            numero_pedido: form.numero_pedido || null,
-            numero_nota_fiscal: form.numero_nota_fiscal || null,
+            numero_pedido: isEstoque ? null : (form.numero_pedido || null),
+            numero_nota_fiscal: isEstoque ? null : (form.numero_nota_fiscal || null),
             destino: form.destino || '',
             observacoes: form.observacoes || null,
+            tipo_cimento: isEstoque ? form.tipo_cimento : null,
         };
 
         setSaving(true);
@@ -630,6 +653,7 @@ export default function TabVolume({ isAdmin }) {
                 'Data': FMT(r.data_carregamento),
                 'Tipo': TIPOS[tipo]?.label || tipo || '—',
                 'Fornecedor/Origem': nome || '—',
+                'Tipo de Cimento': r.tipo_cimento || '—',
                 'Placa': r.veiculo?.placa || r.veiculo_id || '—',
                 'Motorista': r.motorista?.name || r.motorista_id || '—',
                 'Pedido': r.numero_pedido || '—',
@@ -792,84 +816,134 @@ export default function TabVolume({ isAdmin }) {
                         <Field label="Tipo de carregamento" required>
                             <TipoSelector value={form.tipo} onChange={v => setForm(f => ({ ...f, tipo: v }))} />
                         </Field>
-                        <div className="grid grid-cols-2 gap-3">
-                            <Field label="Data" required>
-                                <input type="date" value={form.data_carregamento} onChange={e => setForm(f => ({ ...f, data_carregamento: e.target.value }))} className={inputCls} style={inputStyle} />
-                            </Field>
-                            <Field label="Quantidade (sacos)" required>
-                                <input type="number" min="0" value={form.quantidade} onChange={e => setForm(f => ({ ...f, quantidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 1200" />
-                            </Field>
-                        </div>
-                        <Field label="Fornecedor / Origem">
-                            <OrigemDropdown value={form.empresa_origem} onChange={v => setForm(f => ({ ...f, empresa_origem: v }))} fornecedores={fornecedores} />
-                        </Field>
-                        <div className="grid grid-cols-2 gap-3">
-                            <Field label="Veículo (placa)">
-                                <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione...</option>
-                                    {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
-                                </select>
-                            </Field>
-                            <Field label="Motorista">
-                                <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione...</option>
-                                    {motoristasProprios.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                </select>
-                            </Field>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <Field label="Nº Pedido">
-                                <input value={form.numero_pedido} onChange={e => setForm(f => ({ ...f, numero_pedido: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 123456" />
-                            </Field>
-                            <Field label="Nota Fiscal">
-                                <input value={form.numero_nota_fiscal} onChange={e => setForm(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
-                            </Field>
-                        </div>
-                        <Field label="Destino">
-                            <DestinoSelect
-                                value={form.destino}
-                                onChange={v => setForm(f => ({ ...f, destino: v }))}
-                                onFreteAutoFill={v => setForm(f => ({ ...f, tipo_calculo_frete: 'por_saco', valor_base_frete: String(v) }))}
-                                fretes={fretesFretas}
-                                placeholder="Cidade ou estoque"
-                            />
-                        </Field>
-                        <Field label="Empresa (frete)">
-                            <select value={form.empresa_id} onChange={e => setForm(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                <option value="">Selecione...</option>
-                                {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                            </select>
-                        </Field>
-                        {/* ── Bloco de Frete ── */}
-                        <div className="col-span-full p-4 rounded-xl border" style={{ borderColor: '#C4B5FD', backgroundColor: '#FAF5FF' }}>
-                            <p className="text-xs font-semibold text-purple-700 mb-3">💰 Cálculo de Frete</p>
-                            <div className="grid grid-cols-2 gap-3">
-                                <Field label="Tipo de cálculo">
-                                    <select value={form.tipo_calculo_frete} onChange={e => setForm(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
-                                        {TIPOS_CALCULO_FRETE.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+
+                        {form.tipo === 'ESTOQUE' ? (
+                            <>
+                                <div className="flex items-start gap-2 p-3 rounded-xl border" style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }}>
+                                    <Icon name="Info" size={14} color="#C2410C" className="flex-shrink-0 mt-0.5" />
+                                    <p className="text-xs" style={{ color: '#9A3412' }}>
+                                        Carga retirada do estoque próprio (não veio direto do fornecedor) — por isso não
+                                        entra no volume de sacos do dashboard. Gera bônus para o motorista normalmente,
+                                        calculado pelo destino (mesma regra da aba Bonificações).
+                                    </p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Data" required>
+                                        <input type="date" value={form.data_carregamento} onChange={e => setForm(f => ({ ...f, data_carregamento: e.target.value }))} className={inputCls} style={inputStyle} />
+                                    </Field>
+                                    <Field label="Veículo (placa)" required>
+                                        <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                            <option value="">Selecione...</option>
+                                            {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
+                                        </select>
+                                    </Field>
+                                </div>
+                                <Field label="Motorista" required>
+                                    <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione...</option>
+                                        {motoristasProprios.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                     </select>
                                 </Field>
-                                <Field label={
-                                    form.tipo_calculo_frete === 'percentual' ? 'Percentual (%)' :
-                                    form.tipo_calculo_frete === 'por_km' ? 'Preço diesel (R$/L)' : 'Valor base (R$)'
-                                }>
-                                    <input type="number" step="0.01" value={form.valor_base_frete} onChange={e => setForm(f => ({ ...f, valor_base_frete: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                <Field label="Destino" required>
+                                    <DestinoSelect
+                                        value={form.destino}
+                                        onChange={v => setForm(f => ({ ...f, destino: v }))}
+                                        fretes={fretesFretas}
+                                        placeholder="Cidade de destino"
+                                    />
                                 </Field>
-                            </div>
-                            {form.tipo_calculo_frete === 'por_km' && (
-                                <p className="text-xs text-purple-600 mt-2">
-                                    {veiculoSelecionado?.media_consumo
-                                        ? `Consumo do veículo: ${veiculoSelecionado.media_consumo} km/L — informe a distância em km no campo Quantidade`
-                                        : '⚠️ Veículo sem consumo cadastrado. Cadastre o consumo em Veículos para usar este cálculo.'}
-                                </p>
-                            )}
-                            {previewFrete > 0 && (
-                                <div className="mt-3 p-2.5 rounded-lg bg-purple-600 text-white text-sm font-semibold flex items-center justify-between">
-                                    <span>Frete calculado:</span>
-                                    <span className="font-mono">{BRL(previewFrete)}</span>
+                                <Field label="Tipo de cimento" required>
+                                    <select value={form.tipo_cimento} onChange={e => setForm(f => ({ ...f, tipo_cimento: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione...</option>
+                                        <option value="Montes Claros">Montes Claros</option>
+                                        <option value="Liz">Liz</option>
+                                        <option value="Ambas">Ambas (Montes Claros + Liz)</option>
+                                    </select>
+                                </Field>
+                            </>
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Data" required>
+                                        <input type="date" value={form.data_carregamento} onChange={e => setForm(f => ({ ...f, data_carregamento: e.target.value }))} className={inputCls} style={inputStyle} />
+                                    </Field>
+                                    <Field label="Quantidade (sacos)" required>
+                                        <input type="number" min="0" value={form.quantidade} onChange={e => setForm(f => ({ ...f, quantidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 1200" />
+                                    </Field>
                                 </div>
-                            )}
-                        </div>
+                                <Field label="Fornecedor / Origem">
+                                    <OrigemDropdown value={form.empresa_origem} onChange={v => setForm(f => ({ ...f, empresa_origem: v }))} fornecedores={fornecedores} />
+                                </Field>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Veículo (placa)">
+                                        <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                            <option value="">Selecione...</option>
+                                            {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
+                                        </select>
+                                    </Field>
+                                    <Field label="Motorista">
+                                        <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                            <option value="">Selecione...</option>
+                                            {motoristasProprios.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                        </select>
+                                    </Field>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Nº Pedido">
+                                        <input value={form.numero_pedido} onChange={e => setForm(f => ({ ...f, numero_pedido: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 123456" />
+                                    </Field>
+                                    <Field label="Nota Fiscal">
+                                        <input value={form.numero_nota_fiscal} onChange={e => setForm(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
+                                    </Field>
+                                </div>
+                                <Field label="Destino">
+                                    <DestinoSelect
+                                        value={form.destino}
+                                        onChange={v => setForm(f => ({ ...f, destino: v }))}
+                                        onFreteAutoFill={v => setForm(f => ({ ...f, tipo_calculo_frete: 'por_saco', valor_base_frete: String(v) }))}
+                                        fretes={fretesFretas}
+                                        placeholder="Cidade ou estoque"
+                                    />
+                                </Field>
+                                <Field label="Empresa (frete)">
+                                    <select value={form.empresa_id} onChange={e => setForm(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione...</option>
+                                        {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                                    </select>
+                                </Field>
+                                {/* ── Bloco de Frete ── */}
+                                <div className="col-span-full p-4 rounded-xl border" style={{ borderColor: '#C4B5FD', backgroundColor: '#FAF5FF' }}>
+                                    <p className="text-xs font-semibold text-purple-700 mb-3">💰 Cálculo de Frete</p>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <Field label="Tipo de cálculo">
+                                            <select value={form.tipo_calculo_frete} onChange={e => setForm(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
+                                                {TIPOS_CALCULO_FRETE.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                            </select>
+                                        </Field>
+                                        <Field label={
+                                            form.tipo_calculo_frete === 'percentual' ? 'Percentual (%)' :
+                                            form.tipo_calculo_frete === 'por_km' ? 'Preço diesel (R$/L)' : 'Valor base (R$)'
+                                        }>
+                                            <input type="number" step="0.01" value={form.valor_base_frete} onChange={e => setForm(f => ({ ...f, valor_base_frete: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                        </Field>
+                                    </div>
+                                    {form.tipo_calculo_frete === 'por_km' && (
+                                        <p className="text-xs text-purple-600 mt-2">
+                                            {veiculoSelecionado?.media_consumo
+                                                ? `Consumo do veículo: ${veiculoSelecionado.media_consumo} km/L — informe a distância em km no campo Quantidade`
+                                                : '⚠️ Veículo sem consumo cadastrado. Cadastre o consumo em Veículos para usar este cálculo.'}
+                                        </p>
+                                    )}
+                                    {previewFrete > 0 && (
+                                        <div className="mt-3 p-2.5 rounded-lg bg-purple-600 text-white text-sm font-semibold flex items-center justify-between">
+                                            <span>Frete calculado:</span>
+                                            <span className="font-mono">{BRL(previewFrete)}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+
                         <Field label="Observações">
                             <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Observações gerais..." />
                         </Field>
@@ -918,7 +992,7 @@ export default function TabVolume({ isAdmin }) {
                             ⚠️ Este lançamento é exclusivo para veículos terceirizados. Não gera bonificações e não aparece nas telas dos motoristas.
                         </div>
                         <Field label="Tipo de carregamento" required>
-                            <TipoSelector value={formTerceiro.tipo} onChange={v => setFormTerceiro(f => ({ ...f, tipo: v }))} />
+                            <TipoSelector value={formTerceiro.tipo} onChange={v => setFormTerceiro(f => ({ ...f, tipo: v }))} options={['ARA_GBI_FOB', 'ARA_BARR_FOB', 'CIF_GBI', 'CIF_BARR']} />
                         </Field>
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Data" required>
@@ -1012,7 +1086,7 @@ export default function TabVolume({ isAdmin }) {
                         </div>
                         {/* Tipo de carregamento — igual ao Registros */}
                         <Field label="Tipo de carregamento" required>
-                            <TipoSelector value={formRetira.tipo} onChange={v => setFormRetira(f => ({ ...f, tipo: v }))} />
+                            <TipoSelector value={formRetira.tipo} onChange={v => setFormRetira(f => ({ ...f, tipo: v }))} options={['ARA_GBI_FOB', 'ARA_BARR_FOB', 'CIF_GBI', 'CIF_BARR']} />
                         </Field>
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Data" required>
@@ -1069,7 +1143,7 @@ export default function TabVolume({ isAdmin }) {
 // ─── Sub-componente: Dashboard ─────────────────────────────────────────────────
 function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], carregamentosRetira = [], mes }) {
     const pct = v => totais.totalGeral > 0 ? ((v / totais.totalGeral) * 100).toFixed(1) : '0.0';
-    const tipoEntries = Object.entries(TIPOS);
+    const tipoEntries = Object.entries(TIPOS).filter(([key]) => key !== 'ESTOQUE');
 
     // Barras de progresso empilhadas
     const bars = tipoEntries.map(([key, t]) => ({
@@ -1273,13 +1347,15 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo 
                             <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', background: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                 <td className="px-3 py-2.5 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
                                 <td className="px-3 py-2.5"><TipoBadge tipo={tipo} /></td>
-                                <td className="px-3 py-2.5 max-w-[140px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{nome || '—'}</td>
+                                <td className="px-3 py-2.5 max-w-[140px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                    {tipo === 'ESTOQUE' ? (r.tipo_cimento || '—') : (nome || '—')}
+                                </td>
                                 <td className="px-3 py-2.5 font-mono text-xs">{r.veiculo?.placa || r.veiculo_id || '—'}</td>
                                 <td className="px-3 py-2.5 text-xs">{r.motorista?.name || r.motorista_id || '—'}</td>
                                 <td className="px-3 py-2.5 font-mono text-xs">{r.numero_pedido || '—'}</td>
                                 <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>
                                 <td className="px-3 py-2.5 text-xs max-w-[120px] truncate">{r.destino || '—'}</td>
-                                <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap">{fmtNum(r.quantidade)}</td>
+                                <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap">{tipo === 'ESTOQUE' && !r.quantidade ? '—' : fmtNum(r.quantidade)}</td>
                                 <td className="px-3 py-2.5 font-mono font-semibold whitespace-nowrap" style={{ color: '#7C3AED' }}>{BRL(r.valor_frete_calculado)}</td>
                                 {isAdmin && (
                                     <td className="px-3 py-2.5">

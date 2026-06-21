@@ -542,11 +542,11 @@ function ultimoDiaMes(anoMes) {
 // REGISTROS DE VIAGEM (preenchido pelo carreteiro)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function fetchRegistrosViagem(motoristaId) {
-    const q = supabase
+    let q = supabase
         .from('carretas_registros_viagem')
         .select('*, veiculo:veiculo_id(id, placa, modelo)')
         .order('data_carregamento', { ascending: false });
-    if (motoristaId) q.eq('motorista_id', motoristaId);
+    if (motoristaId) q = q.eq('motorista_id', motoristaId);
     const { data, error } = await q;
     if (error) throw error;
     return data || [];
