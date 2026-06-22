@@ -1330,12 +1330,18 @@ export async function fetchRomaneiosFerragem(filters = {}) {
         .select(`
             *,
             motorista:motorista_id(id, name),
-            veiculo:veiculo_id(id, placa, modelo)
+            veiculo:veiculo_id(id, placa, modelo),
+            itens:carretas_romaneio_itens(
+                id, quantidade, unidade, peso_total, descricao, observacoes,
+                material:material_id(id, nome, peso, unidade, percentual_frete, categoria_frete)
+            )
         `)
         .or('tipo_carga.eq.ferragem,lancado_por_motorista.eq.true')
         .order('created_at', { ascending: false });
     if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
     if (filters.status)      q = q.eq('status', filters.status);
+    if (filters.dataInicio)  q = q.gte('data_saida', filters.dataInicio);
+    if (filters.dataFim)     q = q.lte('data_saida', filters.dataFim);
     const { data, error } = await q;
     if (error) throw error;
     return data || [];

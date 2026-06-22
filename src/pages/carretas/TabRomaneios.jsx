@@ -385,6 +385,26 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 return null;
             })();
 
+            const itensPayload = itens.filter(it => it.material_id || it.descricao).map(it => {
+                const matIt = materiais.find(m => m.id === it.material_id);
+                // Prioridade: peso_unit do item > peso do material > null
+                const pu = it.peso_unit
+                    ? Number(it.peso_unit)
+                    : (matIt?.peso && Number(matIt.peso) > 0 ? Number(matIt.peso) : null);
+                const pesoSalvo = (pu && !it._pesoManual && it.quantidade)
+                    ? String(pu * Number(it.quantidade))
+                    : it.peso_total;
+                // Não persistir campos de controle interno no banco
+                const { _pesoManual, peso_unit, ...itemClean } = it;
+                return { ...itemClean, peso_total: pesoSalvo };
+            });
+            // Soma o peso (kg) de todos os itens e converte para toneladas — é o campo
+            // 'toneladas' que listas, exportações e relatórios financeiros usam para
+            // exibir o peso do romaneio. Sem isso, a soma calculada nos itens ficava só
+            // na prévia do modal e nunca era gravada no romaneio.
+            const pesoItensKg = itensPayload.reduce((s, it) => s + (Number(it.peso_total) || 0), 0);
+            const toneladasCalculadas = pesoItensKg > 0 ? pesoItensKg / 1000 : (rom?.toneladas ?? null);
+
             const payload = {
                 status:              form.status,
                 destino:             form.destino,
@@ -399,19 +419,8 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 tipo_calculo_frete:  form.tipo_calculo_frete,
                 valor_frete:         freteValor,
                 observacoes:         form.observacoes   || undefined,
-                itens: itens.filter(it => it.material_id || it.descricao).map(it => {
-                    const matIt = materiais.find(m => m.id === it.material_id);
-                    // Prioridade: peso_unit do item > peso do material > null
-                    const pu = it.peso_unit
-                        ? Number(it.peso_unit)
-                        : (matIt?.peso && Number(matIt.peso) > 0 ? Number(matIt.peso) : null);
-                    const pesoSalvo = (pu && !it._pesoManual && it.quantidade)
-                        ? String(pu * Number(it.quantidade))
-                        : it.peso_total;
-                    // Não persistir campos de controle interno no banco
-                    const { _pesoManual, peso_unit, ...itemClean } = it;
-                    return { ...itemClean, peso_total: pesoSalvo };
-                }),
+                toneladas:           toneladasCalculadas,
+                itens: itensPayload,
             };
             // Remove undefined
             Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
@@ -790,13 +799,19 @@ export default function TabRomaneios({ isAdmin }) {
                     Number(filtroMes.split('-')[1]), 0
                 ).getDate()).padStart(2, '0');
             }
+            // Filtro de data da aba "Romaneios lançados pelo motorista" — mesmo período do
+            // mês/dia acima, mas sem o filtro de status (que é exclusivo da aba Romaneios)
+            const fFerragem = {};
+            if (f.dataInicio) fFerragem.dataInicio = f.dataInicio;
+            if (f.dataFim)    fFerragem.dataFim    = f.dataFim;
+
             const [r, v, m, e, matResult, rf, fr] = await Promise.all([
                 fetchRomaneios(f),
                 fetchCarretasVeiculos(),
                 fetchCarreteirosPropriosOnly(),
                 fetchEmpresas(),
                 fetchMaterials().catch(err => { console.warn('[TabRomaneios] fetchMaterials falhou:', err); return []; }),
-                fetchRomaneiosFerragem(),
+                fetchRomaneiosFerragem(fFerragem),
                 fetchFretesCidades('frota'),
             ]);
             // Enriquece materiais com dados do join dos romaneios (garante peso mesmo se catalog parcial)
@@ -910,8 +925,22 @@ export default function TabRomaneios({ isAdmin }) {
                         <Icon name="Info" size={14} color="#065F46" />
                         <p className="text-xs" style={{ color: '#065F46' }}>Romaneios de ferragens registrados pelos motoristas carreteiros. Use para conferência e acompanhamento.</p>
                     </div>
-                    <div className="mb-4">
-                        <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Nº, motorista, placa, NF, destino..." width="260px" />
+                    <div className="flex flex-wrap items-center gap-2 mb-4">
+                        <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltroDia(''); }}
+                            className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}
+                            title="Filtrar por mês" />
+                        <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); handleSetFiltroMes(''); }}
+                            className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}
+                            title="Filtrar por dia específico" />
+                        {(filtroMes || filtroDia) && (
+                            <button onClick={() => { handleSetFiltroMes(''); setFiltroDia(''); }}
+                                className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors"
+                                style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                                title="Limpar filtro de data">
+                                ✕ Data
+                            </button>
+                        )}
+                        <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Nº, motorista, placa, NF, destino..." />
                     </div>
                     {loading ? (
                         <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: '#059669', borderTopColor: 'transparent' }} /></div>
@@ -1006,7 +1035,7 @@ export default function TabRomaneios({ isAdmin }) {
                             ✕ Data
                         </button>
                     )}
-                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Nº, motorista, placa, NF, destino..." width="240px" />
+                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Nº, motorista, placa, NF, destino..." />
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <button onClick={load}
