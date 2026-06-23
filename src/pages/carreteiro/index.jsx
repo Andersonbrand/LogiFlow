@@ -845,7 +845,7 @@ export default function CarreteiroDashboard() {
                                                 style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }}>
                                                 <Icon name="Info" size={15} color="#1D4ED8" />
                                                 <p className="text-xs" style={{ color: '#1D4ED8' }}>
-                                                    Romaneios lançados pelo administrador e vinculados ao seu perfil.
+                                                    Romaneios e viagens lançados pelo administrador e vinculados ao seu perfil.
                                                 </p>
                                             </div>
 

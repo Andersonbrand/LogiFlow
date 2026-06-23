@@ -758,7 +758,7 @@ function ResumoMateriaisCidadeModal({ rascunhos, onClose }) {
                             <Icon name="MapPin" size={18} color="#D97706" />
                         </div>
                         <div className="min-w-0">
-                            <h3 className="text-base font-bold truncate" style={{ color: 'var(--color-text-primary)' }}>Materiais por   Carga</h3>
+                            <h3 className="text-base font-bold truncate" style={{ color: 'var(--color-text-primary)' }}>Materiais por Carga</h3>
                             <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Cada carga (rascunho), separada por cidade de destino</p>
                         </div>
                     </div>

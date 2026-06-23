@@ -276,7 +276,7 @@ function TabViagens({ isAdmin }) {
                     <div className="flex gap-1 p-1 rounded-xl" style={{ backgroundColor: 'var(--color-muted)' }}>
                         {[
                         { id: 'carregamentos', label: 'Carregamentos', count: carregamentosComBonus.length },
-                            { id: 'motoristas',    label: 'Romaneios lançados pelo motorista', count: registrosMotoristas.length },
+                            { id: 'motoristas',    label: 'Viagens lançadas pelos motoristas', count: registrosMotoristas.length },
                         ].map(s => (
                             <button key={s.id} onClick={() => setAbaViagens(s.id)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"

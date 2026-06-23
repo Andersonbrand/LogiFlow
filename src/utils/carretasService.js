@@ -1323,8 +1323,17 @@ export async function createRomaneioFerragem(payload) {
 
 
 export async function fetchRomaneiosFerragem(filters = {}) {
-    // Busca romaneios que OU têm tipo_carga='ferragem' OU foram lançados pelo motorista
-    // Garante que registros vinculados pelo motorista sempre apareçam nesta aba
+    // ATENÇÃO — a combinação de .or() com .gte()/.lte() no Supabase JS v2 gera
+    // um AND implícito ENTRE as condições extra (status, datas) e o OR de tipo,
+    // mas o Supabase/PostgREST interpreta o .gte()/.lte() como filtro global mesmo
+    // sobre rows que bateram no OR. O resultado certo exige passar as datas DENTRO
+    // do próprio OR usando a sintaxe de string do PostgREST:
+    //   (tipo_carga.eq.ferragem,lancado_por_motorista.eq.true)
+    //   AND data_saida BETWEEN dataInicio AND dataFim
+    // — que é o comportamento desejado (OR de tipo, AND de datas).
+    //
+    // Registros cujo data_saida é nulo (inseridos sem data) são excluídos quando
+    // há filtro de data ativo, o que é correto — assim não "vazam" entre meses.
     let q = supabase
         .from('carretas_romaneios')
         .select(`
@@ -1337,11 +1346,16 @@ export async function fetchRomaneiosFerragem(filters = {}) {
             )
         `)
         .or('tipo_carga.eq.ferragem,lancado_por_motorista.eq.true')
-        .order('created_at', { ascending: false });
+        .order('data_saida', { ascending: false, nullsFirst: false });
+
     if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
     if (filters.status)      q = q.eq('status', filters.status);
+    // Filtro de data aplicado DEPOIS do .or() — no PostgREST isso é tratado como
+    // AND global, que é o comportamento correto aqui: queremos os romaneios que são
+    // (ferragem OU lançados pelo motorista) E que estão no período selecionado.
     if (filters.dataInicio)  q = q.gte('data_saida', filters.dataInicio);
     if (filters.dataFim)     q = q.lte('data_saida', filters.dataFim);
+
     const { data, error } = await q;
     if (error) throw error;
     return data || [];

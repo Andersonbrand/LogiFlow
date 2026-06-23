@@ -799,7 +799,7 @@ export default function TabRomaneios({ isAdmin }) {
                     Number(filtroMes.split('-')[1]), 0
                 ).getDate()).padStart(2, '0');
             }
-            // Filtro de data da aba "Romaneios lançados pelo motorista" — mesmo período do
+            // Filtro de data da aba "Viagens lançadas pelos motoristas" — mesmo período do
             // mês/dia acima, mas sem o filtro de status (que é exclusivo da aba Romaneios)
             const fFerragem = {};
             if (f.dataInicio) fFerragem.dataInicio = f.dataInicio;
@@ -898,8 +898,8 @@ export default function TabRomaneios({ isAdmin }) {
             {/* ── Guias Cimento / Ferragens ── */}
             <div className="flex gap-1 mb-5 p-1 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB', width: 'fit-content' }}>
                 {[
-                    { id: 'cimento',   label: 'Romaneios',                        icon: 'Package',  color: '#1D4ED8' },
-                    { id: 'ferragens', label: 'Romaneios lançados pelo motorista', icon: 'FileText', color: '#059669' },
+                    { id: 'cimento',   label: 'Romaneios',                          icon: 'Package',  color: '#1D4ED8' },
+                    { id: 'ferragens', label: 'Viagens lançadas pelos motoristas',   icon: 'Truck',    color: '#059669' },
                 ].map(g => (
                     <button key={g.id} onClick={() => setGuia(g.id)}
                         className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
@@ -923,7 +923,7 @@ export default function TabRomaneios({ isAdmin }) {
                 <div>
                     <div className="flex items-center gap-2 p-3 rounded-xl border mb-4" style={{ backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }}>
                         <Icon name="Info" size={14} color="#065F46" />
-                        <p className="text-xs" style={{ color: '#065F46' }}>Romaneios de ferragens registrados pelos motoristas carreteiros. Use para conferência e acompanhamento.</p>
+                        <p className="text-xs" style={{ color: '#065F46' }}>Viagens registradas diretamente pelos motoristas carreteiros no app deles. Use para conferência e acompanhamento.</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 mb-4">
                         <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltroDia(''); }}
@@ -1004,7 +1004,7 @@ export default function TabRomaneios({ isAdmin }) {
                                 </tbody>
                             </table>
                             <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
-                                {romaneiosFerragemFiltrados.length} romaneio{romaneiosFerragemFiltrados.length !== 1 ? 's' : ''} de ferragens
+                                {romaneiosFerragemFiltrados.length} viagem{romaneiosFerragemFiltrados.length !== 1 ? 's' : ''} registrada{romaneiosFerragemFiltrados.length !== 1 ? 's' : ''} pelo motorista
                             </div>
                         </div>
                     )}
