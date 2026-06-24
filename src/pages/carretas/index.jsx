@@ -2497,8 +2497,78 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const [barcodeMode, setBarcodeMode] = useState(false);
     const [barcodeBuffer, setBarcodeBuffer] = useState('');
     const [loadingNFe, setLoadingNFe] = useState(false);
+    const [guiaDespesas, setGuiaDespesas] = useState('registros'); // 'registros' | 'parcelas' | 'relatorio'
+    const [relatorioPeriodo, setRelatorioPeriodo] = useState(() => {
+        const h = new Date();
+        return {
+            inicio: `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-01`,
+            fim:    `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate()).padStart(2, '0')}`,
+        };
+    });
 
     const todasCategorias = useMemo(() => [...CATEGORIAS_DESPESA, ...categoriasExtras], [categoriasExtras]);
+
+    // ── Parcelas futuras a vencer (de TODAS as despesas, não apenas do período filtrado) ──
+    const parcelasFuturas = useMemo(() => {
+        const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+        const porMes = {}; // 'YYYY-MM' -> { total, itens: [{despesa, tipo, valor, vencimento, cartao?}] }
+        const addItem = (despesa, tipo, valor, vencimento, cartao) => {
+            if (!vencimento) return;
+            const d = new Date(vencimento + 'T00:00:00');
+            if (d < hoje) return; // apenas futuras
+            const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            if (!porMes[chave]) porMes[chave] = { total: 0, itens: [] };
+            porMes[chave].total += Number(valor) || 0;
+            porMes[chave].itens.push({ despesa, tipo, valor: Number(valor) || 0, vencimento, cartao });
+        };
+        despesas.forEach(d => {
+            (d.boletos || []).forEach(b => { if (!b.pago) addItem(d, 'Boleto', b.valor, b.vencimento); });
+            (d.parcelas_cartao || []).forEach(p => { if (!p.pago) addItem(d, 'Cartão', p.valor, p.vencimento, p.cartao); });
+            (d.cheques || []).forEach(c => { if (!c.pago) addItem(d, 'Cheque', c.valor, c.vencimento); });
+        });
+        return Object.entries(porMes)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([mes, dados]) => ({ mes, ...dados, itens: dados.itens.sort((a, b) => a.vencimento.localeCompare(b.vencimento)) }));
+    }, [despesas]);
+
+    // ── Relatório pago/aberto por período selecionado ──
+    const relatorioStatus = useMemo(() => {
+        const { inicio, fim } = relatorioPeriodo;
+        if (!inicio || !fim) return null;
+        const fmtMes = d => {
+            const dt = new Date(d + 'T00:00:00');
+            return dt.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        };
+        const pagos = [], abertos = [];
+        despesas.forEach(d => {
+            const isNoPeriodo = d.data_despesa >= inicio && d.data_despesa <= fim;
+            // A prazo: analisa cada parcela/boleto individualmente
+            if (d.forma_pagamento === 'a_prazo') {
+                (d.boletos || []).forEach(b => {
+                    const v = b.vencimento || d.data_despesa;
+                    if (v < inicio || v > fim) return;
+                    const item = { despesa: d, tipo: 'Boleto', valor: Number(b.valor) || 0, vencimento: v, pago: b.pago, pago_em: b.pago_em };
+                    b.pago ? pagos.push(item) : abertos.push(item);
+                });
+                (d.parcelas_cartao || []).forEach(p => {
+                    const v = p.vencimento || d.data_despesa;
+                    if (v < inicio || v > fim) return;
+                    const item = { despesa: d, tipo: 'Cartão', valor: Number(p.valor) || 0, vencimento: v, pago: p.pago, pago_em: p.pago_em, cartao: p.cartao };
+                    p.pago ? pagos.push(item) : abertos.push(item);
+                });
+            } else if (isNoPeriodo) {
+                // À vista: a própria despesa é paga ou aberta
+                const item = { despesa: d, tipo: d.tipo_pagamento || 'À vista', valor: Number(d.valor) || 0, vencimento: d.data_despesa, pago: true };
+                pagos.push(item);
+            }
+        });
+        return {
+            pagos:        pagos.sort((a, b) => a.vencimento.localeCompare(b.vencimento)),
+            abertos:      abertos.sort((a, b) => a.vencimento.localeCompare(b.vencimento)),
+            totalPago:    pagos.reduce((s, i) => s + i.valor, 0),
+            totalAberto:  abertos.reduce((s, i) => s + i.valor, 0),
+        };
+    }, [despesas, relatorioPeriodo]);
 
     const adicionarCategoria = () => {
         const cat = novaCategoria.trim();
@@ -2847,7 +2917,28 @@ function TabDespesasExtras({ isAdmin, profile }) {
                 </div>
             </div>
 
-            {/* KPIs */}
+            {/* ── Sub-guias ── */}
+            <div className="flex gap-1 mb-5 p-1 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB', width: 'fit-content' }}>
+                {[
+                    { id: 'registros',  label: 'Registros',        icon: 'Receipt' },
+                    { id: 'parcelas',   label: 'Parcelas Futuras',  icon: 'Clock' },
+                    { id: 'relatorio',  label: 'Pago / Em Aberto',  icon: 'BarChart2' },
+                ].map(g => (
+                    <button key={g.id} onClick={() => setGuiaDespesas(g.id)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                        style={guiaDespesas === g.id
+                            ? { backgroundColor: 'white', color: '#DC2626', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', fontWeight: 600 }
+                            : { color: 'var(--color-muted-foreground)' }}>
+                        <Icon name={g.icon} size={14} color={guiaDespesas === g.id ? '#DC2626' : 'var(--color-muted-foreground)'} />
+                        {g.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* ══════════════════════════════════════════════════ */}
+            {/* GUIA: REGISTROS                                    */}
+            {/* ══════════════════════════════════════════════════ */}
+            {guiaDespesas === 'registros' && (<>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
                 <div className="bg-white rounded-xl border p-4 shadow-sm sm:col-span-2" style={{ borderColor: 'var(--color-border)' }}>
                     <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Total no Período</p>
@@ -2923,6 +3014,155 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             ))}
                         </tbody>
                     </table>
+                </div>
+            )}
+            </>)}
+
+            {/* ══════════════════════════════════════════════════ */}
+            {/* GUIA: PARCELAS FUTURAS A VENCER                   */}
+            {/* ══════════════════════════════════════════════════ */}
+            {guiaDespesas === 'parcelas' && (
+                <div className="space-y-4">
+                    {parcelasFuturas.length === 0 ? (
+                        <div className="flex flex-col items-center gap-2 py-16 text-center">
+                            <Icon name="CheckCircle2" size={32} color="#059669" />
+                            <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Nenhuma parcela futura em aberto</p>
+                            <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Todas as parcelas estão pagas ou não há parcelas cadastradas.</p>
+                        </div>
+                    ) : (<>
+                        <div className="grid grid-cols-2 gap-3 mb-2">
+                            <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: '#FED7AA' }}>
+                                <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Total a vencer</p>
+                                <p className="text-2xl font-bold font-data text-orange-600">{BRL(parcelasFuturas.reduce((s, m) => s + m.total, 0))}</p>
+                            </div>
+                            <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: '#FED7AA' }}>
+                                <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Meses com vencimentos</p>
+                                <p className="text-2xl font-bold font-data text-orange-600">{parcelasFuturas.length}</p>
+                            </div>
+                        </div>
+                        {parcelasFuturas.map(mes => (
+                            <div key={mes.mes} className="rounded-xl border overflow-hidden" style={{ borderColor: '#FED7AA' }}>
+                                <div className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: '#FFF7ED' }}>
+                                    <p className="text-sm font-bold" style={{ color: '#9A3412' }}>
+                                        {new Date(mes.mes + '-01T00:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                                    </p>
+                                    <p className="text-sm font-bold font-data text-orange-600">{BRL(mes.total)}</p>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                        <thead style={{ color: 'var(--color-muted-foreground)', backgroundColor: '#FFFBF5' }}>
+                                            <tr>
+                                                <th className="text-left px-4 py-2 font-medium">Vencimento</th>
+                                                <th className="text-left px-4 py-2 font-medium">Despesa</th>
+                                                <th className="text-left px-4 py-2 font-medium">Tipo</th>
+                                                <th className="text-left px-4 py-2 font-medium">Veículo</th>
+                                                <th className="text-right px-4 py-2 font-medium">Valor</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {mes.itens.map((it, idx) => (
+                                                <tr key={idx} className="border-t" style={{ borderColor: '#FEF3C7' }}>
+                                                    <td className="px-4 py-2 font-data whitespace-nowrap">{FMT_DATE(it.vencimento)}</td>
+                                                    <td className="px-4 py-2 max-w-[200px] truncate">
+                                                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium mr-1">{it.despesa.categoria}</span>
+                                                        {it.despesa.fornecedor || it.despesa.descricao || '—'}
+                                                    </td>
+                                                    <td className="px-4 py-2">{it.tipo}{it.cartao ? ` (${it.cartao})` : ''}</td>
+                                                    <td className="px-4 py-2 font-data">{it.despesa.veiculo?.placa || '—'}</td>
+                                                    <td className="px-4 py-2 text-right font-data font-semibold text-orange-600">{BRL(it.valor)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr className="border-t font-semibold" style={{ borderColor: '#FED7AA', backgroundColor: '#FFF7ED' }}>
+                                                <td colSpan={4} className="px-4 py-2 text-right" style={{ color: '#9A3412' }}>Total do mês:</td>
+                                                <td className="px-4 py-2 text-right font-data text-orange-600">{BRL(mes.total)}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        ))}
+                    </>)}
+                </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════ */}
+            {/* GUIA: RELATÓRIO PAGO / EM ABERTO                  */}
+            {/* ══════════════════════════════════════════════════ */}
+            {guiaDespesas === 'relatorio' && (
+                <div className="space-y-5">
+                    <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-card)' }}>
+                        <div>
+                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Período — início</label>
+                            <input type="date" value={relatorioPeriodo.inicio} onChange={e => setRelatorioPeriodo(p => ({ ...p, inicio: e.target.value }))}
+                                className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Período — fim</label>
+                            <input type="date" value={relatorioPeriodo.fim} onChange={e => setRelatorioPeriodo(p => ({ ...p, fim: e.target.value }))}
+                                className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                        </div>
+                        <p className="text-xs mt-4" style={{ color: 'var(--color-muted-foreground)' }}>
+                            O relatório considera o vencimento de cada parcela, e a data da despesa para pagamentos à vista.
+                        </p>
+                    </div>
+                    {relatorioStatus && (<>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="rounded-xl border p-4 shadow-sm" style={{ borderColor: '#A7F3D0', backgroundColor: '#F0FDF4' }}>
+                                <p className="text-xs mb-1 font-medium text-green-700">✅ Total Pago</p>
+                                <p className="text-2xl font-bold font-data text-green-700">{BRL(relatorioStatus.totalPago)}</p>
+                                <p className="text-xs mt-0.5 text-green-600">{relatorioStatus.pagos.length} lançamento{relatorioStatus.pagos.length !== 1 ? 's' : ''}</p>
+                            </div>
+                            <div className="rounded-xl border p-4 shadow-sm" style={{ borderColor: '#FCA5A5', backgroundColor: '#FFF1F2' }}>
+                                <p className="text-xs mb-1 font-medium text-red-700">🔴 Total em Aberto</p>
+                                <p className="text-2xl font-bold font-data text-red-700">{BRL(relatorioStatus.totalAberto)}</p>
+                                <p className="text-xs mt-0.5 text-red-600">{relatorioStatus.abertos.length} lançamento{relatorioStatus.abertos.length !== 1 ? 's' : ''}</p>
+                            </div>
+                        </div>
+
+                        {[
+                            { lista: relatorioStatus.abertos, titulo: 'Em Aberto', cor: '#DC2626', bg: '#FFF1F2', border: '#FCA5A5', badgeBg: '#FEE2E2', badgeCor: '#DC2626' },
+                            { lista: relatorioStatus.pagos,   titulo: 'Pagos',     cor: '#059669', bg: '#F0FDF4', border: '#A7F3D0', badgeBg: '#D1FAE5', badgeCor: '#059669' },
+                        ].map(({ lista, titulo, cor, bg, border, badgeBg, badgeCor }) => lista.length > 0 && (
+                            <div key={titulo} className="rounded-xl border overflow-hidden" style={{ borderColor: border }}>
+                                <div className="px-4 py-3 font-bold text-sm" style={{ backgroundColor: bg, color: cor }}>{titulo} — {lista.length} lançamento{lista.length !== 1 ? 's' : ''}</div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs">
+                                        <thead style={{ color: 'var(--color-muted-foreground)' }}>
+                                            <tr>
+                                                <th className="text-left px-4 py-2 font-medium">Data/Venc.</th>
+                                                <th className="text-left px-4 py-2 font-medium">Despesa</th>
+                                                <th className="text-left px-4 py-2 font-medium">Tipo Pgto</th>
+                                                <th className="text-left px-4 py-2 font-medium">Veículo</th>
+                                                <th className="text-right px-4 py-2 font-medium">Valor</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {lista.map((it, idx) => (
+                                                <tr key={idx} className="border-t" style={{ borderColor: border }}>
+                                                    <td className="px-4 py-2 font-data whitespace-nowrap">{FMT_DATE(it.vencimento)}</td>
+                                                    <td className="px-4 py-2 max-w-[200px]">
+                                                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold mr-1" style={{ backgroundColor: badgeBg, color: badgeCor }}>{it.despesa.categoria}</span>
+                                                        <span className="truncate">{it.despesa.fornecedor || it.despesa.descricao || '—'}</span>
+                                                    </td>
+                                                    <td className="px-4 py-2">{it.tipo}{it.cartao ? ` (${it.cartao})` : ''}</td>
+                                                    <td className="px-4 py-2 font-data">{it.despesa.veiculo?.placa || '—'}</td>
+                                                    <td className="px-4 py-2 text-right font-data font-semibold" style={{ color: cor }}>{BRL(it.valor)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot>
+                                            <tr className="border-t font-bold" style={{ borderColor: border, backgroundColor: bg }}>
+                                                <td colSpan={4} className="px-4 py-2 text-right" style={{ color: cor }}>Total {titulo}:</td>
+                                                <td className="px-4 py-2 text-right font-data" style={{ color: cor }}>{BRL(titulo === 'Em Aberto' ? relatorioStatus.totalAberto : relatorioStatus.totalPago)}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        ))}
+                    </>)}
                 </div>
             )}
 

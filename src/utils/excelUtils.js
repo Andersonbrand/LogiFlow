@@ -1034,17 +1034,30 @@ export function exportDiariaModelo(diaria) {
     rowsData.push([ cs(descr, 2), NULL, NULL, NULL, NULL ]);
     rowsHt.push(20);
 
-    // Linhas 10–15: linhas vazias com borda full (para preencher depois)
-    for (let i = 0; i < 6; i++) {
+    // Linhas 10–11: espaço extra para descrição
+    for (let i = 0; i < 2; i++) {
         rowsData.push([ ce(2), NULL, NULL, NULL, NULL ]);
-        rowsHt.push(i < 3 ? 20 : 0);  // 10,11,12 com altura; 13,14,15 padrão
+        rowsHt.push(20);
     }
 
-    // Linha 16 (r=16): "Valor Total:" | "R$ X,XX"
+    // Linha 12 (r=12): "ROTA PROGRAMADA" — bold center borda full
+    rowsData.push([ cs('ROTA PROGRAMADA', 5), NULL, NULL, NULL, NULL ]);
+    rowsHt.push(20);
+
+    // Linhas 13–16: espaço para preencher a rota (4 linhas com borda)
+    const destino = diaria.destino || diaria.viagem?.destino || '';
+    rowsData.push([ cs(destino ? `Destino: ${destino}` : '', 2), NULL, NULL, NULL, NULL ]);
+    rowsHt.push(20);
+    for (let i = 0; i < 3; i++) {
+        rowsData.push([ ce(2), NULL, NULL, NULL, NULL ]);
+        rowsHt.push(20);
+    }
+
+    // Linha 17 (r=17): "Valor Total:" | "R$ X,XX"
     rowsData.push([ cs('Valor Total:', 1), cs(brl2(vlTotal), 6), NULL, NULL, NULL ]);
     rowsHt.push(20);
 
-    // Linhas 17–19: espaço
+    // Linhas 18–20: espaço
     for (let i = 0; i < 3; i++) {
         rowsData.push([ NULL, NULL, NULL, NULL, NULL ]);
         rowsHt.push(0);

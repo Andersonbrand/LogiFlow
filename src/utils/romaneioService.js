@@ -522,6 +522,14 @@ export async function updateRascunho(id, romaneio, itens) {
 }
 
 export async function deleteRascunho(id) {
+    // Apaga dependentes na ordem correta (filho antes do pai) para não
+    // violar as foreign key constraints:
+    //   romaneio_itens.pedido_id  → romaneio_pedidos.id  (CASCADE adicionado em 20260619)
+    //   romaneio_pedidos.romaneio_id → romaneios.id      (constraint original)
+    const { error: itensErr } = await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
+    if (itensErr) throw new Error('Falha ao remover itens do rascunho: ' + itensErr.message);
+    const { error: pedidosErr } = await supabase.from('romaneio_pedidos').delete().eq('romaneio_id', id);
+    if (pedidosErr) throw new Error('Falha ao remover pedidos do rascunho: ' + pedidosErr.message);
     const { error } = await supabase.from('romaneios').delete().eq('id', id);
     if (error) throw error;
 }
