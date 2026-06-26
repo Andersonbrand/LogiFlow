@@ -61,6 +61,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
     const [obsManut, setObsManut]     = useState('');
     const [modalFoto, setModalFoto]   = useState(null);
     const [modalDiaria, setModalDiaria] = useState(null);
+    const [viewDiaria, setViewDiaria] = useState(null);
     const [romaneiosDiarias, setRomaneiosDiarias] = useState([]);
     const [formDiaria, setFormDiaria] = useState({
         data_inicio: new Date().toISOString().split('T')[0],
@@ -535,8 +536,18 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                     <td className="px-3 py-2.5 font-data font-semibold text-emerald-700">{BRL(r.custo_motorista)}</td>
                                                                     <td className="px-3 py-2.5">
                                                                         <div className="flex gap-1">
-                                                                            <button onClick={() => exportarRomaneioComoDialia(r)} title="Exportar no modelo" className="p-1.5 rounded hover:bg-emerald-50">
-                                                                                <Icon name="FileDown" size={13} color="#059669" />
+                                                                            <button onClick={() => setViewDiaria({
+                                                                                motorista: { name: motorista.name },
+                                                                                veiculo: { placa: r.placa || motorista.veiculo?.placa || '' },
+                                                                                data_inicio: r.saida ? r.saida.slice(0,10) : r.created_at?.slice(0,10) || '',
+                                                                                quantidade_dias: r.dias_diaria || 1,
+                                                                                valor_dia: r.valor_diaria_dia || (r.custo_motorista / (r.dias_diaria || 1)),
+                                                                                valor_total: Number(r.custo_motorista || 0),
+                                                                                descricao: r.destino || '',
+                                                                                viagem: { numero: r.numero, destino: r.destino },
+                                                                                _exportFn: () => exportarRomaneioComoDialia(r),
+                                                                            })} title="Visualizar diária" className="p-1.5 rounded hover:bg-emerald-50">
+                                                                                <Icon name="Eye" size={13} color="#059669" />
                                                                             </button>
                                                                             <button onClick={() => handleDeleteRomaneio(r.id)} title="Excluir romaneio" className="p-1.5 rounded hover:bg-red-50">
                                                                                 <Icon name="Trash2" size={13} color="#DC2626" />
@@ -595,7 +606,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                 <td className="px-3 py-2.5 text-xs max-w-[180px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
                                                                 <td className="px-3 py-2.5">
                                                                     <div className="flex gap-1">
-                                                                        <button onClick={() => exportarDiariaIndividual(d)} title="Exportar no modelo" className="p-1.5 rounded hover:bg-indigo-50"><Icon name="FileDown" size={13} color="#4F46E5" /></button>
+                                                                        <button onClick={() => setViewDiaria(d)} title="Visualizar diária" className="p-1.5 rounded hover:bg-indigo-50"><Icon name="Eye" size={13} color="#4F46E5" /></button>
                                                                         <button onClick={() => openEditDiaria(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
                                                                         <button onClick={() => handleDeleteDiaria(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>
                                                                     </div>
@@ -717,6 +728,58 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
 
             <Toast toast={toast} />
             {ConfirmDialog}
+            {viewDiaria && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setViewDiaria(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="flex items-center gap-2">
+                                <Icon name="CalendarDays" size={18} color="#4F46E5" />
+                                <h3 className="text-base font-bold" style={{ color: 'var(--color-text-primary)' }}>Detalhes da Diária</h3>
+                            </div>
+                            <button onClick={() => setViewDiaria(null)} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={16} color="var(--color-muted-foreground)" /></button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div className="grid grid-cols-2 gap-3">
+                                {[
+                                    { label: 'Motorista', value: viewDiaria.motorista?.name || '—' },
+                                    { label: 'Data', value: FMT(viewDiaria.data_inicio) },
+                                    { label: 'Quantidade de dias', value: viewDiaria.quantidade_dias },
+                                    { label: 'Valor por dia', value: BRL(viewDiaria.valor_dia) },
+                                ].map(({ label, value }) => (
+                                    <div key={label} className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
+                                        <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{label}</p>
+                                        <p className="text-sm font-semibold font-data">{value}</p>
+                                    </div>
+                                ))}
+                            </div>
+                            {viewDiaria.viagem && (
+                                <div className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
+                                    <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Viagem vinculada</p>
+                                    <p className="text-sm font-semibold font-data text-blue-700">{viewDiaria.viagem.numero}</p>
+                                    {viewDiaria.viagem.destino && <p className="text-xs text-gray-500">{viewDiaria.viagem.destino}</p>}
+                                </div>
+                            )}
+                            {viewDiaria.descricao && (
+                                <div className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
+                                    <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Descrição / Motivo</p>
+                                    <p className="text-sm">{viewDiaria.descricao}</p>
+                                </div>
+                            )}
+                            <div className="p-4 rounded-xl text-center" style={{ backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE' }}>
+                                <p className="text-xs text-indigo-600 font-medium mb-1">Total da Diária</p>
+                                <p className="text-3xl font-bold font-data text-indigo-700">{BRL(viewDiaria.valor_total)}</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 p-5 justify-end border-t" style={{ borderColor: 'var(--color-border)' }}>
+                            <button onClick={() => setViewDiaria(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
+                            <button onClick={() => { (viewDiaria._exportFn || (() => exportarDiariaIndividual(viewDiaria)))(); showToast('Exportado!', 'success'); }}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: '#4F46E5' }}>
+                                <Icon name="FileDown" size={14} color="white" /> Exportar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

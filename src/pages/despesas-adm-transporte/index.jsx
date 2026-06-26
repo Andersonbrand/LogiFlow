@@ -733,6 +733,39 @@ export default function DespesasAdmTransporte() {
     const [categoriasExtras]          = useState(() => { try { return JSON.parse(localStorage.getItem('adm_transporte_categorias_extras') || '[]'); } catch { return []; } });
 
     const todasCategorias = useMemo(() => [...CATEGORIAS_DESPESA_ADM, ...categoriasExtras], [categoriasExtras]);
+    const [guiaDespesas, setGuiaDespesas] = useState('registros');
+    const [relatorioPeriodo, setRelatorioPeriodo] = useState(() => {
+        const h = new Date();
+        return { inicio: `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}-01`, fim: `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}-${String(new Date(h.getFullYear(),h.getMonth()+1,0).getDate()).padStart(2,'0')}` };
+    });
+    const parcelasFuturas = useMemo(() => {
+        const hoje = new Date(); hoje.setHours(0,0,0,0);
+        const porMes = {};
+        const add = (d, tipo, valor, venc, cartao) => {
+            if (!venc) return; const dt = new Date(venc+'T00:00:00'); if (dt < hoje) return;
+            const k = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+            if (!porMes[k]) porMes[k] = { total: 0, itens: [] };
+            porMes[k].total += Number(valor)||0;
+            porMes[k].itens.push({ despesa: d, tipo, valor: Number(valor)||0, vencimento: venc, cartao });
+        };
+        despesas.forEach(d => {
+            (d.boletos||[]).forEach(b => { if (!b.pago) add(d,'Boleto',b.valor,b.vencimento); });
+            (d.parcelas_cartao||[]).forEach(p => { if (!p.pago) add(d,'Cartão',p.valor,p.vencimento,p.cartao); });
+            (d.cheques||[]).forEach(c => { if (!c.pago) add(d,'Cheque',c.valor,c.vencimento); });
+        });
+        return Object.entries(porMes).sort(([a],[b]) => a.localeCompare(b)).map(([mes,dados]) => ({ mes, ...dados, itens: dados.itens.sort((a,b) => a.vencimento.localeCompare(b.vencimento)) }));
+    }, [despesas]);
+    const relatorioStatus = useMemo(() => {
+        const { inicio, fim } = relatorioPeriodo; if (!inicio||!fim) return null;
+        const pagos=[],abertos=[];
+        despesas.forEach(d => {
+            if (d.forma_pagamento==='a_prazo') {
+                (d.boletos||[]).forEach(b => { const v=b.vencimento||d.data_despesa; if(v<inicio||v>fim) return; const it={despesa:d,tipo:'Boleto',valor:Number(b.valor)||0,vencimento:v,pago:b.pago}; b.pago?pagos.push(it):abertos.push(it); });
+                (d.parcelas_cartao||[]).forEach(p => { const v=p.vencimento||d.data_despesa; if(v<inicio||v>fim) return; const it={despesa:d,tipo:'Cartão',valor:Number(p.valor)||0,vencimento:v,pago:p.pago,cartao:p.cartao}; p.pago?pagos.push(it):abertos.push(it); });
+            } else if (d.data_despesa>=inicio&&d.data_despesa<=fim) { pagos.push({despesa:d,tipo:d.tipo_pagamento||'À vista',valor:Number(d.valor)||0,vencimento:d.data_despesa,pago:true}); }
+        });
+        return { pagos:pagos.sort((a,b)=>a.vencimento.localeCompare(b.vencimento)), abertos:abertos.sort((a,b)=>a.vencimento.localeCompare(b.vencimento)), totalPago:pagos.reduce((s,i)=>s+i.valor,0), totalAberto:abertos.reduce((s,i)=>s+i.valor,0) };
+    }, [despesas, relatorioPeriodo]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -930,8 +963,19 @@ export default function DespesasAdmTransporte() {
                         </div>
                     )}
 
+                    {/* Sub-guias */}
+                    <div className="flex gap-1 mb-5 p-1 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB', width: 'fit-content' }}>
+                        {[{ id: 'registros', label: 'Registros', icon: 'Receipt' }, { id: 'parcelas', label: 'Parcelas Futuras', icon: 'Clock' }, { id: 'relatorio', label: 'Pago / Em Aberto', icon: 'BarChart2' }].map(g => (
+                            <button key={g.id} onClick={() => setGuiaDespesas(g.id)}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
+                                style={guiaDespesas === g.id ? { backgroundColor: 'white', color: '#059669', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', fontWeight: 600 } : { color: 'var(--color-muted-foreground)' }}>
+                                <Icon name={g.icon} size={14} color={guiaDespesas === g.id ? '#059669' : 'var(--color-muted-foreground)'} />{g.label}
+                            </button>
+                        ))}
+                    </div>
+
                     {/* Tabela */}
-                    {loading ? (
+                    {guiaDespesas === 'registros' && (loading ? (
                         <div className="flex justify-center py-16">
                             <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                         </div>
@@ -1010,6 +1054,76 @@ export default function DespesasAdmTransporte() {
                                     </tr>
                                 </tfoot>
                             </table>
+                        </div>
+                    ))}
+
+                    {/* Parcelas Futuras */}
+                    {guiaDespesas === 'parcelas' && (
+                        <div className="space-y-4">
+                            {parcelasFuturas.length === 0 ? (
+                                <div className="flex flex-col items-center gap-2 py-16 text-center">
+                                    <Icon name="CheckCircle2" size={32} color="#059669" />
+                                    <p className="text-sm font-medium">Nenhuma parcela futura em aberto</p>
+                                </div>
+                            ) : parcelasFuturas.map(mes => (
+                                <div key={mes.mes} className="rounded-xl border overflow-hidden" style={{ borderColor: '#FED7AA' }}>
+                                    <div className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: '#FFF7ED' }}>
+                                        <p className="text-sm font-bold" style={{ color: '#9A3412' }}>{new Date(mes.mes+'-01T00:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</p>
+                                        <p className="text-sm font-bold font-data text-orange-600">{BRL(mes.total)}</p>
+                                    </div>
+                                    <table className="w-full text-xs">
+                                        <thead style={{ color: 'var(--color-muted-foreground)', backgroundColor: '#FFFBF5' }}>
+                                            <tr><th className="text-left px-4 py-2">Vencimento</th><th className="text-left px-4 py-2">Despesa</th><th className="text-left px-4 py-2">Tipo</th><th className="text-right px-4 py-2">Valor</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {mes.itens.map((it, idx) => (
+                                                <tr key={idx} className="border-t" style={{ borderColor: '#FEF3C7' }}>
+                                                    <td className="px-4 py-2 font-data">{FMT(it.vencimento)}</td>
+                                                    <td className="px-4 py-2 max-w-[240px] truncate"><span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium mr-1">{it.despesa.categoria}</span>{it.despesa.fornecedor||it.despesa.descricao||'—'}</td>
+                                                    <td className="px-4 py-2">{it.tipo}{it.cartao?` (${it.cartao})`:''}</td>
+                                                    <td className="px-4 py-2 text-right font-data font-semibold text-orange-600">{BRL(it.valor)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot><tr className="border-t font-semibold" style={{ borderColor: '#FED7AA', backgroundColor: '#FFF7ED' }}><td colSpan={3} className="px-4 py-2 text-right" style={{ color: '#9A3412' }}>Total do mês:</td><td className="px-4 py-2 text-right font-data text-orange-600">{BRL(mes.total)}</td></tr></tfoot>
+                                    </table>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Relatório Pago / Em Aberto */}
+                    {guiaDespesas === 'relatorio' && (
+                        <div className="space-y-5">
+                            <div className="flex flex-wrap items-end gap-3 p-4 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-card)' }}>
+                                <div><label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Início</label><input type="date" value={relatorioPeriodo.inicio} onChange={e => setRelatorioPeriodo(p => ({ ...p, inicio: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" /></div>
+                                <div><label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Fim</label><input type="date" value={relatorioPeriodo.fim} onChange={e => setRelatorioPeriodo(p => ({ ...p, fim: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" /></div>
+                            </div>
+                            {relatorioStatus && (<>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="rounded-xl border p-4" style={{ borderColor: '#A7F3D0', backgroundColor: '#F0FDF4' }}><p className="text-xs font-medium text-green-700 mb-1">✅ Total Pago</p><p className="text-2xl font-bold font-data text-green-700">{BRL(relatorioStatus.totalPago)}</p><p className="text-xs text-green-600">{relatorioStatus.pagos.length} lançamento(s)</p></div>
+                                    <div className="rounded-xl border p-4" style={{ borderColor: '#FCA5A5', backgroundColor: '#FFF1F2' }}><p className="text-xs font-medium text-red-700 mb-1">🔴 Total em Aberto</p><p className="text-2xl font-bold font-data text-red-700">{BRL(relatorioStatus.totalAberto)}</p><p className="text-xs text-red-600">{relatorioStatus.abertos.length} lançamento(s)</p></div>
+                                </div>
+                                {[{ lista: relatorioStatus.abertos, titulo: 'Em Aberto', cor: '#DC2626', bg: '#FFF1F2', border: '#FCA5A5' }, { lista: relatorioStatus.pagos, titulo: 'Pagos', cor: '#059669', bg: '#F0FDF4', border: '#A7F3D0' }].map(({ lista, titulo, cor, bg, border }) => lista.length > 0 && (
+                                    <div key={titulo} className="rounded-xl border overflow-hidden" style={{ borderColor: border }}>
+                                        <div className="px-4 py-3 font-bold text-sm" style={{ backgroundColor: bg, color: cor }}>{titulo} — {lista.length} lançamento(s)</div>
+                                        <table className="w-full text-xs">
+                                            <thead style={{ color: 'var(--color-muted-foreground)' }}><tr><th className="text-left px-4 py-2">Data/Venc.</th><th className="text-left px-4 py-2">Despesa</th><th className="text-left px-4 py-2">Tipo</th><th className="text-right px-4 py-2">Valor</th></tr></thead>
+                                            <tbody>
+                                                {lista.map((it, idx) => (
+                                                    <tr key={idx} className="border-t" style={{ borderColor: border }}>
+                                                        <td className="px-4 py-2 font-data">{FMT(it.vencimento)}</td>
+                                                        <td className="px-4 py-2 max-w-[240px] truncate"><span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold mr-1" style={{ backgroundColor: titulo==='Em Aberto'?'#FEE2E2':'#D1FAE5', color: cor }}>{it.despesa.categoria}</span>{it.despesa.fornecedor||it.despesa.descricao||'—'}</td>
+                                                        <td className="px-4 py-2">{it.tipo}{it.cartao?` (${it.cartao})`:''}</td>
+                                                        <td className="px-4 py-2 text-right font-data font-semibold" style={{ color: cor }}>{BRL(it.valor)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot><tr className="border-t font-bold" style={{ borderColor: border, backgroundColor: bg }}><td colSpan={3} className="px-4 py-2 text-right" style={{ color: cor }}>Total {titulo}:</td><td className="px-4 py-2 text-right font-data" style={{ color: cor }}>{BRL(titulo==='Em Aberto'?relatorioStatus.totalAberto:relatorioStatus.totalPago)}</td></tr></tfoot>
+                                        </table>
+                                    </div>
+                                ))}
+                            </>)}
                         </div>
                     )}
                 </div>

@@ -3711,6 +3711,7 @@ function TabDiarias({ isAdmin, profile }) {
         setForm({ motorista_id: d.motorista_id || '', viagem_id: d.viagem_id || '', data_inicio: d.data_inicio, quantidade_dias: d.quantidade_dias, valor_dia: d.valor_dia, descricao: d.descricao || '' });
         setModal({ mode: 'edit', data: d });
     };
+    const [viewDiaria, setViewDiaria] = useState(null);
 
     return (
         <div>
@@ -3785,10 +3786,10 @@ function TabDiarias({ isAdmin, profile }) {
                                     <td className="px-4 py-3 font-data font-semibold text-indigo-600">{BRL(d.valor_total)}</td>
                                     <td className="px-4 py-3">
                                         <div className="flex gap-1">
-                                            <button onClick={() => exportarDiariaIndividual(d)}
-                                                className="p-1.5 rounded hover:bg-emerald-50"
-                                                title="Exportar modelo Excel">
-                                                <Icon name="FileDown" size={13} color="#059669" />
+                                            <button onClick={() => setViewDiaria(d)}
+                                                className="p-1.5 rounded hover:bg-indigo-50"
+                                                title="Visualizar diária">
+                                                <Icon name="Eye" size={13} color="#4F46E5" />
                                             </button>
                                             {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>}
                                             {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>}
@@ -3844,6 +3845,47 @@ function TabDiarias({ isAdmin, profile }) {
                     <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
+                    </div>
+                </ModalOverlay>
+            )}
+            {viewDiaria && (
+                <ModalOverlay onClose={() => setViewDiaria(null)}>
+                    <ModalHeader title="Detalhes da Diária" icon="CalendarDays" onClose={() => setViewDiaria(null)} />
+                    <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                        <div className="grid grid-cols-2 gap-3">
+                            {[
+                                { label: 'Motorista', value: viewDiaria.motorista?.name || '—' },
+                                { label: 'Data', value: FMT_DATE(viewDiaria.data_inicio) },
+                                { label: 'Quantidade de dias', value: viewDiaria.quantidade_dias },
+                                { label: 'Valor por dia', value: BRL(viewDiaria.valor_dia) },
+                            ].map(({ label, value }) => (
+                                <div key={label} className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
+                                    <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{label}</p>
+                                    <p className="text-sm font-semibold font-data">{value}</p>
+                                </div>
+                            ))}
+                        </div>
+                        {viewDiaria.viagem && (
+                            <div className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
+                                <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Viagem vinculada</p>
+                                <p className="text-sm font-semibold font-data text-blue-700">{viewDiaria.viagem.numero}</p>
+                                {viewDiaria.viagem.destino && <p className="text-xs text-gray-500">{viewDiaria.viagem.destino}</p>}
+                            </div>
+                        )}
+                        {viewDiaria.descricao && (
+                            <div className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
+                                <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Descrição / Motivo</p>
+                                <p className="text-sm">{viewDiaria.descricao}</p>
+                            </div>
+                        )}
+                        <div className="p-4 rounded-xl text-center" style={{ backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE' }}>
+                            <p className="text-xs text-indigo-600 font-medium mb-1">Total da Diária</p>
+                            <p className="text-3xl font-bold font-data text-indigo-700">{BRL(viewDiaria.valor_total)}</p>
+                        </div>
+                    </div>
+                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                        <button onClick={() => setViewDiaria(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
+                        <Button onClick={() => { exportarDiariaIndividual(viewDiaria); showToast('Exportado!', 'success'); }} iconName="FileDown" size="sm">Exportar</Button>
                     </div>
                 </ModalOverlay>
             )}
