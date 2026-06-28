@@ -20,6 +20,13 @@ import {
 } from 'utils/despesasAdmTransporteService';
 import * as XLSX from 'xlsx';
 
+import { supabase } from 'utils/supabaseClient';
+
+async function fetchDespesaAdmById(id) {
+    const { data } = await supabase.from('transporte_despesas_adm').select('*').eq('id', id).single();
+    return data || null;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -106,6 +113,141 @@ function BoletosPendentes({ despesa }) {
                 </span>
             )}
         </div>
+    );
+}
+
+// ─── Modal: Visualizar Despesa + Baixas/Revogações ───────────────────────────
+function ModalVisualizacaoDespesa({ despesa, onClose, onAtualizado, admin }) {
+    const { toast, showToast } = useToast();
+    const [loading, setLoading] = useState(false);
+    const [dados, setDados] = useState(despesa);
+
+    const reload = async () => {
+        try {
+            const updated = await fetchDespesaAdmById(despesa.id);
+            if (updated) setDados(updated);
+            if (onAtualizado) onAtualizado();
+        } catch {}
+    };
+
+    const act = async (fn, msg) => {
+        setLoading(true);
+        try { await fn(); showToast(msg, msg.includes('evogad') ? 'warning' : 'success'); await reload(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    };
+
+    const boletos  = dados.boletos        || [];
+    const parcelas = dados.parcelas_cartao || [];
+    const temParcelas = boletos.length > 0 || parcelas.length > 0;
+    const statusGeral = () => {
+        const todas = [...boletos, ...parcelas];
+        if (!todas.length) return null;
+        const pagas = todas.filter(x => x.pago).length;
+        return pagas === todas.length ? 'quitado' : pagas > 0 ? 'parcial' : 'aberto';
+    };
+    const sg = statusGeral();
+
+    return (
+        <ModalOverlay onClose={onClose}>
+            <ModalHeader title="Detalhes da Despesa" icon="Receipt" onClose={onClose} />
+            <div className="p-5 overflow-y-auto flex-1 space-y-5">
+                <div className="grid grid-cols-2 gap-3">
+                    {[
+                        { l: 'Categoria',          v: dados.categoria       || '—' },
+                        { l: 'Data',               v: FMT(dados.data_despesa)      },
+                        { l: 'Fornecedor',         v: dados.fornecedor      || '—' },
+                        { l: 'Nota Fiscal',        v: dados.nota_fiscal     || '—' },
+                        { l: 'Forma de Pagamento', v: dados.forma_pagamento || '—' },
+                        { l: 'Centro de Custo',    v: dados.centro_custo    || '—' },
+                    ].map(({ l, v }) => (
+                        <div key={l} className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
+                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{l}</p>
+                            <p className="text-sm font-semibold">{v}</p>
+                        </div>
+                    ))}
+                    {dados.descricao && (
+                        <div className="col-span-2 p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
+                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Descrição</p>
+                            <p className="text-sm">{dados.descricao}</p>
+                        </div>
+                    )}
+                </div>
+                <div className="p-4 rounded-xl flex items-center justify-between" style={{ backgroundColor: '#FFF1F2', border: '1px solid #FCA5A5' }}>
+                    <div>
+                        <p className="text-xs text-red-600 font-medium mb-0.5">Valor Total</p>
+                        <p className="text-3xl font-bold font-data text-red-700">{BRL(dados.valor)}</p>
+                    </div>
+                    {sg && <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${sg === 'quitado' ? 'bg-green-100 text-green-700' : sg === 'parcial' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{sg === 'quitado' ? '✅ Quitado' : sg === 'parcial' ? '⚠️ Parcialmente pago' : '🔴 Em Aberto'}</span>}
+                </div>
+                {boletos.length > 0 && (
+                    <div>
+                        <p className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>Boletos</p>
+                        <div className="space-y-2">
+                            {boletos.map((b, idx) => (
+                                <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: b.pago ? '#F0FDF4' : '#FFFBEB' }}>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold font-data">Parcela {idx + 1} — {BRL(b.valor)}</p>
+                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Venc.: {FMT(b.vencimento)}</p>
+                                        {b.pago && <p className="text-xs text-green-600 font-medium">✓ Pago em {b.pago_em ? new Date(b.pago_em).toLocaleDateString('pt-BR') : '—'}</p>}
+                                    </div>
+                                    <div className="flex gap-1.5 flex-shrink-0">
+                                        {!b.pago ? (
+                                            <button disabled={loading} onClick={() => act(() => pagarBoletoAdmTransporte(dados.id, idx), 'Boleto baixado!')}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-60">
+                                                <Icon name="Check" size={12} />Dar baixa
+                                            </button>
+                                        ) : (
+                                            <>
+                                                <span className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-green-100 text-green-700">Pago</span>
+                                                {admin && <button disabled={loading} onClick={() => act(() => revogarBoletoAdmTransporte(dados.id, idx), 'Baixa revogada!')}
+                                                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 disabled:opacity-60">
+                                                    <Icon name="RotateCcw" size={11} />Revogar
+                                                </button>}
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {parcelas.length > 0 && (
+                    <div>
+                        <p className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>Parcelas do Cartão</p>
+                        <div className="space-y-2">
+                            {parcelas.map((p, idx) => (
+                                <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: p.pago ? '#F0FDF4' : '#FAF5FF' }}>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold font-data">Parcela {idx + 1} — {BRL(p.valor)}</p>
+                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Venc.: {FMT(p.vencimento)}{p.cartao ? ` · ${p.cartao}` : ''}</p>
+                                        {p.pago && <p className="text-xs text-green-600 font-medium">✓ Pago em {p.pago_em ? new Date(p.pago_em).toLocaleDateString('pt-BR') : '—'}</p>}
+                                    </div>
+                                    <div className="flex gap-1.5 flex-shrink-0">
+                                        {!p.pago ? (
+                                            <button disabled={loading} onClick={() => act(() => pagarParcelaCartaoAdmTransporte(dados.id, idx), 'Parcela baixada!')}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60">
+                                                <Icon name="Check" size={12} />Dar baixa
+                                            </button>
+                                        ) : (
+                                            <>
+                                                <span className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-purple-100 text-purple-700">Pago</span>
+                                                {admin && <button disabled={loading} onClick={() => act(() => revogarParcelaCartaoAdmTransporte(dados.id, idx), 'Baixa revogada!')}
+                                                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 disabled:opacity-60">
+                                                    <Icon name="RotateCcw" size={11} />Revogar
+                                                </button>}
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {!temParcelas && <p className="text-xs text-center py-4" style={{ color: 'var(--color-muted-foreground)' }}>Pagamento à vista — sem parcelas ou boletos vinculados.</p>}
+            </div>
+            <Toast toast={toast} />
+        </ModalOverlay>
     );
 }
 
@@ -729,6 +871,7 @@ export default function DespesasAdmTransporte() {
     const [loading, setLoading]       = useState(true);
     const [modal, setModal]           = useState(null);
     const [modalBaixa, setModalBaixa] = useState(null);
+    const [viewDespesa, setViewDespesa] = useState(null);
     const [filtro, setFiltro]         = useState({ categoria: '', mes: '', formaPgto: '' });
     const [categoriasExtras]          = useState(() => { try { return JSON.parse(localStorage.getItem('adm_transporte_categorias_extras') || '[]'); } catch { return []; } });
 
@@ -1025,6 +1168,10 @@ export default function DespesasAdmTransporte() {
                                             <td className="px-3 py-3 font-data font-bold whitespace-nowrap" style={{ color: '#DC2626' }}>{BRL(d.valor)}</td>
                                             <td className="px-3 py-3">
                                                 <div className="flex items-center gap-1">
+                                                    <button onClick={() => setViewDespesa(d)} title="Visualizar despesa"
+                                                        className="p-1.5 rounded hover:bg-indigo-50 transition-colors">
+                                                        <Icon name="Eye" size={13} color="#4F46E5" />
+                                                    </button>
                                                     {((d.boletos || []).length > 0 || (d.parcelas_cartao || []).length > 0) && (
                                                         <button onClick={() => setModalBaixa(d)} title="Gerenciar pagamentos"
                                                             className="p-1.5 rounded hover:bg-green-50 transition-colors">
@@ -1131,6 +1278,14 @@ export default function DespesasAdmTransporte() {
 
             {modal && (
                 <ModalDespesa modal={modal} onClose={() => setModal(null)} onSaved={load} />
+            )}
+            {viewDespesa && (
+                <ModalVisualizacaoDespesa
+                    despesa={viewDespesa}
+                    onClose={() => setViewDespesa(null)}
+                    onAtualizado={load}
+                    admin={admin}
+                />
             )}
             {modalBaixa && (
                 <ModalBaixa
