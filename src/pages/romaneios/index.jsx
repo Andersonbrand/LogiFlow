@@ -209,7 +209,7 @@ export default function Romaneios() {
                                 <Button variant="outline" iconName="MapPin" iconSize={15}
                                     onClick={() => setResumoCidadeOpen(true)}
                                     disabled={rascunhos.length === 0}>
-                                    <span className="hidden sm:inline">Materiais por </span>Carga
+                                    Materiais por Carga
                                 </Button>
                                 <Button variant="default" iconName="Plus" iconSize={16}
                                     onClick={() => setRascunhoModal({ open: true, rascunho: null })}

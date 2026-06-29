@@ -964,18 +964,23 @@ async function buscarNumeroExistente({ motorista_id, motoristaNome, destino, dat
  * garantindo que não haja colisão entre romaneios do admin e do motorista.
  */
 async function nextRomaneioNumero() {
-    // Busca TODOS os números para garantir pegar o maior real (não apenas o último por created_at)
+    // IMPORTANTE: filtra apenas números no formato ROM-XXXXX.
+    // Sem esse filtro, números de pedido (ex: 8836898) ou timestamps gravados
+    // no campo `numero` por registros de motoristas seriam tratados como parte
+    // da sequência, gerando números absurdamente grandes.
+    const isRomNum = (str) => typeof str === 'string' && /^ROM-/i.test(str.trim());
+    const parseNum = (str) => isRomNum(str) ? (parseInt(str.replace(/\D/g, ''), 10) || 0) : 0;
+
     const [{ data: todosCarretas }, { data: todosAdmin }] = await Promise.all([
         supabase.from('carretas_romaneios').select('numero'),
-        supabase.from('romaneios').select('numero'),
+        supabase.from('romaneios').select('numero').eq('is_rascunho', false),
     ]);
-    const parseNum = (str) => str ? parseInt((str || '').replace(/\D/g, ''), 10) || 0 : 0;
     const nums = [
         ...(todosCarretas || []).map(r => parseNum(r.numero)),
         ...(todosAdmin    || []).map(r => parseNum(r.numero)),
-    ];
+    ].filter(n => n > 0);
     const maxN = nums.length > 0 ? Math.max(...nums) : 0;
-    return `ROM-${String(maxN + 1).padStart(5, '0')}`;
+    return `ROM-${String(maxN + 1).padStart(3, '0')}`;
 }
 
 export async function fetchRomaneios(filters = {}) {

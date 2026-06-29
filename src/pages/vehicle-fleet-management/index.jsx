@@ -13,7 +13,7 @@ import VehicleCards from "./components/VehicleCards";
 import VehicleFormModal from "./components/VehicleFormModal";
 import StatusUpdateModal from "./components/StatusUpdateModal";
 import HistoryModal from "./components/HistoryModal";
-import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate, exportDiariaModelo } from "utils/excelUtils";
+import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate, exportDiariaModelo, printDiaria } from "utils/excelUtils";
 import { useAuth } from "utils/AuthContext";
 import AccessDeniedModal from "components/ui/AccessDeniedModal";
 import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle } from "utils/vehicleService";
@@ -772,6 +772,10 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                         </div>
                         <div className="flex gap-3 p-5 justify-end border-t" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => setViewDiaria(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
+                            <button onClick={() => printDiaria(viewDiaria)}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border" style={{ borderColor: '#4F46E5', color: '#4F46E5' }}>
+                                <Icon name="Printer" size={14} color="#4F46E5" /> Imprimir
+                            </button>
                             <button onClick={() => { (viewDiaria._exportFn || (() => exportarDiariaIndividual(viewDiaria)))(); showToast('Exportado!', 'success'); }}
                                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: '#4F46E5' }}>
                                 <Icon name="FileDown" size={14} color="white" /> Exportar

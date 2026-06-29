@@ -41,7 +41,7 @@ import {
     updateAbastecimento,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
-import { exportDiariaModelo, exportDiariasRomaneiosModelo } from 'utils/excelUtils';
+import { exportDiariaModelo, exportDiariasRomaneiosModelo, printDiaria } from 'utils/excelUtils';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT_DATE = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -3885,6 +3885,7 @@ function TabDiarias({ isAdmin, profile }) {
                     </div>
                     <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setViewDiaria(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
+                        <Button variant="outline" onClick={() => printDiaria(viewDiaria)} iconName="Printer" size="sm">Imprimir</Button>
                         <Button onClick={() => { exportarDiariaIndividual(viewDiaria); showToast('Exportado!', 'success'); }} iconName="FileDown" size="sm">Exportar</Button>
                     </div>
                 </ModalOverlay>
@@ -6091,7 +6092,41 @@ function TabDuplicatas() {
     const { toast, showToast } = useToast();
     const [mes, setMes]           = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`; });
     const [loading, setLoading]   = useState(false);
-    const [resultado, setResultado] = useState(null); // null | { total, dups, placaMap, all }
+    const [resultado, setResultado] = useState(null); // null | { total, dups, possiveis, placaMap }
+    const [verificadas, setVerificadas] = useState(new Set()); // Set of assinaturas já verificadas
+    const [loadingVerif, setLoadingVerif] = useState(false);
+
+    // Carrega assinaturas já verificadas do Supabase
+    const loadVerificadas = async () => {
+        const { data } = await supabase.from('duplicatas_verificadas').select('assinatura');
+        setVerificadas(new Set((data || []).map(d => d.assinatura)));
+    };
+    useEffect(() => { loadVerificadas(); }, []);
+
+    // Gera a assinatura de um grupo de possíveis duplicatas (IDs ordenados)
+    const assinatura = (grupo) => grupo.itens.map(r => r.id).sort().join(',');
+
+    const marcarVerificado = async (grupo) => {
+        setLoadingVerif(true);
+        try {
+            const sig = assinatura(grupo);
+            await supabase.from('duplicatas_verificadas').upsert({ assinatura: sig, tipo: grupo.tipo }, { onConflict: 'assinatura' });
+            setVerificadas(prev => new Set([...prev, sig]));
+            showToast('Marcado como verificado — não aparecerá mais nas próximas pesquisas.', 'success');
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoadingVerif(false); }
+    };
+
+    const desmarcarVerificado = async (grupo) => {
+        setLoadingVerif(true);
+        try {
+            const sig = assinatura(grupo);
+            await supabase.from('duplicatas_verificadas').delete().eq('assinatura', sig);
+            setVerificadas(prev => { const s = new Set(prev); s.delete(sig); return s; });
+            showToast('Verificação removida — voltará a aparecer nas pesquisas.', 'warning');
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoadingVerif(false); }
+    };
 
     const detectar = async () => {
         setLoading(true); setResultado(null);
@@ -6165,7 +6200,13 @@ function TabDuplicatas() {
             Object.entries(porPedido).forEach(([ped, lista]) => addPossivel(lista, `Pedido ${ped}`));
             Object.entries(porNF).forEach(([nf, lista]) => addPossivel(lista, `NF ${nf}`));
 
-            setResultado({ total: all.length, dups, possiveis, placaMap });
+            // Filtra possíveis já marcadas como verificadas (persistidas no Supabase)
+            const possiveisNaoVerificadas = possiveis.filter(p => {
+                const sig = p.itens.map(r => r.id).sort().join(',');
+                return !verificadas.has(sig);
+            });
+
+            setResultado({ total: all.length, dups, possiveis: possiveisNaoVerificadas, possiveisAll: possiveis, placaMap });
         } catch (e) {
             showToast('Erro: ' + e.message, 'error');
         } finally { setLoading(false); }
@@ -6290,18 +6331,31 @@ function TabDuplicatas() {
                     ) : null}
 
                     {/* ── Alertas: possíveis duplicatas (mesmo pedido OU mesma NF, mas placa/destino diferem) ── */}
-                    {resultado.possiveis?.length > 0 && (
+                    {(resultado.possiveis?.length > 0 || (resultado.possiveisAll?.length > resultado.possiveis?.length)) && (
                         <div className="bg-white rounded-xl border shadow-sm overflow-x-auto mt-4" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="px-4 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#FFFBEB' }}>
-                                <Icon name="AlertTriangle" size={16} color="#D97706" />
-                                <span className="text-sm font-semibold" style={{ color: '#92400E' }}>
-                                    {resultado.possiveis.length} alerta(s) — registros com o mesmo número de pedido ou NF, mas placa/destino diferentes. Pode ser erro de digitação ou registro duplicado com dado trocado.
-                                </span>
+                            <div className="px-4 py-3 border-b flex items-center justify-between gap-2 flex-wrap" style={{ borderColor: 'var(--color-border)', backgroundColor: '#FFFBEB' }}>
+                                <div className="flex items-center gap-2">
+                                    <Icon name="AlertTriangle" size={16} color="#D97706" />
+                                    <span className="text-sm font-semibold" style={{ color: '#92400E' }}>
+                                        {resultado.possiveis.length} alerta(s) — registros com o mesmo número de pedido ou NF, mas placa/destino diferentes. Pode ser erro de digitação ou registro duplicado com dado trocado.
+                                    </span>
+                                </div>
+                                {resultado.possiveisAll?.length > resultado.possiveis?.length && (
+                                    <span className="text-xs px-2.5 py-1 rounded-full font-medium" style={{ backgroundColor: '#F0FDF4', color: '#15803D', border: '1px solid #A7F3D0' }}>
+                                        ✅ {resultado.possiveisAll.length - resultado.possiveis.length} oculto(s) — já verificado(s) e confirmado(s) como não duplicata
+                                    </span>
+                                )}
                             </div>
+                            {resultado.possiveis.length === 0 ? (
+                                <div className="px-4 py-8 text-center">
+                                    <Icon name="CheckCircle2" size={28} color="#15803D" />
+                                    <p className="text-sm font-medium text-green-700 mt-2">Todos os alertas foram verificados e confirmados como corretos.</p>
+                                </div>
+                            ) : (
                             <table className="w-full text-sm min-w-[900px]">
                                 <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
                                     <tr>
-                                        {['Critério','Placa','Data','Destino','NF','Pedido','Sacos','Empresa Orig.'].map(h => (
+                                        {['Critério','Placa','Data','Destino','NF','Pedido','Sacos','Empresa Orig.',''].map(h => (
                                             <th key={h} className="px-3 py-2 text-left font-medium whitespace-nowrap">{h}</th>
                                         ))}
                                     </tr>
@@ -6320,11 +6374,24 @@ function TabDuplicatas() {
                                                 <td className="px-3 py-3 font-data whitespace-nowrap">{r.numero_pedido || '—'}</td>
                                                 <td className="px-3 py-3 font-data text-right">{fmt(r.quantidade)}</td>
                                                 <td className="px-3 py-3 text-xs">{r.empresa_origem || '—'}</td>
+                                                {ri === 0 && (
+                                                    <td className="px-3 py-3 whitespace-nowrap" rowSpan={p.itens.length}>
+                                                        <button
+                                                            disabled={loadingVerif}
+                                                            onClick={() => marcarVerificado(p)}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-60"
+                                                            title="Confirmar que estes registros são intencionais e não são duplicatas — não aparecerão mais em pesquisas futuras">
+                                                            <Icon name="CheckCheck" size={12} color="white" />
+                                                            Verificado — não é duplicata
+                                                        </button>
+                                                    </td>
+                                                )}
                                             </tr>
                                         ))
                                     ))}
                                 </tbody>
                             </table>
+                            )}
                         </div>
                     )}
                 </>
