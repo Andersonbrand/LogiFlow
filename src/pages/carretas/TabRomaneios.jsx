@@ -827,7 +827,7 @@ export default function TabRomaneios({ isAdmin }) {
                 });
             });
             const mat = Object.values(matMap).sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-            setRomaneios(r); setVeiculos(v); setMotoristas(m); setEmpresas(e); setMateriais(mat);
+            setRomaneios(r); setVeiculos((v || []).filter(x => !x.is_terceiro)); setMotoristas(m); setEmpresas(e); setMateriais(mat);
             setRomaneiosFerragem(rf || []);
             setFretesFretas(fr || []);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }

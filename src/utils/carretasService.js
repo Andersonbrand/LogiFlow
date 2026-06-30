@@ -968,17 +968,13 @@ async function nextRomaneioNumero() {
     // Sem esse filtro, números de pedido (ex: 8836898) ou timestamps gravados
     // no campo `numero` por registros de motoristas seriam tratados como parte
     // da sequência, gerando números absurdamente grandes.
+    // item 5: sequência independente — considera apenas os romaneios do próprio
+    // módulo de carretas (carretas_romaneios), sem misturar com a tabela `romaneios`.
     const isRomNum = (str) => typeof str === 'string' && /^ROM-/i.test(str.trim());
     const parseNum = (str) => isRomNum(str) ? (parseInt(str.replace(/\D/g, ''), 10) || 0) : 0;
 
-    const [{ data: todosCarretas }, { data: todosAdmin }] = await Promise.all([
-        supabase.from('carretas_romaneios').select('numero'),
-        supabase.from('romaneios').select('numero').eq('is_rascunho', false),
-    ]);
-    const nums = [
-        ...(todosCarretas || []).map(r => parseNum(r.numero)),
-        ...(todosAdmin    || []).map(r => parseNum(r.numero)),
-    ].filter(n => n > 0);
+    const { data: todosCarretas } = await supabase.from('carretas_romaneios').select('numero');
+    const nums = (todosCarretas || []).map(r => parseNum(r.numero)).filter(n => n > 0);
     const maxN = nums.length > 0 ? Math.max(...nums) : 0;
     return `ROM-${String(maxN + 1).padStart(3, '0')}`;
 }

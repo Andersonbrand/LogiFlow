@@ -172,22 +172,18 @@ async function buscarNumeroExistente({ motorista_id, motoristaNome, destino, sai
     return null;
 }
 
-/** Gera próximo número sequencial global, considerando as duas tabelas.
- *  Exclui rascunhos (is_rascunho=true) e números RASC-* para não poluir a sequência. */
+/** Gera próximo número sequencial, considerando apenas a tabela própria (`romaneios`).
+ *  Exclui rascunhos (is_rascunho=true) e números RASC-* para não poluir a sequência.
+ *  item 5: sequência independente da usada pelo módulo de carretas. */
 async function nextNumeroGlobal() {
     // Filtra apenas números no formato ROM-XXX para não poluir a sequência
     // com números de pedido ou timestamps gravados por registros de motoristas.
     const isRomNum = (str) => typeof str === 'string' && /^ROM-/i.test(str.trim());
     const parseNum = (str) => isRomNum(str) ? (parseInt(str.replace(/\D/g, ''), 10) || 0) : 0;
 
-    const [{ data: rowsAdmin }, { data: rowsCarretas }] = await Promise.all([
-        supabase.from('romaneios').select('numero').eq('is_rascunho', false).not('numero', 'is', null),
-        supabase.from('carretas_romaneios').select('numero').not('numero', 'is', null),
-    ]);
-    const nums = [
-        ...(rowsAdmin    || []).map(r => parseNum(r.numero)),
-        ...(rowsCarretas || []).map(r => parseNum(r.numero)),
-    ].filter(n => n > 0);
+    const { data: rowsAdmin } = await supabase
+        .from('romaneios').select('numero').eq('is_rascunho', false).not('numero', 'is', null);
+    const nums = (rowsAdmin || []).map(r => parseNum(r.numero)).filter(n => n > 0);
     const maxN = nums.length > 0 ? Math.max(...nums) : 0;
     return `ROM-${String(maxN + 1).padStart(3, '0')}`;
 }

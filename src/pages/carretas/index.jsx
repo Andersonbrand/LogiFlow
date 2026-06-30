@@ -798,7 +798,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                 {[
                     { l: 'Diesel (L)', v: totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#1D4ED8', bg: '#EFF6FF', i: 'Fuel' },
                     { l: 'Custo Diesel', v: BRL(totais.valorDiesel), c: '#1D4ED8', bg: '#EFF6FF', i: 'DollarSign' },
-                    { l: 'Arla (L)', v: totais.litrosArla.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#059669', bg: '#D1FAE5', i: 'Droplets' },
+                    { l: 'Arla (L)', v: totais.litrosArla.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#059669', bg: '#D1FAE5', i: 'Droplets', sub: BRL(totais.valorArla) },
                     { l: 'Gasto Total', v: BRL(totais.valorTotal), c: '#7C3AED', bg: '#EDE9FE', i: 'Receipt' },
                 ].map(k => (
                     <div key={k.l} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
@@ -807,6 +807,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                             <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{k.l}</span>
                         </div>
                         <p className="text-lg font-bold font-data" style={{ color: k.c }}>{k.v}</p>
+                        {k.sub && <p className="text-xs font-data font-semibold" style={{ color: k.c }}>{k.sub}</p>}
                     </div>
                 ))}
             </div>
@@ -3610,6 +3611,7 @@ function TabDiarias({ isAdmin, profile }) {
     const { confirm, ConfirmDialog } = useConfirm();
     const [diarias, setDiarias]     = useState([]);
     const [motoristas, setMotoristas] = useState([]);
+    const [veiculos, setVeiculos]   = useState([]);
     const [viagens, setViagens]     = useState([]);
     const [loading, setLoading]     = useState(true);
     const [modal, setModal]         = useState(null);
@@ -3624,7 +3626,7 @@ function TabDiarias({ isAdmin, profile }) {
         try { sessionStorage.setItem('carretas_diarias_filtroMes', mes); } catch {}
     };
     const [form, setForm] = useState({
-        motorista_id: '', viagem_id: '', data_inicio: new Date().toISOString().split('T')[0],
+        motorista_id: '', viagem_id: '', veiculo_id: '', data_inicio: new Date().toISOString().split('T')[0],
         quantidade_dias: '1', valor_dia: '', descricao: '',
     });
 
@@ -3639,10 +3641,11 @@ function TabDiarias({ isAdmin, profile }) {
                 f.dataInicio = filtro.mes + '-01';
                 f.dataFim    = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0');
             }
-            const [d, m, v] = await Promise.all([fetchDiarias(f), fetchCarreteirosPropriosOnly(), fetchViagens({})]);
+            const [d, m, v, vc] = await Promise.all([fetchDiarias(f), fetchCarreteirosPropriosOnly(), fetchViagens({}), fetchCarretasVeiculos()]);
             setDiarias(d);
             setMotoristas(m); // fetchCarreteirosPropriosOnly já filtra apenas carreteiros próprios
             setViagens(v);
+            setVeiculos((vc || []).filter(x => !x.is_terceiro)); // item 2: apenas placas da frota própria de carretas
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtro]); // eslint-disable-line
@@ -3704,11 +3707,11 @@ function TabDiarias({ isAdmin, profile }) {
     };
 
     const openCreate = () => {
-        setForm({ motorista_id: '', viagem_id: '', data_inicio: new Date().toISOString().split('T')[0], quantidade_dias: '1', valor_dia: '', descricao: '' });
+        setForm({ motorista_id: '', viagem_id: '', veiculo_id: '', data_inicio: new Date().toISOString().split('T')[0], quantidade_dias: '1', valor_dia: '', descricao: '' });
         setModal({ mode: 'create' });
     };
     const openEdit = (d) => {
-        setForm({ motorista_id: d.motorista_id || '', viagem_id: d.viagem_id || '', data_inicio: d.data_inicio, quantidade_dias: d.quantidade_dias, valor_dia: d.valor_dia, descricao: d.descricao || '' });
+        setForm({ motorista_id: d.motorista_id || '', viagem_id: d.viagem_id || '', veiculo_id: d.veiculo_id || '', data_inicio: d.data_inicio, quantidade_dias: d.quantidade_dias, valor_dia: d.valor_dia, descricao: d.descricao || '' });
         setModal({ mode: 'edit', data: d });
     };
     const [viewDiaria, setViewDiaria] = useState(null);
@@ -3764,10 +3767,10 @@ function TabDiarias({ isAdmin, profile }) {
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                     <table className="w-full text-sm min-w-[640px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Data','Motorista','Viagem','Dias','Valor/Dia','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                            <tr>{['Data','Motorista','Placa','Viagem','Dias','Valor/Dia','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {diariasFiltradas.length === 0 ? <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                            {diariasFiltradas.length === 0 ? <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                 <div className="flex flex-col items-center gap-2">
                                     <Icon name="CalendarDays" size={28} color="var(--color-muted-foreground)" />
                                     <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma diária registrada'}</span>
@@ -3777,6 +3780,7 @@ function TabDiarias({ isAdmin, profile }) {
                                 <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(d.data_inicio)}</td>
                                     <td className="px-4 py-3 font-medium">{d.motorista?.name || '—'}</td>
+                                    <td className="px-4 py-3 font-data whitespace-nowrap">{d.veiculo?.placa || '—'}</td>
                                     <td className="px-4 py-3 text-xs">
                                         {d.viagem ? <span className="font-data text-blue-700">{d.viagem.numero}</span> : <span style={{ color: 'var(--color-muted-foreground)' }}>—</span>}
                                         {d.viagem?.destino && <span className="block text-gray-400">{d.viagem.destino}</span>}
@@ -3810,6 +3814,13 @@ function TabDiarias({ isAdmin, profile }) {
                             <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
                                 {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                            </select>
+                        </Field>
+                        {/* item 2: select de placa — apenas placas das carretas (frota própria), sem vínculo, somente registro */}
+                        <Field label="Placa do veículo">
+                            <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <option value="">Sem placa...</option>
+                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                             </select>
                         </Field>
                         {/* item 10: para carretas não é necessário vincular viagem */}
@@ -3855,6 +3866,7 @@ function TabDiarias({ isAdmin, profile }) {
                         <div className="grid grid-cols-2 gap-3">
                             {[
                                 { label: 'Motorista', value: viewDiaria.motorista?.name || '—' },
+                                { label: 'Placa', value: viewDiaria.veiculo?.placa || '—' },
                                 { label: 'Data', value: FMT_DATE(viewDiaria.data_inicio) },
                                 { label: 'Quantidade de dias', value: viewDiaria.quantidade_dias },
                                 { label: 'Valor por dia', value: BRL(viewDiaria.valor_dia) },

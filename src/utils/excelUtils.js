@@ -1040,20 +1040,7 @@ export function exportDiariaModelo(diaria) {
         rowsHt.push(20);
     }
 
-    // Linha 12 (r=12): "ROTA PROGRAMADA" — bold center borda full
-    rowsData.push([ cs('ROTA PROGRAMADA', 5), NULL, NULL, NULL, NULL ]);
-    rowsHt.push(20);
-
-    // Linhas 13–16: espaço para preencher a rota (4 linhas com borda)
-    const destino = diaria.destino || diaria.viagem?.destino || '';
-    rowsData.push([ cs(destino ? `Destino: ${destino}` : '', 2), NULL, NULL, NULL, NULL ]);
-    rowsHt.push(20);
-    for (let i = 0; i < 3; i++) {
-        rowsData.push([ ce(2), NULL, NULL, NULL, NULL ]);
-        rowsHt.push(20);
-    }
-
-    // Linha 17 (r=17): "Valor Total:" | "R$ X,XX"
+    // Linha 12 (r=12): "Valor Total:" | "R$ X,XX"
     rowsData.push([ cs('Valor Total:', 1), cs(brl2(vlTotal), 6), NULL, NULL, NULL ]);
     rowsHt.push(20);
 
@@ -1327,7 +1314,7 @@ export function printDiaria(diaria) {
 </head>
 <body><div class="page">
 
-<table style="margin-bottom:8px"><tr><td class="emp" colspan="4">TRANSPORTE — CARRETAS</td></tr></table>
+<table style="margin-bottom:8px"><tr><td class="emp" colspan="4">TRANSPORTE — DIÁRIAS</td></tr></table>
 
 <table>
   <tr>
@@ -1356,33 +1343,23 @@ export function printDiaria(diaria) {
 </table>
 
 <table style="margin-top:8px">
-  <tr><td class="sec" colspan="2">ROTA PROGRAMADA</td></tr>
-  <tr><td colspan="2" style="height:24px">${destino ? 'Destino: ' + esc(destino) : ''}</td></tr>
-  <tr><td colspan="2" class="sp"></td></tr>
-  <tr><td colspan="2" class="sp"></td></tr>
-  <tr><td colspan="2" class="sp"></td></tr>
-</table>
-
-<table style="margin-top:8px">
   <tr><td class="ttl" style="width:50%">Valor Total:</td><td class="tval">${brl(vlTotal)}</td></tr>
 </table>
 
-<table style="margin-top:30px;border-collapse:separate;border-spacing:0">
-  <tr>
-    <td style="width:33%;border:none;padding:0 12px 0 0;vertical-align:bottom">
-      <div style="border-bottom:1px solid #222;height:40px"></div>
-      <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA DO SETOR DE TRANSPORTE</div>
-    </td>
-    <td style="width:34%;border:none;padding:0 6px;vertical-align:bottom">
-      <div style="border-bottom:1px solid #222;height:40px"></div>
-      <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA DO SETOR DE LOGÍSTICA</div>
-    </td>
-    <td style="width:33%;border:none;padding:0 0 0 12px;vertical-align:bottom">
-      <div style="border-bottom:1px solid #222;height:40px"></div>
-      <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA MOTORISTA</div>
-    </td>
-  </tr>
-</table>
+<div style="margin-top:34px;display:flex;justify-content:space-between;align-items:flex-start">
+  <div style="width:31%;padding:0 12px 0 0">
+    <div style="border-bottom:1px solid #222;height:40px"></div>
+    <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA DO SETOR DE TRANSPORTE</div>
+  </div>
+  <div style="width:31%;padding:0 6px">
+    <div style="border-bottom:1px solid #222;height:40px"></div>
+    <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA DO SETOR DE LOGÍSTICA</div>
+  </div>
+  <div style="width:31%;padding:0 0 0 12px">
+    <div style="border-bottom:1px solid #222;height:40px"></div>
+    <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA MOTORISTA</div>
+  </div>
+</div>
 
 </div>
 <script>
