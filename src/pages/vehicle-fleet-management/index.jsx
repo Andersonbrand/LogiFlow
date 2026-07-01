@@ -17,6 +17,7 @@ import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate,
 import { useAuth } from "utils/AuthContext";
 import AccessDeniedModal from "components/ui/AccessDeniedModal";
 import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle } from "utils/vehicleService";
+const fetchCaminhoesPlacas = async () => (await fetchVehicles()).filter(v => v.tipo === 'Caminhão');
 import { fetchRomaneios } from "utils/romaneioService";
 import {
     fetchAbastecimentos,
@@ -63,6 +64,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
     const [modalDiaria, setModalDiaria] = useState(null);
     const [viewDiaria, setViewDiaria] = useState(null);
     const [romaneiosDiarias, setRomaneiosDiarias] = useState([]);
+    const [veiculosCaminhao, setVeiculosCaminhao] = useState([]);
     const [formDiaria, setFormDiaria] = useState({
         data_inicio: new Date().toISOString().split('T')[0],
         quantidade_dias: '1', valor_dia: '', placa: '', descricao: '',
@@ -88,13 +90,15 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                 .lte('created_at', f.dataFim + 'T23:59:59')
                 .order('created_at', { ascending: false });
 
-            const [a, ch, d] = await Promise.all([
+            const [a, ch, d, vc] = await Promise.all([
                 fetchAbastecimentos(f),
                 fetchChecklists({ motoristaId: motorista.id }),
                 fetchDiarias({ motoristaId: motorista.id, dataInicio: f.dataInicio, dataFim: f.dataFim }),
+                fetchCaminhoesPlacas(),
             ]);
             setAbast(a); setChecklists(ch); setDiarias(d);
             setRomaneiosDiarias(romaneioRes.data || []);
+            setVeiculosCaminhao(vc || []);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [motorista.id, motorista.name, mes]); // eslint-disable-line
@@ -707,7 +711,10 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                             )}
                             <div className="col-span-2">
                                 <Field label="Placa do veículo">
-                                    <input value={formDiaria.placa} onChange={e => setFormDiaria(f => ({ ...f, placa: e.target.value.toUpperCase() }))} className={inputCls} style={inputStyle} placeholder="ABC-1234" />
+                                    <select value={formDiaria.placa} onChange={e => setFormDiaria(f => ({ ...f, placa: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <option value="">Sem placa...</option>
+                                        {veiculosCaminhao.map(v => <option key={v.id} value={v.placa}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
+                                    </select>
                                 </Field>
                             </div>
                             <div className="col-span-2">

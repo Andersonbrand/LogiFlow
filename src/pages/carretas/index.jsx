@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import TabRomaneios from './TabRomaneios';
 import TabVolume from './TabVolume';
 import TabFretes from './TabFretes';
+import TabCustos from './TabCustos';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -794,11 +795,12 @@ function TabAbastecimentos({ isAdmin, profile }) {
             </div>
 
             {/* KPIs */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
                 {[
                     { l: 'Diesel (L)', v: totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#1D4ED8', bg: '#EFF6FF', i: 'Fuel' },
                     { l: 'Custo Diesel', v: BRL(totais.valorDiesel), c: '#1D4ED8', bg: '#EFF6FF', i: 'DollarSign' },
-                    { l: 'Arla (L)', v: totais.litrosArla.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#059669', bg: '#D1FAE5', i: 'Droplets', sub: BRL(totais.valorArla) },
+                    { l: 'Arla (L)', v: totais.litrosArla.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#059669', bg: '#D1FAE5', i: 'Droplets' },
+                    { l: 'Custo Arla', v: BRL(totais.valorArla), c: '#059669', bg: '#D1FAE5', i: 'DollarSign' },
                     { l: 'Gasto Total', v: BRL(totais.valorTotal), c: '#7C3AED', bg: '#EDE9FE', i: 'Receipt' },
                 ].map(k => (
                     <div key={k.l} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
@@ -3767,10 +3769,10 @@ function TabDiarias({ isAdmin, profile }) {
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                     <table className="w-full text-sm min-w-[640px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Data','Motorista','Placa','Viagem','Dias','Valor/Dia','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
+                            <tr>{['Data','Motorista','Placa','Dias','Valor/Dia','Total',''].map(h => <th key={h} className="px-4 py-3 text-left font-medium">{h}</th>)}</tr>
                         </thead>
                         <tbody>
-                            {diariasFiltradas.length === 0 ? <tr><td colSpan={8} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
+                            {diariasFiltradas.length === 0 ? <tr><td colSpan={7} className="text-center py-12" style={{ color: 'var(--color-muted-foreground)' }}>
                                 <div className="flex flex-col items-center gap-2">
                                     <Icon name="CalendarDays" size={28} color="var(--color-muted-foreground)" />
                                     <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma diária registrada'}</span>
@@ -3781,10 +3783,6 @@ function TabDiarias({ isAdmin, profile }) {
                                     <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(d.data_inicio)}</td>
                                     <td className="px-4 py-3 font-medium">{d.motorista?.name || '—'}</td>
                                     <td className="px-4 py-3 font-data whitespace-nowrap">{d.veiculo?.placa || '—'}</td>
-                                    <td className="px-4 py-3 text-xs">
-                                        {d.viagem ? <span className="font-data text-blue-700">{d.viagem.numero}</span> : <span style={{ color: 'var(--color-muted-foreground)' }}>—</span>}
-                                        {d.viagem?.destino && <span className="block text-gray-400">{d.viagem.destino}</span>}
-                                    </td>
                                     <td className="px-4 py-3 font-data text-center">{d.quantidade_dias}</td>
                                     <td className="px-4 py-3 font-data">{BRL(d.valor_dia)}</td>
                                     <td className="px-4 py-3 font-data font-semibold text-indigo-600">{BRL(d.valor_total)}</td>
@@ -6425,6 +6423,7 @@ const TABS = [
     { id: 'distribuicao',  label: 'Distribuição de Viagens', icon: 'Shuffle', group: 'Operação' },
     { id: 'pontos_parada', label: 'Pontos de Parada',  icon: 'Navigation2',   group: 'Operação' },
     { id: 'fretes',        label: 'Fretes',             icon: 'DollarSign',    group: 'Financeiro' },
+    { id: 'custos',        label: 'Custos de Rodagem',  icon: 'Calculator',    group: 'Financeiro' },
     { id: 'bonificacoes',  label: 'Bonificações',      icon: 'Award',         group: 'Financeiro' },
     { id: 'despesas',      label: 'Despesas',          icon: 'Receipt',       group: 'Financeiro' },
     { id: 'diarias',       label: 'Diárias',           icon: 'CalendarDays',  group: 'Financeiro' },
@@ -6532,6 +6531,7 @@ export default function CarretasPage() {
                             {tab === 'distribuicao'   && <TabDistribuicaoViagens key={tab} />}
                             {tab === 'pontos_parada'  && <TabPontosParada     isAdmin={admin} />}
                             {tab === 'fretes'         && <TabFretes          isAdmin={admin} />}
+                            {tab === 'custos'         && <TabCustos          isAdmin={admin} />}
                             {tab === 'bonificacoes'   && <TabBonificacoes   isAdmin={admin} />}
                             {tab === 'despesas'       && <TabDespesasExtras  isAdmin={admin} profile={profile} />}
                             {tab === 'diarias'         && <TabDiarias         isAdmin={admin} profile={profile} />}
