@@ -42,8 +42,8 @@ function LinhaItem({ item, categoria, cor, isAdmin, onSave, onDelete }) {
                 <td className="px-3 py-2 text-right font-data font-semibold" style={{ color: cor }}>{BRL(valorCalculado)}</td>
                 <td className="px-3 py-2">
                     <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => { onSave(form); setEditando(false); }} className="p-1.5 rounded-lg hover:bg-green-100"><Icon name="Check" size={14} color="#059669" /></button>
-                        <button onClick={() => { setForm(item); setEditando(false); }} className="p-1.5 rounded-lg hover:bg-gray-200"><Icon name="X" size={14} color="#6B7280" /></button>
+                        <button onClick={() => { onSave(form); setEditando(false); }} className="p-2 rounded-lg hover:bg-green-100"><Icon name="Check" size={18} color="#059669" /></button>
+                        <button onClick={() => { setForm(item); setEditando(false); }} className="p-2 rounded-lg hover:bg-gray-200"><Icon name="X" size={18} color="#6B7280" /></button>
                     </div>
                 </td>
             </tr>
@@ -133,7 +133,16 @@ function TabelaItens({ tipoVeiculo, categoria, itens, isAdmin, cor, onChanged })
                         {(categoria === 'km'
                             ? ['Item', 'Preço da unidade', 'KM de vida útil', 'Unid. por veículo', 'Custo / KM', '']
                             : ['Item', 'Valor mensal', 'Valor anual', 'Custo / Dia', '']
-                        ).map(h => <th key={h} className="px-3 py-2.5 text-left font-medium whitespace-nowrap">{h}</th>)}
+                        ).map((h, i, arr) => (
+                            <th
+                                key={h}
+                                className={`px-3 py-2.5 font-medium whitespace-nowrap ${
+                                    i === 0 ? 'text-left' : i === arr.length - 1 ? 'text-center' : 'text-right'
+                                }`}
+                            >
+                                {h}
+                            </th>
+                        ))}
                     </tr>
                 </thead>
                 <tbody>
@@ -161,8 +170,8 @@ function TabelaItens({ tipoVeiculo, categoria, itens, isAdmin, cor, onChanged })
                             <td className="px-3 py-2 text-right text-xs" style={{ color: 'var(--color-muted-foreground)' }}>—</td>
                             <td className="px-3 py-2">
                                 <div className="flex items-center justify-center gap-1">
-                                    <button onClick={salvarNovo} className="p-1.5 rounded-lg hover:bg-green-100"><Icon name="Check" size={14} color="#059669" /></button>
-                                    <button onClick={() => setAddMode(false)} className="p-1.5 rounded-lg hover:bg-red-100"><Icon name="X" size={14} color="#DC2626" /></button>
+                                    <button onClick={salvarNovo} className="p-2 rounded-lg hover:bg-green-100"><Icon name="Check" size={18} color="#059669" /></button>
+                                    <button onClick={() => setAddMode(false)} className="p-2 rounded-lg hover:bg-red-100"><Icon name="X" size={18} color="#DC2626" /></button>
                                 </div>
                             </td>
                         </tr>
@@ -203,8 +212,8 @@ function LinhaDestino({ destino, custoPorKm, custoPorDia, margemPadrao, isAdmin,
                 <td className="px-3 py-2 text-right font-data" style={{ color: calc.diferenca == null ? 'var(--color-muted-foreground)' : calc.diferenca >= 0 ? '#059669' : '#DC2626' }}>{calc.diferenca == null ? '—' : BRL(calc.diferenca)}</td>
                 <td className="px-3 py-2">
                     <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => { onSave(form); setEditando(false); }} className="p-1.5 rounded-lg hover:bg-green-100"><Icon name="Check" size={14} color="#059669" /></button>
-                        <button onClick={() => { setForm(destino); setEditando(false); }} className="p-1.5 rounded-lg hover:bg-gray-200"><Icon name="X" size={14} color="#6B7280" /></button>
+                        <button onClick={() => { onSave(form); setEditando(false); }} className="p-2 rounded-lg hover:bg-green-100"><Icon name="Check" size={18} color="#059669" /></button>
+                        <button onClick={() => { setForm(destino); setEditando(false); }} className="p-2 rounded-lg hover:bg-gray-200"><Icon name="X" size={18} color="#6B7280" /></button>
                     </div>
                 </td>
             </tr>
@@ -352,8 +361,8 @@ function PainelCustos({ tipoVeiculo, isAdmin }) {
                     {isAdmin && (
                         editandoMargem ? (
                             <div className="flex gap-1">
-                                <button onClick={salvarMargem} className="p-1.5 rounded-lg hover:bg-green-100"><Icon name="Check" size={14} color="#059669" /></button>
-                                <button onClick={() => { setMargemForm(config.margem_lucro_pct); setEditandoMargem(false); }} className="p-1.5 rounded-lg hover:bg-gray-200"><Icon name="X" size={14} color="#6B7280" /></button>
+                                <button onClick={salvarMargem} className="p-2 rounded-lg hover:bg-green-100"><Icon name="Check" size={18} color="#059669" /></button>
+                                <button onClick={() => { setMargemForm(config.margem_lucro_pct); setEditandoMargem(false); }} className="p-2 rounded-lg hover:bg-gray-200"><Icon name="X" size={18} color="#6B7280" /></button>
                             </div>
                         ) : (
                             <button onClick={() => setEditandoMargem(true)} className="p-1.5 rounded-lg hover:bg-blue-100"><Icon name="Pencil" size={13} color="#2563EB" /></button>
@@ -401,8 +410,16 @@ function PainelCustos({ tipoVeiculo, isAdmin }) {
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                     <table className="w-full text-sm min-w-[900px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                            <tr>{['Destino', 'Distância', 'Dias', 'Margem', 'Custo Total', 'Valor Estimado', 'Valor Praticado', 'Diferença', ''].map(h =>
-                                <th key={h} className="px-3 py-2.5 text-left font-medium whitespace-nowrap">{h}</th>)}</tr>
+                            <tr>{['Destino', 'Distância', 'Dias', 'Margem', 'Custo Total', 'Valor Estimado', 'Valor Praticado', 'Diferença', ''].map((h, i, arr) => (
+                                <th
+                                    key={h}
+                                    className={`px-3 py-2.5 font-medium whitespace-nowrap ${
+                                        i === 0 ? 'text-left' : i === arr.length - 1 ? 'text-center' : 'text-right'
+                                    }`}
+                                >
+                                    {h}
+                                </th>
+                            ))}</tr>
                         </thead>
                         <tbody>
                             {addDestinoMode && (
@@ -417,8 +434,8 @@ function PainelCustos({ tipoVeiculo, isAdmin }) {
                                     <td className="px-3 py-2 text-right text-xs" style={{ color: 'var(--color-muted-foreground)' }}>—</td>
                                     <td className="px-3 py-2">
                                         <div className="flex items-center justify-center gap-1">
-                                            <button onClick={salvarNovoDestino} className="p-1.5 rounded-lg hover:bg-green-100"><Icon name="Check" size={14} color="#059669" /></button>
-                                            <button onClick={() => setAddDestinoMode(false)} className="p-1.5 rounded-lg hover:bg-red-100"><Icon name="X" size={14} color="#DC2626" /></button>
+                                            <button onClick={salvarNovoDestino} className="p-2 rounded-lg hover:bg-green-100"><Icon name="Check" size={18} color="#059669" /></button>
+                                            <button onClick={() => setAddDestinoMode(false)} className="p-2 rounded-lg hover:bg-red-100"><Icon name="X" size={18} color="#DC2626" /></button>
                                         </div>
                                     </td>
                                 </tr>
