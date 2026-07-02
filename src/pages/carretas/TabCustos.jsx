@@ -41,9 +41,9 @@ function LinhaItem({ item, categoria, cor, isAdmin, onSave, onDelete }) {
                 )}
                 <td className="px-3 py-2 text-right font-data font-semibold" style={{ color: cor }}>{BRL(valorCalculado)}</td>
                 <td className="px-3 py-2">
-                    <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => { onSave(form); setEditando(false); }} className="p-2 rounded-lg hover:bg-green-100"><Icon name="Check" size={18} color="#059669" /></button>
-                        <button onClick={() => { setForm(item); setEditando(false); }} className="p-2 rounded-lg hover:bg-gray-200"><Icon name="X" size={18} color="#6B7280" /></button>
+                    <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => { onSave(form); setEditando(false); }} className="p-2.5 rounded-lg hover:bg-green-100"><Icon name="Check" size={22} color="#059669" /></button>
+                        <button onClick={() => { setForm(item); setEditando(false); }} className="p-2.5 rounded-lg hover:bg-gray-200"><Icon name="X" size={22} color="#6B7280" /></button>
                     </div>
                 </td>
             </tr>
@@ -169,9 +169,9 @@ function TabelaItens({ tipoVeiculo, categoria, itens, isAdmin, cor, onChanged })
                             )}
                             <td className="px-3 py-2 text-right text-xs" style={{ color: 'var(--color-muted-foreground)' }}>—</td>
                             <td className="px-3 py-2">
-                                <div className="flex items-center justify-center gap-1">
-                                    <button onClick={salvarNovo} className="p-2 rounded-lg hover:bg-green-100"><Icon name="Check" size={18} color="#059669" /></button>
-                                    <button onClick={() => setAddMode(false)} className="p-2 rounded-lg hover:bg-red-100"><Icon name="X" size={18} color="#DC2626" /></button>
+                                <div className="flex items-center justify-center gap-2">
+                                    <button onClick={salvarNovo} className="p-2.5 rounded-lg hover:bg-green-100"><Icon name="Check" size={22} color="#059669" /></button>
+                                    <button onClick={() => setAddMode(false)} className="p-2.5 rounded-lg hover:bg-red-100"><Icon name="X" size={22} color="#DC2626" /></button>
                                 </div>
                             </td>
                         </tr>
@@ -211,9 +211,9 @@ function LinhaDestino({ destino, custoPorKm, custoPorDia, margemPadrao, isAdmin,
                 <td className="px-3 py-2"><input type="number" step="0.01" value={form.valor_praticado ?? ''} onChange={e => setForm(f => ({ ...f, valor_praticado: e.target.value }))} className={inputCls} style={{ ...inputStyle, textAlign: 'right' }} placeholder="0,00" /></td>
                 <td className="px-3 py-2 text-right font-data" style={{ color: calc.diferenca == null ? 'var(--color-muted-foreground)' : calc.diferenca >= 0 ? '#059669' : '#DC2626' }}>{calc.diferenca == null ? '—' : BRL(calc.diferenca)}</td>
                 <td className="px-3 py-2">
-                    <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => { onSave(form); setEditando(false); }} className="p-2 rounded-lg hover:bg-green-100"><Icon name="Check" size={18} color="#059669" /></button>
-                        <button onClick={() => { setForm(destino); setEditando(false); }} className="p-2 rounded-lg hover:bg-gray-200"><Icon name="X" size={18} color="#6B7280" /></button>
+                    <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => { onSave(form); setEditando(false); }} className="p-2.5 rounded-lg hover:bg-green-100"><Icon name="Check" size={22} color="#059669" /></button>
+                        <button onClick={() => { setForm(destino); setEditando(false); }} className="p-2.5 rounded-lg hover:bg-gray-200"><Icon name="X" size={22} color="#6B7280" /></button>
                     </div>
                 </td>
             </tr>
@@ -360,9 +360,9 @@ function PainelCustos({ tipoVeiculo, isAdmin }) {
                     </div>
                     {isAdmin && (
                         editandoMargem ? (
-                            <div className="flex gap-1">
-                                <button onClick={salvarMargem} className="p-2 rounded-lg hover:bg-green-100"><Icon name="Check" size={18} color="#059669" /></button>
-                                <button onClick={() => { setMargemForm(config.margem_lucro_pct); setEditandoMargem(false); }} className="p-2 rounded-lg hover:bg-gray-200"><Icon name="X" size={18} color="#6B7280" /></button>
+                            <div className="flex gap-2">
+                                <button onClick={salvarMargem} className="p-2.5 rounded-lg hover:bg-green-100"><Icon name="Check" size={22} color="#059669" /></button>
+                                <button onClick={() => { setMargemForm(config.margem_lucro_pct); setEditandoMargem(false); }} className="p-2.5 rounded-lg hover:bg-gray-200"><Icon name="X" size={22} color="#6B7280" /></button>
                             </div>
                         ) : (
                             <button onClick={() => setEditandoMargem(true)} className="p-1.5 rounded-lg hover:bg-blue-100"><Icon name="Pencil" size={13} color="#2563EB" /></button>
@@ -433,9 +433,9 @@ function PainelCustos({ tipoVeiculo, isAdmin }) {
                                     <td className="px-3 py-2"><input type="number" step="0.01" value={novoDestino.valor_praticado} onChange={e => setNovoDestino(f => ({ ...f, valor_praticado: e.target.value }))} className={inputCls} style={{ ...inputStyle, textAlign: 'right' }} placeholder="0,00" /></td>
                                     <td className="px-3 py-2 text-right text-xs" style={{ color: 'var(--color-muted-foreground)' }}>—</td>
                                     <td className="px-3 py-2">
-                                        <div className="flex items-center justify-center gap-1">
-                                            <button onClick={salvarNovoDestino} className="p-2 rounded-lg hover:bg-green-100"><Icon name="Check" size={18} color="#059669" /></button>
-                                            <button onClick={() => setAddDestinoMode(false)} className="p-2 rounded-lg hover:bg-red-100"><Icon name="X" size={18} color="#DC2626" /></button>
+                                        <div className="flex items-center justify-center gap-2">
+                                            <button onClick={salvarNovoDestino} className="p-2.5 rounded-lg hover:bg-green-100"><Icon name="Check" size={22} color="#059669" /></button>
+                                            <button onClick={() => setAddDestinoMode(false)} className="p-2.5 rounded-lg hover:bg-red-100"><Icon name="X" size={22} color="#DC2626" /></button>
                                         </div>
                                     </td>
                                 </tr>
