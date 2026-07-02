@@ -850,11 +850,14 @@ export async function revogarParcelaCartaoCarreta(despesaId, parcelaIdx) {
 export async function fetchDiarias(filters = {}) {
     let q = supabase
         .from('carretas_diarias')
-        .select('*, motorista:motorista_id(id, name), viagem:viagem_id(id, numero, destino), veiculo:veiculo_id(id, placa, modelo)')
+        .select('*, motorista:motorista_id(id, name, tipo_veiculo), viagem:viagem_id(id, numero, destino), veiculo:veiculo_id(id, placa, modelo)')
         .order('data_inicio', { ascending: false });
-    if (filters.motoristaId) q = q.eq('motorista_id', filters.motoristaId);
-    if (filters.dataInicio)  q = q.gte('data_inicio', filters.dataInicio);
-    if (filters.dataFim)     q = q.lte('data_inicio', filters.dataFim);
+    if (filters.motoristaId)  q = q.eq('motorista_id', filters.motoristaId);
+    if (filters.dataInicio)   q = q.gte('data_inicio', filters.dataInicio);
+    if (filters.dataFim)      q = q.lte('data_inicio', filters.dataFim);
+    // Filtro por lista de IDs de motoristas — separa carretas de caminhões
+    if (Array.isArray(filters.motoristasIds) && filters.motoristasIds.length > 0)
+        q = q.in('motorista_id', filters.motoristasIds);
     const { data, error } = await q;
     if (error) throw error;
     return data || [];

@@ -10,6 +10,9 @@ import { supabase } from './supabaseClient';
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Itens de custo ────────────────────────────────────────────────────────────
+const isMissingTable = (e) =>
+    e && (e.code === 'PGRST106' || e.message?.includes('schema cache') || e.message?.includes('does not exist'));
+
 export async function fetchCustosItens(tipoVeiculo) {
     const { data, error } = await supabase
         .from('custos_itens')
@@ -17,7 +20,10 @@ export async function fetchCustosItens(tipoVeiculo) {
         .eq('tipo_veiculo', tipoVeiculo)
         .order('categoria', { ascending: true })
         .order('ordem', { ascending: true });
-    if (error) throw error;
+    if (error) {
+        if (isMissingTable(error)) return [];
+        throw error;
+    }
     return data || [];
 }
 
@@ -48,7 +54,13 @@ export async function fetchCustosConfig(tipoVeiculo) {
         .select('*')
         .eq('tipo_veiculo', tipoVeiculo)
         .maybeSingle();
-    if (error) throw error;
+    // Se a tabela ainda não existe no banco, retorna padrão sem lançar erro
+    if (error) {
+        if (error.code === 'PGRST106' || error.message?.includes('schema cache') || error.message?.includes('does not exist')) {
+            return { tipo_veiculo: tipoVeiculo, margem_lucro_pct: 20 };
+        }
+        throw error;
+    }
     return data || { tipo_veiculo: tipoVeiculo, margem_lucro_pct: 20 };
 }
 
@@ -68,7 +80,10 @@ export async function fetchCustosDestinos(tipoVeiculo) {
         .select('*')
         .eq('tipo_veiculo', tipoVeiculo)
         .order('destino', { ascending: true });
-    if (error) throw error;
+    if (error) {
+        if (isMissingTable(error)) return [];
+        throw error;
+    }
     return data || [];
 }
 

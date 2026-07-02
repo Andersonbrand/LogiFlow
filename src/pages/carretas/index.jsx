@@ -186,7 +186,7 @@ function TabViagens({ isAdmin }) {
             }
             const [c, regs] = await Promise.all([
                 fetchCarregamentos({ ...f, is_terceiro: false }),
-                isAdmin ? fetchAllRegistrosViagem() : Promise.resolve([]),
+                isAdmin ? fetchAllRegistrosViagem(f) : Promise.resolve([]), // fix: passa filtros de data
             ]);
             setCarregamentos(c);
             setRegistrosMotoristas(regs);
@@ -3643,11 +3643,18 @@ function TabDiarias({ isAdmin, profile }) {
                 f.dataInicio = filtro.mes + '-01';
                 f.dataFim    = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0');
             }
-            const [d, m, v, vc] = await Promise.all([fetchDiarias(f), fetchCarreteirosPropriosOnly(), fetchViagens({}), fetchCarretasVeiculos()]);
+            // Busca motoristas de carreta primeiro para filtrar as diárias
+            // Isso impede que diárias lançadas por motoristas de caminhão apareçam aqui
+            const [m, vc] = await Promise.all([fetchCarreteirosPropriosOnly(), fetchCarretasVeiculos()]);
+            const idsCarretas = m.map(x => x.id);
+            // Só busca diárias de carreteiros (filtro por IDs)
+            const df = { ...f };
+            if (idsCarretas.length > 0) df.motoristasIds = idsCarretas;
+            const [d, v] = await Promise.all([fetchDiarias(df), fetchViagens({})]);
             setDiarias(d);
-            setMotoristas(m); // fetchCarreteirosPropriosOnly já filtra apenas carreteiros próprios
+            setMotoristas(m);
             setViagens(v);
-            setVeiculos((vc || []).filter(x => !x.is_terceiro)); // item 2: apenas placas da frota própria de carretas
+            setVeiculos((vc || []).filter(x => !x.is_terceiro));
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtro]); // eslint-disable-line

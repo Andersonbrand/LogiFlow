@@ -446,13 +446,6 @@ export default function TabCustos({ isAdmin }) {
 
     return (
         <div className="flex flex-col gap-5">
-            <div>
-                <h2 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>Custos de Rodagem</h2>
-                <p className="text-sm mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
-                    Custo por KM e por dia da frota, e valor estimado de frete por destino — separados por tipo de veículo.
-                </p>
-            </div>
-
             <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ backgroundColor: 'var(--color-muted)' }}>
                 {[
                     { id: 'carreta',  label: 'Carretas',   icon: 'Truck',  cor: '#4F46E5' },

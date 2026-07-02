@@ -12,6 +12,7 @@ import { fetchRomaneios } from 'utils/romaneioService';
 import { fetchDespesasCaminhoes } from 'utils/caminhoesDespesasService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { fetchMaterials } from 'utils/materialService';
+import { fetchDiarias, fetchMotoristasCaminhao } from 'utils/carretasService';
 import { useToast } from 'utils/useToast';
 import { exportRomaneiosToExcel, exportRelatorioConsolidado, exportRelatorioBonificacoes } from 'utils/excelUtils';
 import { EMPRESAS } from 'pages/romaneios/components/RomaneioFormModal';
@@ -71,6 +72,7 @@ export default function Relatorios() {
     const [romaneios, setRomaneios] = useState([]);
     const [vehicles, setVehicles] = useState([]);
     const [despesasCaminhoes, setDespesasCaminhoes] = useState([]);
+    const [diariasAvulsasCaminhao, setDiariasAvulsasCaminhao] = useState([]);
     const [loading, setLoading] = useState(true);
     const [periodo, setPeriodo] = useState('30');
     const [tab, setTab] = useState('operacional');
@@ -82,8 +84,17 @@ export default function Relatorios() {
         (async () => {
             try {
                 setLoading(true);
-                const [rom, veh, desp] = await Promise.all([fetchRomaneios(), fetchVehicles(), fetchDespesasCaminhoes()]);
+                const [rom, veh, desp, motorCaminhao] = await Promise.all([
+                    fetchRomaneios(), fetchVehicles(), fetchDespesasCaminhoes(), fetchMotoristasCaminhao(),
+                ]);
                 setRomaneios(rom); setVehicles(veh); setDespesasCaminhoes(desp);
+                // Busca diárias avulsas lançadas por motoristas de caminhão
+                // (excluindo carreteiros para não duplicar a DRE)
+                const idsCaminhao = (motorCaminhao || []).map(m => m.id);
+                const diavs = idsCaminhao.length > 0
+                    ? await fetchDiarias({ motoristasIds: idsCaminhao })
+                    : [];
+                setDiariasAvulsasCaminhao(diavs);
             } catch (err) { showToast('Erro: ' + err.message, 'error'); }
             finally { setLoading(false); }
         })();
@@ -225,6 +236,18 @@ export default function Relatorios() {
             map[m].viagens++;
         });
 
+        // Soma diárias avulsas de motoristas de caminhão por mês (lançadas manualmente)
+        diariasAvulsasCaminhao.forEach(d => {
+            const m = d.data_inicio?.slice(0, 7);
+            if (!m) return;
+            if (!map[m]) map[m] = {
+                mes: m, mesLabel: m.slice(5),
+                receita: 0, custoCombustivel: 0, custoPedagio: 0,
+                custoMotorista: 0, despesasCaminhoes: 0, viagens: 0,
+            };
+            map[m].custoMotorista += Number(d.valor_total || 0);
+        });
+
         // Soma despesas de caminhões (manutenção, pneus, etc.) por mês
         despesasCaminhoes.forEach(d => {
             const m = d.data_despesa?.slice(0, 7);
@@ -251,7 +274,7 @@ export default function Relatorios() {
                 const margemPct        = m.receita > 0 ? (resultadoLiquido / m.receita) * 100 : 0;
                 return { ...m, custoOperacional, totalDespesas, margemBruta, resultadoLiquido, margemPct };
             });
-    }, [romFinalizados, despesasCaminhoes]);
+    }, [romFinalizados, despesasCaminhoes, diariasAvulsasCaminhao]);
 
     // Totais consolidados da DRE
     const dreTotais = useMemo(() => {
