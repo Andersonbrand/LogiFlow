@@ -40,9 +40,12 @@ import {
     revogarBoletoCarreta, revogarParcelaCartaoCarreta,
     fetchVeiculosProprios, fetchMotoristasProprios, fetchCarreteirosPropriosOnly,
     updateAbastecimento,
+    fetchFornecedoresCarretas, createFornecedorCarretas, updateFornecedorCarretas, deleteFornecedorCarretas,
 } from 'utils/carretasService';
 import * as XLSX from 'xlsx';
 import { exportDiariaModelo, exportDiariasRomaneiosModelo, printDiaria } from 'utils/excelUtils';
+import { fetchDadosMargemFrete, calcularAbatimentoCustosFrota } from 'utils/custosFrotaService';
+import { somarDespesasPorVencimento, agruparDespesasPorCategoriaVencimento } from 'utils/despesasParcelasUtils';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT_DATE = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -3961,14 +3964,15 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const filtrosDiarias = { dataInicio, dataFim };
             if (idsCarretas.length > 0) filtrosDiarias.motoristasIds = idsCarretas;
 
-            const [carregamentos, abastecimentos, viagens, despesasExtras, diariasLancadas, romaneiosCarga, bonificacoesExtras] = await Promise.all([
+            const [carregamentos, abastecimentos, viagens, despesasExtras, diariasLancadas, romaneiosCarga, bonificacoesExtras, dadosMargem] = await Promise.all([
                 fetchCarregamentos(filtros),
                 fetchAbastecimentos({ dataInicio, dataFim }),
                 fetchViagens({ dataInicio, dataFim }),
-                fetchDespesasExtras({ dataInicio, dataFim }),
+                fetchDespesasExtras({}),
                 fetchDiarias(filtrosDiarias),
                 fetchRomaneios({ dataInicio, dataFim }),
                 fetchBonificacoesExtras({ dataInicio, dataFim }),
+                fetchDadosMargemFrete('carreta').catch(() => null),
             ]);
 
             // ── Receitas (fretes de carregamentos) ────────────────────────
@@ -3992,6 +3996,16 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 receitaPorEmpresa[nome] = (receitaPorEmpresa[nome] || 0) + Number(r.valor_frete || 0);
             });
 
+            // ── Custo de Rodagem estimado (abate a receita por veículo/destino) ──
+            const fretesParaCusto = [
+                ...carregamentos.map(c => ({ destino: c.destino, valor_frete: c.valor_frete_calculado, placa: c.veiculo?.placa })),
+                ...romaneiosCarga.filter(r => r.status !== 'Cancelado').map(r => ({ destino: r.destino, valor_frete: r.valor_frete, placa: r.veiculo?.placa })),
+            ];
+            const abatimentoCustos = dadosMargem
+                ? calcularAbatimentoCustosFrota(fretesParaCusto, dadosMargem)
+                : { custoTotalEstimado: 0, porVeiculo: {}, semMatch: 0, totalFretes: fretesParaCusto.length };
+            const custoRodagemEstimado = abatimentoCustos.custoTotalEstimado;
+
             // ── Despesas combustível ───────────────────────────────────────
             const valorDiesel        = abastecimentos.reduce((s, a) => s + Number(a.valor_diesel || 0), 0);
             const valorArla          = abastecimentos.reduce((s, a) => s + Number(a.valor_arla   || 0), 0);
@@ -4000,11 +4014,11 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const litrosArla         = abastecimentos.reduce((s, a) => s + Number(a.litros_arla   || 0), 0);
 
             // ── Despesas extras por veículo ──────────────────────────────────
-            const totalDespesasExtras = despesasExtras.reduce((s, d) => s + Number(d.valor || 0), 0);
-            const despesasPorCategoria = {};
-            despesasExtras.forEach(d => {
-                despesasPorCategoria[d.categoria] = (despesasPorCategoria[d.categoria] || 0) + Number(d.valor || 0);
-            });
+            // Abate pela data de VENCIMENTO de cada boleto/parcela, não pela
+            // data de emissão da NF — uma despesa a prazo pode ter parcelas
+            // vencendo em meses diferentes do lançamento.
+            const totalDespesasExtras = somarDespesasPorVencimento(despesasExtras, dataInicio, dataFim);
+            const despesasPorCategoria = agruparDespesasPorCategoriaVencimento(despesasExtras, dataInicio, dataFim);
 
             // ── Diárias lançadas ─────────────────────────────────────────────
             const totalDiariasLancadas = diariasLancadas.reduce((s, d) => s + Number(d.valor_total || 0), 0);
@@ -4035,9 +4049,9 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const bonusTotal        = bonusTotalViagens + bonusTotalExtras;
 
             // ── Margens ───────────────────────────────────────────────────
-            const despesaTotal  = despesaCombustivel + bonusTotal + totalDiariasLancadas + totalDespesasExtras;
+            const despesaTotal  = despesaCombustivel + bonusTotal + totalDiariasLancadas + totalDespesasExtras + custoRodagemEstimado;
             const margemBruta   = receitaTotal - (despesaCombustivel + bonusTotal + totalDiariasLancadas); // receita − custos operacionais
-            const margemLiquida = receitaTotal - despesaTotal;                // receita − combustível − bônus − diárias − despesas extras
+            const margemLiquida = receitaTotal - despesaTotal;                // receita − combustível − bônus − diárias − despesas extras − custo de rodagem
             const margemPct     = receitaTotal > 0 ? (margemLiquida / receitaTotal) * 100 : 0;
 
             // ── Por motorista (frete + bônus) ─────────────────────────────
@@ -4067,6 +4081,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
 
             setDados({
                 periodo: `${periodoInicio === periodoFim ? periodoInicio : `${periodoInicio} a ${periodoFim}`}`,
+                periodoDataInicio: dataInicio, periodoDataFim: dataFim,
                 receitaTotal, receitaCarregamentos, receitaRomaneios,
                 totalRomaneios: romaneiosCarga.filter(r => r.status !== 'Cancelado').length,
                 receitaPorEmpresa,
@@ -4080,6 +4095,10 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 viagensFinalizadas: viagensFinalizadas.length,
                 totalDespesasExtras, despesasPorCategoria,
                 totalDiariasLancadas,
+                custoRodagemEstimado,
+                custoRodagemPorVeiculo: abatimentoCustos.porVeiculo,
+                custoRodagemSemMatch: abatimentoCustos.semMatch,
+                custoRodagemTotalFretes: abatimentoCustos.totalFretes,
                 // raw data for placa filter (item 7)
                 _carregamentos: carregamentos,
                 _abastecimentos: abastecimentos,
@@ -4117,6 +4136,8 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             ['Diárias de Motoristas', dados.totalDiariasLancadas, ''],
             ['Despesas Extras (veículos)', dados.totalDespesasExtras, ''],
             ...Object.entries(dados.despesasPorCategoria).map(([cat, val]) => [`  → ${cat}`, val, '']),
+            ['Custo de Rodagem (estimado por destino)', dados.custoRodagemEstimado || 0, ''],
+            ...(dados.custoRodagemSemMatch > 0 ? [[`  → ${dados.custoRodagemSemMatch} de ${dados.custoRodagemTotalFretes} fretes sem destino cadastrado`, '', '']] : []),
             ['Total Despesas', dados.despesaTotal, ''],
             ['', '', ''],
             ['MARGENS', '', ''],
@@ -4187,16 +4208,17 @@ function TabRelatorioFinanceiro({ isAdmin }) {
         const lDiesel     = absts.reduce((s, a) => s + Number(a.litros_diesel || 0), 0);
         const lArla       = absts.reduce((s, a) => s + Number(a.litros_arla || 0), 0);
         const bonus       = viags.filter(v => v.status === 'Entrega finalizada').reduce((s, v) => s + calcularBonusCarreteiro(v.destino), 0);
-        const despExtra   = desps.reduce((s, d) => s + Number(d.valor || 0), 0);
+        const despExtra   = somarDespesasPorVencimento(desps, dados.periodoDataInicio, dados.periodoDataFim);
         const diarias     = diar.reduce((s, d) => s + Number(d.valor_total || 0), 0);
-        const totalDesp   = combustivel + bonus + despExtra + diarias;
+        const custoRodagem = dados.custoRodagemPorVeiculo?.[veic?.placa]?.custo || 0;
+        const totalDesp   = combustivel + bonus + despExtra + diarias + custoRodagem;
         const margem      = receita - totalDesp;
-        return { veic, carrg, roms, absts, viags, desps, diar, receita, receitaCarrg, receitaRoms, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, totalDesp, margem };
+        return { veic, carrg, roms, absts, viags, desps, diar, receita, receitaCarrg, receitaRoms, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, custoRodagem, totalDesp, margem };
     }, [dados, filtroPlaca, veiculos]);
 
     const exportarPorPlaca = () => {
         if (!dadosPorPlaca) { showToast('Selecione uma placa e gere o relatório primeiro', 'error'); return; }
-        const { veic, carrg, roms, absts, viags, desps, receita, receitaCarrg, receitaRoms, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, totalDesp, margem } = dadosPorPlaca;
+        const { veic, carrg, roms, absts, viags, desps, receita, receitaCarrg, receitaRoms, combustivel, vDiesel, vArla, lDiesel, lArla, bonus, despExtra, diarias, custoRodagem, totalDesp, margem } = dadosPorPlaca;
         const wb = XLSX.utils.book_new();
 
         // Aba Resumo
@@ -4217,6 +4239,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             ['Bônus Motoristas', bonus],
             ['Diárias', diarias],
             ['Despesas Extras', despExtra],
+            ['Custo de Rodagem (estimado)', custoRodagem],
             ['Total Despesas', totalDesp],
             ['', ''],
             ['MARGEM LÍQUIDA', margem],
@@ -4487,6 +4510,22 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                                     <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(val)}</span>
                                 </div>
                             ))}
+                            {dados.custoRodagemTotalFretes > 0 && (
+                                <div className="flex justify-between py-1.5 pl-3">
+                                    <span className="text-sm flex items-center gap-1.5" style={{ color: 'var(--color-text-primary)' }}>
+                                        Custo de Rodagem (estimado)
+                                        <span title="Custo estimado de rodagem (pneus/óleo/manutenção/depreciação etc., rateados por KM e por dia) casado com o destino de cada frete. Configurável em Custos de Rodagem.">
+                                            <Icon name="Info" size={12} color="var(--color-muted-foreground)" />
+                                        </span>
+                                    </span>
+                                    <span className="font-data font-semibold text-rose-700">({BRL(dados.custoRodagemEstimado)})</span>
+                                </div>
+                            )}
+                            {dados.custoRodagemSemMatch > 0 && (
+                                <div className="flex justify-between py-1 pl-6">
+                                    <span className="text-xs" style={{ color: '#B45309' }}>↳ {dados.custoRodagemSemMatch} de {dados.custoRodagemTotalFretes} fretes sem destino cadastrado (não abatidos)</span>
+                                </div>
+                            )}
 
                             {/* Separador margem bruta */}
                             <div className="flex justify-between py-2.5 px-3 rounded-lg mt-2" style={{ backgroundColor: '#F0FDF4' }}>
@@ -4615,6 +4654,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                                         {dadosPorPlaca.bonus > 0 && <div className="flex justify-between py-1 text-purple-700"><span>(-) Bônus Motoristas</span><span className="font-data">({BRL(dadosPorPlaca.bonus)})</span></div>}
                                         {dadosPorPlaca.diarias > 0 && <div className="flex justify-between py-1 text-indigo-700"><span>(-) Diárias</span><span className="font-data">({BRL(dadosPorPlaca.diarias)})</span></div>}
                                         {dadosPorPlaca.despExtra > 0 && <div className="flex justify-between py-1 text-orange-700"><span>(-) Despesas Extras</span><span className="font-data">({BRL(dadosPorPlaca.despExtra)})</span></div>}
+                                        {dadosPorPlaca.custoRodagem > 0 && <div className="flex justify-between py-1 text-rose-700"><span>(-) Custo de Rodagem (estimado)</span><span className="font-data">({BRL(dadosPorPlaca.custoRodagem)})</span></div>}
                                         <div className="flex justify-between py-2 px-3 rounded-lg font-bold mt-2" style={{ backgroundColor: dadosPorPlaca.margem >= 0 ? '#EFF6FF' : '#FEF2F2', border: `1px solid ${dadosPorPlaca.margem >= 0 ? '#BFDBFE' : '#FECACA'}` }}>
                                             <span style={{ color: dadosPorPlaca.margem >= 0 ? '#1D4ED8' : '#DC2626' }}>Margem Líquida</span>
                                             <span className="font-data" style={{ color: dadosPorPlaca.margem >= 0 ? '#1D4ED8' : '#DC2626' }}>{BRL(dadosPorPlaca.margem)} ({dadosPorPlaca.receita > 0 ? ((dadosPorPlaca.margem / dadosPorPlaca.receita) * 100).toFixed(1) : 0}%)</span>

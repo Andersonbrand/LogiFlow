@@ -13,6 +13,8 @@ import { fetchDespesasCaminhoes } from 'utils/caminhoesDespesasService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { fetchMaterials } from 'utils/materialService';
 import { fetchDiarias, fetchMotoristasCaminhao } from 'utils/carretasService';
+import { fetchDadosMargemFrete, encontrarCustoDestino, calcularCustoDestino } from 'utils/custosFrotaService';
+import { somarDespesasPorVencimento, agruparDespesasPorCategoriaVencimento, despesaTemVencimentoNoPeriodo, expandirDespesaParcelas } from 'utils/despesasParcelasUtils';
 import { useToast } from 'utils/useToast';
 import { exportRomaneiosToExcel, exportRelatorioConsolidado, exportRelatorioBonificacoes } from 'utils/excelUtils';
 import { EMPRESAS } from 'pages/romaneios/components/RomaneioFormModal';
@@ -73,6 +75,7 @@ export default function Relatorios() {
     const [vehicles, setVehicles] = useState([]);
     const [despesasCaminhoes, setDespesasCaminhoes] = useState([]);
     const [diariasAvulsasCaminhao, setDiariasAvulsasCaminhao] = useState([]);
+    const [dadosMargemCaminhao, setDadosMargemCaminhao] = useState(null);
     const [loading, setLoading] = useState(true);
     const [periodo, setPeriodo] = useState('30');
     const [tab, setTab] = useState('operacional');
@@ -88,6 +91,7 @@ export default function Relatorios() {
                     fetchRomaneios(), fetchVehicles(), fetchDespesasCaminhoes(), fetchMotoristasCaminhao(),
                 ]);
                 setRomaneios(rom); setVehicles(veh); setDespesasCaminhoes(desp);
+                fetchDadosMargemFrete('caminhao').then(setDadosMargemCaminhao).catch(() => setDadosMargemCaminhao(null));
                 // Busca diárias avulsas lançadas por motoristas de caminhão
                 // (excluindo carreteiros para não duplicar a DRE)
                 const idsCaminhao = (motorCaminhao || []).map(m => m.id);
@@ -185,34 +189,48 @@ export default function Relatorios() {
     }, [romFinalizados]);
 
     // ─── Despesas Caminhões KPIs ─────────────────────────────
-    const despesasFiltradas = useMemo(() => {
-        const cutoffDesp = new Date(); cutoffDesp.setDate(cutoffDesp.getDate() - Number(periodo));
-        return despesasCaminhoes.filter(d => d.data_despesa && new Date(d.data_despesa) >= cutoffDesp);
-    }, [despesasCaminhoes, periodo]);
+    // Abate pela data de VENCIMENTO de cada boleto/parcela, não pela data de
+    // emissão da NF — uma despesa a prazo pode ter parcelas vencendo em meses
+    // diferentes do lançamento original.
+    const despesasCutoffISO = useMemo(() => {
+        const d = new Date(); d.setDate(d.getDate() - Number(periodo));
+        return d.toISOString().slice(0, 10);
+    }, [periodo]);
 
-    const totalDespesasCaminhoes = despesasFiltradas.reduce((s, d) => s + Number(d.valor || 0), 0);
+    const despesasFiltradas = useMemo(() => {
+        return despesasCaminhoes.filter(d => despesaTemVencimentoNoPeriodo(d, despesasCutoffISO, '9999-12-31'));
+    }, [despesasCaminhoes, despesasCutoffISO]);
+
+    const totalDespesasCaminhoes = useMemo(() => somarDespesasPorVencimento(despesasCaminhoes, despesasCutoffISO, '9999-12-31'), [despesasCaminhoes, despesasCutoffISO]);
 
     const despesasPorCategoria = useMemo(() => {
-        const map = {};
-        despesasFiltradas.forEach(d => {
-            const cat = d.categoria || 'Outros';
-            map[cat] = (map[cat] || 0) + Number(d.valor || 0);
-        });
+        const map = agruparDespesasPorCategoriaVencimento(despesasCaminhoes, despesasCutoffISO, '9999-12-31');
         return Object.entries(map).sort(([,a],[,b]) => b - a).map(([name, value]) => ({ name, value }));
-    }, [despesasFiltradas]);
+    }, [despesasCaminhoes, despesasCutoffISO]);
 
     const despesasPorMes = useMemo(() => {
         const map = {};
-        despesasFiltradas.forEach(d => {
-            const m = d.data_despesa?.slice(0, 7);
-            if (!m) return;
-            if (!map[m]) map[m] = { mes: m.slice(5), total: 0 };
-            map[m].total += Number(d.valor || 0);
+        despesasCaminhoes.forEach(d => {
+            expandirDespesaParcelas(d).forEach(item => {
+                if (!item.vencimento || item.vencimento < despesasCutoffISO) return;
+                const m = item.vencimento.slice(0, 7);
+                if (!map[m]) map[m] = { mes: m.slice(5), total: 0 };
+                map[m].total += item.valor;
+            });
         });
         return Object.values(map).sort((a, b) => a.mes.localeCompare(b.mes));
-    }, [despesasFiltradas]);
+    }, [despesasCaminhoes, despesasCutoffISO]);
 
     // ─── DRE Mensal Caminhões ─────────────────────────────────
+    const custoRodagemStats = useMemo(() => {
+        if (!dadosMargemCaminhao) return { comMatch: 0, semMatch: 0 };
+        let comMatch = 0, semMatch = 0;
+        romFinalizados.forEach(r => {
+            if (encontrarCustoDestino(r.destino, dadosMargemCaminhao.destinos)) comMatch++; else semMatch++;
+        });
+        return { comMatch, semMatch };
+    }, [romFinalizados, dadosMargemCaminhao]);
+
     const dreMensal = useMemo(() => {
         // Consolida receitas dos romaneios finalizados por mês
         const map = {};
@@ -227,6 +245,7 @@ export default function Relatorios() {
                 custoPedagio: 0,
                 custoMotorista: 0,
                 despesasCaminhoes: 0,
+                custoRodagem: 0,
                 viagens: 0,
             };
             map[m].receita          += r.valor_frete          || 0;
@@ -234,6 +253,16 @@ export default function Relatorios() {
             map[m].custoPedagio     += r.custo_pedagio         || 0;
             map[m].custoMotorista   += r.custo_motorista       || 0;
             map[m].viagens++;
+
+            // Custo de rodagem estimado — casa o destino do romaneio com a
+            // tabela de custos por destino cadastrada para caminhões
+            if (dadosMargemCaminhao) {
+                const destino = encontrarCustoDestino(r.destino, dadosMargemCaminhao.destinos);
+                if (destino) {
+                    const { custoTotal } = calcularCustoDestino(destino, dadosMargemCaminhao.custoPorKm, dadosMargemCaminhao.custoPorDia, dadosMargemCaminhao.margemPadrao);
+                    map[m].custoRodagem += custoTotal;
+                }
+            }
         });
 
         // Soma diárias avulsas de motoristas de caminhão por mês (lançadas manualmente)
@@ -243,38 +272,42 @@ export default function Relatorios() {
             if (!map[m]) map[m] = {
                 mes: m, mesLabel: m.slice(5),
                 receita: 0, custoCombustivel: 0, custoPedagio: 0,
-                custoMotorista: 0, despesasCaminhoes: 0, viagens: 0,
+                custoMotorista: 0, despesasCaminhoes: 0, custoRodagem: 0, viagens: 0,
             };
             map[m].custoMotorista += Number(d.valor_total || 0);
         });
 
-        // Soma despesas de caminhões (manutenção, pneus, etc.) por mês
+        // Soma despesas de caminhões (manutenção, pneus, etc.) por mês —
+        // pela data de VENCIMENTO de cada boleto/parcela, não pela emissão da NF
         despesasCaminhoes.forEach(d => {
-            const m = d.data_despesa?.slice(0, 7);
-            if (!m) return;
-            if (!map[m]) map[m] = {
-                mes: m, mesLabel: m.slice(5),
-                receita: 0,
-                custoCombustivel: 0,
-                custoPedagio: 0,
-                custoMotorista: 0,
-                despesasCaminhoes: 0,
-                viagens: 0,
-            };
-            map[m].despesasCaminhoes += Number(d.valor || 0);
+            expandirDespesaParcelas(d).forEach(item => {
+                const m = item.vencimento?.slice(0, 7);
+                if (!m) return;
+                if (!map[m]) map[m] = {
+                    mes: m, mesLabel: m.slice(5),
+                    receita: 0,
+                    custoCombustivel: 0,
+                    custoPedagio: 0,
+                    custoMotorista: 0,
+                    despesasCaminhoes: 0,
+                    custoRodagem: 0,
+                    viagens: 0,
+                };
+                map[m].despesasCaminhoes += item.valor;
+            });
         });
 
         return Object.values(map)
             .sort((a, b) => a.mes.localeCompare(b.mes))
             .map(m => {
                 const custoOperacional = m.custoCombustivel + m.custoPedagio + m.custoMotorista;
-                const totalDespesas    = custoOperacional + m.despesasCaminhoes;
+                const totalDespesas    = custoOperacional + m.despesasCaminhoes + m.custoRodagem;
                 const margemBruta      = m.receita - custoOperacional;
                 const resultadoLiquido = m.receita - totalDespesas;
                 const margemPct        = m.receita > 0 ? (resultadoLiquido / m.receita) * 100 : 0;
                 return { ...m, custoOperacional, totalDespesas, margemBruta, resultadoLiquido, margemPct };
             });
-    }, [romFinalizados, despesasCaminhoes, diariasAvulsasCaminhao]);
+    }, [romFinalizados, despesasCaminhoes, diariasAvulsasCaminhao, dadosMargemCaminhao]);
 
     // Totais consolidados da DRE
     const dreTotais = useMemo(() => {
@@ -284,14 +317,17 @@ export default function Relatorios() {
             custoPedagio:     acc.custoPedagio     + m.custoPedagio,
             custoMotorista:   acc.custoMotorista   + m.custoMotorista,
             despesasCaminhoes:acc.despesasCaminhoes+ m.despesasCaminhoes,
+            custoRodagem:     acc.custoRodagem      + m.custoRodagem,
             totalDespesas:    acc.totalDespesas    + m.totalDespesas,
             margemBruta:      acc.margemBruta      + m.margemBruta,
             resultadoLiquido: acc.resultadoLiquido + m.resultadoLiquido,
             viagens:          acc.viagens          + m.viagens,
-        }), { receita:0, custoCombustivel:0, custoPedagio:0, custoMotorista:0, despesasCaminhoes:0, totalDespesas:0, margemBruta:0, resultadoLiquido:0, viagens:0 });
+        }), { receita:0, custoCombustivel:0, custoPedagio:0, custoMotorista:0, despesasCaminhoes:0, custoRodagem:0, totalDespesas:0, margemBruta:0, resultadoLiquido:0, viagens:0 });
         t.margemPct = t.receita > 0 ? (t.resultadoLiquido / t.receita) * 100 : 0;
+        t.custoRodagemComMatch = custoRodagemStats.comMatch;
+        t.custoRodagemSemMatch = custoRodagemStats.semMatch;
         return t;
-    }, [dreMensal]);
+    }, [dreMensal, custoRodagemStats]);
 
     // ─── Frota KPIs ──────────────────────────────────────────
     const frota = vehicles.length;
@@ -736,9 +772,10 @@ export default function Relatorios() {
                             </div>
 
                             {/* KPIs consolidados do período */}
-                            <div className="grid grid-cols-2 tab:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 tab:grid-cols-5 gap-4">
                                 <KpiCard label="Receita Total" value={fmtBRL(dreTotais.receita)} icon="TrendingUp" color="#059669" sub={`${dreTotais.viagens} viagens finalizadas`} />
-                                <KpiCard label="Custo Operacional" value={fmtBRL(dreTotais.totalDespesas - dreTotais.despesasCaminhoes)} icon="Fuel" color="#D97706" sub="Combustível + Pedágio + Motoristas" />
+                                <KpiCard label="Custo Operacional" value={fmtBRL(dreTotais.totalDespesas - dreTotais.despesasCaminhoes - dreTotais.custoRodagem)} icon="Fuel" color="#D97706" sub="Combustível + Pedágio + Motoristas" />
+                                <KpiCard label="Custo de Rodagem" value={fmtBRL(dreTotais.custoRodagem)} icon="Gauge" color="#E11D48" sub={dreTotais.custoRodagemSemMatch > 0 ? `${dreTotais.custoRodagemSemMatch} viagens sem destino cadastrado` : 'Estimado por destino'} />
                                 <KpiCard label="Despesas Caminhões" value={fmtBRL(dreTotais.despesasCaminhoes)} icon="Wrench" color="#7C3AED" sub="Manutenção e demais despesas" />
                                 <KpiCard
                                     label="Resultado Líquido"
@@ -780,6 +817,7 @@ export default function Relatorios() {
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-amber-600 uppercase tracking-wide hidden lg:table-cell">Pedágio</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-amber-600 uppercase tracking-wide hidden lg:table-cell">Motoristas</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-purple-600 uppercase tracking-wide hidden md:table-cell">Desp. Caminhões</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-rose-600 uppercase tracking-wide hidden md:table-cell">Custo Rodagem</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-red-600 uppercase tracking-wide hidden sm:table-cell">Total Desp.</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-700 uppercase tracking-wide">Resultado</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Margem</th>
@@ -794,6 +832,7 @@ export default function Relatorios() {
                                                     <td className="px-4 py-3 text-right text-xs text-amber-600 hidden lg:table-cell">({fmtBRL(m.custoPedagio)})</td>
                                                     <td className="px-4 py-3 text-right text-xs text-amber-600 hidden lg:table-cell">({fmtBRL(m.custoMotorista)})</td>
                                                     <td className="px-4 py-3 text-right text-xs text-purple-600 hidden md:table-cell">({fmtBRL(m.despesasCaminhoes)})</td>
+                                                    <td className="px-4 py-3 text-right text-xs text-rose-600 hidden md:table-cell">({fmtBRL(m.custoRodagem)})</td>
                                                     <td className="px-4 py-3 text-right text-xs text-red-600 hidden sm:table-cell">({fmtBRL(m.totalDespesas)})</td>
                                                     <td className="px-4 py-3 text-right text-xs font-bold" style={{ color: m.resultadoLiquido >= 0 ? '#059669' : '#DC2626' }}>
                                                         {fmtBRL(m.resultadoLiquido)}
@@ -813,6 +852,7 @@ export default function Relatorios() {
                                                 <td className="px-4 py-3 text-right text-xs font-bold text-amber-600 hidden lg:table-cell">({fmtBRL(dreTotais.custoPedagio)})</td>
                                                 <td className="px-4 py-3 text-right text-xs font-bold text-amber-600 hidden lg:table-cell">({fmtBRL(dreTotais.custoMotorista)})</td>
                                                 <td className="px-4 py-3 text-right text-xs font-bold text-purple-600 hidden md:table-cell">({fmtBRL(dreTotais.despesasCaminhoes)})</td>
+                                                <td className="px-4 py-3 text-right text-xs font-bold text-rose-600 hidden md:table-cell">({fmtBRL(dreTotais.custoRodagem)})</td>
                                                 <td className="px-4 py-3 text-right text-xs font-bold text-red-600 hidden sm:table-cell">({fmtBRL(dreTotais.totalDespesas)})</td>
                                                 <td className="px-4 py-3 text-right text-xs font-bold" style={{ color: dreTotais.resultadoLiquido >= 0 ? '#059669' : '#DC2626' }}>
                                                     {fmtBRL(dreTotais.resultadoLiquido)}
@@ -889,6 +929,29 @@ export default function Relatorios() {
                                             <span className="text-xs text-slate-400">{fmtBRL(c.value)}</span>
                                         </div>
                                     ))}
+
+                                    {/* Custo de rodagem estimado */}
+                                    {dreTotais.custoRodagem > 0 && (
+                                        <>
+                                            <div className="flex justify-between py-2 border-b border-slate-100 mt-2">
+                                                <span className="text-xs font-semibold uppercase tracking-wide text-rose-700">Custo de Rodagem (estimado por destino)</span>
+                                            </div>
+                                            <div className="flex justify-between py-1.5 pl-3">
+                                                <span className="text-sm text-slate-800 flex items-center gap-1.5">
+                                                    Custo de Rodagem
+                                                    <span title="Custo estimado (pneus/óleo/manutenção/depreciação etc., rateados por KM e por dia) casado com o destino de cada romaneio finalizado. Configurável em Custos de Rodagem.">
+                                                        <Icon name="Info" size={12} color="#94A3B8" />
+                                                    </span>
+                                                </span>
+                                                <span className="font-semibold text-rose-700">({fmtBRL(dreTotais.custoRodagem)})</span>
+                                            </div>
+                                            {dreTotais.custoRodagemSemMatch > 0 && (
+                                                <div className="flex justify-between py-1 pl-6">
+                                                    <span className="text-xs text-amber-600">↳ {dreTotais.custoRodagemSemMatch} de {dreTotais.custoRodagemSemMatch + dreTotais.custoRodagemComMatch} viagens sem destino cadastrado (não abatidas)</span>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
 
                                     {/* Resultado Líquido */}
                                     <div className="flex justify-between py-3 px-3 rounded-lg mt-2" style={{

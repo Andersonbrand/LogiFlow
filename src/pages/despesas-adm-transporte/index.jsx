@@ -17,6 +17,8 @@ import {
     revogarBoletoAdmTransporte,
     pagarParcelaCartaoAdmTransporte,
     revogarParcelaCartaoAdmTransporte,
+    fetchFornecedoresAdmTransporte, createFornecedorAdmTransporte,
+    updateFornecedorAdmTransporte, deleteFornecedorAdmTransporte,
 } from 'utils/despesasAdmTransporteService';
 import * as XLSX from 'xlsx';
 
@@ -359,6 +361,128 @@ function ModalBaixa({ despesa, onClose, onBaixado, isAdmin }) {
     );
 }
 
+// ─── Modal de Cadastro de Fornecedores (Despesas Administrativas) ────────────
+function ModalFornecedoresAdmTransporte({ onClose, onSelect }) {
+    const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
+    const [fornecedores, setFornecedores] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [modal, setModal] = useState(null); // null | {mode:'create'|'edit', data?}
+    const [busca, setBusca] = useState('');
+    const emptyForm = { nome: '', cnpj: '', telefone: '', email: '', endereco: '', categoria: '', observacoes: '' };
+    const [form, setForm] = useState(emptyForm);
+
+    const load = async () => {
+        try { setFornecedores(await fetchFornecedoresAdmTransporte()); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    };
+    useEffect(() => { load(); }, []); // eslint-disable-line
+
+    const handleSave = async () => {
+        if (!form.nome.trim()) { showToast('Nome é obrigatório', 'error'); return; }
+        try {
+            if (modal?.mode === 'edit') await updateFornecedorAdmTransporte(modal.data.id, form);
+            else await createFornecedorAdmTransporte(form);
+            showToast('Fornecedor salvo!', 'success');
+            setModal(null);
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleDelete = async (id) => {
+        const ok = await confirm({ title: 'Excluir fornecedor?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deleteFornecedorAdmTransporte(id); showToast('Excluído!', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const filtrados = fornecedores.filter(f =>
+        !busca || f.nome.toLowerCase().includes(busca.toLowerCase()) || (f.cnpj || '').includes(busca)
+    );
+
+    return (
+        <ModalOverlay onClose={onClose} wide>
+            <ModalHeader title="Fornecedores" icon="Building2" onClose={onClose} />
+
+            <div className="flex items-center gap-3 px-5 py-3 border-b shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                <input value={busca} onChange={e => setBusca(e.target.value)}
+                    placeholder="Buscar por nome ou CNPJ..."
+                    className={inputCls + ' flex-1'} style={inputStyle} />
+                <button onClick={() => { setForm(emptyForm); setModal({ mode: 'create' }); }}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-white"
+                    style={{ backgroundColor: 'var(--color-primary)' }}>
+                    <Icon name="Plus" size={13} color="white" /> Novo
+                </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+                {loading ? (
+                    <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div>
+                ) : filtrados.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
+                        <Icon name="Building2" size={32} color="var(--color-muted-foreground)" />
+                        <span className="text-sm">{busca ? 'Nenhum fornecedor encontrado' : 'Nenhum fornecedor cadastrado ainda'}</span>
+                    </div>
+                ) : (
+                    <div className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
+                        {filtrados.map(f => (
+                            <div key={f.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: '#EFF6FF' }}>
+                                    <Icon name="Building2" size={15} color="#1D4ED8" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm truncate" style={{ color: 'var(--color-text-primary)' }}>{f.nome}</p>
+                                    <div className="flex items-center gap-3 flex-wrap mt-0.5">
+                                        {f.cnpj && <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{f.cnpj}</span>}
+                                        {f.telefone && <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{f.telefone}</span>}
+                                        {f.categoria && <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">{f.categoria}</span>}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                    {onSelect && (
+                                        <button onClick={() => { onSelect(f); onClose(); }}
+                                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white"
+                                            style={{ backgroundColor: 'var(--color-primary)' }}>
+                                            Selecionar
+                                        </button>
+                                    )}
+                                    <button onClick={() => { setForm({ nome: f.nome, cnpj: f.cnpj||'', telefone: f.telefone||'', email: f.email||'', endereco: f.endereco||'', categoria: f.categoria||'', observacoes: f.observacoes||'' }); setModal({ mode: 'edit', data: f }); }}
+                                        className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
+                                    <button onClick={() => handleDelete(f.id)}
+                                        className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {modal && (
+                <div className="border-t p-5 space-y-3 shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                    <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                        {modal.mode === 'create' ? 'Novo Fornecedor' : 'Editar Fornecedor'}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <Field label="Nome" required><input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Nome do fornecedor" /></Field>
+                        <Field label="CNPJ"><input value={form.cnpj} onChange={e => setForm(f => ({ ...f, cnpj: e.target.value }))} className={inputCls} style={inputStyle} placeholder="00.000.000/0000-00" /></Field>
+                        <Field label="Telefone"><input value={form.telefone} onChange={e => setForm(f => ({ ...f, telefone: e.target.value }))} className={inputCls} style={inputStyle} placeholder="(00) 00000-0000" /></Field>
+                        <Field label="E-mail"><input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className={inputCls} style={inputStyle} placeholder="contato@fornecedor.com" /></Field>
+                        <Field label="Categoria habitual"><input value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: Materiais de Escritório" /></Field>
+                        <Field label="Endereço" className="sm:col-span-2"><input value={form.endereco} onChange={e => setForm(f => ({ ...f, endereco: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Endereço completo" /></Field>
+                    </div>
+                    <div className="flex gap-2 justify-end pt-1">
+                        <button onClick={() => setModal(null)} className="px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <Button onClick={handleSave} size="sm" iconName="Check">Salvar</Button>
+                    </div>
+                </div>
+            )}
+            <Toast toast={toast} />
+            {ConfirmDialog}
+        </ModalOverlay>
+    );
+}
+
 // ─── Modal de Formulário ──────────────────────────────────────────────────────
 function ModalDespesa({ modal, onClose, onSaved }) {
     const { toast, showToast } = useToast();
@@ -378,6 +502,7 @@ function ModalDespesa({ modal, onClose, onSaved }) {
     const [novoBoleto, setNovoBoleto] = useState({ vencimento: '', valor: '' });
     const [novoCheque, setNovoCheque] = useState({ numero: '', banco: '', valor: '', vencimento: '' });
     const [novaParcela, setNovaParcela] = useState({ vencimento: '', valor: '', cartao: '' });
+    const [showFornecedores, setShowFornecedores] = useState(false);
 
     const todasCategorias = useMemo(() => [...CATEGORIAS_DESPESA_ADM, ...categoriasExtras], [categoriasExtras]);
     const isEdit = modal?.mode === 'edit';
@@ -385,7 +510,7 @@ function ModalDespesa({ modal, onClose, onSaved }) {
     const emptyForm = () => ({
         categoria: CATEGORIAS_DESPESA_ADM[0], descricao: '', valor: '',
         data_despesa: new Date().toISOString().split('T')[0],
-        nota_fiscal: '', fornecedor: '', empresa: '', observacoes: '',
+        nota_fiscal: '', fornecedor: '', empresa: '', centro_custo: '', observacoes: '',
         notas_fiscais: [], nf_itens: [],
         forma_pagamento: 'a_vista', tipo_pagamento: 'pix',
         comprovante_url: '', boletos: [], parcelas_cartao: [],
@@ -399,7 +524,7 @@ function ModalDespesa({ modal, onClose, onSaved }) {
                 categoria: d.categoria, descricao: d.descricao || '',
                 valor: String(d.valor || ''), data_despesa: d.data_despesa,
                 nota_fiscal: d.nota_fiscal || '', fornecedor: d.fornecedor || '',
-                empresa: d.empresa || '', observacoes: d.observacoes || '',
+                empresa: d.empresa || '', centro_custo: d.centro_custo || '', observacoes: d.observacoes || '',
                 notas_fiscais: d.notas_fiscais || [], nf_itens: d.nf_itens || [],
                 forma_pagamento: d.forma_pagamento || 'a_vista',
                 tipo_pagamento: d.tipo_pagamento || 'pix',
@@ -693,8 +818,18 @@ function ModalDespesa({ modal, onClose, onSaved }) {
                     <Field label="Empresa">
                         <input value={form.empresa} onChange={e => set('empresa', e.target.value)} className={inputCls} style={inputStyle} placeholder="Ex: Distribuidora Silva Ltda" />
                     </Field>
+                    <Field label="Centro de Custo">
+                        <input value={form.centro_custo || ''} onChange={e => set('centro_custo', e.target.value)} className={inputCls} style={inputStyle} placeholder="Ex: Administrativo, Escritório..." />
+                    </Field>
                     <Field label="Fornecedor" className="sm:col-span-2">
-                        <input value={form.fornecedor || ''} onChange={e => set('fornecedor', e.target.value)} className={inputCls} style={inputStyle} placeholder="Ex: Fórum Papelaria" />
+                        <div className="flex gap-2">
+                            <input value={form.fornecedor || ''} onChange={e => set('fornecedor', e.target.value)} className={inputCls + ' flex-1'} style={inputStyle} placeholder="Ex: Fórum Papelaria" />
+                            <button type="button" onClick={() => setShowFornecedores(true)}
+                                className="px-3 py-2 rounded-lg border text-xs font-medium flex items-center gap-1.5 hover:bg-gray-50 shrink-0"
+                                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                                <Icon name="Building2" size={13} color="var(--color-muted-foreground)" /> Fornecedores
+                            </button>
+                        </div>
                     </Field>
                     <Field label="Nº Nota Fiscal">
                         <input value={form.nota_fiscal} onChange={e => set('nota_fiscal', e.target.value)} className={inputCls} style={inputStyle} placeholder="Ex: 12345" />
@@ -856,6 +991,14 @@ function ModalDespesa({ modal, onClose, onSaved }) {
                 </Button>
             </div>
             <Toast toast={toast} />
+            {showFornecedores && (
+                <ModalFornecedoresAdmTransporte
+                    onClose={() => setShowFornecedores(false)}
+                    onSelect={f => {
+                        setForm(prev => ({ ...prev, fornecedor: f.nome, ...(f.categoria && !prev.centro_custo ? { centro_custo: f.categoria } : {}) }));
+                    }}
+                />
+            )}
         </ModalOverlay>
     );
 }

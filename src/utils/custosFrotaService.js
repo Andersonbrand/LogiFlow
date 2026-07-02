@@ -152,3 +152,119 @@ export function calcularCustoDestino(destino, custoPorKm, custoPorDia, margemPad
     const diferenca = valorPraticado != null ? valorPraticado - valorEstimado : null;
     return { custoTotal, valorEstimado, valorPraticado, diferenca, margem };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VÍNCULO COM RECEITA — casar o destino de um romaneio/carregamento com a
+// tabela de custos por destino, para abater o custo estimado da receita de
+// frete de cada veículo (caminhão/carreta), separadamente, no DRE.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Remove acentos, parênteses, pontuação e normaliza espaços/caixa para comparação de texto livre. */
+function normalizarDestino(txt) {
+    if (!txt) return '';
+    return txt
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+        .toLowerCase()
+        .replace(/\([^)]*\)/g, ' ')  // remove "(frete c/ antecedência)", "(Por Matina)" etc.
+        .replace(/[^a-z0-9,\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+/**
+ * Encontra o registro de custos_destinos que melhor corresponde a um texto de
+ * destino livre (ex: vindo de romaneios.destino ou carretas_romaneios.destino).
+ * Retorna null se não achar. Estratégia: match exato → match por segmento
+ * (destinos com vírgula, ex. "Arapiranga, Rio de Contas") → substring.
+ */
+export function encontrarCustoDestino(destinoTexto, custosDestinos) {
+    const alvo = normalizarDestino(destinoTexto);
+    if (!alvo || !custosDestinos?.length) return null;
+
+    let achado = custosDestinos.find(d => normalizarDestino(d.destino) === alvo);
+    if (achado) return achado;
+
+    for (const d of custosDestinos) {
+        const segmentosCadastro = normalizarDestino(d.destino).split(',').map(s => s.trim()).filter(Boolean);
+        const segmentosAlvo     = alvo.split(',').map(s => s.trim()).filter(Boolean);
+        if (segmentosCadastro.some(s => segmentosAlvo.includes(s))) return d;
+    }
+
+    achado = custosDestinos.find(d => {
+        const nome = normalizarDestino(d.destino);
+        return nome && (alvo.includes(nome) || nome.includes(alvo));
+    });
+    return achado || null;
+}
+
+/**
+ * Calcula a margem real de um frete já lançado (romaneio/carregamento),
+ * cruzando o destino informado com a tabela de custos cadastrada.
+ * Retorna null se não houver destino correspondente cadastrado.
+ */
+export function calcularMargemFrete({ destinoTexto, valorFrete, custosDestinos, custoPorKm, custoPorDia, margemPadrao }) {
+    const destino = encontrarCustoDestino(destinoTexto, custosDestinos);
+    if (!destino) return null;
+    const calc = calcularCustoDestino(destino, custoPorKm, custoPorDia, margemPadrao);
+    const receita = Number(valorFrete || 0);
+    const lucroReal = receita - calc.custoTotal;
+    const margemRealPct = receita > 0 ? (lucroReal / receita) * 100 : null;
+    return {
+        destinoEncontrado: destino.destino,
+        distanciaKm: Number(destino.distancia_km || 0),
+        diasViagem: Number(destino.dias_viagem || 0),
+        custoTotal: calc.custoTotal,
+        valorEstimado: calc.valorEstimado,
+        receita,
+        lucroReal,
+        margemRealPct,
+    };
+}
+
+/** Carrega tudo que é necessário (itens + config + destinos) para calcular margens de um tipo de veículo. */
+export async function fetchDadosMargemFrete(tipoVeiculo) {
+    const [itens, config, destinos] = await Promise.all([
+        fetchCustosItens(tipoVeiculo),
+        fetchCustosConfig(tipoVeiculo),
+        fetchCustosDestinos(tipoVeiculo),
+    ]);
+    const { custoPorKm, custoPorDia } = calcularCustosTotais(itens);
+    return { custoPorKm, custoPorDia, margemPadrao: config.margem_lucro_pct, destinos };
+}
+
+/**
+ * Calcula o custo total estimado (abatimento) de uma LISTA de fretes (romaneios
+ * ou carregamentos), agrupando por veículo/placa e casando cada um pelo destino.
+ * Usado no DRE para abater a receita de frete pelo custo de rodagem real de cada
+ * veículo, separado por tipo (caminhão/carreta).
+ *
+ * fretes: [{ destino, valor_frete, placa }]
+ * Retorna { custoTotalEstimado, porVeiculo: { [placa]: { custo, receita, fretesComMatch, fretesSemMatch } } }
+ */
+export function calcularAbatimentoCustosFrota(fretes, dadosMargem) {
+    const { custoPorKm, custoPorDia, margemPadrao, destinos } = dadosMargem;
+    let custoTotalEstimado = 0;
+    let receitaTotal = 0;
+    const porVeiculo = {};
+    let semMatch = 0;
+
+    for (const f of (fretes || [])) {
+        const placa = f.placa || '—';
+        if (!porVeiculo[placa]) porVeiculo[placa] = { custo: 0, receita: 0, fretesComMatch: 0, fretesSemMatch: 0 };
+        receitaTotal += Number(f.valor_frete || 0);
+        porVeiculo[placa].receita += Number(f.valor_frete || 0);
+
+        const destino = encontrarCustoDestino(f.destino, destinos);
+        if (destino) {
+            const { custoTotal } = calcularCustoDestino(destino, custoPorKm, custoPorDia, margemPadrao);
+            custoTotalEstimado += custoTotal;
+            porVeiculo[placa].custo += custoTotal;
+            porVeiculo[placa].fretesComMatch += 1;
+        } else {
+            semMatch += 1;
+            porVeiculo[placa].fretesSemMatch += 1;
+        }
+    }
+
+    return { custoTotalEstimado, receitaTotal, porVeiculo, semMatch, totalFretes: (fretes || []).length };
+}

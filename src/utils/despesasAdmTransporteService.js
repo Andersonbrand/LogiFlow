@@ -143,3 +143,41 @@ export async function revogarParcelaCartaoAdmTransporte(despesaId, parcelaIdx) {
     if (error) throw error;
     return data;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FORNECEDORES (Despesas Administrativas)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchFornecedoresAdmTransporte() {
+    const { data, error } = await supabase
+        .from('despesas_adm_fornecedores')
+        .select('*')
+        .order('nome', { ascending: true });
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createFornecedorAdmTransporte(fornecedor) {
+    const { data, error } = await supabase
+        .from('despesas_adm_fornecedores')
+        .insert(fornecedor)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updateFornecedorAdmTransporte(id, updates) {
+    const { data, error } = await supabase
+        .from('despesas_adm_fornecedores')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deleteFornecedorAdmTransporte(id) {
+    const { error } = await supabase.from('despesas_adm_fornecedores').delete().eq('id', id);
+    if (error) throw error;
+}
