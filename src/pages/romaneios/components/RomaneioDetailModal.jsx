@@ -50,9 +50,31 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
     const margem   = frete - custoOp;
     const valorCarga = n(romaneio.valor_total_carga) || pedidos.reduce((a,p)=>a+n(p.valor_pedido),0);
 
-    const mapsQuery    = romaneio.destino ? encodeURIComponent(romaneio.destino+', Brasil') : null;
-    const mapsEmbedUrl = mapsQuery ? `https://maps.google.com/maps?q=${mapsQuery}&output=embed&z=8` : null;
-    const mapsLinkUrl  = mapsQuery ? `https://www.google.com/maps/search/${mapsQuery}` : null;
+    // Reconstrói a lista de cidades da rota (origem fixa + paradas salvas + destino)
+    const paradasSalvas = (() => {
+        try { return JSON.parse(romaneio.paradas || '[]'); } catch { return []; }
+    })();
+    const todasCidadesRota = ['Guanambi, BA', ...paradasSalvas, romaneio.destino].filter(Boolean);
+
+    // URL do Google Maps Directions com todos os waypoints
+    const getMapsEmbedUrl = (cidades) => {
+        if (cidades.length < 2) return null;
+        const origem  = encodeURIComponent(cidades[0]);
+        const destino = encodeURIComponent(cidades[cidades.length - 1]);
+        const waypoints = cidades.slice(1, -1).map(c => encodeURIComponent(c)).join('|');
+        // Embed com directions API (sem chave) — funciona para visualização simples
+        const base = `https://maps.google.com/maps?saddr=${origem}&daddr=${destino}`;
+        const waypointStr = cidades.slice(1, -1).map(c => encodeURIComponent(c)).join('+to:');
+        const full = waypointStr
+            ? `https://maps.google.com/maps?saddr=${origem}&daddr=${waypointStr}+to:${destino}&output=embed`
+            : `https://maps.google.com/maps?saddr=${origem}&daddr=${destino}&output=embed`;
+        return full;
+    };
+    const getMapsLinkUrl = (cidades) =>
+        `https://www.google.com/maps/dir/${cidades.map(c => encodeURIComponent(c)).join('/')}`;
+
+    const mapsEmbedUrl = getMapsEmbedUrl(todasCidadesRota);
+    const mapsLinkUrl  = getMapsLinkUrl(todasCidadesRota);
 
     const TABS = [
         ['info',      'Informações',  'FileText'],
@@ -243,29 +265,35 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                                 </div>
                             ) : (
                                 <>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <Icon name="MapPin" size={15} color="var(--color-primary)" />
-                                            <span className="text-sm font-medium" style={{ color:'var(--color-text-primary)' }}>
-                                                Destino: <strong>{romaneio.destino}</strong>
-                                            </span>
-                                        </div>
+                                    {/* Breadcrumb da rota */}
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                        {todasCidadesRota.map((cidade, i) => (
+                                            <React.Fragment key={i}>
+                                                <div className="flex items-center gap-1">
+                                                    <Icon name={i === 0 ? 'Home' : i === todasCidadesRota.length - 1 ? 'MapPin' : 'Circle'} size={13} color={i === 0 ? '#059669' : i === todasCidadesRota.length - 1 ? 'var(--color-primary)' : '#D97706'} />
+                                                    <span className="text-xs font-medium" style={{ color: i === 0 ? '#059669' : i === todasCidadesRota.length - 1 ? 'var(--color-primary)' : '#D97706' }}>{cidade}</span>
+                                                </div>
+                                                {i < todasCidadesRota.length - 1 && <Icon name="ChevronRight" size={12} color="var(--color-muted-foreground)" />}
+                                            </React.Fragment>
+                                        ))}
                                         <a href={mapsLinkUrl} target="_blank" rel="noopener noreferrer"
-                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-caption font-medium border hover:bg-blue-50 transition-colors"
+                                            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-caption font-medium border hover:bg-blue-50 transition-colors flex-shrink-0"
                                             style={{ borderColor:'var(--color-border)', color:'var(--color-primary)' }}>
                                             <Icon name="ExternalLink" size={12} color="currentColor" />
                                             Abrir no Google Maps
                                         </a>
                                     </div>
                                     <div className="rounded-xl overflow-hidden border" style={{ borderColor:'var(--color-border)', height:320 }}>
-                                        <iframe title="Mapa do destino" width="100%" height="100%"
+                                        <iframe title="Rota no mapa" width="100%" height="100%"
                                             loading="lazy" referrerPolicy="no-referrer-when-downgrade"
                                             src={mapsEmbedUrl} style={{ border:0 }} />
                                     </div>
                                     {n(romaneio.distancia_km) > 0 && (
                                         <div className="flex items-center gap-2 text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
                                             <Icon name="Route" size={13} color="currentColor" />
-                                            Distância cadastrada: <strong className="font-data">{romaneio.distancia_km} km</strong>
+                                            Distância (ida): <strong className="font-data">{romaneio.distancia_km} km</strong>
+                                            <span className="mx-1">·</span>
+                                            Total (ida+volta): <strong className="font-data">{romaneio.distancia_km * 2} km</strong>
                                         </div>
                                     )}
                                 </>

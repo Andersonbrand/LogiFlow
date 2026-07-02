@@ -30,7 +30,7 @@ export async function fetchRomaneios() {
         .select(`
             id, numero, motorista, motorista_id, placa, destino, status,
             aprovado, aprovado_por, aprovado_em, status_aprovacao, motivo_reprovacao,
-            peso_total, saida, observacoes, vehicle_id,
+            peso_total, saida, observacoes, vehicle_id, paradas,
             distancia_km, custo_combustivel, custo_pedagio,
             custo_motorista, valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,

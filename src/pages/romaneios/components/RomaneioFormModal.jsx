@@ -380,7 +380,8 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             setRotaInfo(info);
 
             // Preenche distância
-            const distKm = info.distanciaTotal;
+            const distKm = info.distanciaTotal; // distância de IDA
+            const distIdaVolta = distKm ? distKm * 2 : null; // total ida + volta para cálculo de combustível
             const statusMsgs = [];
             const dieselUsado = Number(precoDiesel) || 6.50;
 
@@ -388,19 +389,19 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             setForm(prev => {
                 const next = { ...prev };
 
-                // Distância
+                // Distância — salva apenas a ida (referência geográfica)
                 if (distKm) next.distancia_km = String(distKm);
 
-                // Combustível
-                if (consumoKm && consumoKm > 0 && distKm) {
-                    const litros = distKm / consumoKm;
+                // Combustível — calculado sobre IDA+VOLTA (caminhão retorna vazio)
+                if (consumoKm && consumoKm > 0 && distIdaVolta) {
+                    const litros = distIdaVolta / consumoKm;
                     next.custo_combustivel  = (litros * dieselUsado).toFixed(2);
                     next._litros_estimados  = Math.round(litros);
                 }
 
-                // Pedágio — só preenche se toggle estiver ativo
+                // Pedágio — só preenche se toggle estiver ativo (também ida+volta)
                 if (usarPedagio && info.pedagioEstimado > 0) {
-                    next.custo_pedagio = String(info.pedagioEstimado.toFixed(2));
+                    next.custo_pedagio = String((info.pedagioEstimado * 2).toFixed(2));
                 } else {
                     next.custo_pedagio = '';
                 }
@@ -411,12 +412,12 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             // Mensagens de status
             if (!consumoKm) {
                 statusMsgs.push('Cadastre o consumo km/l do veículo para calcular o combustível automaticamente.');
-            } else if (distKm && consumoKm > 0) {
-                const litros = distKm / consumoKm;
-                statusMsgs.push(`Diesel S10: R$ ${dieselUsado.toFixed(2)}/l · ${Math.round(litros)} litros · R$ ${(litros * dieselUsado).toFixed(2)}`);
+            } else if (distIdaVolta && consumoKm > 0) {
+                const litros = distIdaVolta / consumoKm;
+                statusMsgs.push(`Diesel S10: R$ ${dieselUsado.toFixed(2)}/l · ${Math.round(litros)} litros (ida+volta) · R$ ${(litros * dieselUsado).toFixed(2)}`);
             }
             if (info.pedagioEstimado > 0) {
-                statusMsgs.push(`Pedágios (${info.rodoviasPrincipais || 'rota'}): R$ ${info.pedagioEstimado.toFixed(2)}`);
+                statusMsgs.push(`Pedágios (${info.rodoviasPrincipais || 'rota'}): R$ ${(info.pedagioEstimado * 2).toFixed(2)} (ida+volta)`);
             } else {
                 statusMsgs.push('Sem pedágios identificados na rota.');
             }
@@ -695,7 +696,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                         ) : (
                                             <div className="flex items-center gap-2 font-semibold text-green-700">
                                                 <Icon name="CheckCircle2" size={13} color="#059669" />
-                                                {rotaInfo.distanciaTotal} km · {rotaInfo.tempoEstimado}
+                                                {rotaInfo.distanciaTotal} km (ida) · {rotaInfo.distanciaTotal * 2} km total (ida+volta) · {rotaInfo.tempoEstimado}
                                                 {rotaInfo.rodoviasPrincipais && <span className="font-normal text-green-600">· {rotaInfo.rodoviasPrincipais}</span>}
                                             </div>
                                         )}

@@ -3954,12 +3954,19 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const filtros = { dataInicio, dataFim, is_terceiro: false };
             if (empresa) filtros.empresaId = empresa;
 
+            // Busca IDs de carreteiros para filtrar as diárias — evita que diárias de
+            // motoristas de caminhão sejam contabilizadas na DRE das carretas
+            const carreteiros = await fetchCarreteirosPropriosOnly();
+            const idsCarretas = carreteiros.map(x => x.id);
+            const filtrosDiarias = { dataInicio, dataFim };
+            if (idsCarretas.length > 0) filtrosDiarias.motoristasIds = idsCarretas;
+
             const [carregamentos, abastecimentos, viagens, despesasExtras, diariasLancadas, romaneiosCarga, bonificacoesExtras] = await Promise.all([
                 fetchCarregamentos(filtros),
                 fetchAbastecimentos({ dataInicio, dataFim }),
                 fetchViagens({ dataInicio, dataFim }),
                 fetchDespesasExtras({ dataInicio, dataFim }),
-                fetchDiarias({ dataInicio, dataFim }),
+                fetchDiarias(filtrosDiarias),
                 fetchRomaneios({ dataInicio, dataFim }),
                 fetchBonificacoesExtras({ dataInicio, dataFim }),
             ]);
