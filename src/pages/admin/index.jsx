@@ -13,6 +13,7 @@ import { fetchBonificacoesConsolidadas } from 'utils/bonificacaoService';
 import { fetchCorredores, upsertCorredor, deleteCorredor, invalidarCache } from 'utils/corredoresService';
 import { supabase, subscribeTabela } from 'utils/supabaseClient';
 import { useNavigate } from 'react-router-dom';
+import BackupPanel from './BackupPanel';
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -146,6 +147,7 @@ export default function AdminPanel() {
         { id: 'alertas',     label: 'Alertas',     icon: 'AlertTriangle', badge: alerts.length || null },
         { id: 'bonificacoes',label: 'Bonificações',icon: 'Award' },
         { id: 'corredores',  label: 'Corredores',  icon: 'Map' },
+        { id: 'backup',      label: 'Backup',      icon: 'Archive' },
     ];
 
     if (loading) return (
@@ -414,6 +416,9 @@ export default function AdminPanel() {
                     {tab === 'corredores' && (
                         <CorredoresManager showToast={showToast} />
                     )}
+
+                    {/* ── ABA BACKUP ───────────────────────────────────────── */}
+                    {tab === 'backup' && <BackupPanel />}
                 </div>
             </main>
             <Toast toast={toast} />
