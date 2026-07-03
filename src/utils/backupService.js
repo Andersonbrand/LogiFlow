@@ -1,19 +1,25 @@
 import JSZip from 'jszip';
+import * as XLSX from 'xlsx';
 import { supabase } from './supabaseClient';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LogiFlow — Backup e Restauração
 //
-// Exporta/importa os dados do Supabase como um arquivo .zip organizado por
-// pastas (módulos) e arquivos .json (um por tabela). O admin escolhe, na tela,
-// quais módulos/tabelas deseja exportar ou importar (total ou parcial).
+// Exporta/importa os dados do Supabase (tabelas) e os arquivos anexados no
+// Supabase Storage (CNH de motoristas) como um único arquivo .zip, organizado
+// por pastas (módulos). Cada tabela vira dois arquivos — um .json (para a
+// reimportação funcionar) e um .xlsx (para leitura/edição fácil em Excel).
+// O admin escolhe, na tela, quais módulos/tabelas/anexos deseja exportar ou
+// importar (total ou parcial).
 //
 // Estrutura do .zip gerado:
-//   manifest.json                 → metadados do backup (data, versão, contagens)
+//   manifest.json                          → metadados do backup (data, versão, contagens)
 //   01-usuarios/user_profiles.json
+//   01-usuarios/user_profiles.xlsx
 //   02-carretas/carretas_veiculos.json
-//   02-carretas/carretas_romaneios.json
+//   02-carretas/carretas_veiculos.xlsx
 //   ...
+//   storage/cnh-documents/cnh_123.jpg       → arquivos baixados do Storage
 // ═══════════════════════════════════════════════════════════════════════════
 
 export const BACKUP_VERSION = 1;
@@ -21,12 +27,21 @@ export const BACKUP_VERSION = 1;
 // ── Catálogo de módulos e tabelas ─────────────────────────────────────────
 // `pk`   → coluna usada como chave de conflito no upsert (padrão: 'id')
 // `nice` → nome amigável exibido na tela
+// ── Buckets do Supabase Storage (arquivos/anexos) ──────────────────────────
+// Cada bucket é vinculado ao módulo ao qual pertence, pra aparecer junto na tela.
+export const BACKUP_BUCKETS = [
+    { id: 'cnh-documents', nice: 'CNH dos motoristas (documentos/fotos)', moduleId: 'usuarios' },
+];
+
+export const BUCKET_INDEX = BACKUP_BUCKETS.reduce((acc, b) => { acc[b.id] = b; return acc; }, {});
+
 export const BACKUP_MODULES = [
     {
         id: 'usuarios',
         label: 'Usuários & Perfis',
         icon: 'Users',
         folder: '01-usuarios',
+        buckets: ['cnh-documents'],
         tables: [
             { name: 'user_profiles', nice: 'Perfis de usuário', pk: 'id', aviso: 'Vinculado ao login (auth). Restaurar só recria o perfil se o usuário já existir no Supabase Auth.' },
         ],
@@ -105,15 +120,11 @@ export const BACKUP_MODULES = [
     },
     {
         id: 'materiais',
-        label: 'Materiais & Catálogo',
+        label: 'Materiais',
         icon: 'Package',
         folder: '07-materiais',
         tables: [
             { name: 'materials', nice: 'Materiais' },
-            { name: 'products', nice: 'Produtos (catálogo)' },
-            { name: 'quotes', nice: 'Orçamentos/cotações' },
-            { name: 'quote_responses', nice: 'Respostas de cotação' },
-            { name: 'orders', nice: 'Pedidos (loja)' },
         ],
     },
     {
@@ -133,7 +144,6 @@ export const BACKUP_MODULES = [
         icon: 'Settings',
         folder: '09-sistema',
         tables: [
-            { name: 'settings', nice: 'Configurações gerais', pk: 'key' },
             { name: 'notifications', nice: 'Notificações' },
             { name: 'ai_suggestions_dismissed', nice: 'Sugestões de IA dispensadas' },
         ],
@@ -150,8 +160,7 @@ export const TABLE_INDEX = BACKUP_MODULES.flatMap(m =>
 // na ordem em que aparecem no catálogo.
 const IMPORT_ORDER = [
     'user_profiles',
-    'settings',
-    'materials', 'products',
+    'materials',
     'carretas_empresas', 'carretas_postos', 'carretas_pontos_parada', 'carretas_veiculos', 'carretas_config',
     'vehicles',
     'custos_itens', 'custos_config', 'custos_destinos',
@@ -164,7 +173,6 @@ const IMPORT_ORDER = [
     'bonificacoes', 'rota_corredores',
     'vehicle_history', 'maintenance_alerts', 'caminhoes_despesas',
     'transporte_despesas_adm', 'duplicatas_verificadas',
-    'quotes', 'quote_responses', 'orders',
     'notifications', 'carretas_notificacoes', 'ai_suggestions_dismissed',
 ];
 
@@ -172,6 +180,32 @@ function ordenarParaImportacao(tableNames) {
     const known = IMPORT_ORDER.filter(t => tableNames.includes(t));
     const rest = tableNames.filter(t => !IMPORT_ORDER.includes(t));
     return [...known, ...rest];
+}
+
+// ── Geração de planilha .xlsx a partir das linhas de uma tabela ─────────────
+// Colunas com valor objeto/array (jsonb) são convertidas para texto (JSON),
+// já que célula de planilha não representa estrutura aninhada.
+function linhasParaPlanilha(rows) {
+    return rows.map(row => {
+        const linha = {};
+        for (const [chave, valor] of Object.entries(row)) {
+            if (valor !== null && typeof valor === 'object') {
+                linha[chave] = JSON.stringify(valor);
+            } else {
+                linha[chave] = valor;
+            }
+        }
+        return linha;
+    });
+}
+
+function gerarXlsxArrayBuffer(rows, nomeAba) {
+    const planilha = XLSX.utils.json_to_sheet(linhasParaPlanilha(rows));
+    const livro = XLSX.utils.book_new();
+    // Nome da aba: máx. 31 caracteres, sem caracteres inválidos do Excel
+    const aba = (nomeAba || 'Dados').replace(/[\\/*?:[\]]/g, '').slice(0, 31) || 'Dados';
+    XLSX.utils.book_append_sheet(livro, planilha, aba);
+    return XLSX.write(livro, { type: 'array', bookType: 'xlsx' });
 }
 
 // ── Leitura paginada (contorna o limite padrão de 1000 linhas do Supabase) ──
@@ -190,17 +224,47 @@ async function fetchAllRows(table, onProgress) {
     return all;
 }
 
+// ── Storage: listagem recursiva de arquivos de um bucket ────────────────────
+// Itens de pasta vêm com id === null na resposta do Supabase Storage.
+async function listarArquivosBucket(bucket, prefixo = '') {
+    const { data, error } = await supabase.storage.from(bucket).list(prefixo, {
+        limit: 1000, sortBy: { column: 'name', order: 'asc' },
+    });
+    if (error) throw new Error(`Erro ao listar bucket "${bucket}": ${error.message}`);
+    let arquivos = [];
+    for (const item of data || []) {
+        const caminho = prefixo ? `${prefixo}/${item.name}` : item.name;
+        if (item.id === null) {
+            const sub = await listarArquivosBucket(bucket, caminho);
+            arquivos = arquivos.concat(sub);
+        } else {
+            arquivos.push(caminho);
+        }
+    }
+    return arquivos;
+}
+
+async function limparBucket(bucket) {
+    const arquivos = await listarArquivosBucket(bucket);
+    if (!arquivos.length) return;
+    const CHUNK = 100;
+    for (let i = 0; i < arquivos.length; i += CHUNK) {
+        const { error } = await supabase.storage.from(bucket).remove(arquivos.slice(i, i + CHUNK));
+        if (error) throw new Error(`Erro ao limpar bucket "${bucket}": ${error.message}`);
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // EXPORTAÇÃO
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Gera o .zip de backup para as tabelas selecionadas.
- * @param {string[]} tableNames - nomes das tabelas a exportar
+ * Gera o .zip de backup para as tabelas e/ou buckets selecionados.
+ * @param {{tables?: string[], buckets?: string[]}} selecao
  * @param {(msg:string)=>void} onProgress - callback de progresso (texto)
- * @returns {Promise<Blob>}
+ * @returns {Promise<{blob: Blob, manifest: object}>}
  */
-export async function exportBackup(tableNames, onProgress) {
+export async function exportBackup({ tables = [], buckets = [] }, onProgress) {
     const zip = new JSZip();
     const manifest = {
         app: 'LogiFlow',
@@ -208,25 +272,64 @@ export async function exportBackup(tableNames, onProgress) {
         versao: BACKUP_VERSION,
         gerado_em: new Date().toISOString(),
         tabelas: {},
+        buckets: {},
     };
+    const puladas = []; // { item, motivo } — tabelas/buckets que falharam e foram ignorados
 
-    for (const table of tableNames) {
+    for (const table of tables) {
         const def = TABLE_INDEX[table];
         const folder = def?.folder || 'outros';
-        onProgress?.(`Exportando ${def?.nice || table}…`);
-        const rows = await fetchAllRows(table, onProgress);
-        zip.file(`${folder}/${table}.json`, JSON.stringify(rows, null, 2));
-        manifest.tabelas[table] = {
-            modulo: def?.moduleId || 'outros',
-            pasta: folder,
-            linhas: rows.length,
-        };
+        try {
+            onProgress?.(`Exportando ${def?.nice || table}…`);
+            const rows = await fetchAllRows(table, onProgress);
+            zip.file(`${folder}/${table}.json`, JSON.stringify(rows, null, 2));
+            if (rows.length > 0) {
+                onProgress?.(`Gerando planilha de ${def?.nice || table}…`);
+                zip.file(`${folder}/${table}.xlsx`, gerarXlsxArrayBuffer(rows, def?.nice || table));
+            }
+            manifest.tabelas[table] = {
+                modulo: def?.moduleId || 'outros',
+                pasta: folder,
+                linhas: rows.length,
+            };
+        } catch (e) {
+            const motivo = /schema cache|does not exist|not find the table/i.test(e.message)
+                ? 'Tabela não existe neste banco de dados.'
+                : e.message;
+            onProgress?.(`⚠ Pulando ${def?.nice || table}: ${motivo}`);
+            puladas.push({ item: def?.nice || table, motivo });
+        }
     }
 
+    for (const bucket of buckets) {
+        const def = BUCKET_INDEX[bucket];
+        try {
+            onProgress?.(`Listando arquivos de "${def?.nice || bucket}"…`);
+            const arquivos = await listarArquivosBucket(bucket);
+            let bytes = 0;
+            for (let i = 0; i < arquivos.length; i++) {
+                const caminho = arquivos[i];
+                onProgress?.(`Baixando ${def?.nice || bucket}: ${caminho} (${i + 1}/${arquivos.length})`);
+                const { data, error } = await supabase.storage.from(bucket).download(caminho);
+                if (error) throw new Error(error.message);
+                zip.file(`storage/${bucket}/${caminho}`, data);
+                bytes += data.size || 0;
+            }
+            manifest.buckets[bucket] = { arquivos: arquivos.length, bytes };
+        } catch (e) {
+            const motivo = /not found|bucket.*not exist/i.test(e.message)
+                ? 'Bucket não existe neste projeto Supabase.'
+                : e.message;
+            onProgress?.(`⚠ Pulando ${def?.nice || bucket}: ${motivo}`);
+            puladas.push({ item: def?.nice || bucket, motivo });
+        }
+    }
+
+    manifest.puladas = puladas;
     zip.file('manifest.json', JSON.stringify(manifest, null, 2));
     onProgress?.('Compactando arquivo .zip…');
     const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
-    return { blob, manifest };
+    return { blob, manifest, puladas };
 }
 
 export function nomeArquivoBackup() {
@@ -251,14 +354,16 @@ export function baixarBlob(blob, nomeArquivo) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Lê um arquivo .zip de backup e retorna o manifesto + função para extrair
- * as linhas de cada tabela sob demanda.
+ * Lê um arquivo .zip de backup e retorna o manifesto + funções para extrair
+ * as linhas de cada tabela e os arquivos de cada bucket sob demanda.
  */
 export async function lerArquivoBackup(file) {
     const zip = await JSZip.loadAsync(file);
     const manifestEntry = zip.file('manifest.json');
     if (!manifestEntry) throw new Error('Arquivo inválido: manifest.json não encontrado no .zip.');
     const manifest = JSON.parse(await manifestEntry.async('string'));
+    manifest.buckets = manifest.buckets || {};
+    manifest.tabelas = manifest.tabelas || {};
 
     const getRows = async (table) => {
         const info = manifest.tabelas[table];
@@ -268,7 +373,19 @@ export async function lerArquivoBackup(file) {
         return JSON.parse(await entry.async('string'));
     };
 
-    return { manifest, getRows, tabelasDisponiveis: Object.keys(manifest.tabelas) };
+    const getArquivosBucket = (bucket) => {
+        const prefixo = `storage/${bucket}/`;
+        return zip.file(new RegExp(`^${prefixo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
+            .map(entry => ({ caminho: entry.name.slice(prefixo.length), entry }));
+    };
+
+    return {
+        manifest,
+        getRows,
+        getArquivosBucket,
+        tabelasDisponiveis: Object.keys(manifest.tabelas),
+        bucketsDisponiveis: Object.keys(manifest.buckets),
+    };
 }
 
 /**
@@ -283,18 +400,19 @@ async function limparTabela(table) {
 }
 
 /**
- * Importa as tabelas selecionadas de um backup já carregado (via lerArquivoBackup).
- * @param {{manifest:object, getRows:Function}} backup
- * @param {string[]} tableNames
+ * Importa as tabelas e/ou buckets selecionados de um backup já carregado
+ * (via lerArquivoBackup).
+ * @param {{manifest:object, getRows:Function, getArquivosBucket:Function}} backup
+ * @param {{tables?: string[], buckets?: string[]}} selecao
  * @param {'mesclar'|'substituir'} modo
  * @param {(msg:string)=>void} onProgress
  */
-export async function importarBackup(backup, tableNames, modo, onProgress) {
-    const ordenadas = ordenarParaImportacao(tableNames);
+export async function importarBackup(backup, { tables = [], buckets = [] }, modo, onProgress) {
+    const ordenadas = ordenarParaImportacao(tables);
     const resultado = { ok: [], erros: [] };
 
     // Em modo "substituir", limpamos as tabelas na ordem inversa (filhas primeiro)
-    // para não violar chaves estrangeiras.
+    // para não violar chaves estrangeiras, e esvaziamos os buckets selecionados.
     if (modo === 'substituir') {
         for (const table of [...ordenadas].reverse()) {
             try {
@@ -302,6 +420,14 @@ export async function importarBackup(backup, tableNames, modo, onProgress) {
                 await limparTabela(table);
             } catch (e) {
                 resultado.erros.push({ table, etapa: 'limpar', erro: e.message });
+            }
+        }
+        for (const bucket of buckets) {
+            try {
+                onProgress?.(`Limpando arquivos de "${BUCKET_INDEX[bucket]?.nice || bucket}"…`);
+                await limparBucket(bucket);
+            } catch (e) {
+                resultado.erros.push({ table: bucket, etapa: 'limpar', erro: e.message });
             }
         }
     }
@@ -321,6 +447,23 @@ export async function importarBackup(backup, tableNames, modo, onProgress) {
             resultado.ok.push({ table, linhas: rows.length });
         } catch (e) {
             resultado.erros.push({ table, etapa: 'importar', erro: e.message });
+        }
+    }
+
+    for (const bucket of buckets) {
+        try {
+            const arquivos = backup.getArquivosBucket(bucket);
+            if (!arquivos.length) { onProgress?.(`${bucket}: nenhum arquivo no backup, pulando.`); continue; }
+            for (let i = 0; i < arquivos.length; i++) {
+                const { caminho, entry } = arquivos[i];
+                onProgress?.(`Restaurando ${BUCKET_INDEX[bucket]?.nice || bucket}: ${caminho} (${i + 1}/${arquivos.length})`);
+                const blob = await entry.async('blob');
+                const { error } = await supabase.storage.from(bucket).upload(caminho, blob, { upsert: true });
+                if (error) throw error;
+            }
+            resultado.ok.push({ table: bucket, linhas: arquivos.length });
+        } catch (e) {
+            resultado.erros.push({ table: bucket, etapa: 'importar', erro: e.message });
         }
     }
 
