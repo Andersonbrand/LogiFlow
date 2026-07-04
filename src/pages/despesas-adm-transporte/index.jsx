@@ -23,7 +23,7 @@ import {
 import * as XLSX from 'xlsx';
 
 import { supabase } from 'utils/supabaseClient';
-import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas } from 'utils/parcelasGenerator';
+import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis } from 'utils/parcelasGenerator';
 
 async function fetchDespesaAdmById(id) {
     const { data } = await supabase.from('transporte_despesas_adm').select('*').eq('id', id).single();
@@ -530,7 +530,7 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
     const [novoBoleto, setNovoBoleto] = useState({ numero_boleto: '', vencimento: '', valor: '' });
     const [novoCheque, setNovoCheque] = useState({ numero: '', banco: '', valor: '', vencimento: '' });
     const [novaParcela, setNovaParcela] = useState({ vencimento: '', valor: '', cartao: '' });
-    const [gerador, setGerador] = useState({ quantidade: 2, primeiroVencimento: '', intervaloDias: 30, numeroBoletoInicial: '' });
+    const [gerador, setGerador] = useState({ quantidade: 2, prazoDiasUteis: 30, intervaloDias: 30, numeroBoletoInicial: '' });
     const [duplicatas, setDuplicatas] = useState([]);
     const [showFornecedores, setShowFornecedores] = useState(false);
 
@@ -669,6 +669,10 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
     };
 
     // ── Boletos / parcelas / cheques ───────────────────────────────────────────
+    // Edita um campo de um boleto/parcela já lançado diretamente na lista.
+    const setBoletoField = (idx, campo) => (e) => setForm(f => ({ ...f, boletos: f.boletos.map((x, i) => i === idx ? { ...x, [campo]: e.target.value } : x) }));
+    const setParcelaCartaoField = (idx, campo) => (e) => setForm(f => ({ ...f, parcelas_cartao: f.parcelas_cartao.map((x, i) => i === idx ? { ...x, [campo]: e.target.value } : x) }));
+
     const addBoleto = () => {
         if (!novoBoleto.vencimento || !novoBoleto.valor) { showToast('Preencha vencimento e valor', 'error'); return; }
         setForm(f => ({ ...f, boletos: [...(f.boletos || []), { ...novoBoleto, pago: false, entregue_financeiro: false }] }));
@@ -688,20 +692,21 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
     // ── Geração automática de parcelas (boleto ou cartão) ─────────────────────
     const gerarAutomatico = (tipo) => {
         if (!form.valor || Number(form.valor) <= 0) { showToast('Informe o valor total da despesa antes de gerar as parcelas.', 'error'); return; }
-        if (!gerador.primeiroVencimento) { showToast('Informe a data da 1ª parcela.', 'error'); return; }
+        if (!form.data_despesa) { showToast('Informe a data da despesa/nota fiscal antes de gerar as parcelas.', 'error'); return; }
+        const primeiroVencimento = adicionarDiasUteis(form.data_despesa, gerador.prazoDiasUteis);
         try {
             const parcelas = gerarParcelasAutomaticas({
                 valorTotal: Number(form.valor),
                 quantidade: gerador.quantidade,
-                primeiroVencimento: gerador.primeiroVencimento,
+                primeiroVencimento,
                 intervaloDias: Number(gerador.intervaloDias) || 30,
                 tipo,
-                numeroBoletoInicial: gerador.numeroBoletoInicial ? Number(gerador.numeroBoletoInicial) : null,
+                numeroBoletoInicial: gerador.numeroBoletoInicial || null,
                 cartao: novaParcela.cartao,
             });
             if (tipo === 'boleto') setForm(f => ({ ...f, boletos: parcelas }));
             else setForm(f => ({ ...f, parcelas_cartao: parcelas }));
-            showToast(`${parcelas.length} parcela(s) gerada(s) automaticamente — soma ${BRL(somaParcelas(parcelas))}.`, 'success');
+            showToast(`${parcelas.length} parcela(s) geradas a partir de ${FMT(primeiroVencimento)} (NF + ${gerador.prazoDiasUteis} dias úteis) — soma ${BRL(somaParcelas(parcelas))}.`, 'success');
         } catch (e) { showToast(e.message, 'error'); }
     };
 
@@ -977,9 +982,10 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
                                     <p className="text-xs font-medium text-amber-800">Boletos / Parcelas</p>
                                     {(form.boletos || []).map((b, idx) => (
                                         <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border text-xs flex-wrap" style={{ borderColor: '#FED7AA' }}>
-                                            <span className="text-amber-700 font-medium">{b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Parcela ${idx + 1}`}</span>
-                                            <span className="font-data">{FMT(b.vencimento)}</span>
-                                            <span className="font-data font-semibold text-amber-800">{BRL(b.valor)}</span>
+                                            <input value={b.numero_boleto || ''} onChange={setBoletoField(idx, 'numero_boleto')} placeholder={`Parcela ${idx + 1}`}
+                                                className="font-medium text-amber-700 border rounded px-1.5 py-1 w-24" style={{ borderColor: '#FED7AA' }} title="Nº do boleto" />
+                                            <input type="date" value={b.vencimento || ''} onChange={setBoletoField(idx, 'vencimento')} className="font-data border rounded px-1.5 py-1" style={{ borderColor: '#FED7AA' }} />
+                                            <input type="number" step="0.01" value={b.valor} onChange={setBoletoField(idx, 'valor')} className="font-data font-semibold text-amber-800 border rounded px-1.5 py-1 w-24" style={{ borderColor: '#FED7AA' }} />
                                             <span className={`px-1.5 py-0.5 rounded ${b.pago ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{b.pago ? 'Pago' : 'Pendente'}</span>
                                             <label className="flex items-center gap-1 cursor-pointer" title="Marcar se o boleto já foi entregue ao setor financeiro">
                                                 <input type="checkbox" checked={!!b.entregue_financeiro}
@@ -994,11 +1000,14 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
                                         <p className="text-xs font-semibold text-amber-800 mb-1.5 flex items-center gap-1"><Icon name="Wand2" size={12} /> Gerar parcelas automaticamente</p>
                                         <div className="grid grid-cols-4 gap-2">
                                             <Field label="Qtde parcelas"><input type="number" min="1" value={gerador.quantidade} onChange={e => setGerador(g => ({ ...g, quantidade: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
-                                            <Field label="1ª vencimento"><input type="date" value={gerador.primeiroVencimento} onChange={e => setGerador(g => ({ ...g, primeiroVencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                            <Field label="Prazo (dias úteis)"><input type="number" min="0" value={gerador.prazoDiasUteis} onChange={e => setGerador(g => ({ ...g, prazoDiasUteis: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 30" /></Field>
                                             <Field label="Intervalo (dias)"><input type="number" min="1" value={gerador.intervaloDias} onChange={e => setGerador(g => ({ ...g, intervaloDias: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                                             <Field label="Nº do 1º boleto (opcional)"><input value={gerador.numeroBoletoInicial} onChange={e => setGerador(g => ({ ...g, numeroBoletoInicial: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 4521" /></Field>
                                         </div>
-                                        <p className="text-[11px] text-amber-600 mt-1">Usa o valor total da despesa ({BRL(form.valor || 0)}) dividido pela quantidade — a diferença de centavos fica na última parcela.</p>
+                                        <p className="text-[11px] text-amber-600 mt-1">
+                                            1º vencimento calculado: <strong>{form.data_despesa && gerador.prazoDiasUteis !== '' ? FMT(adicionarDiasUteis(form.data_despesa, gerador.prazoDiasUteis)) : '—'}</strong> (data da despesa/NF + {gerador.prazoDiasUteis || 0} dias úteis).
+                                            Valor total ({BRL(form.valor || 0)}) dividido pela quantidade — a diferença de centavos fica na última parcela.
+                                        </p>
                                         <button type="button" onClick={() => gerarAutomatico('boleto')} className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700"><Icon name="Wand2" size={12} /> Gerar boletos automaticamente</button>
                                     </div>
 
@@ -1016,11 +1025,11 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
                                 <div className="space-y-2">
                                     <p className="text-xs font-medium text-amber-800">Parcelas do Cartão</p>
                                     {(form.parcelas_cartao || []).map((p, idx) => (
-                                        <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border text-xs" style={{ borderColor: '#FED7AA' }}>
+                                        <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border text-xs flex-wrap" style={{ borderColor: '#FED7AA' }}>
                                             <span className="text-amber-700 font-medium">Parcela {idx + 1}</span>
-                                            <span className="font-data">{FMT(p.vencimento)}</span>
-                                            <span className="font-data font-semibold text-amber-800">{BRL(p.valor)}</span>
-                                            {p.cartao && <span className="text-amber-600 truncate max-w-[80px]">{p.cartao}</span>}
+                                            <input type="date" value={p.vencimento || ''} onChange={setParcelaCartaoField(idx, 'vencimento')} className="font-data border rounded px-1.5 py-1" style={{ borderColor: '#FED7AA' }} />
+                                            <input type="number" step="0.01" value={p.valor} onChange={setParcelaCartaoField(idx, 'valor')} className="font-data font-semibold text-amber-800 border rounded px-1.5 py-1 w-24" style={{ borderColor: '#FED7AA' }} />
+                                            <input value={p.cartao || ''} onChange={setParcelaCartaoField(idx, 'cartao')} placeholder="Cartão" className="text-amber-600 border rounded px-1.5 py-1 w-24" style={{ borderColor: '#FED7AA' }} />
                                             <span className={`ml-auto px-1.5 py-0.5 rounded ${p.pago ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{p.pago ? 'Pago' : 'Pendente'}</span>
                                             <button type="button" onClick={() => setForm(f => ({ ...f, parcelas_cartao: f.parcelas_cartao.filter((_, i) => i !== idx) }))} className="p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
                                         </div>
@@ -1029,7 +1038,7 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
                                         <p className="text-xs font-semibold text-amber-800 mb-1.5 flex items-center gap-1"><Icon name="Wand2" size={12} /> Gerar parcelas automaticamente</p>
                                         <div className="grid grid-cols-3 gap-2">
                                             <Field label="Qtde parcelas"><input type="number" min="1" value={gerador.quantidade} onChange={e => setGerador(g => ({ ...g, quantidade: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
-                                            <Field label="1ª vencimento"><input type="date" value={gerador.primeiroVencimento} onChange={e => setGerador(g => ({ ...g, primeiroVencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                            <Field label="Prazo (dias úteis)"><input type="number" min="0" value={gerador.prazoDiasUteis} onChange={e => setGerador(g => ({ ...g, prazoDiasUteis: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 30" /></Field>
                                             <Field label="Intervalo (dias)"><input type="number" min="1" value={gerador.intervaloDias} onChange={e => setGerador(g => ({ ...g, intervaloDias: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                                         </div>
                                         <button type="button" onClick={() => gerarAutomatico('cartao')} className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700"><Icon name="Wand2" size={12} /> Gerar parcelas automaticamente</button>
@@ -1505,14 +1514,24 @@ export default function DespesasAdmTransporte() {
                                 {[{ lista: relatorioStatus.abertos, titulo: 'Em Aberto', cor: '#DC2626', bg: '#FFF1F2', border: '#FCA5A5' }, { lista: relatorioStatus.pagos, titulo: 'Pagos', cor: '#059669', bg: '#F0FDF4', border: '#A7F3D0' }].map(({ lista, titulo, cor, bg, border }) => lista.length > 0 && (
                                     <div key={titulo} className="rounded-xl border overflow-hidden" style={{ borderColor: border }}>
                                         <div className="px-4 py-3 font-bold text-sm" style={{ backgroundColor: bg, color: cor }}>{titulo} — {lista.length} lançamento(s)</div>
-                                        <table className="w-full text-xs">
-                                            <thead style={{ color: 'var(--color-muted-foreground)' }}><tr><th className="text-left px-4 py-2">Data/Venc.</th><th className="text-left px-4 py-2">Despesa</th><th className="text-left px-4 py-2">Tipo</th><th className="text-right px-4 py-2">Valor</th></tr></thead>
+                                        <table className="w-full text-xs table-fixed">
+                                            <thead style={{ color: 'var(--color-muted-foreground)' }}><tr>
+                                                <th className="text-left px-4 py-2 w-[15%]">Data/Venc.</th>
+                                                <th className="text-left px-4 py-2 w-[45%]">Despesa</th>
+                                                <th className="text-left px-4 py-2 w-[20%]">Tipo</th>
+                                                <th className="text-right px-4 py-2 w-[20%]">Valor</th>
+                                            </tr></thead>
                                             <tbody>
                                                 {lista.map((it, idx) => (
                                                     <tr key={idx} className="border-t" style={{ borderColor: border }}>
-                                                        <td className="px-4 py-2 font-data">{FMT(it.vencimento)}</td>
-                                                        <td className="px-4 py-2 max-w-[240px] truncate"><span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold mr-1" style={{ backgroundColor: titulo==='Em Aberto'?'#FEE2E2':'#D1FAE5', color: cor }}>{it.despesa.categoria}</span>{it.despesa.fornecedor||it.despesa.descricao||'—'}</td>
-                                                        <td className="px-4 py-2">{it.tipo}{it.cartao?` (${it.cartao})`:''}</td>
+                                                        <td className="px-4 py-2 font-data whitespace-nowrap">{FMT(it.vencimento)}</td>
+                                                        <td className="px-4 py-2 overflow-hidden">
+                                                            <div className="flex items-center gap-1 min-w-0">
+                                                                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ backgroundColor: titulo==='Em Aberto'?'#FEE2E2':'#D1FAE5', color: cor }}>{it.despesa.categoria}</span>
+                                                                <span className="truncate" title={it.despesa.fornecedor||it.despesa.descricao||'—'}>{it.despesa.fornecedor||it.despesa.descricao||'—'}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-2 truncate">{it.tipo}{it.cartao?` (${it.cartao})`:''}</td>
                                                         <td className="px-4 py-2 text-right font-data font-semibold" style={{ color: cor }}>{BRL(it.valor)}</td>
                                                     </tr>
                                                 ))}

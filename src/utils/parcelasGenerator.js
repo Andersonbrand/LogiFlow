@@ -7,6 +7,45 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
+ * Calcula o próximo número de uma sequência, incrementando apenas o grupo de
+ * dígitos no FINAL da string e preservando tudo que vem antes (prefixo,
+ * hífen, zeros à esquerda). Isso cobre os dois padrões comuns de numeração:
+ *   - "14532-1"  → passo 1 → "14532-2" → "14532-3"  (incrementa só o sufixo)
+ *   - "4536"     → passo 1 → "4537"    → "4538"      (incrementa o número todo)
+ *   - "007"      → passo 1 → "008"                   (mantém zeros à esquerda)
+ * Se a string não terminar em dígito, devolve o valor original sem alterar.
+ */
+export function proximoNumeroSequencial(base, passo) {
+    const str = String(base ?? '');
+    const m = str.match(/^(.*?)(\d+)$/);
+    if (!m) return str;
+    const [, prefixo, numStr] = m;
+    const largura = numStr.length;
+    const novoNum = String(Math.max(0, Number(numStr) + passo)).padStart(largura, '0');
+    return prefixo + novoNum;
+}
+
+/**
+ * Soma dias ÚTEIS (pula sábado e domingo) a uma data 'YYYY-MM-DD'.
+ * Usado para calcular o 1º vencimento a partir da data contábil da nota
+ * fiscal + prazo informado (ex: NF de 01/07 + 30 dias úteis).
+ * Observação: considera apenas fins de semana — feriados nacionais/locais
+ * não entram no cálculo automaticamente.
+ */
+export function adicionarDiasUteis(dataISO, quantidadeDias) {
+    if (!dataISO) return null;
+    const [ano, mes, dia] = dataISO.split('-').map(Number);
+    const data = new Date(Date.UTC(ano, mes - 1, dia));
+    let restantes = Math.max(0, Math.floor(Number(quantidadeDias) || 0));
+    while (restantes > 0) {
+        data.setUTCDate(data.getUTCDate() + 1);
+        const diaSemana = data.getUTCDay(); // 0 = domingo, 6 = sábado
+        if (diaSemana !== 0 && diaSemana !== 6) restantes--;
+    }
+    return data.toISOString().slice(0, 10);
+}
+
+/**
  * Gera um array de parcelas (boleto, cartão ou cheque) a partir do valor
  * total, quantidade de parcelas e regras de vencimento — sem exigir que o
  * admin digite cada parcela uma a uma. O resultado continua 100% editável
@@ -15,10 +54,10 @@
  * @param {Object} opcoes
  * @param {number} opcoes.valorTotal            - valor total da despesa a prazo
  * @param {number} opcoes.quantidade            - número de parcelas
- * @param {string} opcoes.primeiroVencimento    - 'YYYY-MM-DD' da 1ª parcela
- * @param {number} [opcoes.intervaloDias=30]    - intervalo entre parcelas, em dias
+ * @param {string} opcoes.primeiroVencimento    - 'YYYY-MM-DD' da 1ª parcela (normalmente já calculada a partir da data da NF + prazo em dias úteis)
+ * @param {number} [opcoes.intervaloDias=30]    - intervalo ENTRE as parcelas seguintes, em dias corridos (padrão do mercado para boletos mensais)
  * @param {'boleto'|'cartao'|'cheque'} [opcoes.tipo='boleto']
- * @param {number} [opcoes.numeroBoletoInicial] - nº do 1º boleto (numeração sequencial)
+ * @param {string} [opcoes.numeroBoletoInicial] - nº do 1º boleto — aceita "4536" ou "14532-1" (ver proximoNumeroSequencial)
  * @param {string} [opcoes.cartao]              - nome do cartão (quando tipo === 'cartao')
  * @returns {Array<object>} parcelas prontas para ir em `boletos` ou `parcelas_cartao`
  */
@@ -59,7 +98,7 @@ export function gerarParcelasAutomaticas({
         if (tipo === 'boleto') {
             parcelas.push({
                 ...base,
-                numero_boleto: numeroBoletoInicial ? String(numeroBoletoInicial + i) : String(i + 1).padStart(2, '0') + `/${String(qtd).padStart(2, '0')}`,
+                numero_boleto: numeroBoletoInicial ? proximoNumeroSequencial(numeroBoletoInicial, i) : String(i + 1).padStart(2, '0') + `/${String(qtd).padStart(2, '0')}`,
             });
         } else if (tipo === 'cartao') {
             parcelas.push({ ...base, cartao, parcela: `${i + 1}/${qtd}` });
