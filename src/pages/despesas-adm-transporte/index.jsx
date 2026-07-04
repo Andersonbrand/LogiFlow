@@ -23,6 +23,7 @@ import {
 import * as XLSX from 'xlsx';
 
 import { supabase } from 'utils/supabaseClient';
+import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas } from 'utils/parcelasGenerator';
 
 async function fetchDespesaAdmById(id) {
     const { data } = await supabase.from('transporte_despesas_adm').select('*').eq('id', id).single();
@@ -99,19 +100,28 @@ function PgBadge({ d }) {
 }
 
 function BoletosPendentes({ despesa }) {
-    const pendBoletos = (despesa.boletos || []).filter(b => !b.pago);
+    const boletos = despesa.boletos || [];
+    const pendBoletos = boletos.filter(b => !b.pago);
     const pendParcelas = (despesa.parcelas_cartao || []).filter(p => !p.pago);
+    const naoEntregues = boletos.filter(b => !b.entregue_financeiro);
     if (!pendBoletos.length && !pendParcelas.length) return null;
+    const numeros = boletos.map(b => b.numero_boleto).filter(Boolean);
     return (
-        <div className="mt-1 flex items-center gap-1">
+        <div className="mt-1 flex items-center gap-1 flex-wrap">
             {pendBoletos.length > 0 && (
                 <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-xs font-medium">
                     {pendBoletos.length} boleto{pendBoletos.length > 1 ? 's' : ''} pendente{pendBoletos.length > 1 ? 's' : ''}
+                    {numeros.length > 0 && <span className="font-data ml-1 text-amber-500">({numeros.join(', ')})</span>}
                 </span>
             )}
             {pendParcelas.length > 0 && (
                 <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-xs font-medium">
                     {pendParcelas.length} parcela{pendParcelas.length > 1 ? 's' : ''} pendente{pendParcelas.length > 1 ? 's' : ''}
+                </span>
+            )}
+            {boletos.length > 0 && naoEntregues.length > 0 && (
+                <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-600 text-xs font-medium flex items-center gap-1">
+                    <Icon name="AlertCircle" size={10} /> {naoEntregues.length} não entregue{naoEntregues.length > 1 ? 's' : ''} ao financeiro
                 </span>
             )}
         </div>
@@ -189,9 +199,18 @@ function ModalVisualizacaoDespesa({ despesa, onClose, onAtualizado, admin }) {
                             {boletos.map((b, idx) => (
                                 <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: b.pago ? '#F0FDF4' : '#FFFBEB' }}>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold font-data">Parcela {idx + 1} — {BRL(b.valor)}</p>
+                                        <p className="text-sm font-semibold font-data">{b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Parcela ${idx + 1}`} — {BRL(b.valor)}</p>
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Venc.: {FMT(b.vencimento)}</p>
                                         {b.pago && <p className="text-xs text-green-600 font-medium">✓ Pago em {b.pago_em ? new Date(b.pago_em).toLocaleDateString('pt-BR') : '—'}</p>}
+                                        <label className="flex items-center gap-1.5 text-xs mt-1 cursor-pointer">
+                                            <input type="checkbox" checked={!!b.entregue_financeiro} disabled={loading}
+                                                onChange={() => act(async () => {
+                                                    const novos = boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro } : x);
+                                                    const { error } = await supabase.from('transporte_despesas_adm').update({ boletos: novos, updated_at: new Date().toISOString() }).eq('id', dados.id);
+                                                    if (error) throw error;
+                                                }, 'Status de entrega atualizado!')} />
+                                            <span className={b.entregue_financeiro ? 'text-blue-600 font-medium' : 'text-gray-400'}>{b.entregue_financeiro ? '✓ Entregue ao financeiro' : 'Ainda não entregue ao financeiro'}</span>
+                                        </label>
                                     </div>
                                     <div className="flex gap-1.5 flex-shrink-0">
                                         {!b.pago ? (
@@ -281,10 +300,19 @@ function ModalBaixa({ despesa, onClose, onBaixado, isAdmin }) {
                                     style={{ borderColor: 'var(--color-border)', backgroundColor: b.pago ? '#F0FDF4' : '#FFFBEB' }}>
                                     <div className="flex-1">
                                         <p className="text-sm font-medium font-data" style={{ color: 'var(--color-text-primary)' }}>
-                                            Parcela {idx + 1} — {BRL(b.valor)}
+                                            {b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Parcela ${idx + 1}`} — {BRL(b.valor)}
                                         </p>
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Vencimento: {FMT(b.vencimento)}</p>
                                         {b.pago && <p className="text-xs text-green-600 font-medium">✓ Pago em {b.pago_em ? new Date(b.pago_em).toLocaleDateString('pt-BR') : '—'}</p>}
+                                        <label className="flex items-center gap-1.5 text-xs mt-1 cursor-pointer">
+                                            <input type="checkbox" checked={!!b.entregue_financeiro} disabled={loading}
+                                                onChange={() => act(async () => {
+                                                    const novos = boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro } : x);
+                                                    const { error } = await supabase.from('transporte_despesas_adm').update({ boletos: novos, updated_at: new Date().toISOString() }).eq('id', despesa.id);
+                                                    if (error) throw error;
+                                                }, 'Status de entrega atualizado!')} />
+                                            <span className={b.entregue_financeiro ? 'text-blue-600 font-medium' : 'text-gray-400'}>{b.entregue_financeiro ? '✓ Entregue ao financeiro' : 'Ainda não entregue ao financeiro'}</span>
+                                        </label>
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         {!b.pago ? (
@@ -484,7 +512,7 @@ function ModalFornecedoresAdmTransporte({ onClose, onSelect }) {
 }
 
 // ─── Modal de Formulário ──────────────────────────────────────────────────────
-function ModalDespesa({ modal, onClose, onSaved }) {
+function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
     const { toast, showToast } = useToast();
     const xmlRef = useRef(null);
     const comprovanteRef = useRef(null);
@@ -499,9 +527,11 @@ function ModalDespesa({ modal, onClose, onSaved }) {
     });
     const [novaCategoria, setNovaCategoria] = useState('');
     const [showNovaCategoria, setShowNovaCategoria] = useState(false);
-    const [novoBoleto, setNovoBoleto] = useState({ vencimento: '', valor: '' });
+    const [novoBoleto, setNovoBoleto] = useState({ numero_boleto: '', vencimento: '', valor: '' });
     const [novoCheque, setNovoCheque] = useState({ numero: '', banco: '', valor: '', vencimento: '' });
     const [novaParcela, setNovaParcela] = useState({ vencimento: '', valor: '', cartao: '' });
+    const [gerador, setGerador] = useState({ quantidade: 2, primeiroVencimento: '', intervaloDias: 30, numeroBoletoInicial: '' });
+    const [duplicatas, setDuplicatas] = useState([]);
     const [showFornecedores, setShowFornecedores] = useState(false);
 
     const todasCategorias = useMemo(() => [...CATEGORIAS_DESPESA_ADM, ...categoriasExtras], [categoriasExtras]);
@@ -641,8 +671,8 @@ function ModalDespesa({ modal, onClose, onSaved }) {
     // ── Boletos / parcelas / cheques ───────────────────────────────────────────
     const addBoleto = () => {
         if (!novoBoleto.vencimento || !novoBoleto.valor) { showToast('Preencha vencimento e valor', 'error'); return; }
-        setForm(f => ({ ...f, boletos: [...(f.boletos || []), { ...novoBoleto, pago: false }] }));
-        setNovoBoleto({ vencimento: '', valor: '' });
+        setForm(f => ({ ...f, boletos: [...(f.boletos || []), { ...novoBoleto, pago: false, entregue_financeiro: false }] }));
+        setNovoBoleto({ numero_boleto: '', vencimento: '', valor: '' });
     };
     const addCheque = () => {
         if (!novoCheque.numero || !novoCheque.valor) { showToast('Preencha número e valor', 'error'); return; }
@@ -655,8 +685,34 @@ function ModalDespesa({ modal, onClose, onSaved }) {
         setNovaParcela({ vencimento: '', valor: '', cartao: '' });
     };
 
-    const handleSave = async () => {
+    // ── Geração automática de parcelas (boleto ou cartão) ─────────────────────
+    const gerarAutomatico = (tipo) => {
+        if (!form.valor || Number(form.valor) <= 0) { showToast('Informe o valor total da despesa antes de gerar as parcelas.', 'error'); return; }
+        if (!gerador.primeiroVencimento) { showToast('Informe a data da 1ª parcela.', 'error'); return; }
+        try {
+            const parcelas = gerarParcelasAutomaticas({
+                valorTotal: Number(form.valor),
+                quantidade: gerador.quantidade,
+                primeiroVencimento: gerador.primeiroVencimento,
+                intervaloDias: Number(gerador.intervaloDias) || 30,
+                tipo,
+                numeroBoletoInicial: gerador.numeroBoletoInicial ? Number(gerador.numeroBoletoInicial) : null,
+                cartao: novaParcela.cartao,
+            });
+            if (tipo === 'boleto') setForm(f => ({ ...f, boletos: parcelas }));
+            else setForm(f => ({ ...f, parcelas_cartao: parcelas }));
+            showToast(`${parcelas.length} parcela(s) gerada(s) automaticamente — soma ${BRL(somaParcelas(parcelas))}.`, 'success');
+        } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const handleSave = async (forcarApesarDeDuplicata = false) => {
         if (!form.categoria || !form.valor || !form.data_despesa) { showToast('Categoria, valor e data são obrigatórios', 'error'); return; }
+
+        if (!forcarApesarDeDuplicata) {
+            const achados = detectarPossiveisDuplicatas(despesasExistentes, form, { excluirId: isEdit ? modal.data.id : undefined });
+            if (achados.length > 0) { setDuplicatas(achados); return; }
+        }
+
         setSaving(true);
         try {
             const payload = {
@@ -680,6 +736,28 @@ function ModalDespesa({ modal, onClose, onSaved }) {
         <ModalOverlay onClose={onClose} wide>
             <ModalHeader title={isEdit ? 'Editar Despesa' : 'Nova Despesa Administrativa'} icon="ShoppingCart" onClose={onClose} />
             <div className="p-5 space-y-4 overflow-y-auto flex-1">
+
+                {/* ── Alerta de possível duplicidade ────────────────────── */}
+                {duplicatas.length > 0 && (
+                    <div className="p-3 rounded-xl border border-red-300 bg-red-50 space-y-2">
+                        <p className="text-sm font-semibold text-red-700 flex items-center gap-1.5">
+                            <Icon name="AlertTriangle" size={15} /> Possível lançamento duplicado
+                        </p>
+                        {duplicatas.map((d, i) => (
+                            <p key={i} className="text-xs text-red-600 pl-1">
+                                • {d.motivo} <span className="text-red-400">({d.confianca === 'alta' ? 'alta chance' : 'checar antes de salvar'})</span>
+                            </p>
+                        ))}
+                        <div className="flex gap-2 pt-1">
+                            <button type="button" onClick={() => setDuplicatas([])} className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-300 text-red-700 hover:bg-red-100">
+                                Revisar lançamento
+                            </button>
+                            <button type="button" onClick={() => { setDuplicatas([]); handleSave(true); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700">
+                                Salvar mesmo assim
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* ── NF-e ──────────────────────────────────────────────── */}
                 <div className="p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
@@ -898,15 +976,35 @@ function ModalDespesa({ modal, onClose, onSaved }) {
                                 <div className="space-y-2">
                                     <p className="text-xs font-medium text-amber-800">Boletos / Parcelas</p>
                                     {(form.boletos || []).map((b, idx) => (
-                                        <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border text-xs" style={{ borderColor: '#FED7AA' }}>
-                                            <span className="text-amber-700 font-medium">Parcela {idx + 1}</span>
+                                        <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border text-xs flex-wrap" style={{ borderColor: '#FED7AA' }}>
+                                            <span className="text-amber-700 font-medium">{b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Parcela ${idx + 1}`}</span>
                                             <span className="font-data">{FMT(b.vencimento)}</span>
                                             <span className="font-data font-semibold text-amber-800">{BRL(b.valor)}</span>
                                             <span className={`px-1.5 py-0.5 rounded ${b.pago ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{b.pago ? 'Pago' : 'Pendente'}</span>
+                                            <label className="flex items-center gap-1 cursor-pointer" title="Marcar se o boleto já foi entregue ao setor financeiro">
+                                                <input type="checkbox" checked={!!b.entregue_financeiro}
+                                                    onChange={() => setForm(f => ({ ...f, boletos: f.boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro } : x) }))} />
+                                                <span className={b.entregue_financeiro ? 'text-blue-600' : 'text-gray-400'}>Entregue ao financeiro</span>
+                                            </label>
                                             <button type="button" onClick={() => setForm(f => ({ ...f, boletos: f.boletos.filter((_, i) => i !== idx) }))} className="ml-auto p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
                                         </div>
                                     ))}
-                                    <div className="grid grid-cols-2 gap-2 mt-2">
+
+                                    <div className="p-2.5 rounded-lg border border-dashed" style={{ borderColor: '#D97706', backgroundColor: '#FFFBEB' }}>
+                                        <p className="text-xs font-semibold text-amber-800 mb-1.5 flex items-center gap-1"><Icon name="Wand2" size={12} /> Gerar parcelas automaticamente</p>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            <Field label="Qtde parcelas"><input type="number" min="1" value={gerador.quantidade} onChange={e => setGerador(g => ({ ...g, quantidade: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                            <Field label="1ª vencimento"><input type="date" value={gerador.primeiroVencimento} onChange={e => setGerador(g => ({ ...g, primeiroVencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                            <Field label="Intervalo (dias)"><input type="number" min="1" value={gerador.intervaloDias} onChange={e => setGerador(g => ({ ...g, intervaloDias: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                            <Field label="Nº do 1º boleto (opcional)"><input value={gerador.numeroBoletoInicial} onChange={e => setGerador(g => ({ ...g, numeroBoletoInicial: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 4521" /></Field>
+                                        </div>
+                                        <p className="text-[11px] text-amber-600 mt-1">Usa o valor total da despesa ({BRL(form.valor || 0)}) dividido pela quantidade — a diferença de centavos fica na última parcela.</p>
+                                        <button type="button" onClick={() => gerarAutomatico('boleto')} className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700"><Icon name="Wand2" size={12} /> Gerar boletos automaticamente</button>
+                                    </div>
+
+                                    <p className="text-xs font-medium text-amber-700 pt-1">ou adicione manualmente:</p>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <Field label="Nº do boleto"><input value={novoBoleto.numero_boleto} onChange={e => setNovoBoleto(b => ({ ...b, numero_boleto: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 01/03" /></Field>
                                         <Field label="Vencimento"><input type="date" value={novoBoleto.vencimento} onChange={e => setNovoBoleto(b => ({ ...b, vencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                                         <Field label="Valor (R$)"><input type="number" step="0.01" value={novoBoleto.valor} onChange={e => setNovoBoleto(b => ({ ...b, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
                                     </div>
@@ -927,6 +1025,16 @@ function ModalDespesa({ modal, onClose, onSaved }) {
                                             <button type="button" onClick={() => setForm(f => ({ ...f, parcelas_cartao: f.parcelas_cartao.filter((_, i) => i !== idx) }))} className="p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
                                         </div>
                                     ))}
+                                    <div className="p-2.5 rounded-lg border border-dashed" style={{ borderColor: '#D97706', backgroundColor: '#FFFBEB' }}>
+                                        <p className="text-xs font-semibold text-amber-800 mb-1.5 flex items-center gap-1"><Icon name="Wand2" size={12} /> Gerar parcelas automaticamente</p>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <Field label="Qtde parcelas"><input type="number" min="1" value={gerador.quantidade} onChange={e => setGerador(g => ({ ...g, quantidade: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                            <Field label="1ª vencimento"><input type="date" value={gerador.primeiroVencimento} onChange={e => setGerador(g => ({ ...g, primeiroVencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                            <Field label="Intervalo (dias)"><input type="number" min="1" value={gerador.intervaloDias} onChange={e => setGerador(g => ({ ...g, intervaloDias: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                        </div>
+                                        <button type="button" onClick={() => gerarAutomatico('cartao')} className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700"><Icon name="Wand2" size={12} /> Gerar parcelas automaticamente</button>
+                                    </div>
+                                    <p className="text-xs font-medium text-amber-700 pt-1">ou adicione manualmente:</p>
                                     <div className="grid grid-cols-3 gap-2 mt-2">
                                         <Field label="Vencimento"><input type="date" value={novaParcela.vencimento} onChange={e => setNovaParcela(p => ({ ...p, vencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                                         <Field label="Valor (R$)"><input type="number" step="0.01" value={novaParcela.valor} onChange={e => setNovaParcela(p => ({ ...p, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
@@ -986,7 +1094,7 @@ function ModalDespesa({ modal, onClose, onSaved }) {
 
             <div className="flex gap-3 p-5 justify-end border-t shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                 <button onClick={onClose} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                <Button onClick={handleSave} size="sm" iconName={saving ? 'Loader' : 'Check'} disabled={saving}>
+                <Button onClick={() => handleSave()} size="sm" iconName={saving ? 'Loader' : 'Check'} disabled={saving}>
                     {saving ? 'Salvando...' : (isEdit ? 'Atualizar' : 'Salvar Despesa')}
                 </Button>
             </div>
@@ -1420,7 +1528,7 @@ export default function DespesasAdmTransporte() {
             </main>
 
             {modal && (
-                <ModalDespesa modal={modal} onClose={() => setModal(null)} onSaved={load} />
+                <ModalDespesa modal={modal} despesasExistentes={despesas} onClose={() => setModal(null)} onSaved={load} />
             )}
             {viewDespesa && (
                 <ModalVisualizacaoDespesa

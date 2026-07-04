@@ -233,10 +233,16 @@ export async function fetchDadosMargemFrete(tipoVeiculo) {
 }
 
 /**
- * Calcula o custo total estimado (abatimento) de uma LISTA de fretes (romaneios
- * ou carregamentos), agrupando por veículo/placa e casando cada um pelo destino.
- * Usado no DRE para abater a receita de frete pelo custo de rodagem real de cada
- * veículo, separado por tipo (caminhão/carreta).
+ * Calcula o abatimento (na receita, para o DRE) de uma LISTA de fretes
+ * (romaneios ou carregamentos), agrupando por veículo/placa e casando cada
+ * um pelo destino.
+ *
+ * IMPORTANTE: o valor abatido é o "Valor Estimado" (preço de venda com
+ * margem já embutida — o mesmo número mostrado na coluna "Valor Estimado"
+ * da aba Custos de Rodagem), e não o "Custo Total" (que é só o custo puro,
+ * sem margem). Isso é intencional: o DRE precisa comparar receita de frete
+ * contra o valor que o frete DEVERIA ter sido vendido, não contra o custo
+ * de rodagem puro.
  *
  * fretes: [{ destino, valor_frete, placa }]
  * Retorna { custoTotalEstimado, porVeiculo: { [placa]: { custo, receita, fretesComMatch, fretesSemMatch } } }
@@ -256,9 +262,9 @@ export function calcularAbatimentoCustosFrota(fretes, dadosMargem) {
 
         const destino = encontrarCustoDestino(f.destino, destinos);
         if (destino) {
-            const { custoTotal } = calcularCustoDestino(destino, custoPorKm, custoPorDia, margemPadrao);
-            custoTotalEstimado += custoTotal;
-            porVeiculo[placa].custo += custoTotal;
+            const { valorEstimado } = calcularCustoDestino(destino, custoPorKm, custoPorDia, margemPadrao);
+            custoTotalEstimado += valorEstimado;
+            porVeiculo[placa].custo += valorEstimado;
             porVeiculo[placa].fretesComMatch += 1;
         } else {
             semMatch += 1;

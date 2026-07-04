@@ -255,12 +255,14 @@ export default function Relatorios() {
             map[m].viagens++;
 
             // Custo de rodagem estimado — casa o destino do romaneio com a
-            // tabela de custos por destino cadastrada para caminhões
+            // tabela de custos por destino cadastrada para caminhões.
+            // Usa o Valor Estimado (preço de venda com margem), não o Custo
+            // Total puro — mesmo critério usado no DRE de Carretas.
             if (dadosMargemCaminhao) {
                 const destino = encontrarCustoDestino(r.destino, dadosMargemCaminhao.destinos);
                 if (destino) {
-                    const { custoTotal } = calcularCustoDestino(destino, dadosMargemCaminhao.custoPorKm, dadosMargemCaminhao.custoPorDia, dadosMargemCaminhao.margemPadrao);
-                    map[m].custoRodagem += custoTotal;
+                    const { valorEstimado } = calcularCustoDestino(destino, dadosMargemCaminhao.custoPorKm, dadosMargemCaminhao.custoPorDia, dadosMargemCaminhao.margemPadrao);
+                    map[m].custoRodagem += valorEstimado;
                 }
             }
         });

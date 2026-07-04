@@ -42,6 +42,7 @@ import {
     updateAbastecimento,
     fetchFornecedoresCarretas, createFornecedorCarretas, updateFornecedorCarretas, deleteFornecedorCarretas,
 } from 'utils/carretasService';
+import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas } from 'utils/parcelasGenerator';
 import * as XLSX from 'xlsx';
 import { exportDiariaModelo, exportDiariasRomaneiosModelo, printDiaria } from 'utils/excelUtils';
 import { fetchDadosMargemFrete, calcularAbatimentoCustosFrota } from 'utils/custosFrotaService';
@@ -2382,7 +2383,7 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado, isAdmin }) {
                                     style={{ borderColor: 'var(--color-border)', backgroundColor: b.pago ? '#F0FDF4' : '#FFFBEB' }}>
                                     <div className="flex-1">
                                         <p className="text-sm font-medium font-data" style={{ color: 'var(--color-text-primary)' }}>
-                                            Parcela {idx + 1} — {BRL(b.valor)}
+                                            {b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Parcela ${idx + 1}`} — {BRL(b.valor)}
                                         </p>
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
                                             Vencimento: {b.vencimento ? new Date(b.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
@@ -2392,6 +2393,20 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado, isAdmin }) {
                                                 ✓ Pago em {b.pago_em ? new Date(b.pago_em).toLocaleDateString('pt-BR') : '—'}
                                             </p>
                                         )}
+                                        <label className="flex items-center gap-1.5 text-xs mt-1 cursor-pointer">
+                                            <input type="checkbox" checked={!!b.entregue_financeiro} disabled={loading}
+                                                onChange={async () => {
+                                                    setLoading(true);
+                                                    try {
+                                                        const novos = boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro } : x);
+                                                        await updateDespesaExtra(despesa.id, { boletos: novos });
+                                                        showToast('Status de entrega atualizado!', 'success');
+                                                        onBaixado();
+                                                    } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+                                                    finally { setLoading(false); }
+                                                }} />
+                                            <span className={b.entregue_financeiro ? 'text-blue-600 font-medium' : 'text-gray-400'}>{b.entregue_financeiro ? '✓ Entregue ao financeiro' : 'Ainda não entregue ao financeiro'}</span>
+                                        </label>
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         {!b.pago ? (
@@ -2607,8 +2622,10 @@ function TabDespesasExtras({ isAdmin, profile }) {
         nf_itens: [],
     });
     const [form, setForm] = useState(emptyForm());
-    const [novoBoleto, setNovoBoleto] = useState({ vencimento: '', valor: '' });
+    const [novoBoleto, setNovoBoleto] = useState({ numero_boleto: '', vencimento: '', valor: '' });
     const [novoCheque, setNovoCheque] = useState({ numero: '', banco: '', valor: '', vencimento: '' });
+    const [gerador, setGerador] = useState({ quantidade: 2, primeiroVencimento: '', intervaloDias: 30, numeroBoletoInicial: '' });
+    const [duplicatas, setDuplicatas] = useState([]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -2809,10 +2826,29 @@ function TabDespesasExtras({ isAdmin, profile }) {
 
     const adicionarBoleto = () => {
         if (!novoBoleto.vencimento || !novoBoleto.valor) { showToast('Preencha vencimento e valor do boleto', 'error'); return; }
-        setForm(f => ({ ...f, boletos: [...(f.boletos || []), { ...novoBoleto, pago: false }] }));
-        setNovoBoleto({ vencimento: '', valor: '' });
+        setForm(f => ({ ...f, boletos: [...(f.boletos || []), { ...novoBoleto, pago: false, entregue_financeiro: false }] }));
+        setNovoBoleto({ numero_boleto: '', vencimento: '', valor: '' });
     };
     const removerBoleto = (idx) => setForm(f => ({ ...f, boletos: f.boletos.filter((_, i) => i !== idx) }));
+
+    // ── Geração automática de parcelas (boleto ou cartão) ─────────────────────
+    const gerarAutomatico = (tipo) => {
+        if (!form.valor || Number(form.valor) <= 0) { showToast('Informe o valor total da despesa antes de gerar as parcelas.', 'error'); return; }
+        if (!gerador.primeiroVencimento) { showToast('Informe a data da 1ª parcela.', 'error'); return; }
+        try {
+            const parcelas = gerarParcelasAutomaticas({
+                valorTotal: Number(form.valor),
+                quantidade: gerador.quantidade,
+                primeiroVencimento: gerador.primeiroVencimento,
+                intervaloDias: Number(gerador.intervaloDias) || 30,
+                tipo,
+                numeroBoletoInicial: gerador.numeroBoletoInicial ? Number(gerador.numeroBoletoInicial) : null,
+            });
+            if (tipo === 'boleto') setForm(f => ({ ...f, boletos: parcelas }));
+            else setForm(f => ({ ...f, parcelas_cartao: parcelas }));
+            showToast(`${parcelas.length} parcela(s) gerada(s) automaticamente — soma ${BRL(somaParcelas(parcelas))}.`, 'success');
+        } catch (e) { showToast(e.message, 'error'); }
+    };
 
     const adicionarCheque = () => {
         if (!novoCheque.numero || !novoCheque.valor) { showToast('Preencha número e valor do cheque', 'error'); return; }
@@ -2821,8 +2857,15 @@ function TabDespesasExtras({ isAdmin, profile }) {
     };
     const removerCheque = (idx) => setForm(f => ({ ...f, cheques: f.cheques.filter((_, i) => i !== idx) }));
 
-    const handleSubmit = async () => {
+    const handleSubmit = async (forcarApesarDeDuplicata = false) => {
         if (!form.categoria || !form.valor || !form.data_despesa) { showToast('Categoria, valor e data são obrigatórios', 'error'); return; }
+
+        if (!forcarApesarDeDuplicata) {
+            const veiculoSelecionado = veiculos.find(v => v.id === form.veiculo_id);
+            const achados = detectarPossiveisDuplicatas(despesas, { ...form, placa: veiculoSelecionado?.placa }, { excluirId: modal.mode === 'edit' ? modal.data.id : undefined });
+            if (achados.length > 0) { setDuplicatas(achados); return; }
+        }
+
         try {
             const payload = { ...form, notas_fiscais: form.notas_fiscais||[], parcelas_cartao: form.parcelas_cartao||[] };
             if (modal.mode === 'create') await createDespesaExtra(payload);
@@ -3001,7 +3044,25 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                     <td className="px-3 py-3 text-xs max-w-[130px] truncate font-medium" style={{ color: 'var(--color-text-primary)' }}>{d.fornecedor || '—'}</td>
                                     <td className="px-3 py-3 text-xs max-w-[130px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{d.descricao || '—'}</td>
                                     <td className="px-3 py-3 text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.nota_fiscal || '—'}</td>
-                                    <td className="px-3 py-3">{pgBadge(d)}</td>
+                                    <td className="px-3 py-3">
+                                        {pgBadge(d)}
+                                        {(() => {
+                                            const boletosPend = (d.boletos || []).filter(b => !b.pago);
+                                            const naoEntregues = (d.boletos || []).filter(b => !b.entregue_financeiro);
+                                            const numeros = (d.boletos || []).map(b => b.numero_boleto).filter(Boolean);
+                                            if (!boletosPend.length) return null;
+                                            return (
+                                                <div className="mt-1 flex flex-col gap-0.5">
+                                                    <span className="text-[11px] text-amber-600 font-data">
+                                                        {boletosPend.length} pend.{numeros.length > 0 ? ` (${numeros.join(', ')})` : ''}
+                                                    </span>
+                                                    {naoEntregues.length > 0 && (
+                                                        <span className="text-[11px] text-red-500 flex items-center gap-0.5"><Icon name="AlertCircle" size={9} /> {naoEntregues.length} não entregue{naoEntregues.length > 1 ? 's' : ''}</span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                    </td>
                                     <td className="px-3 py-3 font-data font-semibold text-red-600">{BRL(d.valor)}</td>
                                     <td className="px-3 py-3">
                                         <div className="flex gap-1 items-center">
@@ -3176,6 +3237,28 @@ function TabDespesasExtras({ isAdmin, profile }) {
                 <ModalOverlay onClose={() => setModal(null)}>
                     <ModalHeader title={modal.mode === 'create' ? 'Nova Despesa' : 'Editar Despesa'} icon="Receipt" onClose={() => setModal(null)} />
                     <div className="p-5 space-y-4 overflow-y-auto flex-1">
+
+                        {/* ── Alerta de possível duplicidade ────────────────── */}
+                        {duplicatas.length > 0 && (
+                            <div className="p-3 rounded-xl border border-red-300 bg-red-50 space-y-2">
+                                <p className="text-sm font-semibold text-red-700 flex items-center gap-1.5">
+                                    <Icon name="AlertTriangle" size={15} /> Possível lançamento duplicado
+                                </p>
+                                {duplicatas.map((d, i) => (
+                                    <p key={i} className="text-xs text-red-600 pl-1">
+                                        • {d.motivo} <span className="text-red-400">({d.confianca === 'alta' ? 'alta chance' : 'checar antes de salvar'})</span>
+                                    </p>
+                                ))}
+                                <div className="flex gap-2 pt-1">
+                                    <button type="button" onClick={() => setDuplicatas([])} className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-red-300 text-red-700 hover:bg-red-100">
+                                        Revisar lançamento
+                                    </button>
+                                    <button type="button" onClick={() => { setDuplicatas([]); handleSubmit(true); }} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700">
+                                        Salvar mesmo assim
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Notas Fiscais */}
                         <div className="p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
@@ -3471,15 +3554,35 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                         <div className="space-y-2">
                                             <p className="text-xs font-medium text-amber-800">Boletos / Parcelas</p>
                                             {(form.boletos || []).map((b, idx) => (
-                                                <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border" style={{ borderColor: '#FED7AA' }}>
-                                                    <span className="text-xs text-amber-700 font-medium">Parcela {idx + 1}</span>
+                                                <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border flex-wrap" style={{ borderColor: '#FED7AA' }}>
+                                                    <span className="text-xs text-amber-700 font-medium">{b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Parcela ${idx + 1}`}</span>
                                                     <span className="text-xs font-data">{FMT_DATE(b.vencimento)}</span>
                                                     <span className="text-xs font-data font-semibold text-amber-800">{BRL(b.valor)}</span>
                                                     <span className={`text-xs px-1.5 py-0.5 rounded ${b.pago ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{b.pago ? 'Pago' : 'Pendente'}</span>
+                                                    <label className="flex items-center gap-1 text-xs cursor-pointer" title="Marcar se o boleto já foi entregue ao setor financeiro">
+                                                        <input type="checkbox" checked={!!b.entregue_financeiro}
+                                                            onChange={() => setForm(f => ({ ...f, boletos: f.boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro } : x) }))} />
+                                                        <span className={b.entregue_financeiro ? 'text-blue-600' : 'text-gray-400'}>Entregue ao financeiro</span>
+                                                    </label>
                                                     <button type="button" onClick={() => removerBoleto(idx)} className="ml-auto p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
                                                 </div>
                                             ))}
-                                            <div className="grid grid-cols-2 gap-2 mt-2">
+
+                                            <div className="p-2.5 rounded-lg border border-dashed" style={{ borderColor: '#D97706', backgroundColor: '#FFFBEB' }}>
+                                                <p className="text-xs font-semibold text-amber-800 mb-1.5 flex items-center gap-1"><Icon name="Wand2" size={12} /> Gerar parcelas automaticamente</p>
+                                                <div className="grid grid-cols-4 gap-2">
+                                                    <Field label="Qtde parcelas"><input type="number" min="1" value={gerador.quantidade} onChange={e => setGerador(g => ({ ...g, quantidade: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                                    <Field label="1ª vencimento"><input type="date" value={gerador.primeiroVencimento} onChange={e => setGerador(g => ({ ...g, primeiroVencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                                    <Field label="Intervalo (dias)"><input type="number" min="1" value={gerador.intervaloDias} onChange={e => setGerador(g => ({ ...g, intervaloDias: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                                    <Field label="Nº do 1º boleto (opcional)"><input value={gerador.numeroBoletoInicial} onChange={e => setGerador(g => ({ ...g, numeroBoletoInicial: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 4521" /></Field>
+                                                </div>
+                                                <p className="text-[11px] text-amber-600 mt-1">Usa o valor total da despesa ({BRL(form.valor || 0)}) dividido pela quantidade — a diferença de centavos fica na última parcela.</p>
+                                                <button type="button" onClick={() => gerarAutomatico('boleto')} className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700"><Icon name="Wand2" size={12} /> Gerar boletos automaticamente</button>
+                                            </div>
+
+                                            <p className="text-xs font-medium text-amber-700 pt-1">ou adicione manualmente:</p>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <Field label="Nº do boleto"><input value={novoBoleto.numero_boleto} onChange={e => setNovoBoleto(b => ({ ...b, numero_boleto: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 01/03" /></Field>
                                                 <Field label="Vencimento"><input type="date" value={novoBoleto.vencimento} onChange={e => setNovoBoleto(b => ({ ...b, vencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                                                 <Field label="Valor (R$)"><input type="number" step="0.01" value={novoBoleto.valor} onChange={e => setNovoBoleto(b => ({ ...b, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
                                             </div>
@@ -3551,6 +3654,16 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                                     <button type="button" onClick={() => setForm(f => ({...f, parcelas_cartao: f.parcelas_cartao.filter((_,i)=>i!==idx)}))} className="p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
                                                 </div>
                                             ))}
+                                            <div className="p-2.5 rounded-lg border border-dashed" style={{ borderColor: '#D97706', backgroundColor: '#FFFBEB' }}>
+                                                <p className="text-xs font-semibold text-amber-800 mb-1.5 flex items-center gap-1"><Icon name="Wand2" size={12} /> Gerar parcelas automaticamente</p>
+                                                <div className="grid grid-cols-3 gap-2">
+                                                    <Field label="Qtde parcelas"><input type="number" min="1" value={gerador.quantidade} onChange={e => setGerador(g => ({ ...g, quantidade: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                                    <Field label="1ª vencimento"><input type="date" value={gerador.primeiroVencimento} onChange={e => setGerador(g => ({ ...g, primeiroVencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                                    <Field label="Intervalo (dias)"><input type="number" min="1" value={gerador.intervaloDias} onChange={e => setGerador(g => ({ ...g, intervaloDias: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
+                                                </div>
+                                                <button type="button" onClick={() => gerarAutomatico('cartao')} className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700"><Icon name="Wand2" size={12} /> Gerar parcelas automaticamente</button>
+                                            </div>
+                                            <p className="text-xs font-medium text-amber-700 pt-1">ou adicione manualmente:</p>
                                             <div className="grid grid-cols-2 gap-2 mt-2">
                                                 <Field label="Vencimento"><input type="date" id="pc_venc" className={inputCls} style={inputStyle} /></Field>
                                                 <Field label="Valor (R$)"><input type="number" step="0.01" id="pc_valor" className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
@@ -3580,7 +3693,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                     </div>
                     <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button onClick={handleSubmit} size="sm" iconName="Check">Salvar</Button>
+                        <Button onClick={() => handleSubmit()} size="sm" iconName="Check">Salvar</Button>
                     </div>
                 </ModalOverlay>
             )}
