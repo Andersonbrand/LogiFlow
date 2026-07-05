@@ -2383,7 +2383,7 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado, isAdmin }) {
                                     style={{ borderColor: 'var(--color-border)', backgroundColor: b.pago ? '#F0FDF4' : '#FFFBEB' }}>
                                     <div className="flex-1">
                                         <p className="text-sm font-medium font-data" style={{ color: 'var(--color-text-primary)' }}>
-                                            {b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Parcela ${idx + 1}`} — {BRL(b.valor)}
+                                            {b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Boleto ${idx + 1}`} — {BRL(b.valor)}
                                         </p>
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
                                             Vencimento: {b.vencimento ? new Date(b.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
@@ -2533,17 +2533,17 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const parcelasFuturas = useMemo(() => {
         const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
         const porMes = {}; // 'YYYY-MM' -> { total, itens: [{despesa, tipo, valor, vencimento, cartao?}] }
-        const addItem = (despesa, tipo, valor, vencimento, cartao) => {
+        const addItem = (despesa, tipo, valor, vencimento, cartao, numeroBoleto) => {
             if (!vencimento) return;
             const d = new Date(vencimento + 'T00:00:00');
             if (d < hoje) return; // apenas futuras
             const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             if (!porMes[chave]) porMes[chave] = { total: 0, itens: [] };
             porMes[chave].total += Number(valor) || 0;
-            porMes[chave].itens.push({ despesa, tipo, valor: Number(valor) || 0, vencimento, cartao });
+            porMes[chave].itens.push({ despesa, tipo, valor: Number(valor) || 0, vencimento, cartao, numeroBoleto });
         };
         despesas.forEach(d => {
-            (d.boletos || []).forEach(b => { if (!b.pago) addItem(d, 'Boleto', b.valor, b.vencimento); });
+            (d.boletos || []).forEach(b => { if (!b.pago) addItem(d, 'Boleto', b.valor, b.vencimento, null, b.numero_boleto); });
             (d.parcelas_cartao || []).forEach(p => { if (!p.pago) addItem(d, 'Cartão', p.valor, p.vencimento, p.cartao); });
             (d.cheques || []).forEach(c => { if (!c.pago) addItem(d, 'Cheque', c.valor, c.vencimento); });
         });
@@ -2568,7 +2568,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                 (d.boletos || []).forEach(b => {
                     const v = b.vencimento || d.data_despesa;
                     if (v < inicio || v > fim) return;
-                    const item = { despesa: d, tipo: 'Boleto', valor: Number(b.valor) || 0, vencimento: v, pago: b.pago, pago_em: b.pago_em };
+                    const item = { despesa: d, tipo: 'Boleto', valor: Number(b.valor) || 0, vencimento: v, pago: b.pago, pago_em: b.pago_em, numeroBoleto: b.numero_boleto };
                     b.pago ? pagos.push(item) : abertos.push(item);
                 });
                 (d.parcelas_cartao || []).forEach(p => {
@@ -2654,7 +2654,11 @@ function TabDespesasExtras({ isAdmin, profile }) {
             (d.categoria || '').toLowerCase().includes(q) ||
             (d.descricao || '').toLowerCase().includes(q) ||
             (d.fornecedor || '').toLowerCase().includes(q) ||
-            (d.veiculo?.placa || '').toLowerCase().includes(q)
+            (d.veiculo?.placa || '').toLowerCase().includes(q) ||
+            (d.nota_fiscal || '').toLowerCase().includes(q) ||
+            (d.boletos || []).some(b => (b.numero_boleto || '').toLowerCase().includes(q)) ||
+            (d.parcelas_cartao || []).some(p => (p.cartao || '').toLowerCase().includes(q)) ||
+            (d.cheques || []).some(c => (c.numero || '').toLowerCase().includes(q))
         );
     }, [despesas, pesquisa]);
 
@@ -2958,7 +2962,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
                     )}
-                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Categoria, descrição, placa..." width="220px" />
+                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="NF, nº boleto, fornecedor, placa..." width="240px" />
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
@@ -3121,26 +3125,31 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                     <p className="text-sm font-bold font-data text-orange-600">{BRL(mes.total)}</p>
                                 </div>
                                 <div className="overflow-x-auto">
-                                    <table className="w-full text-xs">
+                                    <table className="w-full text-xs table-fixed">
                                         <thead style={{ color: 'var(--color-muted-foreground)', backgroundColor: '#FFFBF5' }}>
                                             <tr>
-                                                <th className="text-left px-4 py-2 font-medium">Vencimento</th>
-                                                <th className="text-left px-4 py-2 font-medium">Despesa</th>
-                                                <th className="text-left px-4 py-2 font-medium">Tipo</th>
-                                                <th className="text-left px-4 py-2 font-medium">Veículo</th>
-                                                <th className="text-right px-4 py-2 font-medium">Valor</th>
+                                                <th className="text-left px-4 py-2 font-medium w-[12%]">Vencimento</th>
+                                                <th className="text-left px-4 py-2 font-medium w-[38%]">Despesa</th>
+                                                <th className="text-left px-4 py-2 font-medium w-[16%]">Tipo</th>
+                                                <th className="text-left px-4 py-2 font-medium w-[16%]">Veículo</th>
+                                                <th className="text-right px-4 py-2 font-medium w-[18%]">Valor</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {mes.itens.map((it, idx) => (
                                                 <tr key={idx} className="border-t" style={{ borderColor: '#FEF3C7' }}>
                                                     <td className="px-4 py-2 font-data whitespace-nowrap">{FMT_DATE(it.vencimento)}</td>
-                                                    <td className="px-4 py-2 max-w-[200px] truncate">
-                                                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium mr-1">{it.despesa.categoria}</span>
-                                                        {it.despesa.fornecedor || it.despesa.descricao || '—'}
+                                                    <td className="px-4 py-2 overflow-hidden">
+                                                        <div className="flex items-center gap-1 min-w-0">
+                                                            <span className="shrink-0 text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">{it.despesa.categoria}</span>
+                                                            <span className="truncate" title={it.despesa.fornecedor || it.despesa.descricao || '—'}>{it.despesa.fornecedor || it.despesa.descricao || '—'}</span>
+                                                        </div>
                                                     </td>
-                                                    <td className="px-4 py-2">{it.tipo}{it.cartao ? ` (${it.cartao})` : ''}</td>
-                                                    <td className="px-4 py-2 font-data">{it.despesa.veiculo?.placa || '—'}</td>
+                                                    <td className="px-4 py-2 truncate">
+                                                        {it.tipo}{it.cartao ? ` (${it.cartao})` : ''}
+                                                        {it.numeroBoleto && <span className="text-orange-500 font-data"> · Nº {it.numeroBoleto}</span>}
+                                                    </td>
+                                                    <td className="px-4 py-2 font-data truncate">{it.despesa.veiculo?.placa || '—'}</td>
                                                     <td className="px-4 py-2 text-right font-data font-semibold text-orange-600">{BRL(it.valor)}</td>
                                                 </tr>
                                             ))}
@@ -3220,7 +3229,10 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                                             <span className="truncate" title={it.despesa.fornecedor || it.despesa.descricao || '—'}>{it.despesa.fornecedor || it.despesa.descricao || '—'}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-2 truncate">{it.tipo}{it.cartao ? ` (${it.cartao})` : ''}</td>
+                                                    <td className="px-4 py-2 truncate">
+                                                        {it.tipo}{it.cartao ? ` (${it.cartao})` : ''}
+                                                        {it.numeroBoleto && <span className="font-data" style={{ color: cor }}> · Nº {it.numeroBoleto}</span>}
+                                                    </td>
                                                     <td className="px-4 py-2 font-data truncate">{it.despesa.veiculo?.placa || '—'}</td>
                                                     <td className="px-4 py-2 text-right font-data font-semibold" style={{ color: cor }}>{BRL(it.valor)}</td>
                                                 </tr>
@@ -3562,7 +3574,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                             <p className="text-xs font-medium text-amber-800">Boletos / Parcelas</p>
                                             {(form.boletos || []).map((b, idx) => (
                                                 <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border flex-wrap" style={{ borderColor: '#FED7AA' }}>
-                                                    <input value={b.numero_boleto || ''} onChange={setBoletoField(idx, 'numero_boleto')} placeholder={`Parcela ${idx + 1}`}
+                                                    <input value={b.numero_boleto || ''} onChange={setBoletoField(idx, 'numero_boleto')} placeholder={`Boleto ${idx + 1}`}
                                                         className="text-xs font-medium text-amber-700 border rounded px-1.5 py-1 w-24" style={{ borderColor: '#FED7AA' }} title="Nº do boleto" />
                                                     <input type="date" value={b.vencimento || ''} onChange={setBoletoField(idx, 'vencimento')} className="text-xs font-data border rounded px-1.5 py-1" style={{ borderColor: '#FED7AA' }} />
                                                     <input type="number" step="0.01" value={b.valor} onChange={setBoletoField(idx, 'valor')} className="text-xs font-data font-semibold text-amber-800 border rounded px-1.5 py-1 w-24" style={{ borderColor: '#FED7AA' }} />

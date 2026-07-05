@@ -189,7 +189,7 @@ function ModalBaixa({ despesa, onClose, onBaixado, isAdmin }) {
                             {boletos.map((b, idx) => (
                                 <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: b.pago ? '#F0FDF4' : '#FFFBEB' }}>
                                     <div className="flex-1">
-                                        <p className="text-sm font-medium font-data" style={{ color: 'var(--color-text-primary)' }}>{b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Parcela ${idx + 1}`} — {BRL(b.valor)}</p>
+                                        <p className="text-sm font-medium font-data" style={{ color: 'var(--color-text-primary)' }}>{b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Boleto ${idx + 1}`} — {BRL(b.valor)}</p>
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Vencimento: {FMT(b.vencimento)}</p>
                                         {b.pago && <p className="text-xs text-green-600 font-medium">✓ Pago em {b.pago_em ? new Date(b.pago_em).toLocaleDateString('pt-BR') : '—'}</p>}
                                         <label className="flex items-center gap-1.5 text-xs mt-1 cursor-pointer">
@@ -344,9 +344,18 @@ function ModalVisualizacaoDespesa({ despesa, onClose, onAtualizado, admin }) {
                             {boletos.map((b, idx) => (
                                 <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: b.pago ? '#F0FDF4' : '#FFFBEB' }}>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold font-data">Parcela {idx + 1} — {BRL(b.valor)}</p>
+                                        <p className="text-sm font-semibold font-data">{b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Boleto ${idx + 1}`} — {BRL(b.valor)}</p>
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Venc.: {FMT(b.vencimento)}</p>
                                         {b.pago && <p className="text-xs text-green-600 font-medium">✓ Pago em {b.pago_em ? new Date(b.pago_em).toLocaleDateString('pt-BR') : '—'}</p>}
+                                        <label className="flex items-center gap-1.5 text-xs mt-1 cursor-pointer">
+                                            <input type="checkbox" checked={!!b.entregue_financeiro} disabled={loading}
+                                                onChange={() => act(async () => {
+                                                    const novos = boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro } : x);
+                                                    const { error } = await supabase.from('caminhoes_despesas').update({ boletos: novos, updated_at: new Date().toISOString() }).eq('id', dados.id);
+                                                    if (error) throw error;
+                                                }, 'Status de entrega atualizado!')} />
+                                            <span className={b.entregue_financeiro ? 'text-blue-600 font-medium' : 'text-gray-400'}>{b.entregue_financeiro ? '✓ Entregue ao financeiro' : 'Ainda não entregue ao financeiro'}</span>
+                                        </label>
                                     </div>
                                     <div className="flex gap-1.5 flex-shrink-0">
                                         {!b.pago ? (
@@ -1009,7 +1018,7 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
                                         <p className="text-xs font-medium text-amber-800">Boletos / Parcelas</p>
                                         {(form.boletos || []).map((b, idx) => (
                                             <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border flex-wrap" style={{ borderColor: '#FED7AA' }}>
-                                                <input value={b.numero_boleto || ''} onChange={setBoletoField(idx, 'numero_boleto')} placeholder={`Parcela ${idx + 1}`}
+                                                <input value={b.numero_boleto || ''} onChange={setBoletoField(idx, 'numero_boleto')} placeholder={`Boleto ${idx + 1}`}
                                                     className="text-xs font-medium text-amber-700 border rounded px-1.5 py-1 w-24" style={{ borderColor: '#FED7AA' }} title="Nº do boleto" />
                                                 <input type="date" value={b.vencimento || ''} onChange={setBoletoField(idx, 'vencimento')}
                                                     className="text-xs font-data border rounded px-1.5 py-1" style={{ borderColor: '#FED7AA' }} />
@@ -1165,6 +1174,20 @@ export default function DespesasCaminhoes() {
     const [modalBaixa, setModalBaixa] = useState(null);
     const [viewDespesa, setViewDespesa] = useState(null);
     const [filtro, setFiltro]         = useState({ vehicleId: '', categoria: '', mes: '', formaPgto: '' });
+    const [busca, setBusca] = useState('');
+    const despesasFiltradas = useMemo(() => {
+        if (!busca.trim()) return despesas;
+        const q = busca.trim().toLowerCase();
+        return despesas.filter(d =>
+            (d.categoria || '').toLowerCase().includes(q) ||
+            (d.descricao || '').toLowerCase().includes(q) ||
+            (d.fornecedor || '').toLowerCase().includes(q) ||
+            (d.veiculo?.placa || '').toLowerCase().includes(q) ||
+            (d.nota_fiscal || '').toLowerCase().includes(q) ||
+            (d.boletos || []).some(b => (b.numero_boleto || '').toLowerCase().includes(q)) ||
+            (d.parcelas_cartao || []).some(p => (p.cartao || '').toLowerCase().includes(q))
+        );
+    }, [despesas, busca]);
     const [categoriasExtras]          = useState(() => { try { return JSON.parse(localStorage.getItem('caminhoes_categorias_extras') || '[]'); } catch { return []; } });
 
     const todasCategorias = useMemo(() => [...CATEGORIAS_DESPESA_CAMINHOES, ...categoriasExtras], [categoriasExtras]);
@@ -1176,15 +1199,15 @@ export default function DespesasCaminhoes() {
     const parcelasFuturas = useMemo(() => {
         const hoje = new Date(); hoje.setHours(0,0,0,0);
         const porMes = {};
-        const add = (d, tipo, valor, venc, cartao) => {
+        const add = (d, tipo, valor, venc, cartao, numeroBoleto) => {
             if (!venc) return; const dt = new Date(venc+'T00:00:00'); if (dt < hoje) return;
             const k = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
             if (!porMes[k]) porMes[k] = { total: 0, itens: [] };
             porMes[k].total += Number(valor)||0;
-            porMes[k].itens.push({ despesa: d, tipo, valor: Number(valor)||0, vencimento: venc, cartao });
+            porMes[k].itens.push({ despesa: d, tipo, valor: Number(valor)||0, vencimento: venc, cartao, numeroBoleto });
         };
         despesas.forEach(d => {
-            (d.boletos||[]).forEach(b => { if (!b.pago) add(d,'Boleto',b.valor,b.vencimento); });
+            (d.boletos||[]).forEach(b => { if (!b.pago) add(d,'Boleto',b.valor,b.vencimento,null,b.numero_boleto); });
             (d.parcelas_cartao||[]).forEach(p => { if (!p.pago) add(d,'Cartão',p.valor,p.vencimento,p.cartao); });
             (d.cheques||[]).forEach(c => { if (!c.pago) add(d,'Cheque',c.valor,c.vencimento); });
         });
@@ -1195,7 +1218,7 @@ export default function DespesasCaminhoes() {
         const pagos=[],abertos=[];
         despesas.forEach(d => {
             if (d.forma_pagamento==='a_prazo') {
-                (d.boletos||[]).forEach(b => { const v=b.vencimento||d.data_despesa; if(v<inicio||v>fim) return; const it={despesa:d,tipo:'Boleto',valor:Number(b.valor)||0,vencimento:v,pago:b.pago}; b.pago?pagos.push(it):abertos.push(it); });
+                (d.boletos||[]).forEach(b => { const v=b.vencimento||d.data_despesa; if(v<inicio||v>fim) return; const it={despesa:d,tipo:'Boleto',valor:Number(b.valor)||0,vencimento:v,pago:b.pago,numeroBoleto:b.numero_boleto}; b.pago?pagos.push(it):abertos.push(it); });
                 (d.parcelas_cartao||[]).forEach(p => { const v=p.vencimento||d.data_despesa; if(v<inicio||v>fim) return; const it={despesa:d,tipo:'Cartão',valor:Number(p.valor)||0,vencimento:v,pago:p.pago,cartao:p.cartao}; p.pago?pagos.push(it):abertos.push(it); });
             } else if (d.data_despesa>=inicio&&d.data_despesa<=fim) { pagos.push({despesa:d,tipo:d.tipo_pagamento||'À vista',valor:Number(d.valor)||0,vencimento:d.data_despesa,pago:true}); }
         });
@@ -1340,11 +1363,16 @@ export default function DespesasCaminhoes() {
                             <option value="a_prazo">A Prazo</option>
                         </select>
                         <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                        <div className="relative flex-1 min-w-[220px] max-w-[320px]">
+                            <Icon name="Search" size={14} color="var(--color-muted-foreground)" className="absolute left-3 top-1/2 -translate-y-1/2" />
+                            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="NF, nº boleto, fornecedor, placa..."
+                                className="w-full pl-9 pr-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                        </div>
                         <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                             <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                         </button>
-                        {(filtro.vehicleId || filtro.categoria || filtro.mes || filtro.formaPgto) && (
-                            <button onClick={() => setFiltro({ vehicleId: '', categoria: '', mes: '', formaPgto: '' })}
+                        {(filtro.vehicleId || filtro.categoria || filtro.mes || filtro.formaPgto || busca) && (
+                            <button onClick={() => { setFiltro({ vehicleId: '', categoria: '', mes: '', formaPgto: '' }); setBusca(''); }}
                                 className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 border border-red-200">
                                 <Icon name="X" size={12} /> Limpar filtros
                             </button>
@@ -1408,11 +1436,11 @@ export default function DespesasCaminhoes() {
                         <div className="flex justify-center py-16">
                             <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                         </div>
-                    ) : despesas.length === 0 ? (
+                    ) : despesasFiltradas.length === 0 ? (
                         <div className="bg-white rounded-2xl border p-16 flex flex-col items-center justify-center gap-3" style={{ borderColor: 'var(--color-border)' }}>
                             <Icon name="Receipt" size={40} color="var(--color-muted-foreground)" />
-                            <p className="text-base font-medium" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma despesa registrada</p>
-                            {admin && (
+                            <p className="text-base font-medium" style={{ color: 'var(--color-muted-foreground)' }}>{busca ? `Nenhum resultado para "${busca}"` : 'Nenhuma despesa registrada'}</p>
+                            {admin && !busca && (
                                 <button onClick={() => setModal({ mode: 'create' })}
                                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white"
                                     style={{ backgroundColor: 'var(--color-primary)' }}>
@@ -1429,7 +1457,7 @@ export default function DespesasCaminhoes() {
                                     ))}</tr>
                                 </thead>
                                 <tbody>
-                                    {despesas.map((d, i) => (
+                                    {despesasFiltradas.map((d, i) => (
                                         <tr key={d.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                             <td className="px-3 py-3 whitespace-nowrap text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{FMT(d.data_despesa)}</td>
                                             <td className="px-3 py-3 font-data font-medium text-xs" style={{ color: 'var(--color-primary)' }}>{d.veiculo?.placa || '—'}</td>
@@ -1502,17 +1530,31 @@ export default function DespesasCaminhoes() {
                                         <p className="text-sm font-bold" style={{ color: '#9A3412' }}>{new Date(mes.mes+'-01T00:00:00').toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</p>
                                         <p className="text-sm font-bold font-data text-orange-600">{BRL(mes.total)}</p>
                                     </div>
-                                    <table className="w-full text-xs">
+                                    <table className="w-full text-xs table-fixed">
                                         <thead style={{ color: 'var(--color-muted-foreground)', backgroundColor: '#FFFBF5' }}>
-                                            <tr><th className="text-left px-4 py-2">Vencimento</th><th className="text-left px-4 py-2">Despesa</th><th className="text-left px-4 py-2">Tipo</th><th className="text-left px-4 py-2">Veículo</th><th className="text-right px-4 py-2">Valor</th></tr>
+                                            <tr>
+                                                <th className="text-left px-4 py-2 w-[12%]">Vencimento</th>
+                                                <th className="text-left px-4 py-2 w-[38%]">Despesa</th>
+                                                <th className="text-left px-4 py-2 w-[16%]">Tipo</th>
+                                                <th className="text-left px-4 py-2 w-[16%]">Veículo</th>
+                                                <th className="text-right px-4 py-2 w-[18%]">Valor</th>
+                                            </tr>
                                         </thead>
                                         <tbody>
                                             {mes.itens.map((it, idx) => (
                                                 <tr key={idx} className="border-t" style={{ borderColor: '#FEF3C7' }}>
-                                                    <td className="px-4 py-2 font-data">{FMT(it.vencimento)}</td>
-                                                    <td className="px-4 py-2 max-w-[200px] truncate"><span className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium mr-1">{it.despesa.categoria}</span>{it.despesa.fornecedor||it.despesa.descricao||'—'}</td>
-                                                    <td className="px-4 py-2">{it.tipo}{it.cartao?` (${it.cartao})`:''}</td>
-                                                    <td className="px-4 py-2 font-data">{it.despesa.veiculo?.placa||'—'}</td>
+                                                    <td className="px-4 py-2 font-data whitespace-nowrap">{FMT(it.vencimento)}</td>
+                                                    <td className="px-4 py-2 overflow-hidden">
+                                                        <div className="flex items-center gap-1 min-w-0">
+                                                            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">{it.despesa.categoria}</span>
+                                                            <span className="truncate" title={it.despesa.fornecedor||it.despesa.descricao||'—'}>{it.despesa.fornecedor||it.despesa.descricao||'—'}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-2 truncate">
+                                                        {it.tipo}{it.cartao?` (${it.cartao})`:''}
+                                                        {it.numeroBoleto && <span className="text-orange-500 font-data"> · Nº {it.numeroBoleto}</span>}
+                                                    </td>
+                                                    <td className="px-4 py-2 font-data truncate">{it.despesa.veiculo?.placa||'—'}</td>
                                                     <td className="px-4 py-2 text-right font-data font-semibold text-orange-600">{BRL(it.valor)}</td>
                                                 </tr>
                                             ))}
@@ -1557,7 +1599,10 @@ export default function DespesasCaminhoes() {
                                                                 <span className="truncate" title={it.despesa.fornecedor||it.despesa.descricao||'—'}>{it.despesa.fornecedor||it.despesa.descricao||'—'}</span>
                                                             </div>
                                                         </td>
-                                                        <td className="px-4 py-2 truncate">{it.tipo}{it.cartao?` (${it.cartao})`:''}</td>
+                                                        <td className="px-4 py-2 truncate">
+                                                            {it.tipo}{it.cartao?` (${it.cartao})`:''}
+                                                            {it.numeroBoleto && <span className="font-data" style={{ color: cor }}> · Nº {it.numeroBoleto}</span>}
+                                                        </td>
                                                         <td className="px-4 py-2 font-data truncate">{it.despesa.veiculo?.placa||'—'}</td>
                                                         <td className="px-4 py-2 text-right font-data font-semibold" style={{ color: cor }}>{BRL(it.valor)}</td>
                                                     </tr>
