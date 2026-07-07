@@ -6,6 +6,8 @@
 // Despesas Administrativas (transporte) e Despesas (dentro de Carretas).
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { supabase } from './supabaseClient';
+
 /**
  * Calcula o próximo número de uma sequência, incrementando apenas o grupo de
  * dígitos no FINAL da string e preservando tudo que vem antes (prefixo,
@@ -160,6 +162,7 @@ export function detectarPossiveisDuplicatas(despesasExistentes, novaDespesa, { e
     const placa = normalizarPlaca(novaDespesa.placa || novaDespesa.veiculo?.placa);
     const valor = Number(novaDespesa.valor) || 0;
     const data = novaDespesa.data_despesa;
+    const numerosBoletoNovos = (novaDespesa.boletos || []).map(b => normalizarTexto(b.numero_boleto)).filter(Boolean);
 
     const achados = [];
 
@@ -170,6 +173,7 @@ export function detectarPossiveisDuplicatas(despesasExistentes, novaDespesa, { e
         const dFornecedor = normalizarTexto(d.empresa || d.fornecedor);
         const dPlaca = normalizarPlaca(d.placa || d.veiculo?.placa);
         const dValor = Number(d.valor) || 0;
+        const mesmaPlaca = placa && dPlaca && placa === dPlaca;
 
         // Confiança ALTA: mesma nota fiscal + mesmo fornecedor (não pode ser coincidência)
         if (nf && dNf && nf === dNf && fornecedor && dFornecedor && fornecedor === dFornecedor) {
@@ -177,11 +181,28 @@ export function detectarPossiveisDuplicatas(despesasExistentes, novaDespesa, { e
             continue;
         }
 
+        // Confiança ALTA: mesma nota fiscal + mesma placa, MESMO que o fornecedor esteja
+        // escrito diferente (nome digitado errado é o erro de lançamento mais comum aqui).
+        if (nf && dNf && nf === dNf && mesmaPlaca) {
+            achados.push({ despesa: d, motivo: `Mesma nota fiscal (${novaDespesa.nota_fiscal}) já lançada para a placa ${novaDespesa.placa || dPlaca}, mesmo que o fornecedor esteja digitado diferente.`, confianca: 'alta' });
+            continue;
+        }
+
+        // Confiança ALTA: algum número de boleto já lançado se repete na mesma placa
+        if (mesmaPlaca && numerosBoletoNovos.length > 0) {
+            const numerosExistentes = (d.boletos || []).map(b => normalizarTexto(b.numero_boleto)).filter(Boolean);
+            const repetido = numerosBoletoNovos.find(n => numerosExistentes.includes(n));
+            if (repetido) {
+                achados.push({ despesa: d, motivo: `Boleto nº ${repetido} já lançado para a placa ${novaDespesa.placa || dPlaca}.`, confianca: 'alta' });
+                continue;
+            }
+        }
+
         // Confiança MÉDIA: mesmo fornecedor + mesma placa/veículo + valor idêntico + data próxima
         const mesmoValor = valor > 0 && Math.abs(dValor - valor) < 0.01;
         const mesmaEpoca = diasEntre(data, d.data_despesa) <= janelaDias;
         if (fornecedor && dFornecedor && fornecedor === dFornecedor && mesmoValor && mesmaEpoca) {
-            if (placa && dPlaca && placa === dPlaca) {
+            if (mesmaPlaca) {
                 achados.push({ despesa: d, motivo: `Mesmo fornecedor, mesma placa (${novaDespesa.placa || ''}) e mesmo valor, em data próxima.`, confianca: 'alta' });
             } else {
                 achados.push({ despesa: d, motivo: `Mesmo fornecedor e mesmo valor, em data próxima (${Math.round(diasEntre(data, d.data_despesa))} dia(s) de diferença).`, confianca: 'media' });
@@ -190,4 +211,32 @@ export function detectarPossiveisDuplicatas(despesasExistentes, novaDespesa, { e
     }
 
     return achados;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Checagem GLOBAL de nota fiscal duplicada — consulta direto o banco de dados
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// A verificação acima (detectarPossiveisDuplicatas) só enxerga as despesas já
+// carregadas na tela — que podem estar restritas pelos filtros ativos (mês,
+// veículo, categoria etc). Isso deixava passar duplicidade de NF quando os
+// dois lançamentos caíam em períodos/filtros diferentes. Esta função resolve
+// isso consultando a tabela inteira no Supabase, sem depender do que está
+// carregado na tela — a NF precisa ser única em toda a tabela, sempre.
+//
+// @param {string} table - nome da tabela ('caminhoes_despesas', 'transporte_despesas_adm', 'carretas_despesas_extras')
+// @param {string} notaFiscal - número da NF a verificar
+// @param {string} [excluirId] - id da própria despesa (ao editar, não compara consigo mesma)
+// @returns {Promise<Array<object>>} despesas já existentes com a mesma NF
+export async function buscarDespesasComMesmaNf(table, notaFiscal, excluirId) {
+    const nf = String(notaFiscal ?? '').trim();
+    if (!nf) return [];
+    let query = supabase
+        .from(table)
+        .select('id, nota_fiscal, fornecedor, empresa, categoria, data_despesa, valor, boletos')
+        .ilike('nota_fiscal', nf);
+    if (excluirId) query = query.neq('id', excluirId);
+    const { data, error } = await query;
+    if (error) { console.error(`Erro ao checar NF duplicada em ${table}:`, error.message); return []; }
+    return data || [];
 }

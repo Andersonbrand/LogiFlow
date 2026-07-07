@@ -16,7 +16,7 @@ import {
     fetchFornecedoresCaminhoes, createFornecedorCaminhao, updateFornecedorCaminhao, deleteFornecedorCaminhao,
 } from 'utils/caminhoesDespesasService';
 import { supabase } from 'utils/supabaseClient';
-import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis } from 'utils/parcelasGenerator';
+import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf } from 'utils/parcelasGenerator';
 import * as XLSX from 'xlsx';
 
 // fetchDespesaById: busca despesa individual por id para recarregar após baixa/revogar
@@ -555,6 +555,7 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
     const comprovanteRef = useRef(null);
     const permutaRef = useRef(null);
     const barcodeInputRef = useRef(null);
+    const corpoModalRef = useRef(null);
     const [barcodeMode, setBarcodeMode] = useState(false);
     const [barcodeBuffer, setBarcodeBuffer] = useState('');
     const [loadingNFe, setLoadingNFe] = useState(false);
@@ -750,11 +751,33 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
     const handleSave = async (forcarApesarDeDuplicata = false) => {
         if (!form.categoria || !form.valor || !form.data_despesa) { showToast('Categoria, valor e data são obrigatórios', 'error'); return; }
 
-        // Checagem de possíveis duplicatas (NF, fornecedor, placa, valor, data) — só avisa, não bloqueia.
+        // Checagem de possíveis duplicatas — só avisa, não bloqueia sozinha.
         if (!forcarApesarDeDuplicata) {
             const veiculoSelecionado = veiculos.find(v => v.id === form.vehicle_id);
-            const achados = detectarPossiveisDuplicatas(despesasExistentes, { ...form, placa: veiculoSelecionado?.placa }, { excluirId: isEdit ? modal.data.id : undefined });
-            if (achados.length > 0) { setDuplicatas(achados); return; }
+            const excluirId = isEdit ? modal.data.id : undefined;
+
+            // Checagem GLOBAL de NF: consulta o banco inteiro, não só o que está
+            //    carregado na tela (que pode estar filtrado por mês/veículo/categoria).
+            let achadosNf = [];
+            if (form.nota_fiscal?.trim()) {
+                const existentesComMesmaNf = await buscarDespesasComMesmaNf('caminhoes_despesas', form.nota_fiscal, excluirId);
+                achadosNf = existentesComMesmaNf.map(d => ({
+                    despesa: d,
+                    motivo: `Nota fiscal ${form.nota_fiscal} já lançada${d.fornecedor ? ` para ${d.fornecedor}` : ''}${d.categoria ? ` (${d.categoria})` : ''} em ${d.data_despesa ? FMT(d.data_despesa) : '—'}, valor ${BRL(d.valor)}.`,
+                    confianca: 'alta',
+                }));
+            }
+
+            // Checagem local (fornecedor+placa+valor+data, nº de boleto) sobre o que já está na tela.
+            const achadosLocais = detectarPossiveisDuplicatas(despesasExistentes, { ...form, placa: veiculoSelecionado?.placa }, { excluirId });
+
+            const achados = [...achadosNf, ...achadosLocais];
+            if (achados.length > 0) {
+                setDuplicatas(achados);
+                showToast(`⚠️ Possível duplicidade encontrada (${achados.length}) — revise antes de salvar.`, 'error');
+                corpoModalRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                return;
+            }
         }
 
         setSaving(true);
@@ -783,7 +806,7 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
         <>
             <ModalOverlay onClose={onClose} wide>
                 <ModalHeader title={isEdit ? 'Editar Despesa' : 'Nova Despesa'} icon="Receipt" onClose={onClose} />
-                <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                <div ref={corpoModalRef} className="p-5 space-y-4 overflow-y-auto flex-1">
 
                     {/* ── Alerta de possível duplicidade ────────────────────── */}
                     {duplicatas.length > 0 && (
@@ -1017,20 +1040,22 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
                                     <div className="space-y-2">
                                         <p className="text-xs font-medium text-amber-800">Boletos / Parcelas</p>
                                         {(form.boletos || []).map((b, idx) => (
-                                            <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border flex-wrap" style={{ borderColor: '#FED7AA' }}>
-                                                <input value={b.numero_boleto || ''} onChange={setBoletoField(idx, 'numero_boleto')} placeholder={`Boleto ${idx + 1}`}
-                                                    className="text-xs font-medium text-amber-700 border rounded px-1.5 py-1 w-24" style={{ borderColor: '#FED7AA' }} title="Nº do boleto" />
-                                                <input type="date" value={b.vencimento || ''} onChange={setBoletoField(idx, 'vencimento')}
-                                                    className="text-xs font-data border rounded px-1.5 py-1" style={{ borderColor: '#FED7AA' }} />
-                                                <input type="number" step="0.01" value={b.valor} onChange={setBoletoField(idx, 'valor')}
-                                                    className="text-xs font-data font-semibold text-amber-800 border rounded px-1.5 py-1 w-24" style={{ borderColor: '#FED7AA' }} />
-                                                <span className={`text-xs px-1.5 py-0.5 rounded ${b.pago ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{b.pago ? 'Pago' : 'Pendente'}</span>
-                                                <label className="flex items-center gap-1 text-xs cursor-pointer" title="Marcar se o boleto já foi entregue ao setor financeiro">
+                                            <div key={idx} className="p-2 rounded-lg bg-white border" style={{ borderColor: '#FED7AA' }}>
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <input value={b.numero_boleto || ''} onChange={setBoletoField(idx, 'numero_boleto')} placeholder={`Boleto ${idx + 1}`}
+                                                        className="text-xs font-medium text-amber-700 border rounded px-1.5 py-1 w-24 shrink-0" style={{ borderColor: '#FED7AA' }} title="Nº do boleto" />
+                                                    <input type="date" value={b.vencimento || ''} onChange={setBoletoField(idx, 'vencimento')}
+                                                        className="text-xs font-data border rounded px-1.5 py-1 shrink-0" style={{ borderColor: '#FED7AA' }} />
+                                                    <input type="number" step="0.01" value={b.valor} onChange={setBoletoField(idx, 'valor')}
+                                                        className="text-xs font-data font-semibold text-amber-800 border rounded px-1.5 py-1 w-24 shrink-0" style={{ borderColor: '#FED7AA' }} />
+                                                    <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${b.pago ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{b.pago ? 'Pago' : 'Pendente'}</span>
+                                                    <button type="button" onClick={() => setForm(f => ({ ...f, boletos: f.boletos.filter((_, i) => i !== idx) }))} className="ml-auto p-1 rounded hover:bg-red-50 shrink-0"><Icon name="X" size={11} color="#DC2626" /></button>
+                                                </div>
+                                                <label className="flex items-center gap-1 text-xs cursor-pointer mt-1.5" title="Marcar se o boleto já foi entregue ao setor financeiro">
                                                     <input type="checkbox" checked={!!b.entregue_financeiro}
                                                         onChange={() => setForm(f => ({ ...f, boletos: f.boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro } : x) }))} />
                                                     <span className={b.entregue_financeiro ? 'text-blue-600' : 'text-gray-400'}>Entregue ao financeiro</span>
                                                 </label>
-                                                <button type="button" onClick={() => setForm(f => ({ ...f, boletos: f.boletos.filter((_, i) => i !== idx) }))} className="ml-auto p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
                                             </div>
                                         ))}
 
@@ -1206,24 +1231,24 @@ export default function DespesasCaminhoes() {
             porMes[k].total += Number(valor)||0;
             porMes[k].itens.push({ despesa: d, tipo, valor: Number(valor)||0, vencimento: venc, cartao, numeroBoleto });
         };
-        despesas.forEach(d => {
+        despesasFiltradas.forEach(d => {
             (d.boletos||[]).forEach(b => { if (!b.pago) add(d,'Boleto',b.valor,b.vencimento,null,b.numero_boleto); });
             (d.parcelas_cartao||[]).forEach(p => { if (!p.pago) add(d,'Cartão',p.valor,p.vencimento,p.cartao); });
             (d.cheques||[]).forEach(c => { if (!c.pago) add(d,'Cheque',c.valor,c.vencimento); });
         });
         return Object.entries(porMes).sort(([a],[b]) => a.localeCompare(b)).map(([mes,dados]) => ({ mes, ...dados, itens: dados.itens.sort((a,b) => a.vencimento.localeCompare(b.vencimento)) }));
-    }, [despesas]);
+    }, [despesasFiltradas]);
     const relatorioStatus = useMemo(() => {
         const { inicio, fim } = relatorioPeriodo; if (!inicio||!fim) return null;
         const pagos=[],abertos=[];
-        despesas.forEach(d => {
+        despesasFiltradas.forEach(d => {
             if (d.forma_pagamento==='a_prazo') {
                 (d.boletos||[]).forEach(b => { const v=b.vencimento||d.data_despesa; if(v<inicio||v>fim) return; const it={despesa:d,tipo:'Boleto',valor:Number(b.valor)||0,vencimento:v,pago:b.pago,numeroBoleto:b.numero_boleto}; b.pago?pagos.push(it):abertos.push(it); });
                 (d.parcelas_cartao||[]).forEach(p => { const v=p.vencimento||d.data_despesa; if(v<inicio||v>fim) return; const it={despesa:d,tipo:'Cartão',valor:Number(p.valor)||0,vencimento:v,pago:p.pago,cartao:p.cartao}; p.pago?pagos.push(it):abertos.push(it); });
             } else if (d.data_despesa>=inicio&&d.data_despesa<=fim) { pagos.push({despesa:d,tipo:d.tipo_pagamento||'À vista',valor:Number(d.valor)||0,vencimento:d.data_despesa,pago:true}); }
         });
         return { pagos:pagos.sort((a,b)=>a.vencimento.localeCompare(b.vencimento)), abertos:abertos.sort((a,b)=>a.vencimento.localeCompare(b.vencimento)), totalPago:pagos.reduce((s,i)=>s+i.valor,0), totalAberto:abertos.reduce((s,i)=>s+i.valor,0) };
-    }, [despesas, relatorioPeriodo]);
+    }, [despesasFiltradas, relatorioPeriodo]);
 
     const load = useCallback(async () => {
         setLoading(true);
