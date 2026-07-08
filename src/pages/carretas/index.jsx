@@ -42,7 +42,7 @@ import {
     updateAbastecimento,
     fetchFornecedoresCarretas, createFornecedorCarretas, updateFornecedorCarretas, deleteFornecedorCarretas,
 } from 'utils/carretasService';
-import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf, garantirFornecedorCadastrado, EMPRESAS_LOGIFLOW } from 'utils/parcelasGenerator';
+import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas } from 'utils/parcelasGenerator';
 import * as XLSX from 'xlsx';
 import { exportDiariaModelo, exportDiariasRomaneiosModelo, printDiaria } from 'utils/excelUtils';
 import { fetchDadosMargemFrete, calcularAbatimentoCustosFrota } from 'utils/custosFrotaService';
@@ -2383,7 +2383,7 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado, isAdmin }) {
                                     style={{ borderColor: 'var(--color-border)', backgroundColor: b.pago ? '#F0FDF4' : '#FFFBEB' }}>
                                     <div className="flex-1">
                                         <p className="text-sm font-medium font-data" style={{ color: 'var(--color-text-primary)' }}>
-                                            {b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Boleto ${idx + 1}`} — {BRL(b.valor)}
+                                            {b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Parcela ${idx + 1}`} — {BRL(b.valor)}
                                         </p>
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
                                             Vencimento: {b.vencimento ? new Date(b.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
@@ -2496,7 +2496,6 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const [modal, setModal]         = useState(null);
     const [showFornecedores, setShowFornecedores] = useState(false);
     const [modalBaixa, setModalBaixa] = useState(null);
-    const corpoModalRef = useRef(null);
     const mesAtualDespesas = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; })();
     const [filtro, setFiltro]       = useState(() => {
         let mes = mesAtualDespesas;
@@ -2531,43 +2530,27 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const todasCategorias = useMemo(() => [...CATEGORIAS_DESPESA, ...categoriasExtras], [categoriasExtras]);
 
     // ── Parcelas futuras a vencer (de TODAS as despesas, não apenas do período filtrado) ──
-    const [pesquisa, setPesquisa] = useState('');
-    const despesasFiltradas = useMemo(() => {
-        if (!pesquisa.trim()) return despesas;
-        const q = pesquisa.toLowerCase();
-        return despesas.filter(d =>
-            (d.categoria || '').toLowerCase().includes(q) ||
-            (d.descricao || '').toLowerCase().includes(q) ||
-            (d.fornecedor || '').toLowerCase().includes(q) ||
-            (d.veiculo?.placa || '').toLowerCase().includes(q) ||
-            (d.nota_fiscal || '').toLowerCase().includes(q) ||
-            (d.boletos || []).some(b => (b.numero_boleto || '').toLowerCase().includes(q)) ||
-            (d.parcelas_cartao || []).some(p => (p.cartao || '').toLowerCase().includes(q)) ||
-            (d.cheques || []).some(c => (c.numero || '').toLowerCase().includes(q))
-        );
-    }, [despesas, pesquisa]);
-
     const parcelasFuturas = useMemo(() => {
         const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
         const porMes = {}; // 'YYYY-MM' -> { total, itens: [{despesa, tipo, valor, vencimento, cartao?}] }
-        const addItem = (despesa, tipo, valor, vencimento, cartao, numeroBoleto) => {
+        const addItem = (despesa, tipo, valor, vencimento, cartao) => {
             if (!vencimento) return;
             const d = new Date(vencimento + 'T00:00:00');
             if (d < hoje) return; // apenas futuras
             const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             if (!porMes[chave]) porMes[chave] = { total: 0, itens: [] };
             porMes[chave].total += Number(valor) || 0;
-            porMes[chave].itens.push({ despesa, tipo, valor: Number(valor) || 0, vencimento, cartao, numeroBoleto });
+            porMes[chave].itens.push({ despesa, tipo, valor: Number(valor) || 0, vencimento, cartao });
         };
-        despesasFiltradas.forEach(d => {
-            (d.boletos || []).forEach(b => { if (!b.pago) addItem(d, 'Boleto', b.valor, b.vencimento, null, b.numero_boleto); });
+        despesas.forEach(d => {
+            (d.boletos || []).forEach(b => { if (!b.pago) addItem(d, 'Boleto', b.valor, b.vencimento); });
             (d.parcelas_cartao || []).forEach(p => { if (!p.pago) addItem(d, 'Cartão', p.valor, p.vencimento, p.cartao); });
             (d.cheques || []).forEach(c => { if (!c.pago) addItem(d, 'Cheque', c.valor, c.vencimento); });
         });
         return Object.entries(porMes)
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([mes, dados]) => ({ mes, ...dados, itens: dados.itens.sort((a, b) => a.vencimento.localeCompare(b.vencimento)) }));
-    }, [despesasFiltradas]);
+    }, [despesas]);
 
     // ── Relatório pago/aberto por período selecionado ──
     const relatorioStatus = useMemo(() => {
@@ -2578,14 +2561,14 @@ function TabDespesasExtras({ isAdmin, profile }) {
             return dt.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
         };
         const pagos = [], abertos = [];
-        despesasFiltradas.forEach(d => {
+        despesas.forEach(d => {
             const isNoPeriodo = d.data_despesa >= inicio && d.data_despesa <= fim;
             // A prazo: analisa cada parcela/boleto individualmente
             if (d.forma_pagamento === 'a_prazo') {
                 (d.boletos || []).forEach(b => {
                     const v = b.vencimento || d.data_despesa;
                     if (v < inicio || v > fim) return;
-                    const item = { despesa: d, tipo: 'Boleto', valor: Number(b.valor) || 0, vencimento: v, pago: b.pago, pago_em: b.pago_em, numeroBoleto: b.numero_boleto };
+                    const item = { despesa: d, tipo: 'Boleto', valor: Number(b.valor) || 0, vencimento: v, pago: b.pago, pago_em: b.pago_em };
                     b.pago ? pagos.push(item) : abertos.push(item);
                 });
                 (d.parcelas_cartao || []).forEach(p => {
@@ -2606,8 +2589,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
             totalPago:    pagos.reduce((s, i) => s + i.valor, 0),
             totalAberto:  abertos.reduce((s, i) => s + i.valor, 0),
         };
-    }, [despesasFiltradas, relatorioPeriodo]);
-
+    }, [despesas, relatorioPeriodo]);
 
     const adicionarCategoria = () => {
         const cat = novaCategoria.trim();
@@ -2625,7 +2607,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const emptyForm = () => ({
         veiculo_id: '', categoria: 'Pneus', descricao: '', valor: '',
         data_despesa: new Date().toISOString().split('T')[0], nota_fiscal: '',
-        fornecedor: '', empresa: '', observacoes: '',
+        fornecedor: '', observacoes: '',
         notas_fiscais: [], // múltiplas NFs: [{numero, fornecedor, data, descricao, valor, nf_itens}]
         // item 8: pagamento
         forma_pagamento: 'a_vista',
@@ -2642,7 +2624,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const [form, setForm] = useState(emptyForm());
     const [novoBoleto, setNovoBoleto] = useState({ numero_boleto: '', vencimento: '', valor: '' });
     const [novoCheque, setNovoCheque] = useState({ numero: '', banco: '', valor: '', vencimento: '' });
-    const [gerador, setGerador] = useState({ quantidade: 2, prazoDiasUteis: 30, intervaloDias: 30, numeroBoletoInicial: '' });
+    const [gerador, setGerador] = useState({ quantidade: 2, primeiroVencimento: '', intervaloDias: 30, numeroBoletoInicial: '' });
     const [duplicatas, setDuplicatas] = useState([]);
 
     const load = useCallback(async () => {
@@ -2663,6 +2645,18 @@ function TabDespesasExtras({ isAdmin, profile }) {
         finally { setLoading(false); }
     }, [filtro]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+
+    const [pesquisa, setPesquisa] = useState('');
+    const despesasFiltradas = useMemo(() => {
+        if (!pesquisa.trim()) return despesas;
+        const q = pesquisa.toLowerCase();
+        return despesas.filter(d =>
+            (d.categoria || '').toLowerCase().includes(q) ||
+            (d.descricao || '').toLowerCase().includes(q) ||
+            (d.fornecedor || '').toLowerCase().includes(q) ||
+            (d.veiculo?.placa || '').toLowerCase().includes(q)
+        );
+    }, [despesas, pesquisa]);
 
     const totalPeriodo = useMemo(() => despesas.reduce((s, d) => s + Number(d.valor || 0), 0), [despesas]);
     const totalPorCategoria = useMemo(() => {
@@ -2717,10 +2711,6 @@ function TabDespesasExtras({ isAdmin, profile }) {
                     };
                 });
                 showToast(`NF ${nNF} importada: ${fornecedor || 'emissor não identificado'} · ${itens.length} item(s)`, 'success');
-                if (fornecedor) {
-                    garantirFornecedorCadastrado(fetchFornecedoresCarretas, createFornecedorCarretas, { nome: fornecedor, cnpj: emitCNPJ })
-                        .then(r => { if (r === 'cadastrado') showToast(`Fornecedor "${fornecedor}" cadastrado automaticamente.`, 'info'); });
-                }
             } catch {
                 showToast('Erro ao ler XML. Verifique o arquivo.', 'error');
             }
@@ -2781,10 +2771,6 @@ function TabDespesasExtras({ isAdmin, profile }) {
                 ? `✅ NF ${nNF} — ${dados.fornecedor}`
                 : `NF ${nNF} lida. Consulte o XML para dados completos.`;
             showToast(msg, dados?.fornecedor ? 'success' : 'info');
-            if (dados?.fornecedor) {
-                garantirFornecedorCadastrado(fetchFornecedoresCarretas, createFornecedorCarretas, { nome: dados.fornecedor, cnpj: cnpjEmit })
-                    .then(r => { if (r === 'cadastrado') showToast(`Fornecedor "${dados.fornecedor}" cadastrado automaticamente.`, 'info'); });
-            }
 
         } catch (err) {
             // Fallback mínimo: preenche só o número
@@ -2838,10 +2824,6 @@ function TabDespesasExtras({ isAdmin, profile }) {
         reader.readAsDataURL(file);
     };
 
-    // Edita um campo de um boleto/parcela já lançado diretamente na lista.
-    const setBoletoField = (idx, campo) => (e) => setForm(f => ({ ...f, boletos: f.boletos.map((x, i) => i === idx ? { ...x, [campo]: e.target.value } : x) }));
-    const setParcelaCartaoField = (idx, campo) => (e) => setForm(f => ({ ...f, parcelas_cartao: f.parcelas_cartao.map((x, i) => i === idx ? { ...x, [campo]: e.target.value } : x) }));
-
     const adicionarBoleto = () => {
         if (!novoBoleto.vencimento || !novoBoleto.valor) { showToast('Preencha vencimento e valor do boleto', 'error'); return; }
         setForm(f => ({ ...f, boletos: [...(f.boletos || []), { ...novoBoleto, pago: false, entregue_financeiro: false }] }));
@@ -2852,20 +2834,19 @@ function TabDespesasExtras({ isAdmin, profile }) {
     // ── Geração automática de parcelas (boleto ou cartão) ─────────────────────
     const gerarAutomatico = (tipo) => {
         if (!form.valor || Number(form.valor) <= 0) { showToast('Informe o valor total da despesa antes de gerar as parcelas.', 'error'); return; }
-        if (!form.data_despesa) { showToast('Informe a data da despesa/nota fiscal antes de gerar as parcelas.', 'error'); return; }
-        const primeiroVencimento = adicionarDiasUteis(form.data_despesa, gerador.prazoDiasUteis);
+        if (!gerador.primeiroVencimento) { showToast('Informe a data da 1ª parcela.', 'error'); return; }
         try {
             const parcelas = gerarParcelasAutomaticas({
                 valorTotal: Number(form.valor),
                 quantidade: gerador.quantidade,
-                primeiroVencimento,
+                primeiroVencimento: gerador.primeiroVencimento,
                 intervaloDias: Number(gerador.intervaloDias) || 30,
                 tipo,
-                numeroBoletoInicial: gerador.numeroBoletoInicial || null,
+                numeroBoletoInicial: gerador.numeroBoletoInicial ? Number(gerador.numeroBoletoInicial) : null,
             });
             if (tipo === 'boleto') setForm(f => ({ ...f, boletos: parcelas }));
             else setForm(f => ({ ...f, parcelas_cartao: parcelas }));
-            showToast(`${parcelas.length} parcela(s) geradas a partir de ${FMT_DATE(primeiroVencimento)} (NF + ${gerador.prazoDiasUteis} dias úteis) — soma ${BRL(somaParcelas(parcelas))}.`, 'success');
+            showToast(`${parcelas.length} parcela(s) gerada(s) automaticamente — soma ${BRL(somaParcelas(parcelas))}.`, 'success');
         } catch (e) { showToast(e.message, 'error'); }
     };
 
@@ -2881,34 +2862,12 @@ function TabDespesasExtras({ isAdmin, profile }) {
 
         if (!forcarApesarDeDuplicata) {
             const veiculoSelecionado = veiculos.find(v => v.id === form.veiculo_id);
-            const excluirId = modal.mode === 'edit' ? modal.data.id : undefined;
-
-            // Checagem GLOBAL de NF: consulta o banco inteiro, não só o que está
-            // carregado na tela (que pode estar filtrado por mês/veículo/categoria).
-            let achadosNf = [];
-            if (form.nota_fiscal?.trim()) {
-                const existentesComMesmaNf = await buscarDespesasComMesmaNf('carretas_despesas_extras', form.nota_fiscal, excluirId);
-                achadosNf = existentesComMesmaNf.map(d => ({
-                    despesa: d,
-                    motivo: `Nota fiscal ${form.nota_fiscal} já lançada${d.fornecedor ? ` para ${d.fornecedor}` : ''}${d.categoria ? ` (${d.categoria})` : ''} em ${d.data_despesa ? FMT_DATE(d.data_despesa) : '—'}, valor ${BRL(d.valor)}.`,
-                    confianca: 'alta',
-                }));
-            }
-
-            // Checagem local (fornecedor+placa+valor+data, nº de boleto) sobre o que já está na tela.
-            const achadosLocais = detectarPossiveisDuplicatas(despesas, { ...form, placa: veiculoSelecionado?.placa }, { excluirId });
-
-            const achados = [...achadosNf, ...achadosLocais];
-            if (achados.length > 0) {
-                setDuplicatas(achados);
-                showToast(`⚠️ Possível duplicidade encontrada (${achados.length}) — revise antes de salvar.`, 'error');
-                corpoModalRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                return;
-            }
+            const achados = detectarPossiveisDuplicatas(despesas, { ...form, placa: veiculoSelecionado?.placa }, { excluirId: modal.mode === 'edit' ? modal.data.id : undefined });
+            if (achados.length > 0) { setDuplicatas(achados); return; }
         }
 
         try {
-            const payload = { ...form, veiculo_id: form.veiculo_id || null, notas_fiscais: form.notas_fiscais||[], parcelas_cartao: form.parcelas_cartao||[] };
+            const payload = { ...form, notas_fiscais: form.notas_fiscais||[], parcelas_cartao: form.parcelas_cartao||[] };
             if (modal.mode === 'create') await createDespesaExtra(payload);
             else await updateDespesaExtra(modal.data.id, payload);
             showToast('Despesa salva!', 'success'); setModal(null); load();
@@ -2946,7 +2905,6 @@ function TabDespesasExtras({ isAdmin, profile }) {
         setForm({
             veiculo_id: d.veiculo_id || '', categoria: d.categoria, descricao: d.descricao || '',
             valor: d.valor, data_despesa: d.data_despesa, nota_fiscal: d.nota_fiscal || '', observacoes: d.observacoes || '',
-            fornecedor: d.fornecedor || '', empresa: d.empresa || '',
             forma_pagamento: d.forma_pagamento || 'a_vista', tipo_pagamento: d.tipo_pagamento || 'pix',
             comprovante_url: d.comprovante_url || '', boletos: d.boletos || [],
             permuta_obs: d.permuta_obs || '', permuta_doc_url: d.permuta_doc_url || '',
@@ -2995,7 +2953,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
                     )}
-                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="NF, nº boleto, fornecedor, placa..." width="240px" />
+                    <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Categoria, descrição, placa..." width="220px" />
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
@@ -3158,31 +3116,26 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                     <p className="text-sm font-bold font-data text-orange-600">{BRL(mes.total)}</p>
                                 </div>
                                 <div className="overflow-x-auto">
-                                    <table className="w-full text-xs table-fixed">
+                                    <table className="w-full text-xs">
                                         <thead style={{ color: 'var(--color-muted-foreground)', backgroundColor: '#FFFBF5' }}>
                                             <tr>
-                                                <th className="text-left px-4 py-2 font-medium w-[12%]">Vencimento</th>
-                                                <th className="text-left px-4 py-2 font-medium w-[38%]">Despesa</th>
-                                                <th className="text-left px-4 py-2 font-medium w-[16%]">Tipo</th>
-                                                <th className="text-left px-4 py-2 font-medium w-[16%]">Veículo</th>
-                                                <th className="text-right px-4 py-2 font-medium w-[18%]">Valor</th>
+                                                <th className="text-left px-4 py-2 font-medium">Vencimento</th>
+                                                <th className="text-left px-4 py-2 font-medium">Despesa</th>
+                                                <th className="text-left px-4 py-2 font-medium">Tipo</th>
+                                                <th className="text-left px-4 py-2 font-medium">Veículo</th>
+                                                <th className="text-right px-4 py-2 font-medium">Valor</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {mes.itens.map((it, idx) => (
                                                 <tr key={idx} className="border-t" style={{ borderColor: '#FEF3C7' }}>
                                                     <td className="px-4 py-2 font-data whitespace-nowrap">{FMT_DATE(it.vencimento)}</td>
-                                                    <td className="px-4 py-2 overflow-hidden">
-                                                        <div className="flex items-center gap-1 min-w-0">
-                                                            <span className="shrink-0 text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">{it.despesa.categoria}</span>
-                                                            <span className="truncate" title={it.despesa.fornecedor || it.despesa.descricao || '—'}>{it.despesa.fornecedor || it.despesa.descricao || '—'}</span>
-                                                        </div>
+                                                    <td className="px-4 py-2 max-w-[200px] truncate">
+                                                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium mr-1">{it.despesa.categoria}</span>
+                                                        {it.despesa.fornecedor || it.despesa.descricao || '—'}
                                                     </td>
-                                                    <td className="px-4 py-2 truncate">
-                                                        {it.tipo}{it.cartao ? ` (${it.cartao})` : ''}
-                                                        {it.numeroBoleto && <span className="text-orange-500 font-data"> · Nº {it.numeroBoleto}</span>}
-                                                    </td>
-                                                    <td className="px-4 py-2 font-data truncate">{it.despesa.veiculo?.placa || '—'}</td>
+                                                    <td className="px-4 py-2">{it.tipo}{it.cartao ? ` (${it.cartao})` : ''}</td>
+                                                    <td className="px-4 py-2 font-data">{it.despesa.veiculo?.placa || '—'}</td>
                                                     <td className="px-4 py-2 text-right font-data font-semibold text-orange-600">{BRL(it.valor)}</td>
                                                 </tr>
                                             ))}
@@ -3242,31 +3195,26 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             <div key={titulo} className="rounded-xl border overflow-hidden" style={{ borderColor: border }}>
                                 <div className="px-4 py-3 font-bold text-sm" style={{ backgroundColor: bg, color: cor }}>{titulo} — {lista.length} lançamento{lista.length !== 1 ? 's' : ''}</div>
                                 <div className="overflow-x-auto">
-                                    <table className="w-full text-xs table-fixed">
+                                    <table className="w-full text-xs">
                                         <thead style={{ color: 'var(--color-muted-foreground)' }}>
                                             <tr>
-                                                <th className="text-left px-4 py-2 font-medium w-[13%]">Data/Venc.</th>
-                                                <th className="text-left px-4 py-2 font-medium w-[36%]">Despesa</th>
-                                                <th className="text-left px-4 py-2 font-medium w-[17%]">Tipo Pgto</th>
-                                                <th className="text-left px-4 py-2 font-medium w-[16%]">Veículo</th>
-                                                <th className="text-right px-4 py-2 font-medium w-[18%]">Valor</th>
+                                                <th className="text-left px-4 py-2 font-medium">Data/Venc.</th>
+                                                <th className="text-left px-4 py-2 font-medium">Despesa</th>
+                                                <th className="text-left px-4 py-2 font-medium">Tipo Pgto</th>
+                                                <th className="text-left px-4 py-2 font-medium">Veículo</th>
+                                                <th className="text-right px-4 py-2 font-medium">Valor</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {lista.map((it, idx) => (
                                                 <tr key={idx} className="border-t" style={{ borderColor: border }}>
                                                     <td className="px-4 py-2 font-data whitespace-nowrap">{FMT_DATE(it.vencimento)}</td>
-                                                    <td className="px-4 py-2 overflow-hidden">
-                                                        <div className="flex items-center gap-1 min-w-0">
-                                                            <span className="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: badgeBg, color: badgeCor }}>{it.despesa.categoria}</span>
-                                                            <span className="truncate" title={it.despesa.fornecedor || it.despesa.descricao || '—'}>{it.despesa.fornecedor || it.despesa.descricao || '—'}</span>
-                                                        </div>
+                                                    <td className="px-4 py-2 max-w-[200px]">
+                                                        <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold mr-1" style={{ backgroundColor: badgeBg, color: badgeCor }}>{it.despesa.categoria}</span>
+                                                        <span className="truncate">{it.despesa.fornecedor || it.despesa.descricao || '—'}</span>
                                                     </td>
-                                                    <td className="px-4 py-2 truncate">
-                                                        {it.tipo}{it.cartao ? ` (${it.cartao})` : ''}
-                                                        {it.numeroBoleto && <span className="font-data" style={{ color: cor }}> · Nº {it.numeroBoleto}</span>}
-                                                    </td>
-                                                    <td className="px-4 py-2 font-data truncate">{it.despesa.veiculo?.placa || '—'}</td>
+                                                    <td className="px-4 py-2">{it.tipo}{it.cartao ? ` (${it.cartao})` : ''}</td>
+                                                    <td className="px-4 py-2 font-data">{it.despesa.veiculo?.placa || '—'}</td>
                                                     <td className="px-4 py-2 text-right font-data font-semibold" style={{ color: cor }}>{BRL(it.valor)}</td>
                                                 </tr>
                                             ))}
@@ -3286,9 +3234,9 @@ function TabDespesasExtras({ isAdmin, profile }) {
             )}
 
             {modal && isAdmin && (
-                <ModalOverlay onClose={() => setModal(null)} wide>
+                <ModalOverlay onClose={() => setModal(null)}>
                     <ModalHeader title={modal.mode === 'create' ? 'Nova Despesa' : 'Editar Despesa'} icon="Receipt" onClose={() => setModal(null)} />
-                    <div ref={corpoModalRef} className="p-5 space-y-4 overflow-y-auto flex-1">
+                    <div className="p-5 space-y-4 overflow-y-auto flex-1">
 
                         {/* ── Alerta de possível duplicidade ────────────────── */}
                         {duplicatas.length > 0 && (
@@ -3522,12 +3470,6 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             <Field label="Valor (R$)" required>
                                 <input id="despesa-valor" type="number" step="0.01" min="0" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
                             </Field>
-                            <Field label="Empresa">
-                                <select value={form.empresa || ''} onChange={e => setForm(f => ({ ...f, empresa: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione a empresa...</option>
-                                    {EMPRESAS_LOGIFLOW.map(nome => <option key={nome} value={nome}>{nome}</option>)}
-                                </select>
-                            </Field>
                             <Field label="Fornecedor">
                                 <div className="flex gap-2">
                                     <input
@@ -3540,7 +3482,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                         className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors"
                                         style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
                                         title="Abrir cadastro de fornecedores">
-                                        <Icon name="Building2" size={13} /> Fornecedores
+                                        <Icon name="BookOpen" size={13} /> Cadastro
                                     </button>
                                 </div>
                             </Field>
@@ -3612,20 +3554,17 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                         <div className="space-y-2">
                                             <p className="text-xs font-medium text-amber-800">Boletos / Parcelas</p>
                                             {(form.boletos || []).map((b, idx) => (
-                                                <div key={idx} className="p-2 rounded-lg bg-white border" style={{ borderColor: '#FED7AA' }}>
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <input value={b.numero_boleto || ''} onChange={setBoletoField(idx, 'numero_boleto')} placeholder={`Boleto ${idx + 1}`}
-                                                            className="text-xs font-medium text-amber-700 border rounded px-1.5 py-1 w-24 shrink-0" style={{ borderColor: '#FED7AA' }} title="Nº do boleto" />
-                                                        <input type="date" value={b.vencimento || ''} onChange={setBoletoField(idx, 'vencimento')} className="text-xs font-data border rounded px-1.5 py-1 shrink-0" style={{ borderColor: '#FED7AA' }} />
-                                                        <input type="number" step="0.01" value={b.valor} onChange={setBoletoField(idx, 'valor')} className="text-xs font-data font-semibold text-amber-800 border rounded px-1.5 py-1 w-24 shrink-0" style={{ borderColor: '#FED7AA' }} />
-                                                        <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 ${b.pago ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{b.pago ? 'Pago' : 'Pendente'}</span>
-                                                        <button type="button" onClick={() => removerBoleto(idx)} className="ml-auto p-1 rounded hover:bg-red-50 shrink-0"><Icon name="X" size={11} color="#DC2626" /></button>
-                                                    </div>
-                                                    <label className="flex items-center gap-1 text-xs cursor-pointer mt-1.5" title="Marcar se o boleto já foi entregue ao setor financeiro">
+                                                <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border flex-wrap" style={{ borderColor: '#FED7AA' }}>
+                                                    <span className="text-xs text-amber-700 font-medium">{b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Parcela ${idx + 1}`}</span>
+                                                    <span className="text-xs font-data">{FMT_DATE(b.vencimento)}</span>
+                                                    <span className="text-xs font-data font-semibold text-amber-800">{BRL(b.valor)}</span>
+                                                    <span className={`text-xs px-1.5 py-0.5 rounded ${b.pago ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{b.pago ? 'Pago' : 'Pendente'}</span>
+                                                    <label className="flex items-center gap-1 text-xs cursor-pointer" title="Marcar se o boleto já foi entregue ao setor financeiro">
                                                         <input type="checkbox" checked={!!b.entregue_financeiro}
                                                             onChange={() => setForm(f => ({ ...f, boletos: f.boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro } : x) }))} />
                                                         <span className={b.entregue_financeiro ? 'text-blue-600' : 'text-gray-400'}>Entregue ao financeiro</span>
                                                     </label>
+                                                    <button type="button" onClick={() => removerBoleto(idx)} className="ml-auto p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
                                                 </div>
                                             ))}
 
@@ -3633,14 +3572,11 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                                 <p className="text-xs font-semibold text-amber-800 mb-1.5 flex items-center gap-1"><Icon name="Wand2" size={12} /> Gerar parcelas automaticamente</p>
                                                 <div className="grid grid-cols-4 gap-2">
                                                     <Field label="Qtde parcelas"><input type="number" min="1" value={gerador.quantidade} onChange={e => setGerador(g => ({ ...g, quantidade: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
-                                                    <Field label="Prazo (dias úteis)"><input type="number" min="0" value={gerador.prazoDiasUteis} onChange={e => setGerador(g => ({ ...g, prazoDiasUteis: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 30" /></Field>
+                                                    <Field label="1ª vencimento"><input type="date" value={gerador.primeiroVencimento} onChange={e => setGerador(g => ({ ...g, primeiroVencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                                                     <Field label="Intervalo (dias)"><input type="number" min="1" value={gerador.intervaloDias} onChange={e => setGerador(g => ({ ...g, intervaloDias: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                                                     <Field label="Nº do 1º boleto (opcional)"><input value={gerador.numeroBoletoInicial} onChange={e => setGerador(g => ({ ...g, numeroBoletoInicial: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 4521" /></Field>
                                                 </div>
-                                                <p className="text-[11px] text-amber-600 mt-1">
-                                                    1º vencimento calculado: <strong>{form.data_despesa && gerador.prazoDiasUteis !== '' ? FMT_DATE(adicionarDiasUteis(form.data_despesa, gerador.prazoDiasUteis)) : '—'}</strong> (data da despesa/NF + {gerador.prazoDiasUteis || 0} dias úteis).
-                                                    Valor total ({BRL(form.valor || 0)}) dividido pela quantidade — a diferença de centavos fica na última parcela.
-                                                </p>
+                                                <p className="text-[11px] text-amber-600 mt-1">Usa o valor total da despesa ({BRL(form.valor || 0)}) dividido pela quantidade — a diferença de centavos fica na última parcela.</p>
                                                 <button type="button" onClick={() => gerarAutomatico('boleto')} className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700"><Icon name="Wand2" size={12} /> Gerar boletos automaticamente</button>
                                             </div>
 
@@ -3709,11 +3645,11 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                                 )}
                                             </div>
                                             {(form.parcelas_cartao||[]).map((p, idx) => (
-                                                <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border text-xs flex-wrap" style={{ borderColor: '#FED7AA' }}>
+                                                <div key={idx} className="flex items-center gap-2 p-2 rounded-lg bg-white border text-xs" style={{ borderColor: '#FED7AA' }}>
                                                     <span className="text-amber-700 font-medium whitespace-nowrap">Parcela {idx+1}</span>
-                                                    <input type="date" value={p.vencimento || ''} onChange={setParcelaCartaoField(idx, 'vencimento')} className="font-data border rounded px-1.5 py-1" style={{ borderColor: '#FED7AA' }} />
-                                                    <input type="number" step="0.01" value={p.valor} onChange={setParcelaCartaoField(idx, 'valor')} className="font-data font-semibold text-amber-800 border rounded px-1.5 py-1 w-24" style={{ borderColor: '#FED7AA' }} />
-                                                    <input value={p.cartao || ''} onChange={setParcelaCartaoField(idx, 'cartao')} placeholder="Cartão" className="text-amber-600 border rounded px-1.5 py-1 w-24" style={{ borderColor: '#FED7AA' }} />
+                                                    <span className="font-data">{FMT_DATE(p.vencimento)}</span>
+                                                    <span className="font-data font-semibold text-amber-800">{BRL(p.valor)}</span>
+                                                    {p.cartao && <span className="text-amber-600 truncate max-w-[80px]">{p.cartao}</span>}
                                                     <span className={`ml-auto px-1.5 py-0.5 rounded ${p.pago ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{p.pago ? 'Pago' : 'Pendente'}</span>
                                                     <button type="button" onClick={() => setForm(f => ({...f, parcelas_cartao: f.parcelas_cartao.filter((_,i)=>i!==idx)}))} className="p-1 rounded hover:bg-red-50"><Icon name="X" size={11} color="#DC2626" /></button>
                                                 </div>
@@ -3722,7 +3658,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                                 <p className="text-xs font-semibold text-amber-800 mb-1.5 flex items-center gap-1"><Icon name="Wand2" size={12} /> Gerar parcelas automaticamente</p>
                                                 <div className="grid grid-cols-3 gap-2">
                                                     <Field label="Qtde parcelas"><input type="number" min="1" value={gerador.quantidade} onChange={e => setGerador(g => ({ ...g, quantidade: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
-                                                    <Field label="Prazo (dias úteis)"><input type="number" min="0" value={gerador.prazoDiasUteis} onChange={e => setGerador(g => ({ ...g, prazoDiasUteis: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 30" /></Field>
+                                                    <Field label="1ª vencimento"><input type="date" value={gerador.primeiroVencimento} onChange={e => setGerador(g => ({ ...g, primeiroVencimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                                                     <Field label="Intervalo (dias)"><input type="number" min="1" value={gerador.intervaloDias} onChange={e => setGerador(g => ({ ...g, intervaloDias: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                                                 </div>
                                                 <button type="button" onClick={() => gerarAutomatico('cartao')} className="mt-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700"><Icon name="Wand2" size={12} /> Gerar parcelas automaticamente</button>
