@@ -23,7 +23,7 @@ import {
 import * as XLSX from 'xlsx';
 
 import { supabase } from 'utils/supabaseClient';
-import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf } from 'utils/parcelasGenerator';
+import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf, garantirFornecedorCadastrado, EMPRESAS_LOGIFLOW } from 'utils/parcelasGenerator';
 
 async function fetchDespesaAdmById(id) {
     const { data } = await supabase.from('transporte_despesas_adm').select('*').eq('id', id).single();
@@ -621,6 +621,10 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
                     };
                 });
                 showToast(`NF ${nNF} importada: ${fornecedor || 'emissor não identificado'} · ${itens.length} item(s)`, 'success');
+                if (fornecedor) {
+                    garantirFornecedorCadastrado(fetchFornecedoresAdmTransporte, createFornecedorAdmTransporte, { nome: fornecedor, cnpj: emitCNPJ })
+                        .then(r => { if (r === 'cadastrado') showToast(`Fornecedor "${fornecedor}" cadastrado automaticamente.`, 'info'); });
+                }
             } catch { showToast('Erro ao ler XML. Verifique o arquivo.', 'error'); }
         };
         reader.readAsText(file);
@@ -648,6 +652,10 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
                 descricao: f.descricao || `NF ${nNF} · Série ${serie}`,
             }));
             showToast(fornecedor ? `✅ NF ${nNF} — ${fornecedor}` : `NF ${nNF} lida.`, fornecedor ? 'success' : 'info');
+            if (fornecedor) {
+                garantirFornecedorCadastrado(fetchFornecedoresAdmTransporte, createFornecedorAdmTransporte, { nome: fornecedor, cnpj: cnpjEmit })
+                    .then(r => { if (r === 'cadastrado') showToast(`Fornecedor "${fornecedor}" cadastrado automaticamente.`, 'info'); });
+            }
         } catch {
             const nNF = chave.length === 44 ? chave.substring(25, 34).replace(/^0+/, '') || chave : chave;
             setForm(f => ({ ...f, nota_fiscal: nNF }));
@@ -921,7 +929,10 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
                         <input id="adm-despesa-valor" type="number" step="0.01" min="0" value={form.valor} onChange={e => set('valor', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" />
                     </Field>
                     <Field label="Empresa">
-                        <input value={form.empresa} onChange={e => set('empresa', e.target.value)} className={inputCls} style={inputStyle} placeholder="Ex: Distribuidora Silva Ltda" />
+                        <select value={form.empresa || ''} onChange={e => set('empresa', e.target.value)} className={inputCls} style={inputStyle}>
+                            <option value="">Selecione a empresa...</option>
+                            {EMPRESAS_LOGIFLOW.map(nome => <option key={nome} value={nome}>{nome}</option>)}
+                        </select>
                     </Field>
                     <Field label="Fornecedor" className="sm:col-span-2">
                         <div className="flex gap-2">

@@ -231,12 +231,58 @@ export function detectarPossiveisDuplicatas(despesasExistentes, novaDespesa, { e
 export async function buscarDespesasComMesmaNf(table, notaFiscal, excluirId) {
     const nf = String(notaFiscal ?? '').trim();
     if (!nf) return [];
-    let query = supabase
+    const nfNormalizada = nf.toLowerCase();
+    // Busca todos os lançamentos (colunas enxutas) e compara em JS — evita
+    // depender de operadores de texto (ilike) que quebram silenciosamente se
+    // a coluna nota_fiscal for numérica em alguma das tabelas.
+    const { data, error } = await supabase
         .from(table)
         .select('id, nota_fiscal, fornecedor, empresa, categoria, data_despesa, valor, boletos')
-        .ilike('nota_fiscal', nf);
-    if (excluirId) query = query.neq('id', excluirId);
-    const { data, error } = await query;
+        .limit(5000);
     if (error) { console.error(`Erro ao checar NF duplicada em ${table}:`, error.message); return []; }
-    return data || [];
+    return (data || []).filter(d =>
+        d.id !== excluirId &&
+        String(d.nota_fiscal ?? '').trim().toLowerCase() === nfNormalizada
+    );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Cadastro automático de fornecedor a partir da NF (XML ou código de barras)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Quando o admin importa uma NF (XML ou leitura de código de barras), o
+// fornecedor extraído passa a existir automaticamente no catálogo de
+// fornecedores do LogiFlow — sem precisar cadastrar manualmente depois.
+// Cada tela de despesa (caminhões/carretas/adm.) tem seu próprio catálogo,
+// então recebe as funções fetch/create específicas do módulo.
+//
+// @param {Function} fetchFn  - função que retorna a lista de fornecedores já cadastrados
+// @param {Function} createFn - função que cria um novo fornecedor ({nome, cnpj})
+// @param {{nome: string, cnpj?: string}} dados - dados extraídos da NF
+// @returns {Promise<'existente'|'cadastrado'|null>}
+export async function garantirFornecedorCadastrado(fetchFn, createFn, { nome, cnpj } = {}) {
+    const nomeLimpo = String(nome ?? '').trim();
+    if (!nomeLimpo) return null;
+    try {
+        const existentes = await fetchFn();
+        const cnpjLimpo = String(cnpj ?? '').replace(/\D/g, '');
+        const jaExiste = (existentes || []).some(f => {
+            const fCnpj = String(f.cnpj ?? '').replace(/\D/g, '');
+            if (cnpjLimpo && fCnpj && fCnpj === cnpjLimpo) return true;
+            return String(f.nome ?? '').trim().toLowerCase() === nomeLimpo.toLowerCase();
+        });
+        if (jaExiste) return 'existente';
+        await createFn({ nome: nomeLimpo, cnpj: cnpjLimpo || '' });
+        return 'cadastrado';
+    } catch (e) {
+        console.error('Erro ao verificar/cadastrar fornecedor automaticamente:', e.message);
+        return null;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Empresas do grupo — lista fixa usada no campo "Empresa" das 3 telas de
+// despesa (não é um cadastro dinâmico; são as próprias empresas do grupo
+// que emitem/recebem a despesa).
+// ═══════════════════════════════════════════════════════════════════════════
+export const EMPRESAS_LOGIFLOW = ['Comercial Araguaia', 'Indústria Confiance', 'Aços Confiance'];

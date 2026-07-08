@@ -78,6 +78,8 @@ export default function Relatorios() {
     const [dadosMargemCaminhao, setDadosMargemCaminhao] = useState(null);
     const [loading, setLoading] = useState(true);
     const [periodo, setPeriodo] = useState('30');
+    const [dreMesInicio, setDreMesInicio] = useState(() => new Date().toISOString().slice(0, 7));
+    const [dreMesFim, setDreMesFim] = useState(() => new Date().toISOString().slice(0, 7));
     const [tab, setTab] = useState('operacional');
     const [empresaFiltro, setEmpresaFiltro] = useState('Comercial Araguaia');
     const [mesFiltro, setMesFiltro] = useState(() => new Date().toISOString().slice(0, 7)); // YYYY-MM
@@ -115,6 +117,16 @@ export default function Relatorios() {
     const cutoff = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - Number(periodo)); return d; }, [periodo]);
     const romFiltrados = useMemo(() => romaneios.filter(r => r.saida && new Date(r.saida) >= cutoff), [romaneios, cutoff]);
     const romFinalizados = romFiltrados.filter(r => r.status === 'Finalizado');
+
+    // ─── Período mensal do DRE de Caminhões (independente do filtro "Operacional") ───
+    const dreInicioISO = `${dreMesInicio}-01`;
+    const dreFimISO = useMemo(() => {
+        const [ano, mes] = dreMesFim.split('-').map(Number);
+        return new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
+    }, [dreMesFim]);
+    const romFinalizadosDre = useMemo(() =>
+        romaneios.filter(r => r.status === 'Finalizado' && r.saida && r.saida.slice(0, 10) >= dreInicioISO && r.saida.slice(0, 10) <= dreFimISO),
+        [romaneios, dreInicioISO, dreFimISO]);
 
     // ─── Operacional KPIs ──────────────────────────────────────
     const totalViagens = romFiltrados.length;
@@ -235,7 +247,7 @@ export default function Relatorios() {
         // Consolida receitas dos romaneios finalizados por mês
         const map = {};
 
-        romFinalizados.forEach(r => {
+        romFinalizadosDre.forEach(r => {
             const m = r.saida?.slice(0, 7);
             if (!m) return;
             if (!map[m]) map[m] = {
@@ -267,10 +279,12 @@ export default function Relatorios() {
             }
         });
 
-        // Soma diárias avulsas de motoristas de caminhão por mês (lançadas manualmente)
+        // Soma diárias avulsas de motoristas de caminhão por mês (lançadas manualmente),
+        // restritas ao período do DRE selecionado
         diariasAvulsasCaminhao.forEach(d => {
-            const m = d.data_inicio?.slice(0, 7);
-            if (!m) return;
+            const dia = d.data_inicio?.slice(0, 10);
+            if (!dia || dia < dreInicioISO || dia > dreFimISO) return;
+            const m = dia.slice(0, 7);
             if (!map[m]) map[m] = {
                 mes: m, mesLabel: m.slice(5),
                 receita: 0, custoCombustivel: 0, custoPedagio: 0,
@@ -280,11 +294,13 @@ export default function Relatorios() {
         });
 
         // Soma despesas de caminhões (manutenção, pneus, etc.) por mês —
-        // pela data de VENCIMENTO de cada boleto/parcela, não pela emissão da NF
+        // pela data de VENCIMENTO de cada boleto/parcela, não pela emissão da NF,
+        // e restrita ao período do DRE selecionado (cada boleto cai no seu próprio mês)
         despesasCaminhoes.forEach(d => {
             expandirDespesaParcelas(d).forEach(item => {
-                const m = item.vencimento?.slice(0, 7);
-                if (!m) return;
+                const venc = item.vencimento;
+                if (!venc || venc < dreInicioISO || venc > dreFimISO) return;
+                const m = venc.slice(0, 7);
                 if (!map[m]) map[m] = {
                     mes: m, mesLabel: m.slice(5),
                     receita: 0,
@@ -309,7 +325,7 @@ export default function Relatorios() {
                 const margemPct        = m.receita > 0 ? (resultadoLiquido / m.receita) * 100 : 0;
                 return { ...m, custoOperacional, totalDespesas, margemBruta, resultadoLiquido, margemPct };
             });
-    }, [romFinalizados, despesasCaminhoes, diariasAvulsasCaminhao, dadosMargemCaminhao]);
+    }, [romFinalizadosDre, despesasCaminhoes, diariasAvulsasCaminhao, dadosMargemCaminhao, dreInicioISO, dreFimISO]);
 
     // Totais consolidados da DRE
     const dreTotais = useMemo(() => {
@@ -760,6 +776,32 @@ export default function Relatorios() {
                                     <p className="text-sm font-medium text-slate-400">Nenhuma despesa de caminhão no período</p>
                                     <p className="text-xs text-center text-slate-400">Cadastre despesas no módulo de Despesas Caminhões</p>
                                 </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── Seletor de período do DRE de Caminhões ── */}
+                    {tab === 'financeiro' && (
+                        <div className="flex flex-wrap items-center gap-3 bg-white rounded-xl border border-slate-200 px-4 py-3 mt-2">
+                            <Icon name="Calendar" size={15} color="#1E3A5F" />
+                            <span className="text-xs font-semibold text-slate-600">Período do DRE (Caminhões):</span>
+                            <div className="flex items-center gap-1.5">
+                                <label className="text-xs text-slate-400">De</label>
+                                <input type="month" value={dreMesInicio} onChange={e => setDreMesInicio(e.target.value)}
+                                    className="px-2 py-1.5 rounded-lg border text-xs" style={{ borderColor: '#E2E8F0' }} />
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <label className="text-xs text-slate-400">até</label>
+                                <input type="month" value={dreMesFim} onChange={e => setDreMesFim(e.target.value)}
+                                    className="px-2 py-1.5 rounded-lg border text-xs" style={{ borderColor: '#E2E8F0' }} />
+                            </div>
+                            <button
+                                onClick={() => { const m = new Date().toISOString().slice(0, 7); setDreMesInicio(m); setDreMesFim(m); }}
+                                className="text-xs font-medium text-blue-600 hover:underline">
+                                Mês atual
+                            </button>
+                            {dreMensal.length === 0 && (
+                                <span className="ml-auto text-xs text-slate-400">Nenhum dado no período selecionado.</span>
                             )}
                         </div>
                     )}

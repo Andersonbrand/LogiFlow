@@ -16,7 +16,7 @@ import {
     fetchFornecedoresCaminhoes, createFornecedorCaminhao, updateFornecedorCaminhao, deleteFornecedorCaminhao,
 } from 'utils/caminhoesDespesasService';
 import { supabase } from 'utils/supabaseClient';
-import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf } from 'utils/parcelasGenerator';
+import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf, garantirFornecedorCadastrado, EMPRESAS_LOGIFLOW } from 'utils/parcelasGenerator';
 import * as XLSX from 'xlsx';
 
 // fetchDespesaById: busca despesa individual por id para recarregar após baixa/revogar
@@ -658,6 +658,10 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
                     };
                 });
                 showToast(`NF ${nNF} importada: ${fornecedor || 'emissor não identificado'} · ${itens.length} item(s)`, 'success');
+                if (fornecedor) {
+                    garantirFornecedorCadastrado(fetchFornecedoresCaminhoes, createFornecedorCaminhao, { nome: fornecedor, cnpj: emitCNPJ })
+                        .then(r => { if (r === 'cadastrado') showToast(`Fornecedor "${fornecedor}" cadastrado automaticamente.`, 'info'); });
+                }
             } catch { showToast('Erro ao ler XML. Verifique o arquivo.', 'error'); }
         };
         reader.readAsText(file);
@@ -685,6 +689,10 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
                 descricao: f.descricao || `NF ${nNF} · Série ${serie}`,
             }));
             showToast(fornecedor ? `✅ NF ${nNF} — ${fornecedor}` : `NF ${nNF} lida. Consulte o XML para dados completos.`, fornecedor ? 'success' : 'info');
+            if (fornecedor) {
+                garantirFornecedorCadastrado(fetchFornecedoresCaminhoes, createFornecedorCaminhao, { nome: fornecedor, cnpj: cnpjEmit })
+                    .then(r => { if (r === 'cadastrado') showToast(`Fornecedor "${fornecedor}" cadastrado automaticamente.`, 'info'); });
+            }
         } catch {
             const nNF = chave.length === 44 ? chave.substring(25, 34).replace(/^0+/, '') || chave : chave;
             setForm(f => ({ ...f, nota_fiscal: nNF }));
@@ -965,7 +973,10 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
                             <input id="despesa-valor-cam" type="number" step="0.01" min="0" value={form.valor} onChange={e => set('valor', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" />
                         </Field>
                         <Field label="Empresa">
-                            <input value={form.empresa} onChange={e => set('empresa', e.target.value)} className={inputCls} style={inputStyle} placeholder="Ex: Comercial Araguaia" />
+                            <select value={form.empresa || ''} onChange={e => set('empresa', e.target.value)} className={inputCls} style={inputStyle}>
+                                <option value="">Selecione a empresa...</option>
+                                {EMPRESAS_LOGIFLOW.map(nome => <option key={nome} value={nome}>{nome}</option>)}
+                            </select>
                         </Field>
                         <Field label="Nº Nota Fiscal">
                             <input value={form.nota_fiscal} onChange={e => set('nota_fiscal', e.target.value)} className={inputCls} style={inputStyle} placeholder="Ex: 12345" />
@@ -975,7 +986,7 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
                                 <input value={form.fornecedor || ''} onChange={e => set('fornecedor', e.target.value)} className={inputCls + ' flex-1'} style={inputStyle} placeholder="Ex: Auto Peças Silva Ltda" />
                                 <button type="button" onClick={() => setShowFornecedores(true)}
                                     className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
-                                    <Icon name="BookOpen" size={13} /> Cadastro
+                                    <Icon name="Building2" size={13} /> Fornecedores
                                 </button>
                             </div>
                         </Field>

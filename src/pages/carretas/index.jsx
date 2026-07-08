@@ -42,7 +42,7 @@ import {
     updateAbastecimento,
     fetchFornecedoresCarretas, createFornecedorCarretas, updateFornecedorCarretas, deleteFornecedorCarretas,
 } from 'utils/carretasService';
-import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf } from 'utils/parcelasGenerator';
+import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf, garantirFornecedorCadastrado, EMPRESAS_LOGIFLOW } from 'utils/parcelasGenerator';
 import * as XLSX from 'xlsx';
 import { exportDiariaModelo, exportDiariasRomaneiosModelo, printDiaria } from 'utils/excelUtils';
 import { fetchDadosMargemFrete, calcularAbatimentoCustosFrota } from 'utils/custosFrotaService';
@@ -2625,7 +2625,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const emptyForm = () => ({
         veiculo_id: '', categoria: 'Pneus', descricao: '', valor: '',
         data_despesa: new Date().toISOString().split('T')[0], nota_fiscal: '',
-        fornecedor: '', observacoes: '',
+        fornecedor: '', empresa: '', observacoes: '',
         notas_fiscais: [], // múltiplas NFs: [{numero, fornecedor, data, descricao, valor, nf_itens}]
         // item 8: pagamento
         forma_pagamento: 'a_vista',
@@ -2717,6 +2717,10 @@ function TabDespesasExtras({ isAdmin, profile }) {
                     };
                 });
                 showToast(`NF ${nNF} importada: ${fornecedor || 'emissor não identificado'} · ${itens.length} item(s)`, 'success');
+                if (fornecedor) {
+                    garantirFornecedorCadastrado(fetchFornecedoresCarretas, createFornecedorCarretas, { nome: fornecedor, cnpj: emitCNPJ })
+                        .then(r => { if (r === 'cadastrado') showToast(`Fornecedor "${fornecedor}" cadastrado automaticamente.`, 'info'); });
+                }
             } catch {
                 showToast('Erro ao ler XML. Verifique o arquivo.', 'error');
             }
@@ -2777,6 +2781,10 @@ function TabDespesasExtras({ isAdmin, profile }) {
                 ? `✅ NF ${nNF} — ${dados.fornecedor}`
                 : `NF ${nNF} lida. Consulte o XML para dados completos.`;
             showToast(msg, dados?.fornecedor ? 'success' : 'info');
+            if (dados?.fornecedor) {
+                garantirFornecedorCadastrado(fetchFornecedoresCarretas, createFornecedorCarretas, { nome: dados.fornecedor, cnpj: cnpjEmit })
+                    .then(r => { if (r === 'cadastrado') showToast(`Fornecedor "${dados.fornecedor}" cadastrado automaticamente.`, 'info'); });
+            }
 
         } catch (err) {
             // Fallback mínimo: preenche só o número
@@ -2900,7 +2908,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
         }
 
         try {
-            const payload = { ...form, notas_fiscais: form.notas_fiscais||[], parcelas_cartao: form.parcelas_cartao||[] };
+            const payload = { ...form, veiculo_id: form.veiculo_id || null, notas_fiscais: form.notas_fiscais||[], parcelas_cartao: form.parcelas_cartao||[] };
             if (modal.mode === 'create') await createDespesaExtra(payload);
             else await updateDespesaExtra(modal.data.id, payload);
             showToast('Despesa salva!', 'success'); setModal(null); load();
@@ -2938,6 +2946,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
         setForm({
             veiculo_id: d.veiculo_id || '', categoria: d.categoria, descricao: d.descricao || '',
             valor: d.valor, data_despesa: d.data_despesa, nota_fiscal: d.nota_fiscal || '', observacoes: d.observacoes || '',
+            fornecedor: d.fornecedor || '', empresa: d.empresa || '',
             forma_pagamento: d.forma_pagamento || 'a_vista', tipo_pagamento: d.tipo_pagamento || 'pix',
             comprovante_url: d.comprovante_url || '', boletos: d.boletos || [],
             permuta_obs: d.permuta_obs || '', permuta_doc_url: d.permuta_doc_url || '',
@@ -3277,7 +3286,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
             )}
 
             {modal && isAdmin && (
-                <ModalOverlay onClose={() => setModal(null)}>
+                <ModalOverlay onClose={() => setModal(null)} wide>
                     <ModalHeader title={modal.mode === 'create' ? 'Nova Despesa' : 'Editar Despesa'} icon="Receipt" onClose={() => setModal(null)} />
                     <div ref={corpoModalRef} className="p-5 space-y-4 overflow-y-auto flex-1">
 
@@ -3513,6 +3522,12 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             <Field label="Valor (R$)" required>
                                 <input id="despesa-valor" type="number" step="0.01" min="0" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
                             </Field>
+                            <Field label="Empresa">
+                                <select value={form.empresa || ''} onChange={e => setForm(f => ({ ...f, empresa: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <option value="">Selecione a empresa...</option>
+                                    {EMPRESAS_LOGIFLOW.map(nome => <option key={nome} value={nome}>{nome}</option>)}
+                                </select>
+                            </Field>
                             <Field label="Fornecedor">
                                 <div className="flex gap-2">
                                     <input
@@ -3525,7 +3540,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                         className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors"
                                         style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}
                                         title="Abrir cadastro de fornecedores">
-                                        <Icon name="BookOpen" size={13} /> Cadastro
+                                        <Icon name="Building2" size={13} /> Fornecedores
                                     </button>
                                 </div>
                             </Field>
