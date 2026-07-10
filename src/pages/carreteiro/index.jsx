@@ -25,6 +25,7 @@ import {
     fetchEmpresas,
 } from 'utils/carretasService';
 import { useConfirm } from 'components/ui/ConfirmDialog';
+import { useBonusConfig } from 'utils/settingsService';
 import { supabase, subscribeTabela } from 'utils/supabaseClient';
 import { fetchRomaneiosPorMotorista } from 'utils/romaneioService';
 import * as XLSX from 'xlsx';
@@ -93,6 +94,7 @@ export default function CarreteiroDashboard() {
     const { user, profile } = useAuth();
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
+    const { bonusConfig } = useBonusConfig();
     const [tab, setTab]           = useState('viagens');
     const [period, setPeriod]     = useState(30);
     const [viagens, setViagens]   = useState([]);
@@ -285,7 +287,7 @@ export default function CarreteiroDashboard() {
     const carregamentosComBonus = useMemo(() =>
         carregamentos.map(c => {
             const isCIF = (c.empresa_origem || '').toUpperCase().replace(/\|.*/, '').trim().startsWith('CIF');
-            return { ...c, bonus: isCIF ? 0 : calcularBonusCarreteiro(c.destino) };
+            return { ...c, bonus: isCIF ? 0 : calcularBonusCarreteiro(c.destino, bonusConfig) };
         })
     , [carregamentos]);
 
@@ -293,7 +295,7 @@ export default function CarreteiroDashboard() {
     const viagensComBonus = useMemo(() =>
         viagens.map(v => ({
             ...v,
-            bonus: v.status === 'Entrega finalizada' ? calcularBonusCarreteiro(v.destino) : 0,
+            bonus: v.status === 'Entrega finalizada' ? calcularBonusCarreteiro(v.destino, bonusConfig) : 0,
         }))
     , [viagens]);
 

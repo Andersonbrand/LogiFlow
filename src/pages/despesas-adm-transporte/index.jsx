@@ -6,6 +6,8 @@ import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useConfirm } from 'components/ui/ConfirmDialog';
+import PeriodRangeFilter, { usePeriodRangeFilter } from 'components/ui/PeriodRangeFilter';
+import BoletosPainel from 'components/ui/BoletosPainel';
 import { useAuth } from 'utils/AuthContext';
 import {
     CATEGORIAS_DESPESA_ADM,
@@ -17,9 +19,13 @@ import {
     revogarBoletoAdmTransporte,
     pagarParcelaCartaoAdmTransporte,
     revogarParcelaCartaoAdmTransporte,
-    fetchFornecedoresAdmTransporte, createFornecedorAdmTransporte,
-    updateFornecedorAdmTransporte, deleteFornecedorAdmTransporte,
 } from 'utils/despesasAdmTransporteService';
+import {
+    fetchFornecedores as fetchFornecedoresAdmTransporte,
+    createFornecedor as createFornecedorAdmTransporte,
+    updateFornecedor as updateFornecedorAdmTransporte,
+    deleteFornecedor as deleteFornecedorAdmTransporte,
+} from 'utils/fornecedoresService';
 import * as XLSX from 'xlsx';
 
 import { supabase } from 'utils/supabaseClient';
@@ -286,13 +292,32 @@ function ModalBaixa({ despesa, onClose, onBaixado, isAdmin }) {
     const boletos  = despesa.boletos || [];
     const parcelas = despesa.parcelas_cartao || [];
 
+    // ── Entrega ao financeiro: seleção local de 1+ boletos, salva tudo de uma vez ──
+    const [entregas, setEntregas] = useState(() => boletos.map(b => !!b.entregue_financeiro));
+    const entregasAlteradas = entregas.some((v, i) => v !== !!boletos[i]?.entregue_financeiro);
+    const toggleEntrega = (idx) => setEntregas(prev => prev.map((v, i) => i === idx ? !v : v));
+    const marcarTodasEntregas = (valor) => setEntregas(boletos.map(() => valor));
+    const salvarEntregas = () => act(async () => {
+        const novos = boletos.map((b, i) => ({ ...b, entregue_financeiro: entregas[i] }));
+        const { error } = await supabase.from('transporte_despesas_adm').update({ boletos: novos, updated_at: new Date().toISOString() }).eq('id', despesa.id);
+        if (error) throw error;
+    }, `${entregas.filter((v, i) => v !== !!boletos[i]?.entregue_financeiro).length} boleto(s) atualizado(s)!`);
+
     return (
         <ModalOverlay onClose={onClose}>
             <ModalHeader title="Baixa em Pagamentos" icon="CheckCircle2" onClose={onClose} />
             <div className="p-5 overflow-y-auto flex-1 space-y-5">
                 {boletos.length > 0 && (
                     <div>
-                        <p className="text-sm font-semibold mb-3" style={{ color: 'var(--color-text-primary)' }}>Boletos</p>
+                        <div className="flex items-center justify-between mb-3">
+                            <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Boletos</p>
+                            <div className="flex items-center gap-3">
+                                <button type="button" onClick={() => marcarTodasEntregas(true)} disabled={loading}
+                                    className="text-xs font-medium text-blue-600 hover:underline disabled:opacity-50">Marcar todos entregues</button>
+                                <button type="button" onClick={() => marcarTodasEntregas(false)} disabled={loading}
+                                    className="text-xs font-medium text-gray-500 hover:underline disabled:opacity-50">Desmarcar todos</button>
+                            </div>
+                        </div>
                         <div className="space-y-2">
                             {boletos.map((b, idx) => (
                                 <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border"
@@ -304,13 +329,9 @@ function ModalBaixa({ despesa, onClose, onBaixado, isAdmin }) {
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Vencimento: {FMT(b.vencimento)}</p>
                                         {b.pago && <p className="text-xs text-green-600 font-medium">✓ Pago em {b.pago_em ? new Date(b.pago_em).toLocaleDateString('pt-BR') : '—'}</p>}
                                         <label className="flex items-center gap-1.5 text-xs mt-1 cursor-pointer">
-                                            <input type="checkbox" checked={!!b.entregue_financeiro} disabled={loading}
-                                                onChange={() => act(async () => {
-                                                    const novos = boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro } : x);
-                                                    const { error } = await supabase.from('transporte_despesas_adm').update({ boletos: novos, updated_at: new Date().toISOString() }).eq('id', despesa.id);
-                                                    if (error) throw error;
-                                                }, 'Status de entrega atualizado!')} />
-                                            <span className={b.entregue_financeiro ? 'text-blue-600 font-medium' : 'text-gray-400'}>{b.entregue_financeiro ? '✓ Entregue ao financeiro' : 'Ainda não entregue ao financeiro'}</span>
+                                            <input type="checkbox" checked={!!entregas[idx]} disabled={loading}
+                                                onChange={() => toggleEntrega(idx)} />
+                                            <span className={entregas[idx] ? 'text-blue-600 font-medium' : 'text-gray-400'}>{entregas[idx] ? '✓ Entregue ao financeiro' : 'Ainda não entregue ao financeiro'}</span>
                                         </label>
                                     </div>
                                     <div className="flex items-center gap-1.5">
@@ -336,6 +357,14 @@ function ModalBaixa({ despesa, onClose, onBaixado, isAdmin }) {
                                 </div>
                             ))}
                         </div>
+                        {entregasAlteradas && (
+                            <div className="flex justify-end mt-3">
+                                <button type="button" onClick={salvarEntregas} disabled={loading}
+                                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-60">
+                                    <Icon name={loading ? 'Loader' : 'Save'} size={13} /> Salvar entregas ao financeiro
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
                 {parcelas.length > 0 && (
@@ -513,6 +542,7 @@ function ModalFornecedoresAdmTransporte({ onClose, onSelect }) {
 // ─── Modal de Formulário ──────────────────────────────────────────────────────
 function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const xmlRef = useRef(null);
     const comprovanteRef = useRef(null);
     const permutaRef = useRef(null);
@@ -522,9 +552,18 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
     const [barcodeBuffer, setBarcodeBuffer] = useState('');
     const [loadingNFe, setLoadingNFe] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [categoriasExtras, setCategoriasExtras] = useState(() => {
-        try { return JSON.parse(localStorage.getItem('adm_transporte_categorias_extras') || '[]'); } catch { return []; }
+    const [categorias, setCategorias] = useState(() => {
+        try {
+            const v2 = localStorage.getItem('adm_transporte_categorias_v2');
+            if (v2) return JSON.parse(v2);
+            const extras = JSON.parse(localStorage.getItem('adm_transporte_categorias_extras') || '[]');
+            return [...CATEGORIAS_DESPESA_ADM, ...extras];
+        } catch { return [...CATEGORIAS_DESPESA_ADM]; }
     });
+    const salvarCategorias = (novas) => {
+        setCategorias(novas);
+        try { localStorage.setItem('adm_transporte_categorias_v2', JSON.stringify(novas)); } catch {}
+    };
     const [novaCategoria, setNovaCategoria] = useState('');
     const [showNovaCategoria, setShowNovaCategoria] = useState(false);
     const [novoBoleto, setNovoBoleto] = useState({ numero_boleto: '', vencimento: '', valor: '' });
@@ -534,11 +573,11 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
     const [duplicatas, setDuplicatas] = useState([]);
     const [showFornecedores, setShowFornecedores] = useState(false);
 
-    const todasCategorias = useMemo(() => [...CATEGORIAS_DESPESA_ADM, ...categoriasExtras], [categoriasExtras]);
+    const todasCategorias = categorias;
     const isEdit = modal?.mode === 'edit';
 
     const emptyForm = () => ({
-        categoria: CATEGORIAS_DESPESA_ADM[0], descricao: '', valor: '',
+        categoria: todasCategorias[0] || '', descricao: '', valor: '',
         data_despesa: new Date().toISOString().split('T')[0],
         nota_fiscal: '', fornecedor: '', empresa: '', observacoes: '',
         notas_fiscais: [], nf_itens: [],
@@ -572,13 +611,48 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
     const adicionarCategoria = () => {
         const cat = novaCategoria.trim();
         if (!cat || todasCategorias.includes(cat)) { showToast(cat ? 'Categoria já existe' : 'Digite o nome', 'error'); return; }
-        const novas = [...categoriasExtras, cat];
-        setCategoriasExtras(novas);
-        localStorage.setItem('adm_transporte_categorias_extras', JSON.stringify(novas));
+        salvarCategorias([...categorias, cat]);
         set('categoria', cat);
         setNovaCategoria(''); setShowNovaCategoria(false);
         showToast(`Categoria "${cat}" criada!`, 'success');
     };
+
+    // Renomeia qualquer categoria (padrão ou criada pelo usuário) e atualiza em
+    // cascata as despesas já lançadas com o nome antigo.
+    const editarCategoria = async (catAntiga, catNovaBruta) => {
+        const catNova = catNovaBruta.trim();
+        if (!catNova) { showToast('Digite o nome da categoria', 'error'); return; }
+        if (catNova === catAntiga) return;
+        if (todasCategorias.includes(catNova)) { showToast('Já existe uma categoria com esse nome', 'error'); return; }
+        try {
+            const afetadas = despesasExistentes.filter(d => d.categoria === catAntiga);
+            await Promise.all(afetadas.map(d => updateDespesaAdmTransporte(d.id, { categoria: catNova })));
+            salvarCategorias(categorias.map(c => c === catAntiga ? catNova : c));
+            if (form.categoria === catAntiga) set('categoria', catNova);
+            showToast(`Categoria renomeada para "${catNova}"${afetadas.length ? ` (${afetadas.length} despesa(s) atualizada(s))` : ''}!`, 'success');
+        } catch (e) { showToast('Erro ao renomear categoria: ' + e.message, 'error'); }
+    };
+
+    // Exclui uma categoria da lista de opções (não apaga despesas já lançadas
+    // com esse texto — elas mantêm o valor salvo).
+    const excluirCategoria = async (cat) => {
+        if (categorias.length <= 1) { showToast('É preciso manter ao menos uma categoria', 'error'); return; }
+        const emUso = despesasExistentes.filter(d => d.categoria === cat).length;
+        const ok = await confirm({
+            title: 'Excluir categoria?',
+            message: emUso > 0
+                ? `"${cat}" está sendo usada em ${emUso} despesa(s). Elas continuarão com esse texto, mas a categoria deixará de aparecer na lista de opções. Deseja continuar?`
+                : `Excluir a categoria "${cat}"?`,
+            confirmLabel: 'Excluir', variant: 'danger',
+        });
+        if (!ok) return;
+        const novas = categorias.filter(c => c !== cat);
+        salvarCategorias(novas);
+        if (form.categoria === cat) set('categoria', novas[0] || '');
+        showToast('Categoria excluída!', 'success');
+    };
+    const [editandoCategoria, setEditandoCategoria] = useState(null);
+    const [textoEdicaoCategoria, setTextoEdicaoCategoria] = useState('');
 
     // ── XML NF-e ───────────────────────────────────────────────────────────────
     const handleXmlNF = (e) => {
@@ -920,6 +994,34 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
                                     <button type="button" onClick={adicionarCategoria} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white">Criar</button>
                                 </div>
                             )}
+                            {showNovaCategoria && todasCategorias.length > 0 && (
+                                <div className="space-y-1 p-2 rounded-lg" style={{ backgroundColor: '#F9FAFB', border: '1px solid var(--color-border)' }}>
+                                    <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>Categorias (clique no lápis pra editar)</p>
+                                    {todasCategorias.map(cat => (
+                                        <div key={cat} className="flex items-center gap-2">
+                                            {editandoCategoria === cat ? (
+                                                <>
+                                                    <input value={textoEdicaoCategoria} onChange={e => setTextoEdicaoCategoria(e.target.value)}
+                                                        onKeyDown={e => { if (e.key === 'Enter') { editarCategoria(cat, textoEdicaoCategoria); setEditandoCategoria(null); } if (e.key === 'Escape') setEditandoCategoria(null); }}
+                                                        className={inputCls + ' flex-1'} style={{ ...inputStyle, padding: '4px 8px' }} autoFocus />
+                                                    <button type="button" onClick={() => { editarCategoria(cat, textoEdicaoCategoria); setEditandoCategoria(null); }}
+                                                        className="shrink-0 p-1.5 rounded-md text-green-600 hover:bg-green-50" title="Salvar"><Icon name="Check" size={14} /></button>
+                                                    <button type="button" onClick={() => setEditandoCategoria(null)}
+                                                        className="shrink-0 p-1.5 rounded-md text-gray-500 hover:bg-gray-100" title="Cancelar"><Icon name="X" size={14} /></button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span className="flex-1 text-xs truncate" style={{ color: 'var(--color-text-primary)' }}>{cat}</span>
+                                                    <button type="button" onClick={() => { setEditandoCategoria(cat); setTextoEdicaoCategoria(cat); }}
+                                                        className="shrink-0 p-1.5 rounded-md hover:bg-green-50" style={{ color: '#059669' }} title="Renomear"><Icon name="Pencil" size={13} /></button>
+                                                    <button type="button" onClick={() => excluirCategoria(cat)}
+                                                        className="shrink-0 p-1.5 rounded-md text-red-600 hover:bg-red-50" title="Excluir"><Icon name="Trash2" size={13} /></button>
+                                                </>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </Field>
                     <Field label="Data" required>
@@ -1148,6 +1250,7 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
                     }}
                 />
             )}
+            {ConfirmDialog}
         </ModalOverlay>
     );
 }
@@ -1164,7 +1267,8 @@ export default function DespesasAdmTransporte() {
     const [modal, setModal]           = useState(null);
     const [modalBaixa, setModalBaixa] = useState(null);
     const [viewDespesa, setViewDespesa] = useState(null);
-    const [filtro, setFiltro]         = useState({ categoria: '', mes: '', formaPgto: '' });
+    const [filtro, setFiltro]         = useState({ categoria: '', formaPgto: '' });
+    const { preset: periodoPreset, periodo, onPresetChange: aplicarPreset, setPeriodo } = usePeriodRangeFilter('todos');
     const [busca, setBusca] = useState('');
     const despesasFiltradas = useMemo(() => {
         if (!busca.trim()) return despesas;
@@ -1179,9 +1283,15 @@ export default function DespesasAdmTransporte() {
             (d.parcelas_cartao || []).some(p => (p.cartao || '').toLowerCase().includes(q))
         );
     }, [despesas, busca]);
-    const [categoriasExtras]          = useState(() => { try { return JSON.parse(localStorage.getItem('adm_transporte_categorias_extras') || '[]'); } catch { return []; } });
+    const [categoriasExtras]          = useState(() => {
+        try {
+            const v2 = localStorage.getItem('adm_transporte_categorias_v2');
+            if (v2) return JSON.parse(v2);
+            return [...CATEGORIAS_DESPESA_ADM, ...JSON.parse(localStorage.getItem('adm_transporte_categorias_extras') || '[]')];
+        } catch { return [...CATEGORIAS_DESPESA_ADM]; }
+    });
 
-    const todasCategorias = useMemo(() => [...CATEGORIAS_DESPESA_ADM, ...categoriasExtras], [categoriasExtras]);
+    const todasCategorias = categoriasExtras;
     const [guiaDespesas, setGuiaDespesas] = useState('registros');
     const [relatorioPeriodo, setRelatorioPeriodo] = useState(() => {
         const h = new Date();
@@ -1222,14 +1332,12 @@ export default function DespesasAdmTransporte() {
             const f = {};
             if (filtro.categoria) f.categoria = filtro.categoria;
             if (filtro.formaPgto) f.formaPgto = filtro.formaPgto;
-            if (filtro.mes) {
-                f.dataInicio = filtro.mes + '-01';
-                f.dataFim    = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2, '0');
-            }
+            if (periodo.inicio) f.dataInicio = periodo.inicio;
+            if (periodo.fim)    f.dataFim    = periodo.fim;
             setDespesas(await fetchDespesasAdmTransporte(f));
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filtro]); // eslint-disable-line
+    }, [filtro, periodo]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
     const handleDelete = async (id) => {
@@ -1347,7 +1455,7 @@ export default function DespesasAdmTransporte() {
                             <option value="a_vista">À Vista</option>
                             <option value="a_prazo">A Prazo</option>
                         </select>
-                        <input type="month" value={filtro.mes} onChange={e => setFiltro(f => ({ ...f, mes: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} />
+                        <PeriodRangeFilter preset={periodoPreset} onPresetChange={aplicarPreset} periodo={periodo} onPeriodoChange={setPeriodo} />
                         <div className="relative flex-1 min-w-[220px] max-w-[320px]">
                             <Icon name="Search" size={14} color="var(--color-muted-foreground)" className="absolute left-3 top-1/2 -translate-y-1/2" />
                             <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="NF, nº boleto, fornecedor..."
@@ -1356,8 +1464,8 @@ export default function DespesasAdmTransporte() {
                         <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                             <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                         </button>
-                        {(filtro.categoria || filtro.mes || filtro.formaPgto || busca) && (
-                            <button onClick={() => { setFiltro({ categoria: '', mes: '', formaPgto: '' }); setBusca(''); }}
+                        {(filtro.categoria || periodoPreset !== 'todos' || filtro.formaPgto || busca) && (
+                            <button onClick={() => { setFiltro({ categoria: '', formaPgto: '' }); aplicarPreset('todos'); setBusca(''); }}
                                 className="flex items-center gap-1 px-3 py-2 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 border border-red-200">
                                 <Icon name="X" size={12} /> Limpar filtros
                             </button>
@@ -1419,7 +1527,7 @@ export default function DespesasAdmTransporte() {
 
                     {/* Sub-guias */}
                     <div className="flex gap-1 mb-5 p-1 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB', width: 'fit-content' }}>
-                        {[{ id: 'registros', label: 'Registros', icon: 'Receipt' }, { id: 'parcelas', label: 'Parcelas Futuras', icon: 'Clock' }, { id: 'relatorio', label: 'Pago / Em Aberto', icon: 'BarChart2' }].map(g => (
+                        {[{ id: 'registros', label: 'Registros', icon: 'Receipt' }, { id: 'parcelas', label: 'Parcelas Futuras', icon: 'Clock' }, { id: 'relatorio', label: 'Pago / Em Aberto', icon: 'BarChart2' }, { id: 'boletos', label: 'Boletos', icon: 'CalendarClock' }].map(g => (
                             <button key={g.id} onClick={() => setGuiaDespesas(g.id)}
                                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
                                 style={guiaDespesas === g.id ? { backgroundColor: 'white', color: '#059669', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', fontWeight: 600 } : { color: 'var(--color-muted-foreground)' }}>
@@ -1610,6 +1718,9 @@ export default function DespesasAdmTransporte() {
                             </>)}
                         </div>
                     )}
+
+                    {/* Boletos deste módulo */}
+                    {guiaDespesas === 'boletos' && <BoletosPainel origem="adm" onChanged={load} />}
                 </div>
             </main>
 

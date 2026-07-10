@@ -16,11 +16,13 @@ export const CIDADES_BONUS_BAIXO = [
 export const BONUS_BAIXO  = 60;
 export const BONUS_ALTO   = 120;
 
-export function calcularBonusCarreteiro(destino) {
+export function calcularBonusCarreteiro(destino, overrides = null) {
     if (!destino) return 0;
     const d = destino.toLowerCase().trim();
     const isBaixo = CIDADES_BONUS_BAIXO.some(c => d.includes(c));
-    return isBaixo ? BONUS_BAIXO : BONUS_ALTO;
+    const bonusBaixo = Number(overrides?.bonusBaixo ?? BONUS_BAIXO);
+    const bonusAlto  = Number(overrides?.bonusAlto  ?? BONUS_ALTO);
+    return isBaixo ? bonusBaixo : bonusAlto;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1457,4 +1459,40 @@ export async function fetchMotoristasTerceiros() {
         .order('name', { ascending: true });
     if (error) throw error;
     return data || [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RODÍZIO DE ENVIOS DE AÇO
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchEnviosAco(filters = {}) {
+    let q = supabase
+        .from('carretas_envios_aco')
+        .select('*, motorista:motorista_id(id, name)')
+        .order('data_envio', { ascending: false });
+    if (filters.dataInicio) q = q.gte('data_envio', filters.dataInicio);
+    if (filters.dataFim)    q = q.lte('data_envio', filters.dataFim);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
+export async function registrarEnvioAco({ motoristaId, dataEnvio, destino, observacoes, registradoPor }) {
+    const { data, error } = await supabase
+        .from('carretas_envios_aco')
+        .insert({
+            motorista_id: motoristaId,
+            data_envio: dataEnvio || new Date().toISOString().slice(0, 10),
+            destino: destino || null,
+            observacoes: observacoes || null,
+            registrado_por: registradoPor || null,
+        })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function excluirEnvioAco(id) {
+    const { error } = await supabase.from('carretas_envios_aco').delete().eq('id', id);
+    if (error) throw error;
 }

@@ -14,6 +14,7 @@ import { fetchCorredores, upsertCorredor, deleteCorredor, invalidarCache } from 
 import { supabase, subscribeTabela } from 'utils/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import BackupPanel from './BackupPanel';
+import ConfiguracoesPanel from './ConfiguracoesPanel';
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -148,6 +149,7 @@ export default function AdminPanel() {
         { id: 'bonificacoes',label: 'Bonificações',icon: 'Award' },
         { id: 'corredores',  label: 'Corredores',  icon: 'Map' },
         { id: 'backup',      label: 'Backup',      icon: 'Archive' },
+        { id: 'configuracoes', label: 'Configurações', icon: 'Settings' },
     ];
 
     if (loading) return (
@@ -419,6 +421,9 @@ export default function AdminPanel() {
 
                     {/* ── ABA BACKUP ───────────────────────────────────────── */}
                     {tab === 'backup' && <BackupPanel />}
+
+                    {/* ── ABA CONFIGURAÇÕES ───────────────────────────────── */}
+                    {tab === 'configuracoes' && <ConfiguracoesPanel showToast={showToast} profile={profile} />}
                 </div>
             </main>
             <Toast toast={toast} />

@@ -63,6 +63,7 @@ const Routes = () => (
                     {/* Módulo Despesas Administrativas — Transporte (admin apenas) */}
                     <Route path="/despesas-adm-transporte"  element={<AdminRoute><DespesasAdmTransporte /></AdminRoute>} />
 
+
                     {/* Rota do carreteiro */}
                     <Route path="/carreteiro"               element={<CarreteiroRoute><CarreteiroDashboard /></CarreteiroRoute>} />
 

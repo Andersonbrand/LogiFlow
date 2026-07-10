@@ -8,13 +8,17 @@ import * as XLSX from 'xlsx';
 import {
     fetchCarregamentos, createCarregamento, updateCarregamento, deleteCarregamento,
     fetchEmpresas,
-    fetchFornecedoresCarretas, createFornecedorCarretas, deleteFornecedorCarretas,
     fetchCarretasVeiculos, fetchTodosMotoristas,
     fetchVeiculosProprios, fetchVeiculosTerceiros,
     fetchMotoristasProprios, fetchMotoristasTerceiros, fetchCarreteirosPropriosOnly,
     calcularFrete, TIPOS_CALCULO_FRETE,
     fetchFretesCidades,
 } from 'utils/carretasService';
+import {
+    fetchFornecedores as fetchFornecedoresCarretas,
+    createFornecedor as createFornecedorCarretas,
+    deleteFornecedor as deleteFornecedorCarretas,
+} from 'utils/fornecedoresService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -269,6 +273,8 @@ export default function TabVolume({ isAdmin }) {
     const hoje = new Date().toISOString().slice(0, 7);
     const [mes, setMes] = useState(hoje);
     const [dia, setDia] = useState(''); // dia específico — tem prioridade sobre mês
+    const [periodoCustom, setPeriodoCustom] = useState({ inicio: '', fim: '' }); // período (data inicial a data final) — tem prioridade sobre mês/dia
+    const [usarPeriodo, setUsarPeriodo] = useState(false);
     const [empresaFiltro, setEmpresaFiltro] = useState('');
     const [carregamentos, setCarregamentos] = useState([]);
     const [empresas, setEmpresas] = useState([]);
@@ -335,7 +341,10 @@ export default function TabVolume({ isAdmin }) {
         setLoading(true);
         try {
             let filters = {};
-            if (dia) {
+            if (usarPeriodo && periodoCustom.inicio && periodoCustom.fim) {
+                filters.dataInicio = periodoCustom.inicio;
+                filters.dataFim    = periodoCustom.fim;
+            } else if (dia) {
                 filters.dataInicio = dia;
                 filters.dataFim    = dia;
             } else {
@@ -383,7 +392,7 @@ export default function TabVolume({ isAdmin }) {
             setCarregamentosRetira(carrRet);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [mes, dia, empresaFiltro, isAdmin]); // eslint-disable-line
+    }, [mes, dia, usarPeriodo, periodoCustom, empresaFiltro, isAdmin]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
 
@@ -716,6 +725,31 @@ export default function TabVolume({ isAdmin }) {
                             ✕ Dia
                         </button>
                     )}
+                    <div className="flex flex-col gap-1">
+                        <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Período (data inicial a final)</label>
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                type="button"
+                                onClick={() => setUsarPeriodo(v => !v)}
+                                className="px-2.5 py-2 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap"
+                                style={usarPeriodo
+                                    ? { backgroundColor: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE' }
+                                    : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                {usarPeriodo ? '✓ Período ativo' : 'Usar período'}
+                            </button>
+                            {usarPeriodo && (
+                                <>
+                                    <input type="date" value={periodoCustom.inicio}
+                                        onChange={e => setPeriodoCustom(p => ({ ...p, inicio: e.target.value }))}
+                                        className="px-2.5 py-2 rounded-lg border text-sm" style={inputStyle} title="Data inicial" />
+                                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>até</span>
+                                    <input type="date" value={periodoCustom.fim}
+                                        onChange={e => setPeriodoCustom(p => ({ ...p, fim: e.target.value }))}
+                                        className="px-2.5 py-2 rounded-lg border text-sm" style={inputStyle} title="Data final" />
+                                </>
+                            )}
+                        </div>
+                    </div>
                     <div className="flex flex-col gap-1">
                         <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Empresa</label>
                         <select value={empresaFiltro} onChange={e => setEmpresaFiltro(e.target.value)} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
@@ -1248,16 +1282,33 @@ function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], c
                 </div>
             </div>
 
-            {/* Card de Frete Total */}
-            <div className="bg-white rounded-xl border p-4 shadow-sm flex items-center gap-4" style={{ borderColor: '#C4B5FD' }}>
-                <div className="rounded-xl flex items-center justify-center flex-shrink-0" style={{ width: 44, height: 44, background: '#EDE9FE' }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            {/* Card de Frete Total — frota própria, com detalhamento por tipo */}
+            <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: '#C4B5FD' }}>
+                <div className="flex items-center gap-4 mb-1">
+                    <div className="rounded-xl flex items-center justify-center flex-shrink-0" style={{ width: 44, height: 44, background: '#EDE9FE' }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    </div>
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>Frete Total do Período — Frota Própria</p>
+                        <p className="text-2xl font-black font-mono" style={{ color: '#7C3AED' }}>{BRL(freteTotal)}</p>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>soma de valor_frete_calculado · alimenta o Rel. Financeiro</p>
+                    </div>
                 </div>
-                <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>Frete Total do Período</p>
-                    <p className="text-2xl font-black font-mono" style={{ color: '#7C3AED' }}>{BRL(freteTotal)}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>soma de valor_frete_calculado · alimenta o Rel. Financeiro</p>
-                </div>
+                {freteTotal > 0 && (
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-3 pt-3 border-t" style={{ borderColor: '#EDE9FE' }}>
+                        {tipoEntries.map(([key, t]) => {
+                            const freteTipo = carregamentos.filter(r => parseTipo(r).tipo === key)
+                                .reduce((s, r) => s + Number(r.valor_frete_calculado || 0), 0);
+                            if (freteTipo === 0) return null;
+                            return (
+                                <div key={key} className="text-xs">
+                                    <p className="font-medium" style={{ color: t.color }}>{t.label}</p>
+                                    <p className="font-mono font-bold" style={{ color: 'var(--color-text-primary)' }}>{BRL(freteTipo)}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
 
             {/* Tabela de últimos carregamentos (resumo) */}

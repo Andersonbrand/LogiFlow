@@ -144,6 +144,7 @@ export const BACKUP_MODULES = [
         icon: 'Settings',
         folder: '09-sistema',
         tables: [
+            { name: 'fornecedores', nice: 'Fornecedores (cadastro global)' },
             { name: 'notifications', nice: 'Notificações' },
             { name: 'ai_suggestions_dismissed', nice: 'Sugestões de IA dispensadas' },
         ],

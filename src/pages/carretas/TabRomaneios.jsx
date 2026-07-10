@@ -754,6 +754,8 @@ export default function TabRomaneios({ isAdmin }) {
         try { sessionStorage.setItem('carretas_romaneios_filtroMes', v); } catch {}
     };
     const [filtroDia, setFiltroDia]       = useState(''); // dia específico (YYYY-MM-DD)
+    const [periodoCustom, setPeriodoCustom] = useState({ inicio: '', fim: '' }); // tem prioridade sobre dia/mês
+    const [usarPeriodo, setUsarPeriodo] = useState(false);
     const [pesquisa, setPesquisa] = useState('');
 
     const romaneiosFiltrados = useMemo(() => {
@@ -788,8 +790,11 @@ export default function TabRomaneios({ isAdmin }) {
         try {
             const f = {};
             if (filtroStatus) f.status = filtroStatus;
-            // Dia específico tem prioridade sobre mês
-            if (filtroDia) {
+            // Período personalizado > dia específico > mês
+            if (usarPeriodo && periodoCustom.inicio && periodoCustom.fim) {
+                f.dataInicio = periodoCustom.inicio;
+                f.dataFim    = periodoCustom.fim;
+            } else if (filtroDia) {
                 f.dataInicio = filtroDia;
                 f.dataFim    = filtroDia;
             } else if (filtroMes) {
@@ -832,7 +837,7 @@ export default function TabRomaneios({ isAdmin }) {
             setFretesFretas(fr || []);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filtroStatus, filtroMes, filtroDia]); // eslint-disable-line
+    }, [filtroStatus, filtroMes, filtroDia, usarPeriodo, periodoCustom]); // eslint-disable-line
 
     useEffect(() => {
         load();
@@ -925,15 +930,33 @@ export default function TabRomaneios({ isAdmin }) {
                         <Icon name="Info" size={14} color="#065F46" />
                         <p className="text-xs" style={{ color: '#065F46' }}>Viagens registradas diretamente pelos motoristas carreteiros no app deles. Use para conferência e acompanhamento.</p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 mb-4">
-                        <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltroDia(''); }}
-                            className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}
-                            title="Filtrar por mês" />
-                        <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); handleSetFiltroMes(''); }}
+                    <div className="flex flex-wrap items-end gap-2 mb-4">
+                        <div>
+                            <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltroDia(''); setUsarPeriodo(false); }}
+                                className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}
+                                title="Filtrar por mês" />
+                        </div>
+                        <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); handleSetFiltroMes(''); setUsarPeriodo(false); }}
                             className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}
                             title="Filtrar por dia específico" />
-                        {(filtroMes || filtroDia) && (
-                            <button onClick={() => { handleSetFiltroMes(''); setFiltroDia(''); }}
+                        <button type="button" onClick={() => setUsarPeriodo(v => !v)}
+                            className="px-2.5 py-2 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap"
+                            style={usarPeriodo
+                                ? { backgroundColor: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE' }
+                                : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                            {usarPeriodo ? '✓ Período ativo' : 'Usar período'}
+                        </button>
+                        {usarPeriodo && (
+                            <>
+                                <input type="date" value={periodoCustom.inicio} onChange={e => setPeriodoCustom(p => ({ ...p, inicio: e.target.value }))}
+                                    className="px-2.5 py-2 rounded-lg border text-sm" style={inputStyle} title="Data inicial" />
+                                <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>até</span>
+                                <input type="date" value={periodoCustom.fim} onChange={e => setPeriodoCustom(p => ({ ...p, fim: e.target.value }))}
+                                    className="px-2.5 py-2 rounded-lg border text-sm" style={inputStyle} title="Data final" />
+                            </>
+                        )}
+                        {(filtroMes || filtroDia || usarPeriodo) && (
+                            <button onClick={() => { handleSetFiltroMes(''); setFiltroDia(''); setUsarPeriodo(false); setPeriodoCustom({ inicio: '', fim: '' }); }}
                                 className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors"
                                 style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                                 title="Limpar filtro de data">
@@ -1021,14 +1044,30 @@ export default function TabRomaneios({ isAdmin }) {
                         <option value="">Todos os status</option>
                         {STATUS_ROMANEIO.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltroDia(''); }}
+                    <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltroDia(''); setUsarPeriodo(false); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}
                         title="Filtrar por mês" />
-                    <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); handleSetFiltroMes(''); }}
+                    <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); handleSetFiltroMes(''); setUsarPeriodo(false); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}
                         title="Filtrar por dia específico" />
-                    {(filtroMes || filtroDia) && (
-                        <button onClick={() => { handleSetFiltroMes(''); setFiltroDia(''); }}
+                    <button type="button" onClick={() => setUsarPeriodo(v => !v)}
+                        className="px-2.5 py-2 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap"
+                        style={usarPeriodo
+                            ? { backgroundColor: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE' }
+                            : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                        {usarPeriodo ? '✓ Período ativo' : 'Usar período'}
+                    </button>
+                    {usarPeriodo && (
+                        <>
+                            <input type="date" value={periodoCustom.inicio} onChange={e => setPeriodoCustom(p => ({ ...p, inicio: e.target.value }))}
+                                className="px-2.5 py-2 rounded-lg border text-sm" style={inputStyle} title="Data inicial" />
+                            <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>até</span>
+                            <input type="date" value={periodoCustom.fim} onChange={e => setPeriodoCustom(p => ({ ...p, fim: e.target.value }))}
+                                className="px-2.5 py-2 rounded-lg border text-sm" style={inputStyle} title="Data final" />
+                        </>
+                    )}
+                    {(filtroMes || filtroDia || usarPeriodo) && (
+                        <button onClick={() => { handleSetFiltroMes(''); setFiltroDia(''); setUsarPeriodo(false); setPeriodoCustom({ inicio: '', fim: '' }); }}
                             className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors"
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar filtro de data">

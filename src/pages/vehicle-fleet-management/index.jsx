@@ -54,6 +54,8 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
     const [tab, setTab]         = useState('abastecimentos');
     const [loading, setLoading] = useState(true);
     const [mes, setMes]         = useState(() => new Date().toISOString().slice(0, 7));
+    const [periodoCustom, setPeriodoCustom] = useState({ inicio: '', fim: '' }); // tem prioridade sobre mês
+    const [usarPeriodo, setUsarPeriodo] = useState(false);
 
     const [abast, setAbast]       = useState([]);
     const [checklists, setChecklists] = useState([]);
@@ -76,8 +78,8 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             const [ano, m] = mes.split('-').map(Number);
             const f = {
                 motoristaId: motorista.id,
-                dataInicio: mes + '-01',
-                dataFim: mes + '-' + String(new Date(ano, m, 0).getDate()).padStart(2, '0'),
+                dataInicio: (usarPeriodo && periodoCustom.inicio) ? periodoCustom.inicio : mes + '-01',
+                dataFim: (usarPeriodo && periodoCustom.fim) ? periodoCustom.fim : mes + '-' + String(new Date(ano, m, 0).getDate()).padStart(2, '0'),
             };
             // Busca romaneios do período com diária (custo_motorista > 0)
             // cruzando por motorista_id OU nome do motorista (campo texto livre)
@@ -101,7 +103,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             setVeiculosCaminhao(vc || []);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [motorista.id, motorista.name, mes]); // eslint-disable-line
+    }, [motorista.id, motorista.name, mes, usarPeriodo, periodoCustom]); // eslint-disable-line
 
     useEffect(() => {
         load();
@@ -280,8 +282,23 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                         </div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap xs:flex-nowrap">
-                        <input type="month" value={mes} onChange={e => setMes(e.target.value)}
+                        <input type="month" value={mes} onChange={e => { setMes(e.target.value); setUsarPeriodo(false); }}
                             className="px-3 py-1.5 rounded-lg border text-sm flex-1 xs:flex-none" style={inputStyle} />
+                        <button type="button" onClick={() => setUsarPeriodo(v => !v)}
+                            className="px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap flex-shrink-0"
+                            style={usarPeriodo
+                                ? { backgroundColor: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE' }
+                                : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                            {usarPeriodo ? '✓ Período' : 'Período'}
+                        </button>
+                        {usarPeriodo && (
+                            <>
+                                <input type="date" value={periodoCustom.inicio} onChange={e => setPeriodoCustom(p => ({ ...p, inicio: e.target.value }))}
+                                    className="px-2 py-1.5 rounded-lg border text-sm flex-shrink-0" style={inputStyle} title="Data inicial" />
+                                <input type="date" value={periodoCustom.fim} onChange={e => setPeriodoCustom(p => ({ ...p, fim: e.target.value }))}
+                                    className="px-2 py-1.5 rounded-lg border text-sm flex-shrink-0" style={inputStyle} title="Data final" />
+                            </>
+                        )}
                         <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 flex-shrink-0" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                             <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                         </button>
