@@ -663,6 +663,10 @@ export async function fetchOrdensServico(filters = {}) {
         .order('created_at', { ascending: false });
     if (filters.mecanicoId) q = q.eq('mecanico_id', filters.mecanicoId);
     if (filters.status)     q = q.eq('status', filters.status);
+    // Rascunhos são visíveis apenas para o admin (tela de Ordens de Serviço).
+    // Quando a consulta é feita no contexto do mecânico (mecanicoId) sem um
+    // status explícito, os rascunhos ainda não enviados ficam ocultos.
+    else if (filters.mecanicoId) q = q.neq('status', 'Rascunho');
     if (filters.dataInicio) q = q.gte('created_at', filters.dataInicio);
     if (filters.dataFim)    q = q.lte('created_at', filters.dataFim + 'T23:59:59');
     const { data, error } = await q;
@@ -673,7 +677,41 @@ export async function fetchOrdensServico(filters = {}) {
 export async function createOrdemServico(ordem) {
     const { data, error } = await supabase
         .from('carretas_ordens_servico')
-        .insert({ ...ordem, status: 'Pendente' })
+        .insert({ ...ordem, status: ordem.status || 'Pendente' })
+        .select().single();
+    if (error) throw error;
+    return data;
+}
+
+// Cria automaticamente um RASCUNHO de OS a partir de um checklist quando o
+// admin registra manutenção. O rascunho fica visível apenas na aba de Ordens
+// de Serviço (não aparece para o mecânico) até que o admin confira, complete
+// os dados (mecânico responsável, prioridade, PDF) e envie a OS.
+export async function criarRascunhoOSDeChecklist(checklist, adminId) {
+    const partes = [];
+    if (checklist.problemas)          partes.push(`Problemas relatados: ${checklist.problemas}`);
+    if (checklist.necessidades)       partes.push(`Necessidades: ${checklist.necessidades}`);
+    if (checklist.observacoes_livres) partes.push(`Observações do motorista: ${checklist.observacoes_livres}`);
+    const itensReprovados = Object.entries(checklist.itens || {})
+        .filter(([, ok]) => !ok)
+        .map(([id]) => CHECKLIST_ITENS.find(i => i.id === id)?.label || id);
+    if (itensReprovados.length) partes.push(`Itens reprovados no checklist: ${itensReprovados.join(', ')}`);
+
+    const descricao = partes.length
+        ? partes.join('\n')
+        : 'Manutenção solicitada a partir do checklist semanal. Revise e complete a descrição do serviço.';
+
+    const { data, error } = await supabase
+        .from('carretas_ordens_servico')
+        .insert({
+            veiculo_id: checklist.veiculo_id,
+            mecanico_id: null,
+            descricao,
+            prioridade: itensReprovados.length ? 'Urgente' : 'Normal',
+            status: 'Rascunho',
+            checklist_id: checklist.id,
+            criada_por: adminId || null,
+        })
         .select().single();
     if (error) throw error;
     return data;
@@ -688,7 +726,7 @@ export async function updateOrdemServico(id, updates) {
     return data;
 }
 
-export async function finalizarOrdemServico(id, mecanicoId, observacoes) {
+export async function finalizarOrdemServico(id, mecanicoId, observacoes, assinaturaDigital = null) {
     const { data, error } = await supabase
         .from('carretas_ordens_servico')
         .update({
@@ -696,6 +734,7 @@ export async function finalizarOrdemServico(id, mecanicoId, observacoes) {
             finalizada_por: mecanicoId,
             finalizada_em: new Date().toISOString(),
             obs_finalizacao: observacoes,
+            ...(assinaturaDigital ? { assinatura_mecanico: assinaturaDigital } : {}),
             updated_at: new Date().toISOString(),
         })
         .eq('id', id).select().single();
@@ -719,7 +758,7 @@ export async function reportarProblemaOS(id, problema) {
 export async function fetchMecanicos() {
     const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, name, role')
+        .select('id, name, role, assinatura_digital')
         .eq('role', 'mecanico')
         .order('name');
     if (error) throw error;

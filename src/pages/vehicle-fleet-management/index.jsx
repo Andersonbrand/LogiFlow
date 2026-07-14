@@ -22,6 +22,7 @@ import { fetchRomaneios } from "utils/romaneioService";
 import {
     fetchAbastecimentos,
     fetchChecklists, aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
+    criarRascunhoOSDeChecklist,
     deleteChecklist,
     fetchDiarias, createDiaria, updateDiaria, deleteDiaria,
     fetchMotoristasCaminhao,
@@ -32,6 +33,34 @@ import { supabase, subscribeTabela } from "utils/supabaseClient";
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+
+// Baixa uma imagem (data URL base64 ou URL remota) forçando o download no navegador
+async function downloadImagem(url, nomeArquivo) {
+    if (!url) return;
+    try {
+        if (url.startsWith('data:')) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = nomeArquivo || 'foto.jpg';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            return;
+        }
+        const resp = await fetch(url);
+        const blob = await resp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = nomeArquivo || 'foto.jpg';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
+    } catch {
+        window.open(url, '_blank');
+    }
+}
 const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
 const EMPTY_FILTERS = { search: "", tipo: "Todos", status: "Todos" };
@@ -138,7 +167,12 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         const chk = checklists.find(c => c.id === modalManut);
         try {
             await reprovarChecklistComNotificacao(modalManut, adminProfile?.id, chk?.motorista_id, obsManut);
-            showToast('Manutenção registrada!', 'success');
+            try {
+                if (chk) await criarRascunhoOSDeChecklist({ ...chk, observacoes_livres: [chk.observacoes_livres, obsManut].filter(Boolean).join(' | ') }, adminProfile?.id);
+                showToast('Manutenção registrada! Rascunho de OS criado no módulo Carretas > Ordens de Serviço.', 'success');
+            } catch {
+                showToast('Manutenção registrada! (Não foi possível gerar o rascunho de OS automaticamente.)', 'warning');
+            }
             setModalManut(null); setObsManut(''); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
@@ -428,9 +462,14 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                         }
                                                         {c.manutencao_registrada && <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700"><Icon name="Wrench" size={11} />Manutenção</span>}
                                                         {c.foto_url && (
-                                                            <button onClick={() => setModalFoto(c.foto_url)} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200">
-                                                                <Icon name="Camera" size={11} />Foto
-                                                            </button>
+                                                            <>
+                                                                <button onClick={() => setModalFoto(c.foto_url)} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200">
+                                                                    <Icon name="Camera" size={11} />Foto
+                                                                </button>
+                                                                <button onClick={() => downloadImagem(c.foto_url, `checklist_${c.veiculo?.placa || c.id}.jpg`)} title="Baixar foto" className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200">
+                                                                    <Icon name="Download" size={11} />
+                                                                </button>
+                                                            </>
                                                         )}
                                                     </div>
                                                 </div>
@@ -693,7 +732,17 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             {/* Modal foto */}
             {modalFoto && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)' }} onClick={() => setModalFoto(null)}>
-                    <img src={modalFoto} alt="Foto checklist" className="rounded-xl max-w-2xl w-full max-h-[80vh] object-contain" />
+                    <div className="relative max-w-2xl w-full" onClick={e => e.stopPropagation()}>
+                        <div className="absolute -top-10 right-0 flex items-center gap-3">
+                            <button onClick={() => downloadImagem(modalFoto, `checklist_foto_${Date.now()}.jpg`)} className="text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
+                                <Icon name="Download" size={16} color="white" /> Baixar
+                            </button>
+                            <button onClick={() => setModalFoto(null)} className="text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
+                                <Icon name="X" size={16} color="white" /> Fechar
+                            </button>
+                        </div>
+                        <img src={modalFoto} alt="Foto checklist" className="rounded-xl max-w-2xl w-full max-h-[80vh] object-contain" />
+                    </div>
                 </div>
             )}
 

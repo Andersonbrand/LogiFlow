@@ -5,6 +5,7 @@ import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useConfirm } from 'components/ui/ConfirmDialog';
 import { supabase } from 'utils/supabaseClient';
+import { useCaptacaoConfig, saveCaptacaoConfig, useCustoConfig, saveCustoConfig } from 'utils/settingsService';
 
 // ─── Dados iniciais — Frota Própria (Tabela_Frete.pdf — coluna "Frete por saco") ──
 const FROTA_INICIAL = [
@@ -149,6 +150,165 @@ const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', cur
 const inputCls = 'w-full px-3 py-1.5 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
 
+// ─── Painel: Valor de Captação (MOC → Estoque) — apenas frota própria ─────────
+// Captação = frete usado para buscar o cimento em MOC (Montes Claros) e trazer
+// até o Estoque próprio. Distribuição = Frete total da cidade − Captação, ou
+// seja, a parcela do frete que remunera efetivamente a entrega até a região.
+function PainelCaptacao({ isAdmin, onChange }) {
+    const { toast, showToast } = useToast();
+    const { captacaoConfig, loadingCaptacaoConfig, reloadCaptacaoConfig } = useCaptacaoConfig();
+    const [editando, setEditando] = useState(false);
+    const [valor, setValor] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => { onChange && onChange(captacaoConfig.valorPorSaco); }, [captacaoConfig.valorPorSaco]); // eslint-disable-line
+
+    const abrirEdicao = () => { setValor(String(captacaoConfig.valorPorSaco || '')); setEditando(true); };
+
+    const salvar = async () => {
+        if (valor === '' || isNaN(valor) || Number(valor) < 0) { showToast('Informe um valor válido.', 'error'); return; }
+        setSaving(true);
+        try {
+            await saveCaptacaoConfig({ valorPorSaco: Number(valor) });
+            showToast('Valor de captação atualizado!', 'success');
+            setEditando(false);
+            reloadCaptacaoConfig();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSaving(false); }
+    };
+
+    if (loadingCaptacaoConfig) return null;
+
+    return (
+        <div className="rounded-xl border p-4 flex flex-wrap items-center gap-4 justify-between" style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }}>
+            <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg" style={{ backgroundColor: '#DBEAFE' }}>
+                    <Icon name="Truck" size={18} color="#1D4ED8" />
+                </div>
+                <div>
+                    <p className="text-sm font-semibold" style={{ color: '#1D4ED8' }}>Valor de Captação (MOC → Estoque)</p>
+                    <p className="text-xs mt-0.5 max-w-md" style={{ color: '#3B5A99' }}>
+                        Frete usado para buscar o cimento em MOC e trazer até o Estoque próprio. É abatido do frete
+                        total de cada cidade abaixo para revelar o valor (e %) de distribuição sobre o frete da região.
+                    </p>
+                </div>
+            </div>
+            {editando ? (
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium" style={{ color: '#1D4ED8' }}>R$</span>
+                    <input type="number" min="0" step="0.01" autoFocus value={valor} onChange={e => setValor(e.target.value)}
+                        className={inputCls} style={{ ...inputStyle, width: 110 }} placeholder="0,00" />
+                    <span className="text-xs" style={{ color: '#3B5A99' }}>/saco</span>
+                    <button onClick={salvar} disabled={saving} className="p-1.5 rounded-lg hover:bg-blue-100 transition-colors" title="Salvar">
+                        <Icon name="Check" size={16} color="#059669" />
+                    </button>
+                    <button onClick={() => setEditando(false)} className="p-1.5 rounded-lg hover:bg-blue-100 transition-colors" title="Cancelar">
+                        <Icon name="X" size={16} color="#6B7280" />
+                    </button>
+                </div>
+            ) : (
+                <div className="flex items-center gap-3">
+                    <span className="text-2xl font-black font-data" style={{ color: '#1D4ED8' }}>{BRL(captacaoConfig.valorPorSaco)}</span>
+                    <span className="text-xs" style={{ color: '#3B5A99' }}>/saco</span>
+                    {isAdmin && (
+                        <button onClick={abrirEdicao} className="p-1.5 rounded-lg hover:bg-blue-100 transition-colors" title="Editar valor de captação">
+                            <Icon name="Pencil" size={15} color="#1D4ED8" />
+                        </button>
+                    )}
+                </div>
+            )}
+            <Toast toast={toast} />
+        </div>
+    );
+}
+
+// ─── Painel: Custo Médio do Produto + Custo Operacional — apenas frota própria ─
+// Dois valores globais (R$/saco) usados junto ao preço de venda de cada cidade
+// para revelar a margem de venda: Margem = Venda − (Custo do Produto + Custo Operacional).
+function PainelCustos({ isAdmin, onChange }) {
+    const { toast, showToast } = useToast();
+    const { custoConfig, loadingCustoConfig, reloadCustoConfig } = useCustoConfig();
+    const [editando, setEditando] = useState(false);
+    const [produto, setProduto] = useState('');
+    const [operacional, setOperacional] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => { onChange && onChange(custoConfig); }, [custoConfig.custoMedioProduto, custoConfig.custoOperacional]); // eslint-disable-line
+
+    const abrirEdicao = () => {
+        setProduto(String(custoConfig.custoMedioProduto || ''));
+        setOperacional(String(custoConfig.custoOperacional || ''));
+        setEditando(true);
+    };
+
+    const salvar = async () => {
+        if (produto === '' || isNaN(produto) || Number(produto) < 0) { showToast('Informe um custo de produto válido.', 'error'); return; }
+        if (operacional === '' || isNaN(operacional) || Number(operacional) < 0) { showToast('Informe um custo operacional válido.', 'error'); return; }
+        setSaving(true);
+        try {
+            await saveCustoConfig({ custoMedioProduto: Number(produto), custoOperacional: Number(operacional) });
+            showToast('Custos atualizados!', 'success');
+            setEditando(false);
+            reloadCustoConfig();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSaving(false); }
+    };
+
+    if (loadingCustoConfig) return null;
+    const custoTotal = Number(custoConfig.custoMedioProduto || 0) + Number(custoConfig.custoOperacional || 0);
+
+    return (
+        <div className="rounded-xl border p-4 flex flex-wrap items-center gap-4 justify-between" style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }}>
+            <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg" style={{ backgroundColor: '#FFEDD5' }}>
+                    <Icon name="Package" size={18} color="#C2410C" />
+                </div>
+                <div>
+                    <p className="text-sm font-semibold" style={{ color: '#C2410C' }}>Custo do Produto + Custo Operacional</p>
+                    <p className="text-xs mt-0.5 max-w-md" style={{ color: '#9A5B3C' }}>
+                        Preço médio do cimento e custo operacional rateado de toda a operação de transporte (por saco).
+                        Somados ao frete de cada cidade, são usados para calcular a margem de venda abaixo.
+                    </p>
+                </div>
+            </div>
+            {editando ? (
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-xs" style={{ color: '#C2410C' }}>Produto R$</span>
+                        <input type="number" min="0" step="0.01" autoFocus value={produto} onChange={e => setProduto(e.target.value)}
+                            className={inputCls} style={{ ...inputStyle, width: 95 }} placeholder="0,00" />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-xs" style={{ color: '#C2410C' }}>Operacional R$</span>
+                        <input type="number" min="0" step="0.01" value={operacional} onChange={e => setOperacional(e.target.value)}
+                            className={inputCls} style={{ ...inputStyle, width: 95 }} placeholder="0,00" />
+                    </div>
+                    <span className="text-xs" style={{ color: '#9A5B3C' }}>/saco</span>
+                    <button onClick={salvar} disabled={saving} className="p-1.5 rounded-lg hover:bg-orange-100 transition-colors" title="Salvar">
+                        <Icon name="Check" size={16} color="#059669" />
+                    </button>
+                    <button onClick={() => setEditando(false)} className="p-1.5 rounded-lg hover:bg-orange-100 transition-colors" title="Cancelar">
+                        <Icon name="X" size={16} color="#6B7280" />
+                    </button>
+                </div>
+            ) : (
+                <div className="flex items-center gap-4">
+                    <div className="text-right">
+                        <p className="text-[10px] uppercase font-semibold" style={{ color: '#9A5B3C' }}>Produto + Operacional</p>
+                        <span className="text-2xl font-black font-data" style={{ color: '#C2410C' }}>{BRL(custoTotal)}<span className="text-xs font-normal ml-1">/saco</span></span>
+                    </div>
+                    {isAdmin && (
+                        <button onClick={abrirEdicao} className="p-1.5 rounded-lg hover:bg-orange-100 transition-colors" title="Editar custos">
+                            <Icon name="Pencil" size={15} color="#C2410C" />
+                        </button>
+                    )}
+                </div>
+            )}
+            <Toast toast={toast} />
+        </div>
+    );
+}
+
 // ─── Hook para buscar/salvar fretes no Supabase ───────────────────────────────
 function useFretes(tipo) {
     const [rows, setRows] = useState([]);
@@ -192,7 +352,7 @@ function useFretes(tipo) {
 }
 
 // ─── Tabela de fretes (reutilizada para frota e terceiros) ────────────────────
-function TabelaFretes({ tipo, label, cor }) {
+function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { custoMedioProduto: 0, custoOperacional: 0 } }) {
     const { rows, setRows, loading, reload } = useFretes(tipo);
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
@@ -201,11 +361,12 @@ function TabelaFretes({ tipo, label, cor }) {
     const [editData, setEditData] = useState({});
     const [saving, setSaving] = useState(false);
     const [addMode, setAddMode] = useState(false);
-    const [newRow, setNewRow] = useState({ cidade: '', km: '', frete_por_saco: '' });
+    const [newRow, setNewRow] = useState({ cidade: '', km: '', frete_por_saco: '', valor_venda: '' });
+    const custoTotalUnitario = Number(custoConfig.custoMedioProduto || 0) + Number(custoConfig.custoOperacional || 0);
 
     const filtered = rows.filter(r => r.cidade?.toLowerCase().includes(busca.toLowerCase()));
 
-    const startEdit = row => { setEditId(row.id); setEditData({ cidade: row.cidade, km: row.km ?? '', frete_por_saco: row.frete_por_saco ?? '' }); };
+    const startEdit = row => { setEditId(row.id); setEditData({ cidade: row.cidade, km: row.km ?? '', frete_por_saco: row.frete_por_saco ?? '', valor_venda: row.valor_venda ?? '' }); };
     const cancelEdit = () => { setEditId(null); setEditData({}); };
 
     const saveEdit = async () => {
@@ -218,6 +379,7 @@ function TabelaFretes({ tipo, label, cor }) {
                 cidade: editData.cidade.trim(),
                 km: editData.km ? Number(editData.km) : null,
                 frete_por_saco: Number(editData.frete_por_saco),
+                valor_venda: editData.valor_venda !== '' && editData.valor_venda != null ? Number(editData.valor_venda) : null,
                 tipo,
             };
             if (isLocal) {
@@ -258,12 +420,13 @@ function TabelaFretes({ tipo, label, cor }) {
                 cidade: newRow.cidade.trim(),
                 km: newRow.km ? Number(newRow.km) : null,
                 frete_por_saco: Number(newRow.frete_por_saco),
+                valor_venda: newRow.valor_venda !== '' && newRow.valor_venda != null ? Number(newRow.valor_venda) : null,
                 tipo,
             };
             const { data, error } = await supabase.from('carretas_fretes').insert(payload).select().single();
             if (error) throw error;
             setRows(prev => [...prev, data].sort((a, b) => a.cidade.localeCompare(b.cidade)));
-            setNewRow({ cidade: '', km: '', frete_por_saco: '' });
+            setNewRow({ cidade: '', km: '', frete_por_saco: '', valor_venda: '' });
             setAddMode(false);
             showToast('Cidade adicionada!', 'success');
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -301,12 +464,16 @@ function TabelaFretes({ tipo, label, cor }) {
 
             {/* Tabela */}
             <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
-                <table className="w-full text-sm min-w-[500px]">
+                <table className={`w-full text-sm ${tipo === 'frota' ? 'min-w-[980px]' : 'min-w-[500px]'}`}>
                     <thead className="text-xs border-b" style={{ backgroundColor: cor + '15', borderColor: 'var(--color-border)' }}>
                         <tr>
                             <th className="px-4 py-3 text-left font-semibold" style={{ color: cor }}>Cidade / Destino</th>
                             <th className="px-4 py-3 text-right font-semibold w-24" style={{ color: cor }}>KM</th>
                             <th className="px-4 py-3 text-right font-semibold w-36" style={{ color: cor }}>Frete por Saco</th>
+                            {tipo === 'frota' && <th className="px-4 py-3 text-right font-semibold w-28" style={{ color: cor }}>Captação</th>}
+                            {tipo === 'frota' && <th className="px-4 py-3 text-right font-semibold w-40" style={{ color: cor }}>Distribuição</th>}
+                            {tipo === 'frota' && <th className="px-4 py-3 text-right font-semibold w-32" style={{ color: cor }}>Preço de Venda</th>}
+                            {tipo === 'frota' && <th className="px-4 py-3 text-right font-semibold w-40" style={{ color: cor }}>Margem de Venda</th>}
                             <th className="px-4 py-3 text-center font-semibold w-24" style={{ color: cor }}>Ações</th>
                         </tr>
                     </thead>
@@ -326,6 +493,15 @@ function TabelaFretes({ tipo, label, cor }) {
                                     <input type="number" step="0.01" value={newRow.frete_por_saco} onChange={e => setNewRow(r => ({ ...r, frete_por_saco: e.target.value }))}
                                         className={inputCls} style={{ ...inputStyle, textAlign: 'right' }} placeholder="0,00" />
                                 </td>
+                                {tipo === 'frota' && <td className="px-3 py-2 text-right text-xs" style={{ color: 'var(--color-muted-foreground)' }}>—</td>}
+                                {tipo === 'frota' && <td className="px-3 py-2 text-right text-xs" style={{ color: 'var(--color-muted-foreground)' }}>—</td>}
+                                {tipo === 'frota' && (
+                                    <td className="px-3 py-2">
+                                        <input type="number" step="0.01" value={newRow.valor_venda} onChange={e => setNewRow(r => ({ ...r, valor_venda: e.target.value }))}
+                                            className={inputCls} style={{ ...inputStyle, textAlign: 'right' }} placeholder="0,00" />
+                                    </td>
+                                )}
+                                {tipo === 'frota' && <td className="px-3 py-2 text-right text-xs" style={{ color: 'var(--color-muted-foreground)' }}>—</td>}
                                 <td className="px-3 py-2">
                                     <div className="flex items-center justify-center gap-1">
                                         <button onClick={saveNew} disabled={saving} title="Salvar" className="p-1.5 rounded-lg hover:bg-green-100 transition-colors">
@@ -340,7 +516,7 @@ function TabelaFretes({ tipo, label, cor }) {
                         )}
 
                         {filtered.length === 0 && !addMode ? (
-                            <tr><td colSpan={4} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+                            <tr><td colSpan={tipo === 'frota' ? 8 : 4} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
                                 {busca ? `Nenhuma cidade encontrada para "${busca}"` : 'Nenhuma cidade cadastrada.'}
                             </td></tr>
                         ) : filtered.map((row, i) => (
@@ -360,6 +536,32 @@ function TabelaFretes({ tipo, label, cor }) {
                                             <input type="number" step="0.01" value={editData.frete_por_saco} onChange={e => setEditData(d => ({ ...d, frete_por_saco: e.target.value }))}
                                                 className={inputCls} style={{ ...inputStyle, textAlign: 'right' }} />
                                         </td>
+                                        {tipo === 'frota' && (
+                                            <td className="px-3 py-2 text-right text-xs font-mono" style={{ color: '#1D4ED8' }}>{BRL(captacaoValor)}</td>
+                                        )}
+                                        {tipo === 'frota' && (
+                                            <td className="px-3 py-2 text-right text-xs font-mono font-semibold" style={{ color: '#059669' }}>
+                                                {BRL(Math.max(0, Number(editData.frete_por_saco || 0) - Number(captacaoValor || 0)))}
+                                            </td>
+                                        )}
+                                        {tipo === 'frota' && (
+                                            <td className="px-3 py-2">
+                                                <input type="number" step="0.01" value={editData.valor_venda} onChange={e => setEditData(d => ({ ...d, valor_venda: e.target.value }))}
+                                                    className={inputCls} style={{ ...inputStyle, textAlign: 'right' }} placeholder="0,00" />
+                                            </td>
+                                        )}
+                                        {tipo === 'frota' && (() => {
+                                            const venda = Number(editData.valor_venda || 0);
+                                            const custoTotalComFrete = custoTotalUnitario + Number(editData.frete_por_saco || 0);
+                                            const margemReais = venda - custoTotalComFrete;
+                                            const margemPct = venda > 0 ? (margemReais / venda) * 100 : 0;
+                                            const positivo = margemReais >= 0;
+                                            return (
+                                                <td className="px-3 py-2 text-right text-xs font-mono font-semibold" style={{ color: venda > 0 ? (positivo ? '#059669' : '#DC2626') : 'var(--color-muted-foreground)' }}>
+                                                    {venda > 0 ? <>{BRL(margemReais)} <span className="opacity-70">({margemPct.toFixed(0)}%)</span></> : '—'}
+                                                </td>
+                                            );
+                                        })()}
                                         <td className="px-3 py-2">
                                             <div className="flex items-center justify-center gap-1">
                                                 <button onClick={saveEdit} disabled={saving} title="Salvar" className="p-1.5 rounded-lg hover:bg-green-100 transition-colors">
@@ -380,6 +582,45 @@ function TabelaFretes({ tipo, label, cor }) {
                                         <td className="px-4 py-3 text-right font-mono font-semibold" style={{ color: cor }}>
                                             {BRL(row.frete_por_saco)}<span className="text-xs font-normal ml-1" style={{ color: 'var(--color-muted-foreground)' }}>/saco</span>
                                         </td>
+                                        {tipo === 'frota' && (
+                                            <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: '#1D4ED8' }}>
+                                                {BRL(Math.min(Number(row.frete_por_saco) || 0, Number(captacaoValor) || 0))}
+                                            </td>
+                                        )}
+                                        {tipo === 'frota' && (() => {
+                                            const total = Number(row.frete_por_saco) || 0;
+                                            const distrib = Math.max(0, total - (Number(captacaoValor) || 0));
+                                            const pct = total > 0 ? (distrib / total) * 100 : 0;
+                                            return (
+                                                <td className="px-4 py-3 text-right">
+                                                    <span className="font-mono font-semibold text-xs" style={{ color: '#059669' }}>{BRL(distrib)}</span>
+                                                    <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                                        {pct.toFixed(0)}%
+                                                    </span>
+                                                </td>
+                                            );
+                                        })()}
+                                        {tipo === 'frota' && (
+                                            <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: 'var(--color-text-primary)' }}>
+                                                {row.valor_venda ? BRL(row.valor_venda) : '—'}
+                                            </td>
+                                        )}
+                                        {tipo === 'frota' && (() => {
+                                            const venda = Number(row.valor_venda) || 0;
+                                            if (venda <= 0) return <td className="px-4 py-3 text-right text-xs" style={{ color: 'var(--color-muted-foreground)' }}>—</td>;
+                                            const custoTotalComFrete = custoTotalUnitario + (Number(row.frete_por_saco) || 0);
+                                            const margemReais = venda - custoTotalComFrete;
+                                            const margemPct = (margemReais / venda) * 100;
+                                            const positivo = margemReais >= 0;
+                                            return (
+                                                <td className="px-4 py-3 text-right">
+                                                    <span className="font-mono font-semibold text-xs" style={{ color: positivo ? '#059669' : '#DC2626' }}>{BRL(margemReais)}</span>
+                                                    <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: positivo ? '#D1FAE5' : '#FEE2E2', color: positivo ? '#065F46' : '#991B1B' }}>
+                                                        {margemPct.toFixed(0)}%
+                                                    </span>
+                                                </td>
+                                            );
+                                        })()}
                                         <td className="px-4 py-3">
                                             <div className="flex items-center justify-center gap-1">
                                                 <button onClick={() => startEdit(row)} title="Editar" className="p-1.5 rounded-lg hover:bg-blue-100 transition-colors">
@@ -407,6 +648,8 @@ function TabelaFretes({ tipo, label, cor }) {
 // ─── Componente principal ─────────────────────────────────────────────────────
 export default function TabFretes({ isAdmin }) {
     const [guia, setGuia] = useState('frota');
+    const [captacaoValor, setCaptacaoValor] = useState(0);
+    const [custoConfig, setCustoConfig] = useState({ custoMedioProduto: 0, custoOperacional: 0 });
 
     return (
         <div className="flex flex-col gap-5">
@@ -443,6 +686,10 @@ export default function TabFretes({ isAdmin }) {
                 </div>
             )}
 
+            {/* Painel de captação e custos — apenas na guia Frota (própria) */}
+            {guia === 'frota' && <PainelCaptacao isAdmin={isAdmin} onChange={setCaptacaoValor} />}
+            {guia === 'frota' && <PainelCustos isAdmin={isAdmin} onChange={setCustoConfig} />}
+
             {/* Conteúdo da guia */}
             {guia === 'frota' && (
                 <TabelaFretes
@@ -450,6 +697,8 @@ export default function TabFretes({ isAdmin }) {
                     label="Fretes da Frota"
                     cor="#2563EB"
                     isAdmin={isAdmin}
+                    captacaoValor={captacaoValor}
+                    custoConfig={custoConfig}
                 />
             )}
             {guia === 'terceiros' && (

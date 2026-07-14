@@ -19,6 +19,7 @@ import {
     createFornecedor as createFornecedorCarretas,
     deleteFornecedor as deleteFornecedorCarretas,
 } from 'utils/fornecedoresService';
+import { useCaptacaoConfig } from 'utils/settingsService';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -305,7 +306,7 @@ export default function TabVolume({ isAdmin }) {
         data_carregamento: new Date().toISOString().slice(0, 10),
         quantidade: '', unidade_quantidade: 'saco',
         empresa_origem: '', destino: '', numero_pedido: '', numero_nota_fiscal: '', observacoes: '',
-        tipo: '', motorista_id: '', veiculo_id: '',
+        tipo: '', motorista_id: '', veiculo_id: '', empresa_id: '',
         tipo_calculo_frete: 'por_saco', valor_base_frete: '',
     });
     const [modalTerceiro, setModalTerceiro] = useState(null);
@@ -330,6 +331,11 @@ export default function TabVolume({ isAdmin }) {
     // Frete preview
     const veiculoSelecionado = veiculos.find(v => v.id === form.veiculo_id);
     const previewFrete = calcularFrete(form.tipo_calculo_frete, form.quantidade, form.valor_base_frete, veiculoSelecionado?.media_consumo);
+    // Captação (MOC → Estoque) x Distribuição — apenas informativo, frota própria
+    const { captacaoConfig } = useCaptacaoConfig();
+    const previewCaptacaoTotal = Number(captacaoConfig.valorPorSaco || 0) * Number(form.quantidade || 0);
+    const previewDistribuicao = Math.max(0, previewFrete - previewCaptacaoTotal);
+    const previewPctDistribuicao = previewFrete > 0 ? (previewDistribuicao / previewFrete) * 100 : 0;
 
     // Modal fornecedor
     const [modalFornec, setModalFornec] = useState(false);
@@ -518,6 +524,7 @@ export default function TabVolume({ isAdmin }) {
             observacoes: r.observacoes || '',
             motorista_id: r.motorista_id || '',
             veiculo_id: r.veiculo_id || '',
+            empresa_id: r.empresa_id || '',
             tipo_calculo_frete: r.tipo_calculo_frete || 'por_saco',
             valor_base_frete: r.valor_base_frete || '',
         });
@@ -539,7 +546,7 @@ export default function TabVolume({ isAdmin }) {
             observacoes: formTerceiro.observacoes || null,
             is_terceiro: true,
             motorista_id: formTerceiro.motorista_id || null,
-            empresa_id: null,
+            empresa_id: formTerceiro.empresa_id || null,
             veiculo_id: formTerceiro.veiculo_id || null,
             tipo_calculo_frete: formTerceiro.tipo_calculo_frete || null,
             valor_base_frete: formTerceiro.valor_base_frete ? Number(formTerceiro.valor_base_frete) : null,
@@ -804,6 +811,7 @@ export default function TabVolume({ isAdmin }) {
                     onNovo={openCreate}
                     onEdit={openEdit}
                     onDelete={handleDelete}
+                    captacaoPorSaco={captacaoConfig.valorPorSaco}
                 />
             ) : subAba === 'terceiros' ? (
                 <TabelaTerceiros
@@ -974,6 +982,20 @@ export default function TabVolume({ isAdmin }) {
                                             <span className="font-mono">{BRL(previewFrete)}</span>
                                         </div>
                                     )}
+                                    {previewFrete > 0 && captacaoConfig.valorPorSaco > 0 && (
+                                        <div className="mt-2 p-2.5 rounded-lg text-xs" style={{ backgroundColor: '#F5F3FF', border: '1px solid #DDD6FE' }}>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span style={{ color: '#6D28D9' }}>↳ Captação (MOC → Estoque)</span>
+                                                <span className="font-mono font-semibold" style={{ color: '#6D28D9' }}>{BRL(previewCaptacaoTotal)}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span style={{ color: '#059669' }}>↳ Distribuição</span>
+                                                <span className="font-mono font-semibold" style={{ color: '#059669' }}>
+                                                    {BRL(previewDistribuicao)} <span className="opacity-70">({previewPctDistribuicao.toFixed(0)}%)</span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         )}
@@ -1057,6 +1079,12 @@ export default function TabVolume({ isAdmin }) {
                             {veiculosTerceiros.length === 0 && (
                                 <p className="text-xs mt-1 text-amber-600">⚠ Nenhum veículo com flag "terceirizado" cadastrado em Veículos.</p>
                             )}
+                        </Field>
+                        <Field label="Empresa (frete)">
+                            <select value={formTerceiro.empresa_id} onChange={e => setFormTerceiro(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <option value="">Selecione a empresa (opcional)...</option>
+                                {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
+                            </select>
                         </Field>
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Tipo de Cálculo do Frete">
@@ -1354,8 +1382,26 @@ function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], c
     );
 }
 
+// Calcula a divisão captação × distribuição de UM carregamento (frota própria).
+// Se o destino da viagem for o Estoque, o frete inteiro é captação (MOC → Estoque).
+// Caso contrário (entrega direta numa cidade da região), o frete cobre as duas
+// pernas: uma parcela fixa de captação (sacos × valor de captação) e o restante
+// é a distribuição daquela cidade.
+function calcCaptacaoDistribuicao(r, captacaoPorSaco) {
+    const total = Number(r.valor_frete_calculado) || 0;
+    if (total <= 0) return null;
+    const destinoNorm = (r.destino || '').trim().toLowerCase();
+    if (destinoNorm === 'estoque') {
+        return { captacao: total, distribuicao: 0, pctDistribuicao: 0, isEstoque: true };
+    }
+    const captacao = Math.min(total, (Number(r.quantidade) || 0) * Number(captacaoPorSaco || 0));
+    const distribuicao = Math.max(0, total - captacao);
+    const pctDistribuicao = total > 0 ? (distribuicao / total) * 100 : 0;
+    return { captacao, distribuicao, pctDistribuicao, isEstoque: false };
+}
+
 // ─── Sub-componente: Tabela completa ──────────────────────────────────────────
-function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo }) {
+function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo, captacaoPorSaco = 0 }) {
     const [pesquisa, setPesquisa] = useState('');
     const carregamentosFiltrados = carregamentos.filter(r => {
         if (!pesquisa.trim()) return true;
@@ -1407,7 +1453,26 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo 
                                 <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>
                                 <td className="px-3 py-2.5 text-xs max-w-[120px] truncate">{r.destino || '—'}</td>
                                 <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap">{tipo === 'ESTOQUE' && !r.quantidade ? '—' : fmtNum(r.quantidade)}</td>
-                                <td className="px-3 py-2.5 font-mono font-semibold whitespace-nowrap" style={{ color: '#7C3AED' }}>{BRL(r.valor_frete_calculado)}</td>
+                                <td className="px-3 py-2.5 font-mono font-semibold whitespace-nowrap align-top">
+                                    <div style={{ color: '#7C3AED' }}>{BRL(r.valor_frete_calculado)}</div>
+                                    {captacaoPorSaco > 0 && (() => {
+                                        const cd = calcCaptacaoDistribuicao(r, captacaoPorSaco);
+                                        if (!cd) return null;
+                                        return (
+                                            <div className="mt-1 text-[10px] font-normal leading-tight" style={{ minWidth: 130 }}>
+                                                <div className="flex items-center justify-between gap-2" style={{ color: '#6D28D9' }}>
+                                                    <span>↳ Captação</span><span className="font-semibold">{BRL(cd.captacao)}</span>
+                                                </div>
+                                                {!cd.isEstoque && (
+                                                    <div className="flex items-center justify-between gap-2" style={{ color: '#059669' }}>
+                                                        <span>↳ Distribuição</span>
+                                                        <span className="font-semibold">{BRL(cd.distribuicao)} <span className="opacity-70">({cd.pctDistribuicao.toFixed(0)}%)</span></span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+                                </td>
                                 {isAdmin && (
                                     <td className="px-3 py-2.5">
                                         <div className="flex items-center gap-1">
@@ -1624,10 +1689,10 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
                 </div>
             ) : (
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: '#FDE68A' }}>
-                    <table className="w-full text-sm min-w-[750px]">
+                    <table className="w-full text-sm min-w-[850px]">
                         <thead className="text-xs border-b" style={{ background: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}>
                             <tr>
-                                {['Data', 'Motorista', 'Placa', 'Tipo', 'Fornecedor/Origem', 'Destino', 'Pedido', 'NF', 'Qtd (sacos)', 'Frete', ''].map(h => (
+                                {['Data', 'Motorista', 'Placa', 'Tipo', 'Empresa', 'Fornecedor/Origem', 'Destino', 'Pedido', 'NF', 'Qtd (sacos)', 'Frete', ''].map(h => (
                                     <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
@@ -1643,6 +1708,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
                                         <td className="px-3 py-2.5 text-xs font-medium">{r.motorista?.name || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs">{r.veiculo?.placa || '—'}</td>
                                         <td className="px-3 py-2.5"><TipoBadge tipo={tipo} /></td>
+                                        <td className="px-3 py-2.5 text-xs max-w-[110px] truncate" style={{ color: 'var(--color-text-primary)' }}>{r.empresa?.nome || '—'}</td>
                                         <td className="px-3 py-2.5 max-w-[130px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{nome || '—'}</td>
                                         <td className="px-3 py-2.5 text-xs max-w-[120px] truncate">{r.destino || '—'}</td>
                                         <td className="px-3 py-2.5 font-mono text-xs">{r.numero_pedido || '—'}</td>

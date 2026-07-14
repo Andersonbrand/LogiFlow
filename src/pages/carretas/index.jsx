@@ -8,7 +8,7 @@ import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
 import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
-import { useBonusConfig } from 'utils/settingsService';
+import { useBonusConfig, useCaptacaoConfig } from 'utils/settingsService';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import { useConfirm } from 'components/ui/ConfirmDialog';
@@ -29,6 +29,7 @@ import {
         CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
     aprovarChecklistComNotificacao, reprovarChecklistComNotificacao, aprovarChecklistComNotificacaoRetorno,
     fetchOrdensServico, createOrdemServico, updateOrdemServico, deleteOrdemServico,
+    criarRascunhoOSDeChecklist,
     fetchMecanicos,
     fetchDespesasExtras, createDespesaExtra, updateDespesaExtra, deleteDespesaExtra,
     fetchDiarias, createDiaria, updateDiaria, deleteDiaria,
@@ -52,12 +53,54 @@ import {
 } from 'utils/fornecedoresService';
 import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf, garantirFornecedorCadastrado, EMPRESAS_LOGIFLOW } from 'utils/parcelasGenerator';
 import * as XLSX from 'xlsx';
-import { exportDiariaModelo, exportDiariasRomaneiosModelo, printDiaria } from 'utils/excelUtils';
+import { exportDiariaModelo, exportDiariasRomaneiosModelo, printDiaria, printOrdemServico } from 'utils/excelUtils';
+import PeriodRangeFilter, { usePeriodRangeFilter } from 'components/ui/PeriodRangeFilter';
+import { updateUserProfile } from 'utils/userService';
 import { fetchDadosMargemFrete, calcularAbatimentoCustosFrota } from 'utils/custosFrotaService';
 import { somarDespesasPorVencimento, agruparDespesasPorCategoriaVencimento } from 'utils/despesasParcelasUtils';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT_DATE = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+
+// Baixa uma imagem (data URL base64 ou URL remota) forçando o download no navegador
+// Identifica o tipo de um anexo a partir do data URL (usado no anexo da OS)
+function getAnexoTipo(dataUrl) {
+    if (!dataUrl) return null;
+    const m = /^data:([^;]+);/.exec(dataUrl);
+    const mime = m ? m[1] : '';
+    if (mime === 'application/pdf') return 'pdf';
+    if (mime.startsWith('image/')) return 'imagem';
+    if (mime === 'application/msword' || mime.includes('wordprocessingml')) return 'word';
+    return 'outro';
+}
+
+async function downloadImagem(url, nomeArquivo) {
+    if (!url) return;
+    try {
+        if (url.startsWith('data:')) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = nomeArquivo || 'foto.jpg';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            return;
+        }
+        const resp = await fetch(url);
+        const blob = await resp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = nomeArquivo || 'foto.jpg';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
+    } catch {
+        // Fallback: abre em nova aba se o download direto falhar (ex.: CORS)
+        window.open(url, '_blank');
+    }
+}
 
 const STATUS_VIAGEM = ['Agendado', 'Em processamento', 'Aguardando no pátio', 'Em trânsito', 'Entrega finalizada', 'Cancelado'];
 const STATUS_COLORS = {
@@ -618,9 +661,16 @@ function TabAbastecimentos({ isAdmin, profile }) {
         try { savedMes = sessionStorage.getItem('abastecimentos_filtroMes') || ''; } catch {}
         return { motoristaId: '', veiculoId: '', mes: savedMes || mesAtualAbast, dia: '' };
     });
+    // Filtro adicional por período (data inicial a data final), além dos filtros de dia/mês existentes
+    const { preset: periodoPreset, periodo, onPresetChange: aplicarPeriodoPreset, setPeriodo, reset: resetPeriodo } = usePeriodRangeFilter('todos');
     const handleSetFiltroMes = (mes) => {
         setFiltro(f => ({ ...f, mes, dia: '' }));
         try { if (mes) sessionStorage.setItem('abastecimentos_filtroMes', mes); else sessionStorage.removeItem('abastecimentos_filtroMes'); } catch {}
+        if (periodoPreset === 'personalizado') resetPeriodo();
+    };
+    const handleAplicarPeriodo = (p) => {
+        aplicarPeriodoPreset(p);
+        if (p === 'personalizado') setFiltro(f => ({ ...f, mes: '', dia: '' }));
     };
     const [form, setForm] = useState({ motorista_id: '', veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '' });
 
@@ -630,14 +680,17 @@ function TabAbastecimentos({ isAdmin, profile }) {
             const f = {};
             if (filtro.motoristaId) f.motoristaId = filtro.motoristaId;
             if (filtro.veiculoId)   f.veiculoId   = filtro.veiculoId;
-            if (filtro.dia) {
+            if (periodoPreset === 'personalizado' && (periodo.inicio || periodo.fim)) {
+                if (periodo.inicio) f.dataInicio = periodo.inicio;
+                if (periodo.fim)    f.dataFim    = periodo.fim;
+            } else if (filtro.dia) {
                 f.dataInicio = filtro.dia; f.dataFim = filtro.dia;
             } else if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
             const [a, v, m, p] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchCarreteirosPropriosOnly(), fetchPostos().catch(() => [])]);
             setAbast(a); setVeiculos(v); setMotoristas(m); setPostos(p);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filtro]); // eslint-disable-line
+    }, [filtro, periodoPreset, periodo]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
     const totais = useMemo(() => ({
@@ -782,13 +835,20 @@ function TabAbastecimentos({ isAdmin, profile }) {
                     </select>
                     <input type="month" value={filtro.mes} onChange={e => handleSetFiltroMes(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
-                    <input type="date" value={filtro.dia || ''} onChange={e => setFiltro(f => ({ ...f, dia: e.target.value, mes: '' }))}
+                    <input type="date" value={filtro.dia || ''} onChange={e => { setFiltro(f => ({ ...f, dia: e.target.value, mes: '' })); if (periodoPreset === 'personalizado') resetPeriodo(); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
                     {(filtro.dia) && (
                         <button onClick={() => handleSetFiltroMes(mesAtualAbast)}
                             className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
+                    )}
+                    <PeriodRangeFilter presets={['personalizado']} preset={periodoPreset} onPresetChange={handleAplicarPeriodo} periodo={periodo} onPeriodoChange={setPeriodo} label="Período" />
+                    {periodoPreset === 'personalizado' && (
+                        <button onClick={resetPeriodo}
+                            className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                            title="Limpar período">✕ Período</button>
                     )}
                     <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, placa, posto, cupom..." width="230px" />
                 </div>
@@ -1175,7 +1235,14 @@ function TabChecklist({ isAdmin, profile }) {
         setSavingManut(true);
         try {
             await reprovarChecklistComNotificacao(modalManut, profile.id, checklist?.motorista_id, obsManut);
-            showToast('Manutenção registrada! Motorista notificado.', 'success');
+            // Gera automaticamente um rascunho de OS a partir deste checklist,
+            // para que o admin confira, complete e envie na aba "Ordens de Serviço".
+            try {
+                if (checklist) await criarRascunhoOSDeChecklist({ ...checklist, observacoes_livres: [checklist.observacoes_livres, obsManut].filter(Boolean).join(' | ') }, profile.id);
+                showToast('Manutenção registrada! Rascunho de OS criado na aba Ordens de Serviço.', 'success');
+            } catch {
+                showToast('Manutenção registrada! (Não foi possível gerar o rascunho de OS automaticamente — crie manualmente na aba Ordens de Serviço.)', 'warning');
+            }
             setModalManut(null); setObsManut(''); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setSavingManut(false); }
@@ -1243,9 +1310,14 @@ function TabChecklist({ isAdmin, profile }) {
                                         }
                                         {c.manutencao_registrada && <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 whitespace-nowrap"><Icon name="Wrench" size={11} />Manutenção</span>}
                                         {c.foto_url && (
-                                            <button onClick={() => setModalFoto(c.foto_url)} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap">
-                                                <Icon name="Camera" size={11} />Foto
-                                            </button>
+                                            <>
+                                                <button onClick={() => setModalFoto(c.foto_url)} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap">
+                                                    <Icon name="Camera" size={11} />Foto
+                                                </button>
+                                                <button onClick={() => downloadImagem(c.foto_url, `checklist_${c.veiculo?.placa || c.id}.jpg`)} title="Baixar foto" className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors whitespace-nowrap">
+                                                    <Icon name="Download" size={11} />
+                                                </button>
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -1391,10 +1463,15 @@ function TabChecklist({ isAdmin, profile }) {
             {/* Modal visualizar foto */}
             {modalFoto && (
                 <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }} onClick={() => setModalFoto(null)}>
-                    <div className="relative max-w-2xl w-full">
-                        <button onClick={() => setModalFoto(null)} className="absolute -top-10 right-0 text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
-                            <Icon name="X" size={16} color="white" /> Fechar
-                        </button>
+                    <div className="relative max-w-2xl w-full" onClick={e => e.stopPropagation()}>
+                        <div className="absolute -top-10 right-0 flex items-center gap-3">
+                            <button onClick={() => downloadImagem(modalFoto, `checklist_foto_${Date.now()}.jpg`)} className="text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
+                                <Icon name="Download" size={16} color="white" /> Baixar
+                            </button>
+                            <button onClick={() => setModalFoto(null)} className="text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
+                                <Icon name="X" size={16} color="white" /> Fechar
+                            </button>
+                        </div>
                         <img src={modalFoto} alt="Foto do checklist" className="rounded-xl w-full object-contain max-h-[80vh]" />
                     </div>
                 </div>
@@ -4244,6 +4321,7 @@ function TabDiarias({ isAdmin, profile }) {
 function TabRelatorioFinanceiro({ isAdmin }) {
     const { toast, showToast } = useToast();
     const { bonusConfig } = useBonusConfig();
+    const { captacaoConfig } = useCaptacaoConfig();
 
     const hoje = new Date();
     const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
@@ -4404,12 +4482,23 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                 frete:         fretePorMotorista[id]?.frete   || 0,
             })).sort((a, b) => b.frete - a.frete);
 
+            // ── Captação x Distribuição (frete de cimento — frota própria) ─
+            // Capta​ção = frete usado para buscar o cimento em MOC e trazer até o
+            // Estoque (valor fixo por saco, configurável em Fretes > Fretes da Frota).
+            // Distribuição = Receita de Carregamentos − Captação total do período.
+            const totalSacosCarregamentos = carregamentos.reduce((s, c) => s + (Number(c.quantidade) || 0), 0);
+            const valorCaptacaoTotal      = totalSacosCarregamentos * Number(captacaoConfig.valorPorSaco || 0);
+            const valorDistribuicaoTotal  = Math.max(0, receitaCarregamentos - valorCaptacaoTotal);
+            const percentualDistribuicao  = receitaCarregamentos > 0 ? (valorDistribuicaoTotal / receitaCarregamentos) * 100 : 0;
+
             setDados({
                 periodo: `${periodoInicio === periodoFim ? periodoInicio : `${periodoInicio} a ${periodoFim}`}`,
                 periodoDataInicio: dataInicio, periodoDataFim: dataFim,
                 receitaTotal, receitaCarregamentos, receitaRomaneios,
                 totalRomaneios: romaneiosCarga.filter(r => r.status !== 'Cancelado').length,
                 receitaPorEmpresa,
+                totalSacosCarregamentos, valorCaptacaoTotal, valorDistribuicaoTotal, percentualDistribuicao,
+                valorCaptacaoPorSaco: Number(captacaoConfig.valorPorSaco || 0),
                 _romaneios: romaneiosCarga,
                 despesaCombustivel, litrosDiesel, litrosArla, valorDiesel, valorArla,
                 bonusTotal, bonusTotalViagens, bonusTotalExtras, despesaTotal,
@@ -4433,7 +4522,7 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             });
         } catch (e) { showToast('Erro ao calcular: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [periodoInicio, periodoFim, empresa]); // eslint-disable-line
+    }, [periodoInicio, periodoFim, empresa, captacaoConfig.valorPorSaco]); // eslint-disable-line
 
     const exportarExcel = () => {
         if (!dados) { showToast('Gere o relatório antes de exportar', 'error'); return; }
@@ -4769,6 +4858,32 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                                         <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ Carregamentos ({dados.totalCarregamentos})</span>
                                         <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(dados.receitaCarregamentos || 0)}</span>
                                     </div>
+                                    {dados.receitaCarregamentos > 0 && dados.valorCaptacaoPorSaco > 0 && (
+                                        <div className="ml-6 mb-1 px-3 py-2 rounded-lg" style={{ backgroundColor: '#FAF5FF', border: '1px solid #E9D5FF' }}>
+                                            <p className="text-[10px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: '#7C3AED' }}>
+                                                Captação × Distribuição (frete de cimento — frota própria)
+                                            </p>
+                                            <div className="flex justify-between py-0.5">
+                                                <span className="text-xs" style={{ color: '#6D28D9' }}>↳ Captação · MOC → Estoque ({dados.totalSacosCarregamentos} sacos × {BRL(dados.valorCaptacaoPorSaco)})</span>
+                                                <span className="text-xs font-data font-semibold" style={{ color: '#6D28D9' }}>{BRL(dados.valorCaptacaoTotal)}</span>
+                                            </div>
+                                            <div className="flex justify-between py-0.5">
+                                                <span className="text-xs" style={{ color: '#059669' }}>↳ Distribuição · Estoque → Região</span>
+                                                <span className="text-xs font-data font-semibold" style={{ color: '#059669' }}>
+                                                    {BRL(dados.valorDistribuicaoTotal)}
+                                                    <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                                        {dados.percentualDistribuicao.toFixed(1)}%
+                                                    </span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {dados.receitaCarregamentos > 0 && dados.valorCaptacaoPorSaco === 0 && (
+                                        <div className="ml-6 mb-1 px-3 py-1.5 rounded-lg text-[11px] flex items-center gap-1.5" style={{ backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E' }}>
+                                            <Icon name="Info" size={11} color="#D97706" />
+                                            Configure o "Valor de Captação" em Fretes → Fretes da Frota para ver o detalhamento captação × distribuição aqui.
+                                        </div>
+                                    )}
                                     <div className="flex justify-between py-1 pl-6">
                                         <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>↳ Romaneios de Carga ({dados.totalRomaneios || 0})</span>
                                         <span className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(dados.receitaRomaneios || 0)}</span>
@@ -4995,6 +5110,62 @@ function TabRelatorioFinanceiro({ isAdmin }) {
         </div>
     );
 }
+// ─── Modal: Assinaturas Digitais (admin cadastra a assinatura de cada mecânico e a própria) ──
+function ModalAssinaturas({ profile, mecanicos, onClose, onSaved }) {
+    const { toast, showToast } = useToast();
+    const [valores, setValores] = useState(() => {
+        const init = { [profile.id]: profile.assinatura_digital || '' };
+        mecanicos.forEach(m => { init[m.id] = m.assinatura_digital || ''; });
+        return init;
+    });
+    const [savingId, setSavingId] = useState(null);
+
+    const salvar = async (userId) => {
+        setSavingId(userId);
+        try {
+            await updateUserProfile(userId, { assinatura_digital: valores[userId]?.trim() || null });
+            showToast('Assinatura salva!', 'success');
+            onSaved && onSaved();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingId(null); }
+    };
+
+    const pessoas = [{ id: profile.id, name: profile.name + ' (você — responsável)' }, ...mecanicos];
+
+    return (
+        <ModalOverlay onClose={onClose}>
+            <ModalHeader title="Assinaturas Digitais" icon="PenTool" onClose={onClose} />
+            <div className="p-5 flex flex-col gap-3 overflow-y-auto flex-1">
+                <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                    Cadastre o texto que representa a assinatura de cada pessoa (normalmente o nome completo).
+                    Essa assinatura poderá ser usada para autenticar Ordens de Serviço sem precisar assinar no papel.
+                </p>
+                {pessoas.map(p => (
+                    <div key={p.id} className="flex items-center gap-2 p-3 rounded-lg" style={{ backgroundColor: 'var(--color-muted)' }}>
+                        <div className="flex-1">
+                            <p className="text-xs font-semibold mb-1" style={{ color: 'var(--color-text-primary)' }}>{p.name}</p>
+                            <input value={valores[p.id] || ''} onChange={e => setValores(v => ({ ...v, [p.id]: e.target.value }))}
+                                placeholder="Ex.: João da Silva"
+                                className={inputCls} style={inputStyle} />
+                        </div>
+                        <button onClick={() => salvar(p.id)} disabled={savingId === p.id}
+                            className="p-2 rounded-lg hover:bg-green-100 transition-colors mt-4" title="Salvar">
+                            <Icon name={savingId === p.id ? 'Loader' : 'Check'} size={16} color="#059669" />
+                        </button>
+                    </div>
+                ))}
+                {mecanicos.length === 0 && (
+                    <p className="text-xs text-center py-4" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum mecânico cadastrado ainda.</p>
+                )}
+            </div>
+            <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
+                <button onClick={onClose} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
+            </div>
+            <Toast toast={toast} />
+        </ModalOverlay>
+    );
+}
+
 // ─── TAB: Ordens de Serviço ───────────────────────────────────────────────────
 function TabOrdensServico({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
@@ -5013,12 +5184,15 @@ function TabOrdensServico({ isAdmin, profile }) {
         try { sessionStorage.setItem('carretas_os_filtroMes', v); } catch {}
     };
     const [modal, setModal]       = useState(false);
+    const [editingId, setEditingId] = useState(null);
+    const [editingStatus, setEditingStatus] = useState(null);
     const [pdfFile, setPdfFile]   = useState(null);
     const [uploading, setUploading] = useState(false);
     const [viewPdf, setViewPdf]   = useState(null);
-    const [form, setForm] = useState({
-        veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '',
-    });
+    const [modalAssinaturas, setModalAssinaturas] = useState(false);
+    const FORM_VAZIO = { veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '', assinatura_admin: '' };
+    const [form, setForm] = useState(FORM_VAZIO);
+    const [assinarComoAdmin, setAssinarComoAdmin] = useState(false);
 
     // Fix 4: Quando abre o PDF, empurra um estado no histórico para que o botão
     // Voltar do navegador feche o viewer em vez de sair da página.
@@ -5064,11 +5238,15 @@ function TabOrdensServico({ isAdmin, profile }) {
         );
     }, [ordens, pesquisa]);
 
+    const TIPOS_ANEXO_OS = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+    const EXT_ANEXO_OS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.webp', '.heic'];
     const handlePdfChange = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        if (file.type !== 'application/pdf') { showToast('Somente arquivos PDF são aceitos', 'error'); return; }
-        if (file.size > 5 * 1024 * 1024) { showToast('PDF deve ter menos de 5MB', 'error'); return; }
+        const ext = '.' + (file.name.split('.').pop() || '').toLowerCase();
+        const tipoValido = TIPOS_ANEXO_OS.includes(file.type) || EXT_ANEXO_OS.includes(ext);
+        if (!tipoValido) { showToast('Formato não aceito. Use PDF, Word (.doc/.docx) ou imagem (JPG, PNG, WEBP).', 'error'); return; }
+        if (file.size > 8 * 1024 * 1024) { showToast('Arquivo deve ter menos de 8MB', 'error'); return; }
         setPdfFile(file);
         // Convert to base64 data URL for storage
         const reader = new FileReader();
@@ -5076,17 +5254,55 @@ function TabOrdensServico({ isAdmin, profile }) {
         reader.readAsDataURL(file);
     };
 
-    const handleCreate = async () => {
+    const abrirNovaOS = () => {
+        setForm(FORM_VAZIO); setPdfFile(null); setEditingId(null); setEditingStatus(null); setAssinarComoAdmin(false); setModal(true);
+    };
+
+    const abrirEdicaoOS = (o) => {
+        setForm({
+            veiculo_id: o.veiculo_id || '',
+            mecanico_id: o.mecanico_id || '',
+            descricao: o.descricao || '',
+            prioridade: o.prioridade || 'Normal',
+            pdf_url: o.pdf_url || '',
+            assinatura_admin: o.assinatura_admin || '',
+        });
+        setPdfFile(null);
+        setEditingId(o.id);
+        setEditingStatus(o.status);
+        setAssinarComoAdmin(!!o.assinatura_admin);
+        setModal(true);
+    };
+
+    // Salva as edições. Quando `enviar` é true e a OS era um rascunho, o status
+    // passa para "Pendente" (visível ao mecânico); caso contrário mantém o status atual.
+    const handleSalvar = async (enviar = false) => {
         if (!form.veiculo_id || !form.descricao) { showToast('Veículo e descrição são obrigatórios', 'error'); return; }
         setUploading(true);
         try {
-            await createOrdemServico(form);
-            showToast('Ordem de serviço criada!', 'success');
-            setModal(false); setPdfFile(null);
-            setForm({ veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '' });
+            const payload = { ...form, assinatura_admin: assinarComoAdmin ? (profile?.assinatura_digital || '') : null };
+            if (editingId) {
+                const updates = { ...payload };
+                if (enviar && editingStatus === 'Rascunho') updates.status = 'Pendente';
+                await updateOrdemServico(editingId, updates);
+                showToast(enviar ? 'OS enviada!' : 'Ordem de serviço atualizada!', 'success');
+            } else {
+                await createOrdemServico(payload);
+                showToast('Ordem de serviço criada!', 'success');
+            }
+            setModal(false); setPdfFile(null); setEditingId(null); setEditingStatus(null);
+            setForm(FORM_VAZIO); setAssinarComoAdmin(false);
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setUploading(false); }
+    };
+
+    const handleEnviarRascunho = async (o) => {
+        try {
+            await updateOrdemServico(o.id, { status: 'Pendente' });
+            showToast('OS enviada para o mecânico!', 'success');
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
     const handleDeleteOS = async (id) => {
@@ -5096,8 +5312,9 @@ function TabOrdensServico({ isAdmin, profile }) {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
-    const STATUS_OS = ['Pendente', 'Em Andamento', 'Problema Reportado', 'Finalizada'];
+    const STATUS_OS = ['Rascunho', 'Pendente', 'Em Andamento', 'Problema Reportado', 'Finalizada'];
     const STATUS_COLORS_OS = {
+        'Rascunho':           { bg: '#F1F5F9', text: '#475569' },
         'Pendente':           { bg: '#FEF9C3', text: '#B45309' },
         'Em Andamento':       { bg: '#DBEAFE', text: '#1D4ED8' },
         'Finalizada':         { bg: '#D1FAE5', text: '#065F46' },
@@ -5127,7 +5344,14 @@ function TabOrdensServico({ isAdmin, profile }) {
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
-                    {isAdmin && <Button onClick={() => { setForm({ veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '' }); setPdfFile(null); setModal(true); }} iconName="Plus" size="sm">Nova OS</Button>}
+                    {isAdmin && (
+                        <button onClick={() => setModalAssinaturas(true)}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors"
+                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                            <Icon name="PenTool" size={13} />Assinaturas
+                        </button>
+                    )}
+                    {isAdmin && <Button onClick={abrirNovaOS} iconName="Plus" size="sm">Nova OS</Button>}
                 </div>
             </div>
 
@@ -5141,35 +5365,75 @@ function TabOrdensServico({ isAdmin, profile }) {
                     )}
                     {ordensFiltradas.map(o => {
                         const sc = STATUS_COLORS_OS[o.status] || STATUS_COLORS_OS['Pendente'];
+                        const isRascunho = o.status === 'Rascunho';
                         return (
-                            <div key={o.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                <div className="flex items-start justify-between mb-3">
+                            <div key={o.id} className="bg-white rounded-xl border p-4 shadow-sm" style={isRascunho ? { borderColor: '#CBD5E1', borderStyle: 'dashed', backgroundColor: '#F8FAFC' } : { borderColor: 'var(--color-border)' }}>
+                                <div className="flex items-start justify-between mb-3 gap-2 flex-wrap">
                                     <div>
-                                        <div className="flex items-center gap-2 mb-1">
+                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                                             <span className="font-bold font-data text-sm" style={{ color: 'var(--color-text-primary)' }}>
                                                 OS #{o.id?.slice(0, 8).toUpperCase()}
                                             </span>
                                             <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{o.status}</span>
                                             {o.prioridade === 'Urgente' && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white">URGENTE</span>}
+                                            {o.checklist_id && (
+                                                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700" title="Gerada automaticamente a partir de um checklist">
+                                                    <Icon name="ClipboardCheck" size={10} />Do checklist
+                                                </span>
+                                            )}
+                                            {o.assinatura_mecanico && (
+                                                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700" title={`Assinado digitalmente por ${o.assinatura_mecanico}`}>
+                                                    <Icon name="PenTool" size={10} />Assinado (mecânico)
+                                                </span>
+                                            )}
+                                            {o.assinatura_admin && (
+                                                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700" title={`Assinado digitalmente por ${o.assinatura_admin}`}>
+                                                    <Icon name="PenTool" size={10} />Assinado (admin)
+                                                </span>
+                                            )}
                                         </div>
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
                                             {o.veiculo?.placa || '—'} {o.veiculo?.modelo ? `— ${o.veiculo.modelo}` : ''} · Mecânico: {o.mecanico?.name || '—'}
                                         </p>
                                     </div>
-                                    {o.pdf_url && (
-                                        <button onClick={() => setViewPdf(o.pdf_url)}
-                                            className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                                            <Icon name="FileText" size={13} color="#1D4ED8" />Ver PDF
+                                    <div className="flex items-center gap-1 flex-wrap">
+                                        {o.pdf_url && (() => {
+                                            const tipoAnexo = getAnexoTipo(o.pdf_url);
+                                            if (tipoAnexo === 'word') {
+                                                return (
+                                                    <button onClick={() => downloadImagem(o.pdf_url, `OS_${o.id?.slice(0,8)}.docx`)}
+                                                        className="flex items-center gap-1 text-xs text-blue-600 hover:underline px-1.5 py-1">
+                                                        <Icon name="FileText" size={13} color="#1D4ED8" />Baixar anexo (Word)
+                                                    </button>
+                                                );
+                                            }
+                                            return (
+                                                <button onClick={() => setViewPdf(o.pdf_url)}
+                                                    className="flex items-center gap-1 text-xs text-blue-600 hover:underline px-1.5 py-1">
+                                                    <Icon name={tipoAnexo === 'imagem' ? 'Image' : 'FileText'} size={13} color="#1D4ED8" />
+                                                    {tipoAnexo === 'imagem' ? 'Ver imagem' : 'Ver PDF'}
+                                                </button>
+                                            );
+                                        })()}
+                                        <button onClick={() => printOrdemServico(o)} title="Imprimir OS"
+                                            className="p-1.5 rounded hover:bg-gray-100 transition-colors">
+                                            <Icon name="Printer" size={14} color="var(--color-muted-foreground)" />
                                         </button>
-                                    )}
-                                    {isAdmin && (
-                                        <button onClick={() => handleDeleteOS(o.id)}
-                                            className="p-1.5 rounded hover:bg-red-50 transition-colors" title="Excluir OS">
-                                            <Icon name="Trash2" size={14} color="#DC2626" />
-                                        </button>
-                                    )}
+                                        {isAdmin && (
+                                            <button onClick={() => abrirEdicaoOS(o)} title="Editar OS"
+                                                className="p-1.5 rounded hover:bg-blue-50 transition-colors">
+                                                <Icon name="Pencil" size={14} color="#1D4ED8" />
+                                            </button>
+                                        )}
+                                        {isAdmin && (
+                                            <button onClick={() => handleDeleteOS(o.id)}
+                                                className="p-1.5 rounded hover:bg-red-50 transition-colors" title="Excluir OS">
+                                                <Icon name="Trash2" size={14} color="#DC2626" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
-                                <div className="p-3 rounded-lg text-sm mb-2" style={{ backgroundColor: '#F8FAFC' }}>
+                                <div className="p-3 rounded-lg text-sm mb-2 whitespace-pre-line" style={{ backgroundColor: '#F8FAFC' }}>
                                     <p style={{ color: 'var(--color-text-primary)' }}>{o.descricao}</p>
                                 </div>
                                 {o.problema_encontrado && (
@@ -5192,6 +5456,21 @@ function TabOrdensServico({ isAdmin, profile }) {
                                         <p className="text-green-700">{o.obs_finalizacao}</p>
                                     </div>
                                 )}
+                                {isAdmin && isRascunho && (
+                                    <div className="flex flex-wrap gap-2 pt-3 mt-2 border-t" style={{ borderColor: '#CBD5E1' }}>
+                                        <span className="text-xs flex items-center gap-1" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            <Icon name="Info" size={12} />Rascunho gerado automaticamente — confira e envie ao mecânico.
+                                        </span>
+                                        <div className="flex gap-2 ml-auto">
+                                            <button onClick={() => abrirEdicaoOS(o)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors">
+                                                <Icon name="Pencil" size={13} />Conferir e Editar
+                                            </button>
+                                            <button onClick={() => handleEnviarRascunho(o)} disabled={!o.mecanico_id} title={!o.mecanico_id ? 'Defina um mecânico responsável antes de enviar' : ''} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                                <Icon name="Send" size={13} />Enviar OS
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
@@ -5199,9 +5478,15 @@ function TabOrdensServico({ isAdmin, profile }) {
             )}
 
             {modal && (
-                <ModalOverlay onClose={() => setModal(false)}>
-                    <ModalHeader title="Nova Ordem de Serviço" icon="Wrench" onClose={() => setModal(false)} />
+                <ModalOverlay onClose={() => { setModal(false); setEditingId(null); setEditingStatus(null); }}>
+                    <ModalHeader title={editingId ? (editingStatus === 'Rascunho' ? 'Conferir Rascunho de OS' : 'Editar Ordem de Serviço') : 'Nova Ordem de Serviço'} icon="Wrench" onClose={() => { setModal(false); setEditingId(null); setEditingStatus(null); }} />
                     <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
+                        {editingStatus === 'Rascunho' && (
+                            <div className="sm:col-span-2 flex items-center gap-2 p-3 rounded-lg text-xs" style={{ backgroundColor: '#FFF7ED', border: '1px solid #FED7AA', color: '#9A3412' }}>
+                                <Icon name="ClipboardCheck" size={14} color="#9A3412" />
+                                Esta OS foi gerada automaticamente a partir de um checklist com manutenção registrada. Confira os dados antes de enviar.
+                            </div>
+                        )}
                         <Field label="Veículo" required>
                             <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
@@ -5229,28 +5514,63 @@ function TabOrdensServico({ isAdmin, profile }) {
                         </div>
                         <div className="sm:col-span-2">
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                Ordem de serviço em PDF (opcional)
+                                Anexo da OS (opcional)
                             </label>
                             <label className="flex items-center gap-3 px-4 py-3 rounded-lg border-2 border-dashed cursor-pointer hover:bg-gray-50 transition-colors"
-                                style={{ borderColor: pdfFile ? '#059669' : 'var(--color-border)' }}>
-                                <Icon name="Upload" size={18} color={pdfFile ? '#059669' : 'var(--color-muted-foreground)'} />
+                                style={{ borderColor: pdfFile || form.pdf_url ? '#059669' : 'var(--color-border)' }}>
+                                <Icon name="Upload" size={18} color={pdfFile || form.pdf_url ? '#059669' : 'var(--color-muted-foreground)'} />
                                 <div>
-                                    <p className="text-sm font-medium" style={{ color: pdfFile ? '#059669' : 'var(--color-text-primary)' }}>
-                                        {pdfFile ? pdfFile.name : 'Clique para anexar PDF'}
+                                    <p className="text-sm font-medium" style={{ color: pdfFile || form.pdf_url ? '#059669' : 'var(--color-text-primary)' }}>
+                                        {pdfFile ? pdfFile.name : (form.pdf_url ? 'Arquivo já anexado (clique para substituir)' : 'Clique para anexar arquivo')}
                                     </p>
-                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>PDF, máximo 5MB</p>
+                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>PDF, Word (.doc/.docx) ou imagem (JPG, PNG, WEBP) — máximo 8MB</p>
                                 </div>
-                                <input type="file" accept=".pdf" onChange={handlePdfChange} className="hidden" />
+                                <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.heic" onChange={handlePdfChange} className="hidden" />
                             </label>
+                        </div>
+                        <div className="sm:col-span-2">
+                            {profile?.assinatura_digital ? (
+                                <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer" style={{ backgroundColor: assinarComoAdmin ? '#EFF6FF' : 'var(--color-muted)', border: `1px solid ${assinarComoAdmin ? '#93C5FD' : 'var(--color-border)'}` }}>
+                                    <input type="checkbox" checked={assinarComoAdmin} onChange={e => setAssinarComoAdmin(e.target.checked)} className="w-4 h-4" />
+                                    <Icon name="PenTool" size={14} color={assinarComoAdmin ? '#1D4ED8' : 'var(--color-muted-foreground)'} />
+                                    <span className="text-xs font-medium" style={{ color: assinarComoAdmin ? '#1D4ED8' : 'var(--color-text-secondary)' }}>
+                                        Assinar digitalmente como responsável ({profile.assinatura_digital})
+                                    </span>
+                                </label>
+                            ) : (
+                                <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-muted-foreground)' }}>
+                                    <Icon name="Info" size={12} />
+                                    Você ainda não tem uma assinatura digital cadastrada. Cadastre em "Assinaturas" na barra acima.
+                                </p>
+                            )}
                         </div>
                     </div>
                     <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
-                        <button onClick={() => setModal(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button onClick={handleCreate} iconName={uploading ? 'Loader' : 'Send'} size="sm" disabled={uploading}>
-                            {uploading ? 'Enviando...' : 'Criar OS'}
-                        </Button>
+                        <button onClick={() => { setModal(false); setEditingId(null); setEditingStatus(null); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        {editingId && editingStatus === 'Rascunho' ? (
+                            <>
+                                <Button onClick={() => handleSalvar(false)} iconName={uploading ? 'Loader' : 'Save'} size="sm" disabled={uploading} variant="outline">
+                                    {uploading ? 'Salvando...' : 'Salvar Rascunho'}
+                                </Button>
+                                <Button onClick={() => handleSalvar(true)} iconName={uploading ? 'Loader' : 'Send'} size="sm" disabled={uploading}>
+                                    {uploading ? 'Enviando...' : 'Enviar OS'}
+                                </Button>
+                            </>
+                        ) : (
+                            <Button onClick={() => handleSalvar(false)} iconName={uploading ? 'Loader' : 'Send'} size="sm" disabled={uploading}>
+                                {uploading ? 'Salvando...' : (editingId ? 'Salvar Alterações' : 'Criar OS')}
+                            </Button>
+                        )}
                     </div>
                 </ModalOverlay>
+            )}
+            {modalAssinaturas && (
+                <ModalAssinaturas
+                    profile={profile}
+                    mecanicos={mecanicos}
+                    onClose={() => setModalAssinaturas(false)}
+                    onSaved={load}
+                />
             )}
             {/* Viewer de PDF in-app — header fixo sempre visível */}
             {viewPdf && (
@@ -5262,24 +5582,43 @@ function TabOrdensServico({ isAdmin, profile }) {
                         padding: '8px 16px', backgroundColor: '#111827',
                         boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
                     }}>
-                        <span style={{ color: '#9CA3AF', fontSize: 13 }}>Ordem de Serviço — PDF</span>
-                        <button
-                            onClick={() => { setViewPdf(null); window.history.back(); }}
-                            style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                width: 32, height: 32, borderRadius: 6,
-                                backgroundColor: '#374151', color: '#D1D5DB',
-                                border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1,
-                            }}
-                            title="Fechar">
-                            ✕
-                        </button>
+                        <span style={{ color: '#9CA3AF', fontSize: 13 }}>Ordem de Serviço — Anexo</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <button
+                                onClick={() => downloadImagem(viewPdf, `OS_anexo_${Date.now()}${getAnexoTipo(viewPdf) === 'imagem' ? '.jpg' : '.pdf'}`)}
+                                style={{
+                                    display: 'flex', alignItems: 'center', gap: 6,
+                                    padding: '0 12px', height: 32, borderRadius: 6,
+                                    backgroundColor: '#374151', color: '#D1D5DB',
+                                    border: 'none', cursor: 'pointer', fontSize: 12,
+                                }}
+                                title="Baixar">
+                                <Icon name="Download" size={14} color="#D1D5DB" /> Baixar
+                            </button>
+                            <button
+                                onClick={() => { setViewPdf(null); window.history.back(); }}
+                                style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 32, height: 32, borderRadius: 6,
+                                    backgroundColor: '#374151', color: '#D1D5DB',
+                                    border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1,
+                                }}
+                                title="Fechar">
+                                ✕
+                            </button>
+                        </div>
                     </div>
+                    {getAnexoTipo(viewPdf) === 'imagem' ? (
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a1a', overflow: 'auto', padding: 16 }}>
+                            <img src={viewPdf} alt="Anexo da OS" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 6 }} />
+                        </div>
+                    ) : (
                     <iframe
                         src={viewPdf}
                         title="Ordem de Serviço"
                         style={{ flex: 1, border: 'none', width: '100%', backgroundColor: '#1a1a1a' }}
                     />
+                    )}
                 </div>
             )}
             <Toast toast={toast} />

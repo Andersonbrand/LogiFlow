@@ -6,8 +6,30 @@ import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import { subscribeTabela } from 'utils/supabaseClient';
 import { fetchOrdensServico, finalizarOrdemServico, reportarProblemaOS } from 'utils/carretasService';
+import { printOrdemServico } from 'utils/excelUtils';
 
 const FMT_DATE = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
+
+// Identifica o tipo de um anexo a partir do data URL (PDF, imagem, Word ou outro)
+function getAnexoTipo(dataUrl) {
+    if (!dataUrl) return null;
+    const m = /^data:([^;]+);/.exec(dataUrl);
+    const mime = m ? m[1] : '';
+    if (mime === 'application/pdf') return 'pdf';
+    if (mime.startsWith('image/')) return 'imagem';
+    if (mime === 'application/msword' || mime.includes('wordprocessingml')) return 'word';
+    return 'outro';
+}
+
+function downloadAnexo(url, nomeArquivo) {
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nomeArquivo || 'anexo';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
 
 const STATUS_CFG = {
     'Pendente':           { bg: '#FEF9C3', text: '#B45309', icon: 'Clock' },
@@ -42,6 +64,7 @@ export default function MecanicoPage() {
     const [obsFinalizar, setObsFinalizar]     = useState('');
     const [descProblema, setDescProblema]     = useState('');
     const [pdfUrl, setPdfUrl]                 = useState(null);
+    const [assinarFinalizacao, setAssinarFinalizacao] = useState(true);
 
     const load = useCallback(async () => {
         if (!user?.id) return;
@@ -62,7 +85,8 @@ export default function MecanicoPage() {
 
     const handleFinalizar = async () => {
         try {
-            await finalizarOrdemServico(modalFinalizar.id, user.id, obsFinalizar);
+            const assinatura = (assinarFinalizacao && profile?.assinatura_digital) ? profile.assinatura_digital : null;
+            await finalizarOrdemServico(modalFinalizar.id, user.id, obsFinalizar, assinatura);
             showToast('Ordem de serviço finalizada!', 'success');
             setModalFinalizar(null); setObsFinalizar(''); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -92,6 +116,7 @@ export default function MecanicoPage() {
     }, [pdfUrl]);
 
     if (pdfUrl) {
+        const tipoAnexo = getAnexoTipo(pdfUrl);
         return (
             <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
                 <div style={{
@@ -100,15 +125,29 @@ export default function MecanicoPage() {
                     padding: '8px 16px', backgroundColor: '#111827',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
                 }}>
-                    <span style={{ color: '#9CA3AF', fontSize: 13 }}>Ordem de Serviço — PDF</span>
-                    <button onClick={() => setPdfUrl(null)} style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        width: 32, height: 32, borderRadius: 6,
-                        backgroundColor: '#374151', color: '#D1D5DB',
-                        border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1,
-                    }} title="Fechar">✕</button>
+                    <span style={{ color: '#9CA3AF', fontSize: 13 }}>Ordem de Serviço — Anexo</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button onClick={() => downloadAnexo(pdfUrl, `OS_anexo_${Date.now()}`)} style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            padding: '0 12px', height: 32, borderRadius: 6,
+                            backgroundColor: '#374151', color: '#D1D5DB',
+                            border: 'none', cursor: 'pointer', fontSize: 12,
+                        }} title="Baixar"><Icon name="Download" size={14} color="#D1D5DB" /> Baixar</button>
+                        <button onClick={() => setPdfUrl(null)} style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: 32, height: 32, borderRadius: 6,
+                            backgroundColor: '#374151', color: '#D1D5DB',
+                            border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1,
+                        }} title="Fechar">✕</button>
+                    </div>
                 </div>
-                <iframe src={pdfUrl} title="OS" style={{ flex: 1, border: 'none', width: '100%', backgroundColor: '#1a1a1a', display: 'block' }} />
+                {tipoAnexo === 'imagem' ? (
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1a1a', overflow: 'auto', padding: 16 }}>
+                        <img src={pdfUrl} alt="Anexo da OS" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 6 }} />
+                    </div>
+                ) : (
+                    <iframe src={pdfUrl} title="OS" style={{ flex: 1, border: 'none', width: '100%', backgroundColor: '#1a1a1a', display: 'block' }} />
+                )}
             </div>
         );
     }
@@ -199,6 +238,11 @@ export default function MecanicoPage() {
                                                         {o.prioridade === 'Urgente' && (
                                                             <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-600 text-white">URGENTE</span>
                                                         )}
+                                                        {o.assinatura_mecanico && (
+                                                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700" title={`Assinado por ${o.assinatura_mecanico}`}>
+                                                                <Icon name="PenTool" size={10} />Assinado
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
                                                         {FMT_DATE(o.created_at)}
@@ -206,15 +250,36 @@ export default function MecanicoPage() {
                                                         {o.veiculo?.modelo && <span className="hidden sm:inline"> — {o.veiculo.modelo}</span>}
                                                     </p>
                                                 </div>
-                                                {o.pdf_url && (
-                                                    <button onClick={() => setPdfUrl(o.pdf_url)}
-                                                        className="flex-shrink-0 flex items-center gap-1 text-xs text-blue-600 font-medium hover:underline"
-                                                        style={{ paddingTop: 2 }}>
-                                                        <Icon name="FileText" size={14} color="#1D4ED8" />
-                                                        <span className="hidden sm:inline">Ver PDF</span>
-                                                        <span className="sm:hidden">PDF</span>
+                                                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                                                    <button onClick={() => printOrdemServico(o)}
+                                                        className="flex items-center gap-1 text-xs text-gray-500 font-medium hover:underline">
+                                                        <Icon name="Printer" size={14} color="var(--color-muted-foreground)" />
+                                                        <span className="hidden sm:inline">Imprimir</span>
                                                     </button>
-                                                )}
+                                                    {o.pdf_url && (() => {
+                                                    const tipoAnexo = getAnexoTipo(o.pdf_url);
+                                                    if (tipoAnexo === 'word') {
+                                                        return (
+                                                            <button onClick={() => downloadAnexo(o.pdf_url, `OS_${o.id?.slice(0,8)}.docx`)}
+                                                                className="flex-shrink-0 flex items-center gap-1 text-xs text-blue-600 font-medium hover:underline"
+                                                                style={{ paddingTop: 2 }}>
+                                                                <Icon name="FileText" size={14} color="#1D4ED8" />
+                                                                <span className="hidden sm:inline">Baixar anexo</span>
+                                                                <span className="sm:hidden">Word</span>
+                                                            </button>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <button onClick={() => setPdfUrl(o.pdf_url)}
+                                                            className="flex-shrink-0 flex items-center gap-1 text-xs text-blue-600 font-medium hover:underline"
+                                                            style={{ paddingTop: 2 }}>
+                                                            <Icon name={tipoAnexo === 'imagem' ? 'Image' : 'FileText'} size={14} color="#1D4ED8" />
+                                                            <span className="hidden sm:inline">{tipoAnexo === 'imagem' ? 'Ver imagem' : 'Ver PDF'}</span>
+                                                            <span className="sm:hidden">{tipoAnexo === 'imagem' ? 'Imagem' : 'PDF'}</span>
+                                                        </button>
+                                                    );
+                                                })()}
+                                                </div>
                                             </div>
 
                                             {/* Descrição */}
@@ -240,7 +305,7 @@ export default function MecanicoPage() {
                                             {/* Ações — full width no mobile */}
                                             {(o.status === 'Pendente' || o.status === 'Em Andamento') && (
                                                 <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
-                                                    <button onClick={() => { setModalFinalizar(o); setObsFinalizar(''); }}
+                                                    <button onClick={() => { setModalFinalizar(o); setObsFinalizar(''); setAssinarFinalizacao(true); }}
                                                         className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold text-white w-full sm:w-auto"
                                                         style={{ backgroundColor: '#059669' }}>
                                                         <Icon name="CheckCircle2" size={14} color="#fff" />
@@ -292,6 +357,20 @@ export default function MecanicoPage() {
                                 className={inputCls} style={inputStyle} rows={4}
                                 placeholder="Descreva o que foi feito, peças trocadas, etc..." />
                         </div>
+                        {profile?.assinatura_digital ? (
+                            <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer" style={{ backgroundColor: assinarFinalizacao ? '#EFF6FF' : 'var(--color-muted)', border: `1px solid ${assinarFinalizacao ? '#93C5FD' : 'var(--color-border)'}` }}>
+                                <input type="checkbox" checked={assinarFinalizacao} onChange={e => setAssinarFinalizacao(e.target.checked)} className="w-4 h-4" />
+                                <Icon name="PenTool" size={14} color={assinarFinalizacao ? '#1D4ED8' : 'var(--color-muted-foreground)'} />
+                                <span className="text-xs font-medium" style={{ color: assinarFinalizacao ? '#1D4ED8' : 'var(--color-text-secondary)' }}>
+                                    Autenticar com minha assinatura digital ({profile.assinatura_digital})
+                                </span>
+                            </label>
+                        ) : (
+                            <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-muted-foreground)' }}>
+                                <Icon name="Info" size={12} />
+                                Você ainda não tem uma assinatura digital cadastrada. Peça ao administrador para cadastrar.
+                            </p>
+                        )}
                     </div>
                     <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 px-4 sm:px-5 pb-5 sm:justify-end">
                         <button onClick={() => setModalFinalizar(null)}
