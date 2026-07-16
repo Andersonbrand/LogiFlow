@@ -1476,8 +1476,8 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo,
                                 {isAdmin && (
                                     <td className="px-3 py-2.5">
                                         <div className="flex items-center gap-1">
-                                            <button onClick={() => onEdit(r)} className="p-1.5 rounded hover:bg-blue-50 transition-colors"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
-                                            <button onClick={() => onDelete(r.id)} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={13} color="#DC2626" /></button>
+                                            <button onClick={() => onEdit(r)} title="Editar" className="p-2.5 rounded-lg hover:bg-blue-100 transition-colors"><Icon name="Pencil" size={20} color="#1D4ED8" /></button>
+                                            <button onClick={() => onDelete(r.id)} title="Excluir" className="p-2.5 rounded-lg hover:bg-red-100 transition-colors"><Icon name="Trash2" size={20} color="#DC2626" /></button>
                                         </div>
                                     </td>
                                 )}
@@ -1514,8 +1514,8 @@ function PainelFornecedores({ fornecedores, isAdmin, onNovo, onDelete }) {
                             <div className="flex items-start justify-between mb-2">
                                 <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{f.nome}</p>
                                 {isAdmin && (
-                                    <button onClick={() => onDelete(f.id)} className="p-1 rounded hover:bg-red-50 transition-colors flex-shrink-0">
-                                        <Icon name="Trash2" size={13} color="#DC2626" />
+                                    <button onClick={() => onDelete(f.id)} title="Excluir" className="p-2.5 rounded-lg hover:bg-red-100 transition-colors flex-shrink-0">
+                                        <Icon name="Trash2" size={20} color="#DC2626" />
                                     </button>
                                 )}
                             </div>
@@ -1718,8 +1718,8 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
                                         {isAdmin && (
                                             <td className="px-3 py-2.5">
                                                 <div className="flex items-center gap-1">
-                                                    <button onClick={() => onEdit(r)} className="p-1.5 rounded hover:bg-blue-50 transition-colors"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
-                                                    <button onClick={() => onDelete(r.id)} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={13} color="#DC2626" /></button>
+                                                    <button onClick={() => onEdit(r)} title="Editar" className="p-2.5 rounded-lg hover:bg-blue-100 transition-colors"><Icon name="Pencil" size={20} color="#1D4ED8" /></button>
+                                                    <button onClick={() => onDelete(r.id)} title="Excluir" className="p-2.5 rounded-lg hover:bg-red-100 transition-colors"><Icon name="Trash2" size={20} color="#DC2626" /></button>
                                                 </div>
                                             </td>
                                         )}
@@ -1819,8 +1819,8 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                                         {isAdmin && (
                                             <td className="px-3 py-2.5">
                                                 <div className="flex items-center gap-1">
-                                                    <button onClick={() => onEdit(r)} className="p-1.5 rounded hover:bg-blue-50 transition-colors"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
-                                                    <button onClick={() => onDelete(r.id)} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={13} color="#DC2626" /></button>
+                                                    <button onClick={() => onEdit(r)} title="Editar" className="p-2.5 rounded-lg hover:bg-blue-100 transition-colors"><Icon name="Pencil" size={20} color="#1D4ED8" /></button>
+                                                    <button onClick={() => onDelete(r.id)} title="Excluir" className="p-2.5 rounded-lg hover:bg-red-100 transition-colors"><Icon name="Trash2" size={20} color="#DC2626" /></button>
                                                 </div>
                                             </td>
                                         )}

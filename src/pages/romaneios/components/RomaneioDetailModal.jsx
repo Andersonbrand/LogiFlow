@@ -17,6 +17,12 @@ const n   = v => Number(v||0);
 
 export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit, onDelete }) {
     const [tab, setTab] = useState('info');
+    const [openPedidos, setOpenPedidos] = useState(new Set());
+    const togglePedido = idx => setOpenPedidos(s => {
+        const n = new Set(s);
+        n.has(idx) ? n.delete(idx) : n.add(idx);
+        return n;
+    });
     const { isAdmin } = useAuth();
     if (!isOpen || !romaneio) return null;
 
@@ -85,9 +91,9 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
 
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor:'var(--color-border)' }}>
+                <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0" style={{ borderColor:'var(--color-border)' }}>
                     <div>
                         <div className="flex items-center gap-2 mb-1">
                             <span className="font-heading font-bold text-lg" style={{ color:'var(--color-text-primary)' }}>{romaneio.numero}</span>
@@ -125,7 +131,7 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b px-4 overflow-x-auto" style={{ borderColor:'var(--color-border)' }}>
+                <div className="flex border-b px-4 overflow-x-auto flex-shrink-0" style={{ borderColor:'var(--color-border)' }}>
                     {TABS.map(([key, label, icon]) => (
                         <button key={key} onClick={() => setTab(key)}
                             className={`flex items-center gap-1.5 px-3 py-3 text-sm font-medium font-caption border-b-2 transition-colors whitespace-nowrap
@@ -136,7 +142,7 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                     ))}
                 </div>
 
-                <div className="overflow-y-auto flex-1 px-6 py-5">
+                <div className="overflow-y-auto flex-1 min-h-0 px-6 py-5">
 
                     {/* ── INFO ──────────────────────────────────────── */}
                     {tab === 'info' && (
@@ -193,32 +199,45 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                                     <Icon name="ShoppingCart" size={32} color="currentColor" />
                                     <p className="text-sm mt-2">Nenhum pedido registrado neste romaneio.</p>
                                 </div>
-                            ) : pedidos.map((p, i) => {
+                            ) : (<>
+                            <div className="flex justify-end">
+                                <button onClick={() => setOpenPedidos(s => s.size === pedidos.length ? new Set() : new Set(pedidos.map((_,i)=>i)))}
+                                    className="text-xs font-caption font-medium" style={{ color:'var(--color-primary)' }}>
+                                    {openPedidos.size === pedidos.length ? 'Recolher todos' : 'Expandir todos'}
+                                </button>
+                            </div>
+                            {pedidos.map((p, i) => {
                                 const cfg     = getCategoriaConfig(p.categoria_frete);
                                 const fretePed = n(p.frete_calculado) || n(p.valor_pedido) * (n(p.percentual_frete)||0.05);
                                 // itens deste pedido
                                 const pedItens = itens.filter(it => it.pedido_id === p.id);
+                                const aberto = openPedidos.has(i);
                                 return (
                                     <div key={i} className="rounded-xl border overflow-hidden" style={{ borderColor: cfg.cor }}>
-                                        <div className="px-4 py-3 flex items-center justify-between"
+                                        <div onClick={() => togglePedido(i)}
+                                            className="px-4 py-3 flex items-center justify-between cursor-pointer select-none"
                                             style={{ backgroundColor: cfg.bg }}>
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <Icon name={aberto ? 'ChevronDown' : 'ChevronRight'} size={14} color={cfg.cor} />
+                                                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
                                                     style={{ backgroundColor: cfg.cor }}>{i+1}</div>
-                                                <div>
-                                                    <p className="text-sm font-medium" style={{ color: cfg.cor }}>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium truncate" style={{ color: cfg.cor }}>
                                                         {p.numero_pedido ? `Pedido ${p.numero_pedido}` : `Pedido ${i+1}`}
                                                     </p>
-                                                    <p className="text-xs font-caption" style={{ color: cfg.cor, opacity:.7 }}>
-                                                        {p.categoria_frete} · {fmtPct(p.percentual_frete)}
-                                                    </p>
+                                                    {aberto && (
+                                                        <p className="text-xs font-caption" style={{ color: cfg.cor, opacity:.7 }}>
+                                                            {p.categoria_frete} · {fmtPct(p.percentual_frete)}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-xs font-caption" style={{ color: cfg.cor, opacity:.7 }}>Valor do pedido</p>
+                                            <div className="text-right flex-shrink-0">
+                                                {aberto && <p className="text-xs font-caption" style={{ color: cfg.cor, opacity:.7 }}>Valor do pedido</p>}
                                                 <p className="text-sm font-data font-semibold" style={{ color: cfg.cor }}>{brl(p.valor_pedido)}</p>
                                             </div>
                                         </div>
+                                        {aberto && (<>
                                         <div className="px-4 py-3 flex items-center justify-between border-t" style={{ borderColor: cfg.cor + '40' }}>
                                             <span className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
                                                 Frete calculado: {fmtPct(p.percentual_frete)} × {brl(p.valor_pedido)}
@@ -237,9 +256,11 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                                                 </div>
                                             </div>
                                         )}
+                                        </>)}
                                     </div>
                                 );
                             })}
+                            </>)}
                             {pedidos.length > 0 && (
                                 <div className="rounded-xl border p-4 mt-1" style={{ backgroundColor:'var(--color-muted)', borderColor:'var(--color-border)' }}>
                                     <div className="flex justify-between items-center">
@@ -335,7 +356,7 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 border-t flex justify-between gap-2" style={{ borderColor:'var(--color-border)' }}>
+                <div className="px-6 py-4 border-t flex justify-between gap-2 flex-shrink-0" style={{ borderColor:'var(--color-border)' }}>
                     <Button variant="danger" size="sm" iconName="Trash2" iconSize={14}
                         onClick={() => { onDelete(romaneio.id); onClose(); }}>
                         Excluir

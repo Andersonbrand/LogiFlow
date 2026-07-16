@@ -46,6 +46,15 @@ export default function AdminPanel() {
     const [bonifs, setBonifs]       = useState([]);
     const [tab, setTab]             = useState('usuarios');
     const [loading, setLoading]     = useState(true);
+    const [editandoUsuario, setEditandoUsuario] = useState(null); // usuário sendo editado (qualquer papel)
+    const [editUsuarioForm, setEditUsuarioForm] = useState({ name: '', tipo_veiculo: '', cnh_numero: '', cnh_categoria: '', cnh_vencimento: '', data_nascimento: '', is_terceiro: false });
+    const [savingEditUsuario, setSavingEditUsuario] = useState(false);
+    const [criandoUsuario, setCriandoUsuario] = useState(false);
+    const NOVO_USUARIO_VAZIO = { nome: '', email: '', senha: '', role: 'operador', tipoVeiculo: 'caminhao' };
+    const [novoUsuarioForm, setNovoUsuarioForm] = useState(NOVO_USUARIO_VAZIO);
+    const [savingNovoUsuario, setSavingNovoUsuario] = useState(false);
+    const [confirmarExclusaoUsuario, setConfirmarExclusaoUsuario] = useState(null);
+    const [excluindoUsuarioId, setExcluindoUsuarioId] = useState(null);
 
     // ✅ FIX: useCallback garante referência estável para o hook useRecarregarAoVoltar
     const load = useCallback(async () => {
@@ -101,6 +110,85 @@ export default function AdminPanel() {
             showToast('Permissão atualizada!', 'success');
         } catch (err) {
             showToast('Erro: ' + err.message, 'error');
+        }
+    };
+
+    const handleAbrirEdicaoUsuario = (u) => {
+        setEditandoUsuario(u);
+        setEditUsuarioForm({
+            name: u.name || '', tipo_veiculo: u.tipo_veiculo || '',
+            cnh_numero: u.cnh_numero || '', cnh_categoria: u.cnh_categoria || 'C',
+            cnh_vencimento: u.cnh_vencimento || '', data_nascimento: u.data_nascimento || '',
+            is_terceiro: !!u.is_terceiro,
+        });
+    };
+
+    const handleSalvarEdicaoUsuario = async () => {
+        if (!editandoUsuario) return;
+        if (!editUsuarioForm.name?.trim()) { showToast('Informe o nome.', 'error'); return; }
+        setSavingEditUsuario(true);
+        try {
+            const ehMotoristaOuMecanico = editandoUsuario.role === 'motorista' || editandoUsuario.role === 'mecanico';
+            const updates = { name: editUsuarioForm.name.trim() };
+            if (editandoUsuario.role === 'motorista') updates.tipo_veiculo = editUsuarioForm.tipo_veiculo || null;
+            if (ehMotoristaOuMecanico) {
+                updates.cnh_numero      = editUsuarioForm.cnh_numero?.trim() || null;
+                updates.cnh_categoria   = editUsuarioForm.cnh_categoria || null;
+                updates.cnh_vencimento  = editUsuarioForm.cnh_vencimento || null;
+                updates.data_nascimento = editUsuarioForm.data_nascimento || null;
+                updates.is_terceiro     = !!editUsuarioForm.is_terceiro;
+            }
+            await updateUserProfile(editandoUsuario.id, updates);
+            setUsers(prev => prev.map(u => u.id === editandoUsuario.id ? { ...u, ...updates } : u));
+            showToast('Usuário atualizado!', 'success');
+            setEditandoUsuario(null);
+        } catch (err) {
+            showToast('Erro: ' + err.message, 'error');
+        } finally {
+            setSavingEditUsuario(false);
+        }
+    };
+
+    const handleCriarUsuario = async () => {
+        if (!novoUsuarioForm.nome.trim() || !novoUsuarioForm.email.trim() || !novoUsuarioForm.senha) {
+            showToast('Preencha nome, e-mail e senha.', 'error'); return;
+        }
+        if (novoUsuarioForm.senha.length < 6) { showToast('A senha precisa ter ao menos 6 caracteres.', 'error'); return; }
+        setSavingNovoUsuario(true);
+        try {
+            await createDriverUser(supabase, {
+                nome: novoUsuarioForm.nome, email: novoUsuarioForm.email, senha: novoUsuarioForm.senha,
+                role: novoUsuarioForm.role, tipoVeiculo: novoUsuarioForm.tipoVeiculo,
+            });
+            showToast('Usuário criado com sucesso!', 'success');
+            setCriandoUsuario(false);
+            setNovoUsuarioForm(NOVO_USUARIO_VAZIO);
+            const data = await fetchAllUsers();
+            setUsers(data);
+        } catch (err) {
+            showToast('Erro ao criar usuário: ' + err.message, 'error');
+        } finally {
+            setSavingNovoUsuario(false);
+        }
+    };
+
+    const handleExcluirUsuario = async () => {
+        if (!confirmarExclusaoUsuario) return;
+        if (confirmarExclusaoUsuario.id === profile?.id) {
+            showToast('Você não pode excluir seu próprio usuário.', 'error');
+            setConfirmarExclusaoUsuario(null);
+            return;
+        }
+        setExcluindoUsuarioId(confirmarExclusaoUsuario.id);
+        try {
+            await deleteDriverUser(confirmarExclusaoUsuario.id);
+            setUsers(prev => prev.filter(u => u.id !== confirmarExclusaoUsuario.id));
+            showToast('Usuário excluído.', 'success');
+            setConfirmarExclusaoUsuario(null);
+        } catch (err) {
+            showToast('Erro ao excluir: ' + err.message, 'error');
+        } finally {
+            setExcluindoUsuarioId(null);
         }
     };
 
@@ -202,7 +290,11 @@ export default function AdminPanel() {
                             <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
                                 <Icon name="Users" size={18} color="#1D4ED8" />
                                 <h2 className="text-base font-semibold text-slate-800">Usuários do Sistema</h2>
-                                <span className="ml-auto text-xs text-slate-400">{users.length} usuários</span>
+                                <span className="text-xs text-slate-400">{users.length} usuários</span>
+                                <button onClick={() => { setNovoUsuarioForm(NOVO_USUARIO_VAZIO); setCriandoUsuario(true); }}
+                                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors">
+                                    <Icon name="UserPlus" size={14} />Criar Usuário
+                                </button>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm">
@@ -212,11 +304,12 @@ export default function AdminPanel() {
                                             <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide hidden sm:table-cell">Email</th>
                                             <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Perfil</th>
                                             <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Alterar</th>
+                                            <th className="px-4 py-3"></th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                         {users.length === 0 ? (
-                                            <tr><td colSpan={4} className="text-center py-8 text-slate-400">Nenhum usuário encontrado</td></tr>
+                                            <tr><td colSpan={5} className="text-center py-8 text-slate-400">Nenhum usuário encontrado</td></tr>
                                         ) : users.map(u => (
                                             <tr key={u.id} className="hover:bg-slate-50">
                                                 <td className="px-4 py-3">
@@ -251,6 +344,18 @@ export default function AdminPanel() {
                                                         <option value="motorista_carreta">Motorista (Carreta)</option>
                                                         <option value="mecanico">Mecânico</option>
                                                     </select>
+                                                </td>
+                                                <td className="px-4 py-3 text-right whitespace-nowrap">
+                                                    <button onClick={() => handleAbrirEdicaoUsuario(u)}
+                                                        className="p-1.5 rounded-lg hover:bg-amber-50 text-slate-400 hover:text-amber-600 transition-colors"
+                                                        title="Editar usuário">
+                                                        <Icon name="Pencil" size={14} color="currentColor" />
+                                                    </button>
+                                                    <button onClick={() => setConfirmarExclusaoUsuario(u)}
+                                                        className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
+                                                        title="Excluir usuário">
+                                                        <Icon name="Trash2" size={14} color="currentColor" />
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}
@@ -427,6 +532,189 @@ export default function AdminPanel() {
                 </div>
             </main>
             <Toast toast={toast} />
+
+            {/* ── MODAL DE EDIÇÃO DE USUÁRIO (qualquer papel) ─────────────── */}
+            {editandoUsuario && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
+                            <div>
+                                <h3 className="font-bold text-base text-slate-800">Editar Usuário</h3>
+                                <p className="text-xs text-slate-400 mt-0.5">{editandoUsuario.email || 'sem e-mail cadastrado'}</p>
+                            </div>
+                            <button onClick={() => setEditandoUsuario(null)} className="p-1.5 rounded-lg hover:bg-slate-100">
+                                <Icon name="X" size={16} color="#64748B" />
+                            </button>
+                        </div>
+                        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5 text-slate-600">Nome *</label>
+                                <input value={editUsuarioForm.name} onChange={e => setEditUsuarioForm(f => ({ ...f, name: e.target.value }))}
+                                    className="w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" style={{ borderColor: '#CBD5E1' }} />
+                            </div>
+                            {editandoUsuario.role === 'motorista' && (
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5 text-slate-600">Tipo de veículo</label>
+                                    <select value={editUsuarioForm.tipo_veiculo} onChange={e => setEditUsuarioForm(f => ({ ...f, tipo_veiculo: e.target.value }))}
+                                        className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }}>
+                                        <option value="">—</option>
+                                        <option value="caminhao">Caminhão</option>
+                                        <option value="carreta">Carreta</option>
+                                    </select>
+                                </div>
+                            )}
+                            {(editandoUsuario.role === 'motorista' || editandoUsuario.role === 'mecanico') && (
+                                <>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium mb-1.5 text-slate-600">Nº da CNH</label>
+                                            <input value={editUsuarioForm.cnh_numero} onChange={e => setEditUsuarioForm(f => ({ ...f, cnh_numero: e.target.value }))}
+                                                className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium mb-1.5 text-slate-600">Categoria</label>
+                                            <select value={editUsuarioForm.cnh_categoria} onChange={e => setEditUsuarioForm(f => ({ ...f, cnh_categoria: e.target.value }))}
+                                                className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }}>
+                                                {['A', 'B', 'AB', 'C', 'D', 'E', 'ACC'].map(c => <option key={c} value={c}>{c}</option>)}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium mb-1.5 text-slate-600">Venc. da CNH</label>
+                                            <input type="date" value={editUsuarioForm.cnh_vencimento} onChange={e => setEditUsuarioForm(f => ({ ...f, cnh_vencimento: e.target.value }))}
+                                                className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium mb-1.5 text-slate-600">Nascimento</label>
+                                            <input type="date" value={editUsuarioForm.data_nascimento} onChange={e => setEditUsuarioForm(f => ({ ...f, data_nascimento: e.target.value }))}
+                                                className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }} />
+                                        </div>
+                                    </div>
+                                    <label className="flex items-center gap-2 text-xs font-medium text-slate-600 cursor-pointer">
+                                        <input type="checkbox" checked={editUsuarioForm.is_terceiro} onChange={e => setEditUsuarioForm(f => ({ ...f, is_terceiro: e.target.checked }))} />
+                                        Terceirizado
+                                    </label>
+                                </>
+                            )}
+                            <p className="text-xs text-slate-400">
+                                Papel de acesso e e-mail são gerenciados na tela de Usuários do Sistema e não podem ser alterados aqui.
+                            </p>
+                        </div>
+                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50 flex-shrink-0">
+                            <button onClick={() => setEditandoUsuario(null)} disabled={savingEditUsuario}
+                                className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-white disabled:opacity-50" style={{ borderColor: '#CBD5E1' }}>
+                                Cancelar
+                            </button>
+                            <button onClick={handleSalvarEdicaoUsuario} disabled={savingEditUsuario}
+                                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60">
+                                <Icon name={savingEditUsuario ? 'Loader' : 'Check'} size={14} />
+                                {savingEditUsuario ? 'Salvando...' : 'Salvar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── MODAL DE CRIAÇÃO DE USUÁRIO (qualquer papel) ─────────────── */}
+            {criandoUsuario && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0">
+                            <h3 className="font-bold text-base text-slate-800">Criar Usuário</h3>
+                            <button onClick={() => setCriandoUsuario(false)} className="p-1.5 rounded-lg hover:bg-slate-100">
+                                <Icon name="X" size={16} color="#64748B" />
+                            </button>
+                        </div>
+                        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5 text-slate-600">Nome *</label>
+                                <input value={novoUsuarioForm.nome} onChange={e => setNovoUsuarioForm(f => ({ ...f, nome: e.target.value }))}
+                                    className="w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" style={{ borderColor: '#CBD5E1' }} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5 text-slate-600">E-mail *</label>
+                                <input type="email" value={novoUsuarioForm.email} onChange={e => setNovoUsuarioForm(f => ({ ...f, email: e.target.value }))}
+                                    className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5 text-slate-600">Senha * (mín. 6 caracteres)</label>
+                                <input type="password" value={novoUsuarioForm.senha} onChange={e => setNovoUsuarioForm(f => ({ ...f, senha: e.target.value }))}
+                                    className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }} />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1.5 text-slate-600">Papel de acesso *</label>
+                                <select value={novoUsuarioForm.role} onChange={e => setNovoUsuarioForm(f => ({ ...f, role: e.target.value }))}
+                                    className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }}>
+                                    <option value="admin">Admin</option>
+                                    <option value="operador">Operador</option>
+                                    <option value="mecanico">Mecânico</option>
+                                    <option value="motorista">Motorista (Caminhão)</option>
+                                    <option value="motorista_carreta">Motorista (Carreta)</option>
+                                </select>
+                            </div>
+                            {novoUsuarioForm.role === 'motorista' && (
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5 text-slate-600">Tipo de veículo</label>
+                                    <select value={novoUsuarioForm.tipoVeiculo} onChange={e => setNovoUsuarioForm(f => ({ ...f, tipoVeiculo: e.target.value }))}
+                                        className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }}>
+                                        <option value="caminhao">Caminhão</option>
+                                        <option value="carreta">Carreta</option>
+                                    </select>
+                                </div>
+                            )}
+                            <p className="text-xs text-slate-400">
+                                Dados de CNH e outros detalhes específicos de motoristas podem ser preenchidos depois, na edição do usuário.
+                            </p>
+                        </div>
+                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50 flex-shrink-0">
+                            <button onClick={() => setCriandoUsuario(false)} disabled={savingNovoUsuario}
+                                className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-white disabled:opacity-50" style={{ borderColor: '#CBD5E1' }}>
+                                Cancelar
+                            </button>
+                            <button onClick={handleCriarUsuario} disabled={savingNovoUsuario}
+                                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-60">
+                                <Icon name={savingNovoUsuario ? 'Loader' : 'Check'} size={14} />
+                                {savingNovoUsuario ? 'Criando...' : 'Criar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE USUÁRIO ──────────────── */}
+            {confirmarExclusaoUsuario && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+                        <div className="px-6 py-5">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FEE2E2' }}>
+                                    <Icon name="AlertTriangle" size={18} color="#DC2626" />
+                                </div>
+                                <h3 className="font-bold text-base text-slate-800">Excluir usuário?</h3>
+                            </div>
+                            <p className="text-sm text-slate-600">
+                                Isso vai excluir permanentemente <strong>{confirmarExclusaoUsuario.name || confirmarExclusaoUsuario.email}</strong> e
+                                todo o histórico vinculado a ele (viagens, abastecimentos, checklists, diárias, bonificações). Essa ação não pode ser desfeita.
+                            </p>
+                        </div>
+                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-slate-100 bg-slate-50">
+                            <button onClick={() => setConfirmarExclusaoUsuario(null)} disabled={excluindoUsuarioId === confirmarExclusaoUsuario.id}
+                                className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-white disabled:opacity-50" style={{ borderColor: '#CBD5E1' }}>
+                                Cancelar
+                            </button>
+                            <button onClick={handleExcluirUsuario} disabled={excluindoUsuarioId === confirmarExclusaoUsuario.id}
+                                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60">
+                                <Icon name={excluindoUsuarioId === confirmarExclusaoUsuario.id ? 'Loader' : 'Trash2'} size={14} />
+                                {excluindoUsuarioId === confirmarExclusaoUsuario.id ? 'Excluindo...' : 'Excluir'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ── MODAL DE REPROVAÇÃO ──────────────────────────────────────── */}
             {modalReprovar.open && (

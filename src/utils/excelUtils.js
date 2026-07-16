@@ -287,14 +287,16 @@ export function exportRomaneioModelo1(romaneio) {
 
     const grupos = {};
     itens.forEach(item => {
-        const mat    = item.materials || {};
-        const pedido = pedMap[item.pedido_id] || {};
-        const cidade = pedido.cidade_destino || romaneio.destino || '—';
-        const mid    = String(item.material_id || mat.nome || 'x');
+        const mat     = item.materials || {};
+        const pedido  = pedMap[item.pedido_id] || {};
+        const cidade  = pedido.cidade_destino || romaneio.destino || '—';
+        const empresa = pedido.empresa || '—';
+        const mid     = String(item.material_id || mat.nome || 'x');
 
         if (!grupos[cidade]) grupos[cidade] = {};
-        if (!grupos[cidade][mid]) {
-            grupos[cidade][mid] = {
+        if (!grupos[cidade][empresa]) grupos[cidade][empresa] = {};
+        if (!grupos[cidade][empresa][mid]) {
+            grupos[cidade][empresa][mid] = {
                 nome:     mat.nome     || `#${mid}`,
                 unidade:  mat.unidade  || '',
                 pesoUnit: Number(mat.peso || 0),
@@ -302,31 +304,36 @@ export function exportRomaneioModelo1(romaneio) {
                 pedidoIds: new Set(),
             };
         }
-        grupos[cidade][mid].quant     += Number(item.quantidade  || 0);
-        grupos[cidade][mid].pesoTotal += Number(item.peso_total  || 0);
+        grupos[cidade][empresa][mid].quant     += Number(item.quantidade  || 0);
+        grupos[cidade][empresa][mid].pesoTotal += Number(item.peso_total  || 0);
         const np = pedido.numero_pedido;
-        if (np && !grupos[cidade][mid].peds.includes(np)) grupos[cidade][mid].peds.push(np);
-        if (item.pedido_id) grupos[cidade][mid].pedidoIds.add(item.pedido_id);
+        if (np && !grupos[cidade][empresa][mid].peds.includes(np)) grupos[cidade][empresa][mid].peds.push(np);
+        if (item.pedido_id) grupos[cidade][empresa][mid].pedidoIds.add(item.pedido_id);
     });
 
     const cidadesArr = Object.entries(grupos)
         .sort(([a],[b]) => a.localeCompare(b,'pt-BR'))
-        .map(([cidade, mats]) => ({
+        .map(([cidade, empresas]) => ({
             cidade,
-            itens: Object.values(mats)
-                .sort((a,b) => a.nome.localeCompare(b.nome,'pt-BR'))
-                .map(item => {
-                    // Somar valor_pedido e frete de todos os pedidos associados a este item
-                    let totalValorPedido = 0, totalFrete = 0;
-                    item.pedidoIds.forEach(pid => {
-                        const pv = pedValorMap[pid];
-                        if (pv) {
-                            totalValorPedido += pv.valor;
-                            totalFrete += pv.frete || (pv.valor * pv.pct);
-                        }
-                    });
-                    return { ...item, valorPedido: totalValorPedido, fretePedido: totalFrete };
-                }),
+            empresas: Object.entries(empresas)
+                .sort(([a],[b]) => a.localeCompare(b,'pt-BR'))
+                .map(([empresa, mats]) => ({
+                    empresa,
+                    itens: Object.values(mats)
+                        .sort((a,b) => a.nome.localeCompare(b.nome,'pt-BR'))
+                        .map(item => {
+                            // Somar valor_pedido e frete de todos os pedidos associados a este item
+                            let totalValorPedido = 0, totalFrete = 0;
+                            item.pedidoIds.forEach(pid => {
+                                const pv = pedValorMap[pid];
+                                if (pv) {
+                                    totalValorPedido += pv.valor;
+                                    totalFrete += pv.frete || (pv.valor * pv.pct);
+                                }
+                            });
+                            return { ...item, valorPedido: totalValorPedido, fretePedido: totalFrete };
+                        }),
+                })),
         }));
 
     const pesoTotal = itens.reduce((s,i) => s + Number(i.peso_total||0), 0);
@@ -336,6 +343,7 @@ export function exportRomaneioModelo1(romaneio) {
     const AZUL2  = 'D9E1F2';
     const AMAR   = 'FFF2CC';
     const CINZA  = 'F2F2F2';
+    const VERDE  = 'E2EFDA'; // cabeçalho de sub-grupo por empresa
 
     // ── Shared strings ───────────────────────────────────────────────────────
     const ss = []; const ssIdx = {};
@@ -389,26 +397,34 @@ export function exportRomaneioModelo1(romaneio) {
         .map(v => c(v, 5)));
     rowsHt.push(26); R++;
 
-    // Dados por cidade
-    cidadesArr.forEach(({ cidade, itens: itensCidade }) => {
+    // Dados por cidade → empresa → material
+    cidadesArr.forEach(({ cidade, empresas }) => {
         rowsData.push([c(`📍 ${cidade}`, 6), NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
         rowsHt.push(18);
         merges.push({r1:R,c1:0,r2:R,c2:7}); R++;
 
         let pesoCidade = 0;
-        itensCidade.forEach(item => {
-            pesoCidade += item.pesoTotal;
-            rowsData.push([
-                c(item.nome, 7),
-                c(item.unidade, 8),
-                n(item.quant, 8),
-                n(item.pesoUnit > 0 ? item.pesoUnit : 0, 8),
-                n(Math.round(item.pesoTotal*100)/100, 8),
-                c(item.peds.join(' / ')||'—', 8),
-                item.valorPedido > 0 ? n(item.valorPedido, 14) : e(14),
-                item.fretePedido > 0 ? n(item.fretePedido, 14) : e(14),
-            ]);
-            rowsHt.push(15); R++;
+        empresas.forEach(({ empresa, itens: itensEmpresa }) => {
+            rowsData.push([c(`🏢 ${empresa}`, 15), NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
+            rowsHt.push(16);
+            merges.push({r1:R,c1:0,r2:R,c2:7}); R++;
+
+            let pesoEmpresa = 0;
+            itensEmpresa.forEach(item => {
+                pesoEmpresa += item.pesoTotal;
+                rowsData.push([
+                    c(item.nome, 7),
+                    c(item.unidade, 8),
+                    n(item.quant, 8),
+                    n(item.pesoUnit > 0 ? item.pesoUnit : 0, 8),
+                    n(Math.round(item.pesoTotal*100)/100, 8),
+                    c(item.peds.join(' / ')||'—', 8),
+                    item.valorPedido > 0 ? n(item.valorPedido, 14) : e(14),
+                    item.fretePedido > 0 ? n(item.fretePedido, 14) : e(14),
+                ]);
+                rowsHt.push(15); R++;
+            });
+            pesoCidade += pesoEmpresa;
         });
 
         // Subtotal
@@ -516,7 +532,7 @@ export function exportRomaneioModelo1(romaneio) {
   <fill><patternFill patternType="solid"><fgColor rgb="FF${AZUL2}"/></patternFill></fill>
   <fill><patternFill patternType="solid"><fgColor rgb="FF${AMAR}"/></patternFill></fill>
   <fill><patternFill patternType="solid"><fgColor rgb="FF${CINZA}"/></patternFill></fill>
-  <fill><patternFill patternType="none"/></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FF${VERDE}"/></patternFill></fill>
   <fill><patternFill patternType="none"/></fill>
 </fills>
 <borders count="2">
@@ -524,7 +540,7 @@ export function exportRomaneioModelo1(romaneio) {
   <border><left style="thin"><color rgb="FFAAAAAA"/></left><right style="thin"><color rgb="FFAAAAAA"/></right><top style="thin"><color rgb="FFAAAAAA"/></top><bottom style="thin"><color rgb="FFAAAAAA"/></bottom><diagonal/></border>
 </borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="15">
+<cellXfs count="16">
   <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
   <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
   <xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
@@ -540,6 +556,7 @@ export function exportRomaneioModelo1(romaneio) {
   <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
   <xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
   <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+  <xf numFmtId="0" fontId="3" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" indent="1"/></xf>
 </cellXfs>
 </styleSheet>`;
 
@@ -886,7 +903,7 @@ export function exportRelatorioBonificacoes(romaneios, dataInicio, dataFim) {
 
         detalhes.push({
             'Motorista':         motorista,
-            'Romaneio':          r.numero || '',
+            'Romaneio / NF':     r.numero || '',
             'Destino':           r.destino || '',
             'Saída':             saida,
             'Status':            r.status || '',
@@ -897,6 +914,31 @@ export function exportRelatorioBonificacoes(romaneios, dataInicio, dataFim) {
             'Bônus Cimento (R$)': valorCimento.toFixed(2),
             'Total Bônus (R$)':  valorTotal.toFixed(2),
         });
+    });
+
+    // Agrupa os detalhes por motorista (todas as viagens de cada motorista juntas,
+    // ordenadas pelo maior total de bônus), inserindo uma linha de subtotal ao
+    // final de cada grupo — assim cada motorista mostra suas viagens + total.
+    const motoristasOrdenados = Object.entries(porMotorista).sort((a, b) => b[1].valorTotal - a[1].valorTotal).map(([nome]) => nome);
+    const detalhesAgrupados = [];
+    motoristasOrdenados.forEach(nome => {
+        const viagensDoMotorista = detalhes.filter(d => d.Motorista === nome);
+        detalhesAgrupados.push(...viagensDoMotorista);
+        const d = porMotorista[nome];
+        detalhesAgrupados.push({
+            'Motorista':         `TOTAL — ${nome}`,
+            'Romaneio / NF':     '',
+            'Destino':           '',
+            'Saída':             '',
+            'Status':            `${d.viagens} viagem(ns)`,
+            'Kg Ferragem':       d.kgFerragem.toFixed(0),
+            'Ton. Ferragem':     (d.kgFerragem / 1000).toFixed(3),
+            'Bônus Ferragem (R$)': d.valorFerragem.toFixed(2),
+            'Tem Cimento':       '',
+            'Bônus Cimento (R$)': d.valorCimento.toFixed(2),
+            'Total Bônus (R$)':  d.valorTotal.toFixed(2),
+        });
+        detalhesAgrupados.push({}); // linha em branco separando motoristas
     });
 
     const rowsResumo = Object.entries(porMotorista)
@@ -932,10 +974,10 @@ export function exportRelatorioBonificacoes(romaneios, dataInicio, dataFim) {
     wsResumo['!cols'] = Object.keys(rowsResumo[0] || {}).map(() => ({ wch: 20 }));
     XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo por Motorista');
 
-    // ── Aba 2: Detalhes por viagem ─────────────────────────────────────────
-    const wsDetalhes = XLSX.utils.json_to_sheet(detalhes);
+    // ── Aba 2: Detalhes por viagem, agrupados por motorista com subtotal ────
+    const wsDetalhes = XLSX.utils.json_to_sheet(detalhesAgrupados);
     wsDetalhes['!cols'] = Object.keys(detalhes[0] || {}).map(() => ({ wch: 18 }));
-    XLSX.utils.book_append_sheet(wb, wsDetalhes, 'Detalhes por Viagem');
+    XLSX.utils.book_append_sheet(wb, wsDetalhes, 'Detalhes por Motorista');
 
     const periodo = dataInicio && dataFim ? `_${dataInicio.replace(/\//g,'-')}_a_${dataFim.replace(/\//g,'-')}` : '';
     XLSX.writeFile(wb, `relatorio_bonificacoes${periodo}.xlsx`);
@@ -971,6 +1013,8 @@ export function exportDiariaModelo(diaria) {
     const valorDia = Number(diaria.valor_dia || 0);
     const vlTotal  = Number(diaria.valor_total || 0) || diasQtd * valorDia;
     const descr    = diaria.descricao || '';
+    const assinaturaMotorista = diaria.motorista?.assinatura_digital || diaria.assinatura_motorista || '';
+    const assinaturaAdmin = diaria.assinatura_admin || '';
     const brl2 = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 
     // ── Shared strings ────────────────────────────────────────────────────────
@@ -1062,8 +1106,9 @@ export function exportDiariaModelo(diaria) {
     rowsData.push([ NULL, NULL, NULL, NULL, NULL ]); rowsHt.push(0);
     rowsData.push([ NULL, NULL, NULL, NULL, NULL ]); rowsHt.push(0);
 
-    // Linha 24 (r=24): borda bottom
-    rowsData.push([ ce(7), NULL, NULL, NULL, NULL ]);
+    // Linha 24 (r=24): borda bottom — preenchida com a assinatura digital do
+    // admin/operador responsável quando a diária já foi assinada, senão em branco
+    rowsData.push([ assinaturaAdmin ? cs(assinaturaAdmin, 2) : ce(7), NULL, NULL, NULL, NULL ]);
     rowsHt.push(18);
 
     // Linha 25 (r=25): "ASSINATURA DO SETOR DE LOGISTICA"
@@ -1074,8 +1119,9 @@ export function exportDiariaModelo(diaria) {
     rowsData.push([ NULL, NULL, NULL, NULL, NULL ]); rowsHt.push(0);
     rowsData.push([ NULL, NULL, NULL, NULL, NULL ]); rowsHt.push(0);
 
-    // Linha 28 (r=28): borda bottom
-    rowsData.push([ ce(7), NULL, NULL, NULL, NULL ]);
+    // Linha 28 (r=28): borda bottom — preenchida com a assinatura digital do
+    // motorista quando cadastrada, senão fica em branco para assinatura manual
+    rowsData.push([ assinaturaMotorista ? cs(assinaturaMotorista, 2) : ce(7), NULL, NULL, NULL, NULL ]);
     rowsHt.push(18);
 
     // Linha 29 (r=29): "ASSINATURA MOTORISTA"
@@ -1289,6 +1335,8 @@ export function printDiaria(diaria) {
     const vlTotal  = Number(diaria.valor_total || 0) || (diasQtd * valorDia);
     const descr    = diaria.descricao || '';
     const destino  = diaria.destino || diaria.viagem?.destino || '';
+    const assinaturaMotorista = diaria.motorista?.assinatura_digital || diaria.assinatura_motorista || '';
+    const assinaturaAdmin = diaria.assinatura_admin || '';
 
     const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -1352,11 +1400,11 @@ export function printDiaria(diaria) {
     <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA DO SETOR DE TRANSPORTE</div>
   </div>
   <div style="width:31%;padding:0 6px">
-    <div style="border-bottom:1px solid #222;height:40px"></div>
+    <div style="border-bottom:1px solid #222;height:40px;display:flex;align-items:flex-end;justify-content:center">${assinaturaAdmin ? `<span style="font-family:'Brush Script MT',cursive;font-size:16pt;color:#1D4ED8">${esc(assinaturaAdmin)}</span>` : ''}</div>
     <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA DO SETOR DE LOGÍSTICA</div>
   </div>
   <div style="width:31%;padding:0 0 0 12px">
-    <div style="border-bottom:1px solid #222;height:40px"></div>
+    <div style="border-bottom:1px solid #222;height:40px;display:flex;align-items:flex-end;justify-content:center">${assinaturaMotorista ? `<span style="font-family:'Brush Script MT',cursive;font-size:16pt;color:#1D4ED8">${esc(assinaturaMotorista)}</span>` : ''}</div>
     <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA MOTORISTA</div>
   </div>
 </div>

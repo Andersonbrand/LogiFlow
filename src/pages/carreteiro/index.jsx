@@ -8,7 +8,7 @@ import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import {
     fetchViagens, fetchCarretasVeiculos,
-    fetchAbastecimentos, createAbastecimento, updateAbastecimento,
+    fetchAbastecimentos, createAbastecimento, updateAbastecimento, deleteAbastecimento,
     fetchChecklists, createChecklist, updateChecklist, deleteChecklist,
     fetchRegistrosViagem, createRegistroViagem, updateRegistroViagem, deleteRegistroViagem,
     fetchConfigAbastecimento,
@@ -104,6 +104,8 @@ export default function CarreteiroDashboard() {
     const [abast, setAbast]       = useState([]);
     const [checklists, setChecklists] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
+    const veiculosProprios = useMemo(() => veiculos.filter(v => !v.is_terceiro), [veiculos]); // frota própria — exclui terceirizados dos selects
+    const [filtroPlaca, setFiltroPlaca] = useState(''); // filtra registros/abastecimentos/checklist por placa, quando o motorista dirige mais de um veículo
     const [postos, setPostos]     = useState([]);
     const [empresas, setEmpresas] = useState([]);
     const [loading, setLoading]   = useState(true);
@@ -116,6 +118,7 @@ export default function CarreteiroDashboard() {
     const [romaneiosFerragem, setRomaneiosFerragem] = useState([]);
     const [modalRegistro, setModalRegistro] = useState(false);
     const [editandoRegistroId, setEditandoRegistroId] = useState(null);
+    const [salvandoRegistro, setSalvandoRegistro] = useState(false);
     const emptyRegistro = () => ({
         data_carregamento: new Date().toISOString().split('T')[0],
         numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '',
@@ -146,6 +149,8 @@ export default function CarreteiroDashboard() {
     const [modalCheck, setModalCheck]   = useState(false);
     const [editandoAbastId, setEditandoAbastId] = useState(null);
     const [editandoCheckId, setEditandoCheckId] = useState(null);
+    const [salvandoAbast, setSalvandoAbast] = useState(false);
+    const [salvandoCheck, setSalvandoCheck] = useState(false);
     const [formAbast, setFormAbast]     = useState({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '' });
     const [formCheck, setFormCheck]     = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
     const [fotoPreview, setFotoPreview] = useState(null);
@@ -307,6 +312,39 @@ export default function CarreteiroDashboard() {
         bonusExtras.reduce((s, e) => s + Number(e.valor || 0), 0)
     , [bonusExtras]);
 
+    // ── Filtro por placa (motoristas com mais de um veículo) ────────────────
+    const registrosFiltrados = useMemo(() =>
+        filtroPlaca ? registros.filter(r => r.veiculo_id === filtroPlaca) : registros
+    , [registros, filtroPlaca]);
+    const romaneiosFerragemFiltrados = useMemo(() =>
+        filtroPlaca ? romaneiosFerragem.filter(r => r.veiculo_id === filtroPlaca) : romaneiosFerragem
+    , [romaneiosFerragem, filtroPlaca]);
+    const abastFiltrados = useMemo(() =>
+        filtroPlaca ? abast.filter(a => a.veiculo_id === filtroPlaca) : abast
+    , [abast, filtroPlaca]);
+    const checklistsFiltrados = useMemo(() =>
+        filtroPlaca ? checklists.filter(c => c.veiculo_id === filtroPlaca) : checklists
+    , [checklists, filtroPlaca]);
+    // Placas do próprio motorista, extraídas dos registros (não a frota toda) —
+    // relevante para motoristas que dirigem mais de um veículo
+    const minhasPlacas = useMemo(() => {
+        const terceiros = new Set(veiculos.filter(v => v.is_terceiro).map(v => v.id));
+        const map = new Map();
+        [...registros, ...romaneiosFerragem, ...abast, ...checklists].forEach(r => {
+            if (r.veiculo_id && r.veiculo?.placa && !terceiros.has(r.veiculo_id)) map.set(r.veiculo_id, r.veiculo.placa);
+        });
+        return Array.from(map, ([id, placa]) => ({ id, placa })).sort((a, b) => a.placa.localeCompare(b.placa));
+    }, [registros, romaneiosFerragem, abast, checklists, veiculos]);
+    // Seletor de placa — frota própria apenas (exclui veículos de terceiros), só
+    // aparece quando o motorista tem mais de um veículo próprio no histórico
+    const seletorPlaca = minhasPlacas.length > 1 && (
+        <select value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
+            className="px-3 py-2 rounded-lg border text-xs font-medium outline-none" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+            <option value="">Todas as placas</option>
+            {minhasPlacas.map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+        </select>
+    );
+
     const totais = useMemo(() => ({
         viagens:     carregamentos.length,
         finalizadas: carregamentos.length, // todos os carregamentos são considerados finalizados
@@ -314,9 +352,9 @@ export default function CarreteiroDashboard() {
         totalBonus:  totalBonusViagens + totalBonusExtras,
         totalBonusViagens,
         totalBonusExtras,
-        litrosDiesel: abast.reduce((s, a) => s + Number(a.litros_diesel || 0), 0),
-        gastoTotal:   abast.reduce((s, a) => s + Number(a.valor_total || 0), 0),
-    }), [carregamentos, viagens, totalBonusViagens, totalBonusExtras, abast]);
+        litrosDiesel: abastFiltrados.reduce((s, a) => s + Number(a.litros_diesel || 0), 0),
+        gastoTotal:   abastFiltrados.reduce((s, a) => s + Number(a.valor_total || 0), 0),
+    }), [carregamentos, viagens, totalBonusViagens, totalBonusExtras, abastFiltrados]);
 
     // ── Preços: posto tem prioridade sobre config global ───────────────────────
     const getPrecoCarreteiro = useCallback((postoId, tipo) => {
@@ -355,6 +393,7 @@ export default function CarreteiroDashboard() {
     };
 
     const handleAbast = async () => {
+        if (salvandoAbast) return;
         if (!formAbast.veiculo_id || !formAbast.data_abastecimento) { showToast('Veículo e data são obrigatórios', 'error'); return; }
         if (!formAbast.cupom_fiscal?.trim()) { showToast('Informe o N° do cupom fiscal', 'error'); return; }
         const precoDiesel = getPrecoCarreteiro(formAbast.posto_id, 'diesel');
@@ -372,6 +411,7 @@ export default function CarreteiroDashboard() {
             valor_arla:   valorArla.toFixed(2),
         };
         if (!payload.posto_id) delete payload.posto_id;
+        setSalvandoAbast(true);
         try {
             if (editandoAbastId) {
                 await updateAbastecimento(editandoAbastId, payload);
@@ -384,6 +424,7 @@ export default function CarreteiroDashboard() {
             setEditandoAbastId(null);
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSalvandoAbast(false); }
     };
 
     const handleEditAbast = (a) => {
@@ -398,14 +439,24 @@ export default function CarreteiroDashboard() {
             valor_diesel: a.valor_diesel ?? '',
             litros_arla: a.litros_arla ?? '',
             valor_arla: a.valor_arla ?? '',
+            cupom_fiscal: a.cupom_fiscal || '',
             observacoes: a.observacoes || '',
         });
         setModalAbast(true);
     };
 
+    const handleDeleteAbast = async (id) => {
+        const ok = await confirm({ title: 'Excluir abastecimento?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deleteAbastecimento(id); showToast('Abastecimento excluído.', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
     const handleCheck = async () => {
+        if (salvandoCheck) return;
         if (!formCheck.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
+        setSalvandoCheck(true);
         try {
             if (editandoCheckId) {
                 await updateChecklist(editandoCheckId, { ...formCheck });
@@ -420,6 +471,7 @@ export default function CarreteiroDashboard() {
             setFormCheck({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSalvandoCheck(false); }
     };
 
     const handleEditCheck = (c) => {
@@ -1193,6 +1245,7 @@ export default function CarreteiroDashboard() {
 
                                     {tab === 'registros' && (
                                         <div>
+                                            {seletorPlaca && <div className="flex justify-end mb-3">{seletorPlaca}</div>}
                                             {/* Dois botões de ação separados */}
                                             <div className="grid grid-cols-1 gap-3 mb-5">
                                                 <button onClick={() => { setEditandoRegistroId(null); setFormRegistro(emptyRegistro()); setModalRegistro(true); }}
@@ -1221,11 +1274,11 @@ export default function CarreteiroDashboard() {
                                                 </button>
                                             </div>
 
-                                            {registros.length > 0 && (
+                                            {registrosFiltrados.length > 0 && (
                                                 <div>
                                                     <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>Viagens de Cimento</p>
                                                     <div className="flex flex-col gap-2">
-                                                        {registros.map(r => (
+                                                        {registrosFiltrados.map(r => (
                                                             <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: r.local_carregamento === 'Estoque' ? '#FDE68A' : 'var(--color-border)' }}>
                                                                 <div className="flex items-start justify-between mb-2">
                                                                     <div>
@@ -1267,11 +1320,11 @@ export default function CarreteiroDashboard() {
                                             )}
 
                                             {/* ── Romaneios de Ferragem lançados pelo motorista — editáveis aqui ── */}
-                                            {romaneiosFerragem.length > 0 && (
+                                            {romaneiosFerragemFiltrados.length > 0 && (
                                                 <div className="mt-4">
                                                     <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>Romaneios de Ferragem</p>
                                                     <div className="flex flex-col gap-2">
-                                                        {romaneiosFerragem.map(r => (
+                                                        {romaneiosFerragemFiltrados.map(r => (
                                                             <div key={r.id} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: '#FDE68A' }}>
                                                                 <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }}>
                                                                     <div className="flex items-center gap-2">
@@ -1339,7 +1392,7 @@ export default function CarreteiroDashboard() {
                                                 </div>
                                             )}
 
-                                            {registros.length === 0 && romaneiosFerragem.length === 0 && (
+                                            {registrosFiltrados.length === 0 && romaneiosFerragemFiltrados.length === 0 && (
                                                 <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                                                     <Icon name="Navigation" size={28} color="var(--color-muted-foreground)" />
                                                     <span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem registrada</span>
@@ -1350,6 +1403,7 @@ export default function CarreteiroDashboard() {
 
                                     {tab === 'abastecimentos' && (
                                         <div>
+                                            {seletorPlaca && <div className="flex justify-end mb-3">{seletorPlaca}</div>}
                                             <div className="grid grid-cols-2 gap-3 mb-4">
                                                 <div className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                     <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Diesel Total</p>
@@ -1361,9 +1415,9 @@ export default function CarreteiroDashboard() {
                                                 </div>
                                             </div>
                                             <div className="flex flex-col gap-2">
-                                                {abast.length === 0
+                                                {abastFiltrados.length === 0
                                                     ? <div className="bg-white rounded-xl border p-6 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Fuel" size={24} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento no período</span></div>
-                                                    : abast.map(a => (
+                                                    : abastFiltrados.map(a => (
                                                         <div key={a.id} className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                             <div className="flex items-center justify-between mb-1">
                                                                 <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{FMT_DATE(a.data_abastecimento)}</span>
@@ -1375,9 +1429,17 @@ export default function CarreteiroDashboard() {
                                                                 <span className="text-blue-600">{Number(a.litros_diesel || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L diesel</span>
                                                                 {Number(a.litros_arla) > 0 && <span className="text-emerald-600">{Number(a.litros_arla).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L arla</span>}
                                                             </div>
-                                                            <div className="flex justify-end mt-2 pt-2 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                                            {a.cupom_fiscal && (
+                                                                <div className="mt-1 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                    Cupom: <span className="font-data font-medium" style={{ color: 'var(--color-text-primary)' }}>{a.cupom_fiscal}</span>
+                                                                </div>
+                                                            )}
+                                                            <div className="flex justify-end gap-2 mt-2 pt-2 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                                                 <button onClick={() => handleEditAbast(a)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
                                                                     <Icon name="Pencil" size={13} />Editar
+                                                                </button>
+                                                                <button onClick={() => handleDeleteAbast(a.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
+                                                                    <Icon name="Trash2" size={13} />Excluir
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -1389,13 +1451,14 @@ export default function CarreteiroDashboard() {
 
                                     {tab === 'checklist' && (
                                         <div className="flex flex-col gap-4">
-                                            {checklists.length === 0 && (
+                                            {seletorPlaca && <div className="flex justify-end">{seletorPlaca}</div>}
+                                            {checklistsFiltrados.length === 0 && (
                                                 <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
                                                     <Icon name="ClipboardCheck" size={32} color="var(--color-muted-foreground)" />
                                                     <span className="text-sm">Nenhum checklist enviado ainda</span>
                                                 </div>
                                             )}
-                                            {checklists.map(c => {
+                                            {checklistsFiltrados.map(c => {
                                                 const itens = c.itens || {};
                                                 const ok = Object.values(itens).filter(Boolean).length;
                                                 return (
@@ -1496,7 +1559,7 @@ export default function CarreteiroDashboard() {
                             <Field label="Veículo" required>
                                 <select value={formAbast.veiculo_id} onChange={e => setFormAbast(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
-                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                    {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </select>
                             </Field>
                             <Field label="Data" required><input type="date" value={formAbast.data_abastecimento} onChange={e => setFormAbast(f => ({ ...f, data_abastecimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
@@ -1573,8 +1636,8 @@ export default function CarreteiroDashboard() {
                             </div>
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => { setModalAbast(false); setEditandoAbastId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleAbast} size="sm" iconName="Check" className="w-full sm:w-auto">{editandoAbastId ? 'Salvar' : 'Registrar'}</Button>
+                            <button onClick={() => { setModalAbast(false); setEditandoAbastId(null); }} disabled={salvandoAbast} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center disabled:opacity-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <Button onClick={handleAbast} disabled={salvandoAbast} loading={salvandoAbast} size="sm" iconName="Check" className="w-full sm:w-auto">{editandoAbastId ? 'Salvar' : 'Registrar'}</Button>
                         </div>
                     </div>
                 </div>
@@ -1599,7 +1662,7 @@ export default function CarreteiroDashboard() {
                             <Field label="Veículo" required>
                                 <select value={formCheck.veiculo_id} onChange={e => setFormCheck(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
-                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                    {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </select>
                             </Field>
 
@@ -1654,8 +1717,8 @@ export default function CarreteiroDashboard() {
                             <Field label="Observações livres"><textarea value={formCheck.observacoes_livres} onChange={e => setFormCheck(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => { setModalCheck(false); setFotoPreview(null); setEditandoCheckId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleCheck} size="sm" iconName={editandoCheckId ? 'Check' : 'Send'} className="w-full sm:w-auto">{editandoCheckId ? 'Salvar' : 'Enviar'}</Button>
+                            <button onClick={() => { setModalCheck(false); setFotoPreview(null); setEditandoCheckId(null); }} disabled={salvandoCheck} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center disabled:opacity-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <Button onClick={handleCheck} disabled={salvandoCheck} loading={salvandoCheck} size="sm" iconName={editandoCheckId ? 'Check' : 'Send'} className="w-full sm:w-auto">{editandoCheckId ? 'Salvar' : 'Enviar'}</Button>
                         </div>
                     </div>
                 </div>
@@ -1712,7 +1775,7 @@ export default function CarreteiroDashboard() {
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Placa do veículo <span className="text-red-500">*</span></label>
                                 <select value={formRegistro.veiculo_id} onChange={e => setFormRegistro(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
-                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                    {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </select>
                             </div>
                             <div className={formRegistro.local_carregamento === 'Estoque' ? 'sm:col-span-2' : ''}>
@@ -1749,8 +1812,9 @@ export default function CarreteiroDashboard() {
                             </div>
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => { setModalRegistro(false); setEditandoRegistroId(null); }} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <button onClick={() => { setModalRegistro(false); setEditandoRegistroId(null); }} disabled={salvandoRegistro} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center disabled:opacity-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <Button onClick={async () => {
+                                if (salvandoRegistro) return;
                                 const isEstoque = formRegistro.local_carregamento === 'Estoque';
                                 // Placa era exibida como obrigatória (*) mas não era validada — corrigido aqui.
                                 if (!formRegistro.data_carregamento || !formRegistro.destino || !formRegistro.veiculo_id) {
@@ -1767,6 +1831,7 @@ export default function CarreteiroDashboard() {
                                     tipo_cimento:        isEstoque ? formRegistro.tipo_cimento : null,
                                     local_carregamento:  isEstoque ? 'Estoque' : null,
                                 };
+                                setSalvandoRegistro(true);
                                 try {
                                     if (editandoRegistroId) {
                                         await updateRegistroViagem(editandoRegistroId, payload);
@@ -1778,7 +1843,8 @@ export default function CarreteiroDashboard() {
                                     setEditandoRegistroId(null);
                                     setModalRegistro(false); load();
                                 } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                            }} size="sm" iconName="Check" className="w-full sm:w-auto">{editandoRegistroId ? 'Salvar' : 'Registrar'}</Button>
+                                finally { setSalvandoRegistro(false); }
+                            }} disabled={salvandoRegistro} loading={salvandoRegistro} size="sm" iconName="Check" className="w-full sm:w-auto">{editandoRegistroId ? 'Salvar' : 'Registrar'}</Button>
                         </div>
 
                     </div>
@@ -1842,7 +1908,7 @@ export default function CarreteiroDashboard() {
                             <select value={formFerragem.veiculo_id} onChange={e => setFormFerragem(f => ({ ...f, veiculo_id: e.target.value }))}
                                 className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
-                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                             </select>
                         </Field>
                         <div className="grid grid-cols-2 gap-4">
@@ -1967,7 +2033,7 @@ export default function CarreteiroDashboard() {
                                     onChange={e => setFormPonto(f => ({ ...f, veiculo_id: e.target.value }))}
                                     className={inputCls} style={inputStyle}>
                                     <option value="">Selecione (opcional)...</option>
-                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                    {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </select>
                             </Field>
 

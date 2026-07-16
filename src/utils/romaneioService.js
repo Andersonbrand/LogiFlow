@@ -204,6 +204,9 @@ export async function createRomaneio(romaneio, itens = []) {
     if (error) throw error;
     const romId = romData.id;
 
+    // Placa/veículo confirmado neste romaneio → sincroniza o status do veículo automaticamente
+    await sincronizarStatusVeiculo(romaneio.vehicle_id, romaneio.placa, romaneio.status || 'Aguardando');
+
     // Save pedidos and get back their IDs
     const pedidoIdMap = {}; // pedido_index -> real DB id
     const pedidosMeta = romaneio._pedidos || [];
@@ -253,6 +256,11 @@ export async function duplicateRomaneio(romaneio) {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 export async function updateRomaneio(id, romaneio, itens) {
+    // Guarda o veículo/placa anterior para, se a placa for trocada na edição,
+    // liberar o veículo antigo (volta para "Disponível") automaticamente.
+    const { data: romAntes } = await supabase.from('romaneios')
+        .select('vehicle_id, placa').eq('id', id).single();
+
     // ── 1. Pedidos e itens ANTES de atualizar o romaneio ─────────────────────
     // Assim quando o Realtime disparar (após o UPDATE abaixo), o fetch
     // já encontra os dados de pedidos/itens consistentes e não duplica.
@@ -308,6 +316,24 @@ export async function updateRomaneio(id, romaneio, itens) {
     const { error } = await supabase.from('romaneios').update(buildPayload(romaneio)).eq('id', id);
     if (error) throw error;
 
+    // Placa/veículo confirmado (ou trocado) neste romaneio → sincroniza status automaticamente
+    await sincronizarStatusVeiculo(romaneio.vehicle_id, romaneio.placa, romaneio.status || 'Aguardando');
+
+    // Se a placa/veículo foi trocada na edição, libera o veículo anterior
+    const placaAntes  = (romAntes?.placa || '').trim().toLowerCase();
+    const placaDepois = (romaneio.placa  || '').trim().toLowerCase();
+    const vehicleIdMudou = romAntes?.vehicle_id && romaneio.vehicle_id && romAntes.vehicle_id !== romaneio.vehicle_id;
+    const placaMudou     = placaAntes && placaDepois && placaAntes !== placaDepois;
+    if (vehicleIdMudou || placaMudou) {
+        try {
+            if (romAntes.vehicle_id) {
+                await supabase.from('vehicles').update({ status: 'Disponível' }).eq('id', romAntes.vehicle_id);
+            } else if (romAntes.placa) {
+                await supabase.from('vehicles').update({ status: 'Disponível' }).ilike('placa', romAntes.placa.trim());
+            }
+        } catch (_) {}
+    }
+
     return fetchRomaneioById(id);
 }
 
@@ -345,8 +371,46 @@ export async function updateRomaneioStatus(id, status) {
     return data;
 }
 
+// Assina digitalmente a diária gerada automaticamente pelo romaneio (caminhões)
+// como responsável (admin ou operador).
+export async function assinarDiariaRomaneio(id, assinaturaTexto, assinanteId = null) {
+    const { data, error } = await supabase
+        .from('romaneios')
+        .update({
+            assinatura_diaria_admin: assinaturaTexto,
+            assinatura_diaria_admin_at: new Date().toISOString(),
+            assinatura_diaria_admin_por: assinanteId,
+        })
+        .eq('id', id)
+        .select('id, numero, assinatura_diaria_admin, assinatura_diaria_admin_at')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+// Remove a assinatura digital da diária gerada pelo romaneio, voltando ao
+// estado "sem assinatura" (ação reservada a administradores na UI).
+export async function desassinarDiariaRomaneio(id) {
+    const { data, error } = await supabase
+        .from('romaneios')
+        .update({
+            assinatura_diaria_admin: null,
+            assinatura_diaria_admin_at: null,
+            assinatura_diaria_admin_por: null,
+        })
+        .eq('id', id)
+        .select('id, numero, assinatura_diaria_admin, assinatura_diaria_admin_at')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 export async function deleteRomaneio(id) {
+    // Guarda veículo/placa para liberar (voltar a "Disponível") após excluir
+    const { data: romAntes } = await supabase.from('romaneios')
+        .select('vehicle_id, placa').eq('id', id).single();
+
     // Apaga registros dependentes antes (respeita foreign key constraints)
     await supabase.from('notifications').delete().eq('romaneio_id', id);
     const { error: itensErr } = await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
@@ -355,6 +419,12 @@ export async function deleteRomaneio(id) {
     if (pedidosErr) throw new Error('Falha ao remover pedidos do romaneio: ' + pedidosErr.message);
     const { error } = await supabase.from('romaneios').delete().eq('id', id);
     if (error) throw error;
+
+    if (romAntes?.vehicle_id) {
+        await supabase.from('vehicles').update({ status: 'Disponível' }).eq('id', romAntes.vehicle_id);
+    } else if (romAntes?.placa) {
+        await supabase.from('vehicles').update({ status: 'Disponível' }).ilike('placa', romAntes.placa.trim());
+    }
 }
 
 // ── Aprovação de romaneios ────────────────────────────────────────────────────
@@ -535,10 +605,16 @@ export async function deleteRascunho(id) {
 
 export async function promoverRascunho(id) {
     const numero = await nextNumeroGlobal();
-    const { error } = await supabase
+    const { data, error } = await supabase
         .from('romaneios')
         .update({ numero, is_rascunho: false, status: 'Aguardando' })
-        .eq('id', id);
+        .eq('id', id)
+        .select('id, vehicle_id, placa')
+        .single();
     if (error) throw error;
+
+    // Placa confirmada ao promover o rascunho para romaneio oficial → sincroniza veículo
+    await sincronizarStatusVeiculo(data?.vehicle_id, data?.placa, 'Aguardando');
+
     return fetchRomaneioById(id);
 }

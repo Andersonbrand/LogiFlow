@@ -851,7 +851,7 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
 
     const EMPTY_FORM    = { motorista: '', motorista_id: '', placa: '', vehicle_id: '', destino: '', saida: '', observacoes: '' };
     const EMPTY_PEDIDO  = () => ({ numero_pedido: '', empresa: 'Comercial Araguaia', valor_pedido: '', categoria_frete: 'Ferragens', cidade_destino: '', itens: [] });
-    const EMPTY_ITEM    = () => ({ material_id: '', quantidade: '1', peso_unit: '', peso_total: '' });
+    const EMPTY_ITEM    = () => ({ material_id: '', quantidade: '1', peso_unit: '', peso_total: '', is_telha_zinco: false, comprimento_telha: '', metros_totais: '' });
 
     const [form, setForm]       = useState(EMPTY_FORM);
     const [pedidos, setPedidos] = useState([EMPTY_PEDIDO()]);
@@ -859,6 +859,13 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
     const [saving, setSaving]   = useState(false);
     const [aiLoading, setAiLoading] = useState(false);
     const [aiSugestao, setAiSugestao] = useState('');
+    const [buscaPedido, setBuscaPedido] = useState('');
+    const [openPedidos, setOpenPedidos] = useState(() => new Set([0]));
+    const togglePedido = idx => setOpenPedidos(s => {
+        const n = new Set(s);
+        n.has(idx) ? n.delete(idx) : n.add(idx);
+        return n;
+    });
 
     useEffect(() => {
         if (rascunho) {
@@ -872,6 +879,9 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                     material_id: i.material_id || '', quantidade: String(i.quantidade || 1),
                     peso_unit: i.materials?.peso ? String(i.materials.peso) : '',
                     peso_total: i.peso_total != null ? String(i.peso_total) : '',
+                    is_telha_zinco: i.is_telha_zinco || i.materials?.is_telha_zinco || false,
+                    comprimento_telha: i.comprimento_telha != null ? String(i.comprimento_telha) : '',
+                    metros_totais: i.metros_totais != null ? String(i.metros_totais) : '',
                 })),
             })) : [EMPTY_PEDIDO()]);
             setAiSugestao(rascunho.sugestao_veiculo || '');
@@ -879,13 +889,23 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
             setForm(EMPTY_FORM); setPedidos([EMPTY_PEDIDO()]); setAiSugestao('');
         }
         setTab('dados');
+        setBuscaPedido('');
+        setOpenPedidos(new Set([0]));
     }, [rascunho]); // eslint-disable-line
 
     const setF = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
     const updPedido = (idx, patch) => setPedidos(p => p.map((x, i) => i === idx ? { ...x, ...patch } : x));
-    const addPedido = () => setPedidos(p => [...p, EMPTY_PEDIDO()]);
-    const delPedido = idx => setPedidos(p => p.filter((_, i) => i !== idx));
+    const addPedido = () => {
+        setPedidos(p => {
+            setOpenPedidos(s => new Set([...s, p.length]));
+            return [...p, EMPTY_PEDIDO()];
+        });
+    };
+    const delPedido = idx => {
+        setPedidos(p => p.filter((_, i) => i !== idx));
+        setOpenPedidos(s => new Set([...s].filter(i => i !== idx).map(i => i > idx ? i - 1 : i)));
+    };
 
     // useRef garante que materials sempre aponta para a versão mais recente
     // sem criar stale closure (o problema que causava peso_total não calcular)
@@ -898,17 +918,58 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
         const newItens = ped.itens.map((it, ii) => {
             if (ii !== iIdx) return it;
             const merged = { ...it, ...patch };
-            // Se material mudou: busca peso_unit e calcula peso_total imediatamente
+
+            // Se material mudou: detecta telha de zinco e (re)inicializa campos
             if (patch.material_id !== undefined) {
                 const mat = mats.find(m => String(m.id) === String(patch.material_id));
-                if (mat?.peso) {
-                    merged.peso_unit  = String(mat.peso);
-                    merged.peso_total = String(Math.round(Number(mat.peso) * Number(merged.quantidade || 1) * 1000) / 1000);
-                } else {
+                merged.is_telha_zinco = !!mat?.is_telha_zinco;
+                if (merged.is_telha_zinco) {
+                    // Telha: quantidade = nº de peças, calculada a partir de metros totais
+                    // ÷ comprimento de cada peça — mesma lógica usada em Romaneios.
+                    merged.comprimento_telha = merged.comprimento_telha || '';
+                    merged.metros_totais     = merged.metros_totais || '';
                     merged.peso_unit  = '';
-                    if (!merged._manualPeso) merged.peso_total = '';
+                    merged.quantidade = merged.quantidade || '';
+                    merged.peso_total = '';
+                } else {
+                    merged.is_telha_zinco = false;
+                    merged.comprimento_telha = '';
+                    merged.metros_totais = '';
+                    if (mat?.peso) {
+                        merged.peso_unit  = String(mat.peso);
+                        merged.peso_total = String(Math.round(Number(mat.peso) * Number(merged.quantidade || 1) * 1000) / 1000);
+                    } else {
+                        merged.peso_unit  = '';
+                        if (!merged._manualPeso) merged.peso_total = '';
+                    }
                 }
             }
+
+            if (merged.is_telha_zinco) {
+                // Recalcula sempre que comprimento ou metros totais mudarem
+                const mat = mats.find(m => String(m.id) === String(merged.material_id));
+                const pesoBaseMetro = Number(mat?.peso_base_metro) || Number(mat?.peso) || 3.80;
+                const comp = Number(merged.comprimento_telha) || 0;
+                const metros = Number(merged.metros_totais) || 0;
+                if (comp > 0) {
+                    const pesoUnit = pesoBaseMetro * comp;
+                    merged.peso_unit = String(Math.round(pesoUnit * 1000) / 1000);
+                    if (metros > 0) {
+                        const qtdTelhas = Math.round(metros / comp);
+                        merged.quantidade = String(qtdTelhas);
+                        merged.peso_total = String(Math.round(qtdTelhas * pesoUnit * 1000) / 1000);
+                    } else {
+                        merged.quantidade = '';
+                        merged.peso_total = '';
+                    }
+                } else {
+                    merged.peso_unit  = '';
+                    merged.quantidade = '';
+                    merged.peso_total = '';
+                }
+                return merged;
+            }
+
             // Se quantidade mudou e temos peso_unit: recalcula (se não editado manualmente)
             if (patch.quantidade !== undefined && merged.peso_unit && !merged._manualPeso) {
                 merged.peso_total = String(Math.round(Number(merged.peso_unit) * Number(merged.quantidade || 1) * 1000) / 1000);
@@ -1148,33 +1209,60 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                     {/* ── ABA: Pedidos ── */}
                     {tab === 'pedidos' && (
                         <div className="space-y-4">
-                            <div className="flex justify-end">
-                                <button onClick={addPedido} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ backgroundColor: '#D97706' }}>
+                            <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <Icon name="Search" size={14} color="var(--color-muted-foreground)" className="absolute left-3 top-1/2 -translate-y-1/2" />
+                                    <input value={buscaPedido} onChange={e => setBuscaPedido(e.target.value)}
+                                        className={inputCls} style={{ ...inputStyle, paddingLeft: 32 }}
+                                        placeholder="Buscar por nº do pedido, empresa ou cidade..." />
+                                </div>
+                                <button onClick={addPedido} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-white flex-shrink-0" style={{ backgroundColor: '#D97706' }}>
                                     <Icon name="Plus" size={12} color="white" /> Adicionar pedido
                                 </button>
                             </div>
 
-                            {pedidos.map((ped, pIdx) => {
+                            {(() => {
+                                const termo = buscaPedido.trim().toLowerCase();
+                                const visiveis = pedidos
+                                    .map((ped, pIdx) => ({ ped, pIdx }))
+                                    .filter(({ ped }) => !termo ||
+                                        (ped.numero_pedido || '').toLowerCase().includes(termo) ||
+                                        (ped.empresa || '').toLowerCase().includes(termo) ||
+                                        (ped.cidade_destino || '').toLowerCase().includes(termo));
+                                if (visiveis.length === 0) return (
+                                    <div className="flex flex-col items-center justify-center py-8 gap-1 rounded-xl border border-dashed" style={{ borderColor: 'var(--color-border)' }}>
+                                        <Icon name="SearchX" size={20} color="var(--color-muted-foreground)" />
+                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum pedido encontrado para "{buscaPedido}"</p>
+                                    </div>
+                                );
+                                return visiveis.map(({ ped, pIdx }) => {
                                 const pct   = (FRETE_CATEGORIAS || []).find(f => f.categoria === ped.categoria_frete)?.percentual || 0;
                                 const frete = Number(ped.valor_pedido || 0) * pct;
+                                const aberto = openPedidos.has(pIdx);
                                 return (
                                     <div key={pIdx} className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                                        {/* Cabeçalho pedido */}
-                                        <div className="flex items-center justify-between px-4 py-2 border-b" style={{ backgroundColor: 'var(--color-subtle)', borderColor: 'var(--color-border)' }}>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+                                        {/* Cabeçalho pedido — clique expande/recolhe */}
+                                        <div onClick={() => togglePedido(pIdx)}
+                                            className="flex items-center justify-between px-4 py-2 border-b cursor-pointer select-none"
+                                            style={{ backgroundColor: 'var(--color-subtle)', borderColor: 'var(--color-border)' }}>
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <Icon name={aberto ? 'ChevronDown' : 'ChevronRight'} size={14} color="var(--color-muted-foreground)" />
+                                                <span className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
                                                     Pedido #{pIdx + 1}
                                                 </span>
                                                 {ped.numero_pedido && <span className="text-xs font-mono font-semibold" style={{ color: 'var(--color-primary)' }}>#{ped.numero_pedido}</span>}
-                                                {frete > 0 && <span className="text-xs font-semibold" style={{ color: '#059669' }}>Frete: {brl(frete)} ({(pct * 100).toFixed(0)}%)</span>}
+                                                {!aberto && ped.empresa && <span className="text-xs truncate" style={{ color: 'var(--color-muted-foreground)' }}>{ped.empresa}</span>}
+                                                {!aberto && ped.itens?.length > 0 && <span className="text-xs flex-shrink-0" style={{ color: 'var(--color-muted-foreground)' }}>· {ped.itens.length} item(s)</span>}
+                                                {frete > 0 && <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#059669' }}>Frete: {brl(frete)} ({(pct * 100).toFixed(0)}%)</span>}
                                             </div>
                                             {pedidos.length > 1 && (
-                                                <button onClick={() => delPedido(pIdx)} className="text-xs flex items-center gap-1" style={{ color: '#DC2626' }}>
+                                                <button onClick={e => { e.stopPropagation(); delPedido(pIdx); }} className="text-xs flex items-center gap-1 flex-shrink-0" style={{ color: '#DC2626' }}>
                                                     <Icon name="X" size={12} color="#DC2626" /> Remover
                                                 </button>
                                             )}
                                         </div>
 
+                                        {aberto && (
                                         <div className="p-4 space-y-3">
                                             {/* Campos do pedido */}
                                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -1224,6 +1312,44 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                                                     <div className="space-y-2">
                                                         {ped.itens.map((item, iIdx) => {
                                                             const mat = (materials || []).find(m => m.id === item.material_id);
+                                                            const isTelha = item.is_telha_zinco || mat?.is_telha_zinco;
+                                                            if (isTelha) {
+                                                                return (
+                                                                    <div key={iIdx} className="grid grid-cols-4 gap-2 items-end bg-white rounded-lg p-2 border" style={{ borderColor: '#DDD6FE' }}>
+                                                                        <div className="col-span-4 sm:col-span-1">
+                                                                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Material</label>
+                                                                            <select value={item.material_id} onChange={e => updItem(pIdx, iIdx, { material_id: e.target.value })} className={inputCls} style={{ ...inputStyle, fontSize: '11px', padding: '6px 8px' }}>
+                                                                                <option value="">Selecione...</option>
+                                                                                {(materials || []).map(m => <option key={m.id} value={m.id}>{m.nome} {m.peso ? `(${m.peso}kg/${m.unidade})` : ''}</option>)}
+                                                                            </select>
+                                                                        </div>
+                                                                        <div>
+                                                                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Comp. (m)</label>
+                                                                            <input type="number" min="0.5" step="0.5" value={item.comprimento_telha} onChange={e => updItem(pIdx, iIdx, { comprimento_telha: e.target.value })} placeholder="Ex: 2.5" className={inputCls} style={{ ...inputStyle, fontSize: '12px', padding: '6px 8px' }} />
+                                                                        </div>
+                                                                        <div>
+                                                                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Metros totais</label>
+                                                                            <input type="number" min="0" step="0.01" value={item.metros_totais} onChange={e => updItem(pIdx, iIdx, { metros_totais: e.target.value })} placeholder="Ex: 100" className={inputCls} style={{ ...inputStyle, fontSize: '12px', padding: '6px 8px' }} />
+                                                                        </div>
+                                                                        <div className="flex items-end gap-1">
+                                                                            <div className="flex-1">
+                                                                                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Peças / Peso</label>
+                                                                                <div className="px-2 py-1.5 rounded-lg border bg-gray-50 text-xs font-data" style={{ borderColor: '#DDD6FE' }}>
+                                                                                    {item.quantidade ? `${item.quantidade} pç` : '—'} · {item.peso_total ? `${Number(item.peso_total).toLocaleString('pt-BR')} kg` : '—'}
+                                                                                </div>
+                                                                            </div>
+                                                                            <button onClick={() => delItem(pIdx, iIdx)} className="mb-0.5 p-1.5 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0">
+                                                                                <Icon name="X" size={12} color="#DC2626" />
+                                                                            </button>
+                                                                        </div>
+                                                                        {!item.comprimento_telha && (
+                                                                            <p className="col-span-4 text-[11px] flex items-center gap-1" style={{ color: '#B45309' }}>
+                                                                                <Icon name="AlertTriangle" size={11} color="#B45309" /> Informe o comprimento de cada telha (m) para calcular peças e peso.
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            }
                                                             return (
                                                                 <div key={iIdx} className="grid grid-cols-4 gap-2 items-end bg-white rounded-lg p-2 border" style={{ borderColor: '#DDD6FE' }}>
                                                                     <div className="col-span-2">
@@ -1258,9 +1384,11 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                                                 )}
                                             </div>
                                         </div>
+                                        )}
                                     </div>
                                 );
-                            })}
+                                });
+                            })()}
 
                             {/* Resumo totais */}
                             <div className="grid grid-cols-3 gap-3">

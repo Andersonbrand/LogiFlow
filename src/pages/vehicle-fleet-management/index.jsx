@@ -24,11 +24,11 @@ import {
     fetchChecklists, aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
     criarRascunhoOSDeChecklist,
     deleteChecklist,
-    fetchDiarias, createDiaria, updateDiaria, deleteDiaria,
+    fetchDiarias, createDiaria, updateDiaria, deleteDiaria, assinarDiaria, desassinarDiaria,
     fetchMotoristasCaminhao,
     CHECKLIST_ITENS,
 } from "utils/carretasService";
-import { deleteRomaneio } from "utils/romaneioService";
+import { deleteRomaneio, assinarDiariaRomaneio, desassinarDiariaRomaneio } from "utils/romaneioService";
 import { supabase, subscribeTabela } from "utils/supabaseClient";
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -94,6 +94,50 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
     const [modalFoto, setModalFoto]   = useState(null);
     const [modalDiaria, setModalDiaria] = useState(null);
     const [viewDiaria, setViewDiaria] = useState(null);
+    const [assinando, setAssinando] = useState(false);
+    const canSign = adminProfile?.role === 'admin' || adminProfile?.role === 'operador';
+
+    // Assina a diária em exibição como responsável (admin/operador). Cobre tanto
+    // diárias avulsas (carretas_diarias) quanto as geradas por romaneio.
+    const handleAssinarDiaria = async () => {
+        if (!viewDiaria || !canSign || !adminProfile?.assinatura_digital) return;
+        setAssinando(true);
+        try {
+            const texto = adminProfile.assinatura_digital;
+            if (viewDiaria._romaneioId) {
+                await assinarDiariaRomaneio(viewDiaria._romaneioId, texto, adminProfile.id);
+                setRomaneiosDiarias(rs => rs.map(r => r.id === viewDiaria._romaneioId
+                    ? { ...r, assinatura_diaria_admin: texto, assinatura_diaria_admin_at: new Date().toISOString() } : r));
+            } else if (viewDiaria.id) {
+                await assinarDiaria(viewDiaria.id, texto, adminProfile.id);
+                setDiarias(ds => ds.map(d => d.id === viewDiaria.id
+                    ? { ...d, assinatura_admin: texto, assinatura_admin_at: new Date().toISOString() } : d));
+            }
+            setViewDiaria(v => ({ ...v, assinatura_admin: texto, assinatura_admin_at: new Date().toISOString() }));
+            showToast('Diária assinada digitalmente!', 'success');
+        } catch (e) { showToast('Erro ao assinar: ' + e.message, 'error'); }
+        finally { setAssinando(false); }
+    };
+    // Remove a assinatura (volta ao estado sem assinatura) — restrito a admins.
+    const isAdminUser = adminProfile?.role === 'admin';
+    const handleDesassinarDiaria = async () => {
+        if (!viewDiaria || !isAdminUser) return;
+        setAssinando(true);
+        try {
+            if (viewDiaria._romaneioId) {
+                await desassinarDiariaRomaneio(viewDiaria._romaneioId);
+                setRomaneiosDiarias(rs => rs.map(r => r.id === viewDiaria._romaneioId
+                    ? { ...r, assinatura_diaria_admin: null, assinatura_diaria_admin_at: null } : r));
+            } else if (viewDiaria.id) {
+                await desassinarDiaria(viewDiaria.id);
+                setDiarias(ds => ds.map(d => d.id === viewDiaria.id
+                    ? { ...d, assinatura_admin: null, assinatura_admin_at: null } : d));
+            }
+            setViewDiaria(v => ({ ...v, assinatura_admin: null, assinatura_admin_at: null }));
+            showToast('Assinatura removida.', 'success');
+        } catch (e) { showToast('Erro ao remover assinatura: ' + e.message, 'error'); }
+        finally { setAssinando(false); }
+    };
     const [romaneiosDiarias, setRomaneiosDiarias] = useState([]);
     const [veiculosCaminhao, setVeiculosCaminhao] = useState([]);
     const [formDiaria, setFormDiaria] = useState({
@@ -114,7 +158,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             // cruzando por motorista_id OU nome do motorista (campo texto livre)
             const romaneioRes = await supabase
                 .from('romaneios')
-                .select('id, numero, motorista, motorista_id, placa, destino, status, saida, created_at, custo_motorista, dias_diaria, valor_diaria_dia')
+                .select('id, numero, motorista, motorista_id, placa, destino, status, saida, created_at, custo_motorista, dias_diaria, valor_diaria_dia, assinatura_diaria_admin, assinatura_diaria_admin_at')
                 .or(`motorista_id.eq.${motorista.id},motorista.ilike.${motorista.name}`)
                 .gt('custo_motorista', 0)
                 .gte('created_at', f.dataInicio)
@@ -241,6 +285,8 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                     valor_total:     Number(r.custo_motorista || 0),
                     descricao:       r.destino || '',
                     viagem:          { numero: r.numero, destino: r.destino },
+                    assinatura_admin:    r.assinatura_diaria_admin || null,
+                    assinatura_admin_at: r.assinatura_diaria_admin_at || null,
                 });
             });
             showToast(`${avulsas.length + romDiarias.length} diária(s) exportada(s)!`, 'success');
@@ -288,6 +334,8 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             valor_total:     Number(r.custo_motorista || 0),
             descricao:       r.destino || '',
             viagem:          { numero: r.numero, destino: r.destino },
+            assinatura_admin:    r.assinatura_diaria_admin || null,
+            assinatura_admin_at: r.assinatura_diaria_admin_at || null,
         });
     };
 
@@ -605,6 +653,9 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                                 valor_total: Number(r.custo_motorista || 0),
                                                                                 descricao: r.destino || '',
                                                                                 viagem: { numero: r.numero, destino: r.destino },
+                                                                                assinatura_admin: r.assinatura_diaria_admin || null,
+                                                                                assinatura_admin_at: r.assinatura_diaria_admin_at || null,
+                                                                                _romaneioId: r.id,
                                                                                 _exportFn: () => exportarRomaneioComoDialia(r),
                                                                             })} title="Visualizar diária" className="p-1.5 rounded hover:bg-emerald-50">
                                                                                 <Icon name="Eye" size={13} color="#059669" />
@@ -832,6 +883,35 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                     {viewDiaria.viagem.destino && <p className="text-xs text-gray-500">{viewDiaria.viagem.destino}</p>}
                                 </div>
                             )}
+                            {canSign && (
+                                viewDiaria.assinatura_admin ? (
+                                    <label className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg ${isAdminUser ? 'cursor-pointer' : ''}`}
+                                        style={{ backgroundColor: '#EFF6FF', border: '1px solid #93C5FD' }}
+                                        title={isAdminUser ? 'Desmarque para remover a assinatura' : undefined}>
+                                        <input type="checkbox" checked readOnly={!isAdminUser} disabled={!isAdminUser || assinando}
+                                            onChange={() => isAdminUser && handleDesassinarDiaria()} className="w-4 h-4" />
+                                        <Icon name="BadgeCheck" size={14} color="#1D4ED8" />
+                                        <span className="text-xs font-medium" style={{ color: '#1D4ED8' }}>
+                                            Assinado digitalmente por {viewDiaria.assinatura_admin} como responsável
+                                            {viewDiaria.assinatura_admin_at && ` em ${new Date(viewDiaria.assinatura_admin_at).toLocaleDateString('pt-BR')}`}
+                                            {isAdminUser && ' — desmarque para remover'}
+                                        </span>
+                                    </label>
+                                ) : adminProfile?.assinatura_digital ? (
+                                    <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer" style={{ backgroundColor: 'var(--color-muted)', border: '1px solid var(--color-border)' }}>
+                                        <input type="checkbox" checked={false} disabled={assinando} onChange={handleAssinarDiaria} className="w-4 h-4" />
+                                        <Icon name="PenTool" size={14} color="var(--color-muted-foreground)" />
+                                        <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                            {assinando ? 'Assinando...' : `Assinar digitalmente como responsável (${adminProfile.assinatura_digital})`}
+                                        </span>
+                                    </label>
+                                ) : (
+                                    <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-muted-foreground)' }}>
+                                        <Icon name="Info" size={12} />
+                                        Você ainda não tem uma assinatura digital cadastrada. Cadastre em Admin &gt; Configurações.
+                                    </p>
+                                )
+                            )}
                             {viewDiaria.descricao && (
                                 <div className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
                                     <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Descrição / Motivo</p>
@@ -849,7 +929,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border" style={{ borderColor: '#4F46E5', color: '#4F46E5' }}>
                                 <Icon name="Printer" size={14} color="#4F46E5" /> Imprimir
                             </button>
-                            <button onClick={() => { (viewDiaria._exportFn || (() => exportarDiariaIndividual(viewDiaria)))(); showToast('Exportado!', 'success'); }}
+                            <button onClick={() => { exportDiariaModelo(viewDiaria); showToast('Exportado!', 'success'); }}
                                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: '#4F46E5' }}>
                                 <Icon name="FileDown" size={14} color="white" /> Exportar
                             </button>

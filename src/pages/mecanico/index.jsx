@@ -58,7 +58,7 @@ export default function MecanicoPage() {
     const { toast, showToast } = useToast();
     const [ordens, setOrdens]                 = useState([]);
     const [loading, setLoading]               = useState(true);
-    const [filtro, setFiltro]                 = useState('Pendente');
+    const [filtro, setFiltro]                 = useState('');
     const [modalFinalizar, setModalFinalizar] = useState(null);
     const [modalProblema, setModalProblema]   = useState(null);
     const [obsFinalizar, setObsFinalizar]     = useState('');
@@ -163,12 +163,17 @@ export default function MecanicoPage() {
                         <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-base flex-shrink-0" style={{ backgroundColor: '#059669' }}>
                             {(profile?.name || 'M')[0].toUpperCase()}
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                             <h1 className="font-heading font-bold text-lg sm:text-xl truncate" style={{ color: 'var(--color-text-primary)' }}>
                                 Olá, {profile?.name || 'Mecânico'}
                             </h1>
                             <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Ordens de serviço da oficina</p>
                         </div>
+                        <button onClick={load} disabled={loading}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors flex-shrink-0 disabled:opacity-50"
+                            style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                            <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" className={loading ? 'animate-spin' : ''} />
+                        </button>
                     </div>
 
                     {/* KPIs */}

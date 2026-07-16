@@ -502,9 +502,9 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
 
     return (
         <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center sm:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={e => e.target === e.currentTarget && onClose()}>
-            <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[95vh] sm:max-h-[92vh] flex flex-col">
+            <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[95vh] sm:max-h-[92vh] flex flex-col overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b" style={{ borderColor:'var(--color-border)' }}>
+                <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b flex-shrink-0" style={{ borderColor:'var(--color-border)' }}>
                     <div className="flex items-center gap-3">
                         <div className="flex items-center justify-center rounded-lg flex-shrink-0" style={{ width:36, height:36, backgroundColor:'var(--color-primary)' }}>
                             <Icon name="FileText" size={18} color="#fff" />
@@ -524,7 +524,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 </div>
 
                 {/* Tabs — scroll horizontal no mobile */}
-                <div className="flex border-b overflow-x-auto" style={{ borderColor:'var(--color-border)', scrollbarWidth:'none' }}>
+                <div className="flex border-b overflow-x-auto flex-shrink-0" style={{ borderColor:'var(--color-border)', scrollbarWidth:'none' }}>
                     {[
                         ['dados',      'Viagem', 'Truck'],
                         ['pedidos',    `Pedidos (${pedidos.length})`, 'ShoppingCart'],
@@ -540,7 +540,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 </div>
 
                 {/* Body */}
-                <div className="overflow-y-auto flex-1 px-4 sm:px-6 py-4 sm:py-5">
+                <div className="overflow-y-auto flex-1 min-h-0 px-4 sm:px-6 py-4 sm:py-5">
 
                     {/* ── TAB: DADOS ──────────────────────────────── */}
                     {tab === 'dados' && (
@@ -1169,7 +1169,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 </div>
 
                 {/* Footer */}
-                <div className="px-4 sm:px-6 py-3 sm:py-4 border-t flex flex-col xs:flex-row justify-between items-start xs:items-center gap-2" style={{ borderColor:'var(--color-border)' }}>
+                <div className="px-4 sm:px-6 py-3 sm:py-4 border-t flex flex-col xs:flex-row justify-between items-start xs:items-center gap-2 flex-shrink-0" style={{ borderColor:'var(--color-border)' }}>
                     <div className="flex items-center gap-3 flex-wrap">
                         <span className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
                             {pedidos.length} pedido(s) · {totais.pesoTotal.toLocaleString('pt-BR',{maximumFractionDigits:0})} kg

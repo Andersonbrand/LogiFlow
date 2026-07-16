@@ -514,7 +514,7 @@ export async function fetchCarreteiros() {
     // Motoristas com tipo_veiculo = 'carreta' (role = 'motorista')
     const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, name, role, tipo_veiculo')
+        .select('id, name, role, tipo_veiculo, assinatura_digital')
         .eq('role', 'motorista')
         .eq('tipo_veiculo', 'carreta')
         .order('name', { ascending: true });
@@ -891,7 +891,7 @@ export async function revogarParcelaCartaoCarreta(despesaId, parcelaIdx) {
 export async function fetchDiarias(filters = {}) {
     let q = supabase
         .from('carretas_diarias')
-        .select('*, motorista:motorista_id(id, name, tipo_veiculo), viagem:viagem_id(id, numero, destino), veiculo:veiculo_id(id, placa, modelo)')
+        .select('*, motorista:motorista_id(id, name, tipo_veiculo, assinatura_digital), viagem:viagem_id(id, numero, destino), veiculo:veiculo_id(id, placa, modelo)')
         .order('data_inicio', { ascending: false });
     if (filters.motoristaId)  q = q.eq('motorista_id', filters.motoristaId);
     if (filters.dataInicio)   q = q.gte('data_inicio', filters.dataInicio);
@@ -940,13 +940,49 @@ export async function deleteDiaria(id) {
     if (error) throw error;
 }
 
+// Assina digitalmente a diária como responsável (admin ou operador).
+// A assinatura em si é o texto já cadastrado no perfil do usuário (assinatura_digital).
+export async function assinarDiaria(id, assinaturaTexto, assinanteId = null) {
+    const { data, error } = await supabase
+        .from('carretas_diarias')
+        .update({
+            assinatura_admin: assinaturaTexto,
+            assinatura_admin_at: new Date().toISOString(),
+            assinatura_admin_por: assinanteId,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select('*, motorista:motorista_id(id, name, tipo_veiculo, assinatura_digital), viagem:viagem_id(id, numero, destino), veiculo:veiculo_id(id, placa, modelo)')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+// Remove a assinatura digital do responsável, voltando a diária ao estado
+// "sem assinatura" (ação reservada a administradores na UI).
+export async function desassinarDiaria(id) {
+    const { data, error } = await supabase
+        .from('carretas_diarias')
+        .update({
+            assinatura_admin: null,
+            assinatura_admin_at: null,
+            assinatura_admin_por: null,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select('*, motorista:motorista_id(id, name, tipo_veiculo, assinatura_digital), viagem:viagem_id(id, numero, destino), veiculo:veiculo_id(id, placa, modelo)')
+        .single();
+    if (error) throw error;
+    return data;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MOTORISTAS DE CAMINHÃO (excluindo carreteiros)
 // ─────────────────────────────────────────────────────────────────────────────
 export async function fetchMotoristasCaminhao() {
     const { data, error } = await supabase
         .from('user_profiles')
-        .select('id, name, role, tipo_veiculo')
+        .select('id, name, role, tipo_veiculo, assinatura_digital')
         .eq('role', 'motorista')
         .or('tipo_veiculo.neq.carreta,tipo_veiculo.is.null')
         .order('name', { ascending: true });
