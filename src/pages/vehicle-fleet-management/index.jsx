@@ -104,16 +104,17 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         setAssinando(true);
         try {
             const texto = adminProfile.assinatura_digital;
+            const role  = adminProfile.role;
             if (viewDiaria._romaneioId) {
-                await assinarDiariaRomaneio(viewDiaria._romaneioId, texto, adminProfile.id);
+                await assinarDiariaRomaneio(viewDiaria._romaneioId, texto, adminProfile.id, role);
                 setRomaneiosDiarias(rs => rs.map(r => r.id === viewDiaria._romaneioId
-                    ? { ...r, assinatura_diaria_admin: texto, assinatura_diaria_admin_at: new Date().toISOString() } : r));
+                    ? { ...r, assinatura_diaria_admin: texto, assinatura_diaria_admin_at: new Date().toISOString(), assinatura_diaria_admin_role: role } : r));
             } else if (viewDiaria.id) {
-                await assinarDiaria(viewDiaria.id, texto, adminProfile.id);
+                await assinarDiaria(viewDiaria.id, texto, adminProfile.id, role);
                 setDiarias(ds => ds.map(d => d.id === viewDiaria.id
-                    ? { ...d, assinatura_admin: texto, assinatura_admin_at: new Date().toISOString() } : d));
+                    ? { ...d, assinatura_admin: texto, assinatura_admin_at: new Date().toISOString(), assinatura_admin_role: role } : d));
             }
-            setViewDiaria(v => ({ ...v, assinatura_admin: texto, assinatura_admin_at: new Date().toISOString() }));
+            setViewDiaria(v => ({ ...v, assinatura_admin: texto, assinatura_admin_at: new Date().toISOString(), assinatura_admin_role: role }));
             showToast('Diária assinada digitalmente!', 'success');
         } catch (e) { showToast('Erro ao assinar: ' + e.message, 'error'); }
         finally { setAssinando(false); }
@@ -127,13 +128,13 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             if (viewDiaria._romaneioId) {
                 await desassinarDiariaRomaneio(viewDiaria._romaneioId);
                 setRomaneiosDiarias(rs => rs.map(r => r.id === viewDiaria._romaneioId
-                    ? { ...r, assinatura_diaria_admin: null, assinatura_diaria_admin_at: null } : r));
+                    ? { ...r, assinatura_diaria_admin: null, assinatura_diaria_admin_at: null, assinatura_diaria_admin_role: null } : r));
             } else if (viewDiaria.id) {
                 await desassinarDiaria(viewDiaria.id);
                 setDiarias(ds => ds.map(d => d.id === viewDiaria.id
-                    ? { ...d, assinatura_admin: null, assinatura_admin_at: null } : d));
+                    ? { ...d, assinatura_admin: null, assinatura_admin_at: null, assinatura_admin_role: null } : d));
             }
-            setViewDiaria(v => ({ ...v, assinatura_admin: null, assinatura_admin_at: null }));
+            setViewDiaria(v => ({ ...v, assinatura_admin: null, assinatura_admin_at: null, assinatura_admin_role: null }));
             showToast('Assinatura removida.', 'success');
         } catch (e) { showToast('Erro ao remover assinatura: ' + e.message, 'error'); }
         finally { setAssinando(false); }
@@ -158,7 +159,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             // cruzando por motorista_id OU nome do motorista (campo texto livre)
             const romaneioRes = await supabase
                 .from('romaneios')
-                .select('id, numero, motorista, motorista_id, placa, destino, status, saida, created_at, custo_motorista, dias_diaria, valor_diaria_dia, assinatura_diaria_admin, assinatura_diaria_admin_at')
+                .select('id, numero, motorista, motorista_id, placa, destino, status, saida, created_at, custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao, assinatura_diaria_admin, assinatura_diaria_admin_at, assinatura_diaria_admin_role')
                 .or(`motorista_id.eq.${motorista.id},motorista.ilike.${motorista.name}`)
                 .gt('custo_motorista', 0)
                 .gte('created_at', f.dataInicio)
@@ -283,10 +284,11 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                     quantidade_dias: r.dias_diaria || 1,
                     valor_dia:       r.valor_diaria_dia || (r.custo_motorista / (r.dias_diaria || 1)),
                     valor_total:     Number(r.custo_motorista || 0),
-                    descricao:       r.destino || '',
+                    descricao:       r.diaria_descricao || r.destino || '',
                     viagem:          { numero: r.numero, destino: r.destino },
-                    assinatura_admin:    r.assinatura_diaria_admin || null,
-                    assinatura_admin_at: r.assinatura_diaria_admin_at || null,
+                    assinatura_admin:      r.assinatura_diaria_admin || null,
+                    assinatura_admin_at:   r.assinatura_diaria_admin_at || null,
+                    assinatura_admin_role: r.assinatura_diaria_admin_role || null,
                 });
             });
             showToast(`${avulsas.length + romDiarias.length} diária(s) exportada(s)!`, 'success');
@@ -332,10 +334,11 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             quantidade_dias: r.dias_diaria || 1,
             valor_dia:       r.valor_diaria_dia || (r.custo_motorista / (r.dias_diaria || 1)),
             valor_total:     Number(r.custo_motorista || 0),
-            descricao:       r.destino || '',
+            descricao:       r.diaria_descricao || r.destino || '',
             viagem:          { numero: r.numero, destino: r.destino },
-            assinatura_admin:    r.assinatura_diaria_admin || null,
-            assinatura_admin_at: r.assinatura_diaria_admin_at || null,
+            assinatura_admin:      r.assinatura_diaria_admin || null,
+            assinatura_admin_at:   r.assinatura_diaria_admin_at || null,
+            assinatura_admin_role: r.assinatura_diaria_admin_role || null,
         });
     };
 
@@ -651,10 +654,11 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                                 quantidade_dias: r.dias_diaria || 1,
                                                                                 valor_dia: r.valor_diaria_dia || (r.custo_motorista / (r.dias_diaria || 1)),
                                                                                 valor_total: Number(r.custo_motorista || 0),
-                                                                                descricao: r.destino || '',
+                                                                                descricao: r.diaria_descricao || r.destino || '',
                                                                                 viagem: { numero: r.numero, destino: r.destino },
                                                                                 assinatura_admin: r.assinatura_diaria_admin || null,
                                                                                 assinatura_admin_at: r.assinatura_diaria_admin_at || null,
+                                                                                assinatura_admin_role: r.assinatura_diaria_admin_role || null,
                                                                                 _romaneioId: r.id,
                                                                                 _exportFn: () => exportarRomaneioComoDialia(r),
                                                                             })} title="Visualizar diária" className="p-1.5 rounded hover:bg-emerald-50">

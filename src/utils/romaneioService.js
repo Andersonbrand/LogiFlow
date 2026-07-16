@@ -32,7 +32,9 @@ export async function fetchRomaneios() {
             aprovado, aprovado_por, aprovado_em, status_aprovacao, motivo_reprovacao,
             peso_total, saida, observacoes, vehicle_id, paradas,
             distancia_km, custo_combustivel, custo_pedagio,
-            custo_motorista, valor_frete, valor_frete_calculado,
+            custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao,
+            assinatura_diaria_admin, assinatura_diaria_admin_at, assinatura_diaria_admin_role,
+            valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,
             romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado, empresa),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
@@ -53,7 +55,9 @@ export async function fetchRomaneioById(id) {
             id, numero, motorista, placa, destino, status,
             peso_total, saida, observacoes, vehicle_id,
             distancia_km, custo_combustivel, custo_pedagio,
-            custo_motorista, valor_frete, valor_frete_calculado,
+            custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao,
+            assinatura_diaria_admin, assinatura_diaria_admin_at, assinatura_diaria_admin_role,
+            valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,
             romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado, empresa),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
@@ -123,6 +127,9 @@ function buildPayload(r) {
         custo_combustivel:      r.custo_combustivel      || 0,
         custo_pedagio:          r.custo_pedagio          || 0,
         custo_motorista:        r.custo_motorista        || 0,
+        dias_diaria:            r.dias_diaria            || null,
+        valor_diaria_dia:       r.valor_diaria_dia        || null,
+        diaria_descricao:       r.diaria_descricao        || null,
         valor_frete:            r.valor_frete            || 0,
         valor_frete_calculado:  r.valor_frete_calculado  || 0,
         valor_total_carga:      r.valor_total_carga      || 0,
@@ -373,16 +380,21 @@ export async function updateRomaneioStatus(id, status) {
 
 // Assina digitalmente a diária gerada automaticamente pelo romaneio (caminhões)
 // como responsável (admin ou operador).
-export async function assinarDiariaRomaneio(id, assinaturaTexto, assinanteId = null) {
+// `assinanteRole` (role do usuário no momento da assinatura: 'admin' | 'operador')
+// define em qual campo da ficha impressa o nome aparece — Transporte (admin) ou
+// Logística (operador). É guardado à parte do id porque o cargo do usuário pode
+// mudar depois, e isso não deve alterar retroativamente uma diária já assinada.
+export async function assinarDiariaRomaneio(id, assinaturaTexto, assinanteId = null, assinanteRole = null) {
     const { data, error } = await supabase
         .from('romaneios')
         .update({
             assinatura_diaria_admin: assinaturaTexto,
             assinatura_diaria_admin_at: new Date().toISOString(),
             assinatura_diaria_admin_por: assinanteId,
+            assinatura_diaria_admin_role: assinanteRole,
         })
         .eq('id', id)
-        .select('id, numero, assinatura_diaria_admin, assinatura_diaria_admin_at')
+        .select('id, numero, assinatura_diaria_admin, assinatura_diaria_admin_at, assinatura_diaria_admin_role')
         .single();
     if (error) throw error;
     return data;
@@ -397,9 +409,10 @@ export async function desassinarDiariaRomaneio(id) {
             assinatura_diaria_admin: null,
             assinatura_diaria_admin_at: null,
             assinatura_diaria_admin_por: null,
+            assinatura_diaria_admin_role: null,
         })
         .eq('id', id)
-        .select('id, numero, assinatura_diaria_admin, assinatura_diaria_admin_at')
+        .select('id, numero, assinatura_diaria_admin, assinatura_diaria_admin_at, assinatura_diaria_admin_role')
         .single();
     if (error) throw error;
     return data;

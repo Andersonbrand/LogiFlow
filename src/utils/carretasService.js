@@ -942,13 +942,18 @@ export async function deleteDiaria(id) {
 
 // Assina digitalmente a diária como responsável (admin ou operador).
 // A assinatura em si é o texto já cadastrado no perfil do usuário (assinatura_digital).
-export async function assinarDiaria(id, assinaturaTexto, assinanteId = null) {
+// `assinanteRole` (role do usuário no momento da assinatura: 'admin' | 'operador')
+// define em qual campo da ficha impressa o nome aparece — Transporte (admin) ou
+// Logística (operador). É guardado à parte do id porque o cargo do usuário pode
+// mudar depois, e isso não deve alterar retroativamente uma diária já assinada.
+export async function assinarDiaria(id, assinaturaTexto, assinanteId = null, assinanteRole = null) {
     const { data, error } = await supabase
         .from('carretas_diarias')
         .update({
             assinatura_admin: assinaturaTexto,
             assinatura_admin_at: new Date().toISOString(),
             assinatura_admin_por: assinanteId,
+            assinatura_admin_role: assinanteRole,
             updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -967,6 +972,7 @@ export async function desassinarDiaria(id) {
             assinatura_admin: null,
             assinatura_admin_at: null,
             assinatura_admin_por: null,
+            assinatura_admin_role: null,
             updated_at: new Date().toISOString(),
         })
         .eq('id', id)

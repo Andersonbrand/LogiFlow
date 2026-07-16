@@ -1015,6 +1015,10 @@ export function exportDiariaModelo(diaria) {
     const descr    = diaria.descricao || '';
     const assinaturaMotorista = diaria.motorista?.assinatura_digital || diaria.assinatura_motorista || '';
     const assinaturaAdmin = diaria.assinatura_admin || '';
+    // Admin assina como responsável do setor de Transporte; Operador (ex.: diária de
+    // caminhão gerada dentro de um romaneio) assina como responsável do setor de Logística.
+    const assinaturaTransporte = assinaturaAdmin && diaria.assinatura_admin_role === 'admin' ? assinaturaAdmin : '';
+    const assinaturaLogistica  = assinaturaAdmin && diaria.assinatura_admin_role !== 'admin' ? assinaturaAdmin : '';
     const brl2 = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 
     // ── Shared strings ────────────────────────────────────────────────────────
@@ -1094,8 +1098,9 @@ export function exportDiariaModelo(diaria) {
         rowsHt.push(0);
     }
 
-    // Linha 20 (r=20): célula vazia com borda bottom (linha de assinatura)
-    rowsData.push([ ce(7), NULL, NULL, NULL, NULL ]);
+    // Linha 20 (r=20): célula vazia com borda bottom (linha de assinatura do
+    // setor de Transporte) — preenchida quando quem assinou foi um Admin
+    rowsData.push([ assinaturaTransporte ? cs(assinaturaTransporte, 2) : ce(7), NULL, NULL, NULL, NULL ]);
     rowsHt.push(18);
 
     // Linha 21 (r=21): "ASSINATURA DO SETOR DE TRANSPORTE"
@@ -1107,8 +1112,9 @@ export function exportDiariaModelo(diaria) {
     rowsData.push([ NULL, NULL, NULL, NULL, NULL ]); rowsHt.push(0);
 
     // Linha 24 (r=24): borda bottom — preenchida com a assinatura digital do
-    // admin/operador responsável quando a diária já foi assinada, senão em branco
-    rowsData.push([ assinaturaAdmin ? cs(assinaturaAdmin, 2) : ce(7), NULL, NULL, NULL, NULL ]);
+    // Operador responsável (ex.: diária de caminhão gerada dentro de um
+    // romaneio), senão em branco
+    rowsData.push([ assinaturaLogistica ? cs(assinaturaLogistica, 2) : ce(7), NULL, NULL, NULL, NULL ]);
     rowsHt.push(18);
 
     // Linha 25 (r=25): "ASSINATURA DO SETOR DE LOGISTICA"
@@ -1337,6 +1343,10 @@ export function printDiaria(diaria) {
     const destino  = diaria.destino || diaria.viagem?.destino || '';
     const assinaturaMotorista = diaria.motorista?.assinatura_digital || diaria.assinatura_motorista || '';
     const assinaturaAdmin = diaria.assinatura_admin || '';
+    // Admin assina como responsável do setor de Transporte; Operador (ex.: diária de
+    // caminhão gerada dentro de um romaneio) assina como responsável do setor de Logística.
+    const assinaturaTransporte = assinaturaAdmin && diaria.assinatura_admin_role === 'admin' ? assinaturaAdmin : '';
+    const assinaturaLogistica  = assinaturaAdmin && diaria.assinatura_admin_role !== 'admin' ? assinaturaAdmin : '';
 
     const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -1396,11 +1406,11 @@ export function printDiaria(diaria) {
 
 <div style="margin-top:34px;display:flex;justify-content:space-between;align-items:flex-start">
   <div style="width:31%;padding:0 12px 0 0">
-    <div style="border-bottom:1px solid #222;height:40px"></div>
+    <div style="border-bottom:1px solid #222;height:40px;display:flex;align-items:flex-end;justify-content:center">${assinaturaTransporte ? `<span style="font-family:'Brush Script MT',cursive;font-size:16pt;color:#1D4ED8">${esc(assinaturaTransporte)}</span>` : ''}</div>
     <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA DO SETOR DE TRANSPORTE</div>
   </div>
   <div style="width:31%;padding:0 6px">
-    <div style="border-bottom:1px solid #222;height:40px;display:flex;align-items:flex-end;justify-content:center">${assinaturaAdmin ? `<span style="font-family:'Brush Script MT',cursive;font-size:16pt;color:#1D4ED8">${esc(assinaturaAdmin)}</span>` : ''}</div>
+    <div style="border-bottom:1px solid #222;height:40px;display:flex;align-items:flex-end;justify-content:center">${assinaturaLogistica ? `<span style="font-family:'Brush Script MT',cursive;font-size:16pt;color:#1D4ED8">${esc(assinaturaLogistica)}</span>` : ''}</div>
     <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA DO SETOR DE LOGÍSTICA</div>
   </div>
   <div style="width:31%;padding:0 0 0 12px">

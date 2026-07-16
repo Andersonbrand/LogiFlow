@@ -4166,10 +4166,11 @@ function TabDiarias({ isAdmin, profile }) {
         setAssinando(true);
         try {
             const texto = profile.assinatura_digital;
-            await assinarDiaria(viewDiaria.id, texto, profile.id);
+            const role  = profile.role;
+            await assinarDiaria(viewDiaria.id, texto, profile.id, role);
             setDiarias(ds => ds.map(d => d.id === viewDiaria.id
-                ? { ...d, assinatura_admin: texto, assinatura_admin_at: new Date().toISOString() } : d));
-            setViewDiaria(v => ({ ...v, assinatura_admin: texto, assinatura_admin_at: new Date().toISOString() }));
+                ? { ...d, assinatura_admin: texto, assinatura_admin_at: new Date().toISOString(), assinatura_admin_role: role } : d));
+            setViewDiaria(v => ({ ...v, assinatura_admin: texto, assinatura_admin_at: new Date().toISOString(), assinatura_admin_role: role }));
             showToast('Diária assinada digitalmente!', 'success');
         } catch (e) { showToast('Erro ao assinar: ' + e.message, 'error'); }
         finally { setAssinando(false); }
@@ -4181,8 +4182,8 @@ function TabDiarias({ isAdmin, profile }) {
         try {
             await desassinarDiaria(viewDiaria.id);
             setDiarias(ds => ds.map(d => d.id === viewDiaria.id
-                ? { ...d, assinatura_admin: null, assinatura_admin_at: null } : d));
-            setViewDiaria(v => ({ ...v, assinatura_admin: null, assinatura_admin_at: null }));
+                ? { ...d, assinatura_admin: null, assinatura_admin_at: null, assinatura_admin_role: null } : d));
+            setViewDiaria(v => ({ ...v, assinatura_admin: null, assinatura_admin_at: null, assinatura_admin_role: null }));
             showToast('Assinatura removida.', 'success');
         } catch (e) { showToast('Erro ao remover assinatura: ' + e.message, 'error'); }
         finally { setAssinando(false); }

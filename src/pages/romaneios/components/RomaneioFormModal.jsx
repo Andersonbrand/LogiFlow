@@ -21,6 +21,7 @@ export const EMPRESAS = [
 const EMPTY_FORM = {
     motorista:'', motorista_id:'', placa:'', destino:'', status:'Aguardando', saida:'', observacoes:'',
     vehicle_id:'', distancia_km:'', custo_combustivel:'', custo_pedagio:'', custo_motorista:'',
+    dias_diaria:'1', valor_diaria_dia:'', diaria_descricao:'',
 };
 const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', empresa:'Comercial Araguaia', itens:[] };
 
@@ -116,6 +117,9 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 custo_combustivel: editingRomaneio.custo_combustivel || '',
                 custo_pedagio:     editingRomaneio.custo_pedagio     || '',
                 custo_motorista:   editingRomaneio.custo_motorista   || '',
+                dias_diaria:       editingRomaneio.dias_diaria || '1',
+                valor_diaria_dia:  editingRomaneio.valor_diaria_dia || editingRomaneio.custo_motorista || '',
+                diaria_descricao:  editingRomaneio.diaria_descricao || '',
             });
             // Rebuild pedidos from romaneio_pedidos if editing
             const pedidosExistentes = editingRomaneio.romaneio_pedidos || [];
@@ -229,6 +233,14 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     next._litros_estimados = Math.round(litros);
                     next.custo_combustivel = (litros * diesel).toFixed(2);
                 }
+            }
+            // Recalcular a diária do motorista (custo_motorista) automaticamente
+            // a partir de "quantidade de dias" × "valor por dia"
+            if (k === 'dias_diaria' || k === 'valor_diaria_dia') {
+                const dias  = Number(k === 'dias_diaria'      ? v : prev.dias_diaria)      || 0;
+                const valor = Number(k === 'valor_diaria_dia' ? v : prev.valor_diaria_dia) || 0;
+                const total = dias * valor;
+                next.custo_motorista = total ? String(total) : '';
             }
             return next;
         });
@@ -477,6 +489,9 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 custo_combustivel:      n(form.custo_combustivel),
                 custo_pedagio:          n(form.custo_pedagio),
                 custo_motorista:        n(form.custo_motorista),
+                dias_diaria:            n(form.dias_diaria) || null,
+                valor_diaria_dia:       n(form.valor_diaria_dia) || null,
+                diaria_descricao:       form.diaria_descricao || null,
                 valor_frete:            totais.freteCalculado,
                 valor_frete_calculado:  totais.freteCalculado,
                 valor_total_carga:      totais.valorTotalCarga,
@@ -1123,9 +1138,34 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                         </div>
                                     </div>
 
-                                    <div className="sm:col-span-2">
-                                        <MoneyInput label="Diária Motorista (R$)" name="custo_motorista" value={form.custo_motorista}
-                                            onChange={e => setF(e.target.name, e.target.value)} />
+                                    <div className="sm:col-span-2 rounded-lg border p-3" style={{ borderColor:'#E5E7EB', backgroundColor:'#F9FAFB' }}>
+                                        <label className="text-xs font-medium font-caption mb-2 block" style={{ color:'var(--color-text-primary)' }}>
+                                            Diária do Motorista
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-[11px] font-caption mb-1" style={{ color:'var(--color-muted-foreground)' }}>Quantidade de dias</label>
+                                                <input type="number" name="dias_diaria" value={form.dias_diaria} min="0" step="1"
+                                                    onChange={e => setF(e.target.name, e.target.value)}
+                                                    className="w-full h-10 px-3 rounded-lg border text-sm font-data focus:outline-none bg-white"
+                                                    style={{ borderColor:'#E5E7EB' }} />
+                                            </div>
+                                            <MoneyInput label="Valor por dia (R$)" name="valor_diaria_dia" value={form.valor_diaria_dia}
+                                                onChange={e => setF(e.target.name, e.target.value)} />
+                                        </div>
+                                        <div className="mt-3">
+                                            <label className="block text-[11px] font-caption mb-1" style={{ color:'var(--color-muted-foreground)' }}>Descrição / Motivo</label>
+                                            <input type="text" name="diaria_descricao" value={form.diaria_descricao}
+                                                placeholder={form.destino ? `Ex: viagem até ${form.destino}` : 'Ex: 13/07 a 17/07'}
+                                                onChange={e => setF(e.target.name, e.target.value)}
+                                                className="w-full h-10 px-3 rounded-lg border text-sm focus:outline-none bg-white"
+                                                style={{ borderColor:'#E5E7EB' }} />
+                                        </div>
+                                        {n(form.dias_diaria) > 0 && n(form.valor_diaria_dia) > 0 && (
+                                            <p className="text-xs mt-2 font-caption" style={{ color:'#059669' }}>
+                                                Total da diária: <strong>{brl(n(form.dias_diaria) * n(form.valor_diaria_dia))}</strong> — essa diária será preenchida automaticamente na ficha do motorista, sem precisar de lançamento manual.
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
 
