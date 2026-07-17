@@ -349,8 +349,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
     ];
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
-            onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
 
                 {/* Header */}
@@ -760,7 +759,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
 
             {/* Modal manutenção */}
             {modalManut && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={e => e.target === e.currentTarget && setModalManut(null)}>
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
                         <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
@@ -803,7 +802,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
 
             {/* Modal diária */}
             {modalDiaria && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={e => e.target === e.currentTarget && setModalDiaria(null)}>
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
                         <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">

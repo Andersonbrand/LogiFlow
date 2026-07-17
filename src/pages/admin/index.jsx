@@ -1151,8 +1151,7 @@ function MotoristasManager({ showToast }) {
 
             {detalhe && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 pt-20"
-                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}
-                    onClick={e => { if (e.target === e.currentTarget) setDetalhe(null); }}>
+                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[80vh] flex flex-col">
                         {/* Header */}
                         <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-slate-50 flex-shrink-0">
@@ -1251,8 +1250,7 @@ function MotoristasManager({ showToast }) {
             {/* Modal de edição */}
             {editando && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}
-                    onClick={e => { if (e.target === e.currentTarget) setEditando(null); }}>
+                    style={{ backgroundColor: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                         {/* Header */}
                         <div className="flex items-center gap-3 px-6 py-4 border-b border-slate-100 bg-amber-50">

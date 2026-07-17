@@ -747,9 +747,17 @@ function buildResumoPorCarga(rascunhos) {
 function ResumoMateriaisCidadeModal({ rascunhos, onClose }) {
     const resumo = useMemo(() => buildResumoPorCarga(rascunhos), [rascunhos]);
     const semDados = resumo.length === 0;
+    // Só fecha se o clique COMEÇAR e TERMINAR no próprio fundo (evita fechar
+    // ao selecionar texto ou arrastar o scroll e soltar o mouse fora do card).
+    const mouseDownNoFundo = useRef(false);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+            onMouseDown={e => { mouseDownNoFundo.current = e.target === e.currentTarget; }}
+            onClick={e => { if (e.target === e.currentTarget && mouseDownNoFundo.current) onClose(); }}
+        >
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
@@ -1119,8 +1127,7 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
 
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
-            onClick={e => e.target === e.currentTarget && onClose()}>
+            style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
             <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-3xl" style={{ maxHeight: 'calc(100vh - 32px)', backgroundColor: '#ffffff' }}>
 
                 {/* Header */}

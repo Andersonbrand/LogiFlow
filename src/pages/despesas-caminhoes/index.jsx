@@ -43,8 +43,7 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 function ModalOverlay({ children, onClose, wide }) {
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
-            onClick={e => e.target === e.currentTarget && onClose()}>
+            style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
             <div className={`bg-white rounded-2xl shadow-2xl flex flex-col ${wide ? 'w-full max-w-4xl' : 'w-full max-w-2xl'}`}
                 style={{ maxHeight: 'calc(100vh - 32px)' }}>
                 {children}
@@ -470,13 +469,29 @@ function ModalFornecedores({ onClose, onSelect }) {
 
     const handleSave = async () => {
         if (!form.nome.trim()) { showToast('Nome é obrigatório', 'error'); return; }
+        // Normaliza: nome sempre presente; campos opcionais em branco viram null
+        // (evita salvar strings vazias no banco e mantém consistência entre telas)
+        const payload = {
+            nome: form.nome.trim(),
+            cnpj: form.cnpj.trim() || null,
+            telefone: form.telefone.trim() || null,
+            email: form.email.trim() || null,
+            endereco: form.endereco.trim() || null,
+            categoria: form.categoria || null,
+            observacoes: form.observacoes.trim() || null,
+        };
         try {
-            if (modal?.mode === 'edit') await updateFornecedorCaminhao(modal.data.id, form);
-            else await createFornecedorCaminhao(form);
+            if (modal?.mode === 'edit') await updateFornecedorCaminhao(modal.data.id, payload);
+            else await createFornecedorCaminhao(payload);
             showToast('Fornecedor salvo!', 'success');
             setModal(null);
             load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        } catch (e) {
+            const msg = e.code === '23505' || /duplicate key|unique constraint/i.test(e.message)
+                ? 'Já existe um fornecedor cadastrado com este CNPJ.'
+                : 'Erro: ' + e.message;
+            showToast(msg, 'error');
+        }
     };
 
     const handleDelete = async (id) => {

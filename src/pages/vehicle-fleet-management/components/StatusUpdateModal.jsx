@@ -16,7 +16,7 @@ export default function StatusUpdateModal({ isOpen, vehicle, onClose, onUpdate }
     };
 
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
             <div
                 className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden"
                 style={{ backgroundColor: "var(--color-card)" }}

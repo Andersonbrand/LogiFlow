@@ -1103,6 +1103,12 @@ export function exportDiariaModelo(diaria) {
     rowsData.push([ assinaturaTransporte ? cs(assinaturaTransporte, 2) : ce(7), NULL, NULL, NULL, NULL ]);
     rowsHt.push(18);
 
+    // "✓ Assinado digitalmente" — só aparece quando há assinatura registrada
+    if (assinaturaTransporte) {
+        rowsData.push([ cs('✓ Assinado digitalmente', 9), NULL, NULL, NULL, NULL ]);
+        rowsHt.push(12);
+    }
+
     // Linha 21 (r=21): "ASSINATURA DO SETOR DE TRANSPORTE"
     rowsData.push([ cs('ASSINATURA DO SETOR DE TRANSPORTE', 8), NULL, NULL, NULL, NULL ]);
     rowsHt.push(18);
@@ -1117,6 +1123,12 @@ export function exportDiariaModelo(diaria) {
     rowsData.push([ assinaturaLogistica ? cs(assinaturaLogistica, 2) : ce(7), NULL, NULL, NULL, NULL ]);
     rowsHt.push(18);
 
+    // "✓ Assinado digitalmente" — só aparece quando há assinatura registrada
+    if (assinaturaLogistica) {
+        rowsData.push([ cs('✓ Assinado digitalmente', 9), NULL, NULL, NULL, NULL ]);
+        rowsHt.push(12);
+    }
+
     // Linha 25 (r=25): "ASSINATURA DO SETOR DE LOGISTICA"
     rowsData.push([ cs('ASSINATURA DO SETOR DE LOGISTICA', 8), NULL, NULL, NULL, NULL ]);
     rowsHt.push(18);
@@ -1129,6 +1141,12 @@ export function exportDiariaModelo(diaria) {
     // motorista quando cadastrada, senão fica em branco para assinatura manual
     rowsData.push([ assinaturaMotorista ? cs(assinaturaMotorista, 2) : ce(7), NULL, NULL, NULL, NULL ]);
     rowsHt.push(18);
+
+    // "✓ Assinado digitalmente" — só aparece quando há assinatura registrada
+    if (assinaturaMotorista) {
+        rowsData.push([ cs('✓ Assinado digitalmente', 9), NULL, NULL, NULL, NULL ]);
+        rowsHt.push(12);
+    }
 
     // Linha 29 (r=29): "ASSINATURA MOTORISTA"
     rowsData.push([ cs('ASSINATURA MOTORISTA', 8), NULL, NULL, NULL, NULL ]);
@@ -1181,10 +1199,11 @@ export function exportDiariaModelo(diaria) {
     //   bId=2: só bottom thin preto
     const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<fonts count="3">
+<fonts count="4">
   <font><sz val="11"/><name val="Calibri"/><family val="2"/></font>
   <font><b/><sz val="11"/><name val="Calibri"/></font>
   <font><b/><sz val="12"/><name val="Calibri"/></font>
+  <font><sz val="8"/><color rgb="FF059669"/><name val="Calibri"/></font>
 </fonts>
 <fills count="2">
   <fill><patternFill patternType="none"/></fill>
@@ -1196,7 +1215,7 @@ export function exportDiariaModelo(diaria) {
   <border><left/><right/><top/><bottom style="thin"/><diagonal/></border>
 </borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="9">
+<cellXfs count="10">
   <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
   <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
   <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
@@ -1206,6 +1225,7 @@ export function exportDiariaModelo(diaria) {
   <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
   <xf numFmtId="0" fontId="0" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
   <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+  <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
@@ -1407,14 +1427,17 @@ export function printDiaria(diaria) {
 <div style="margin-top:34px;display:flex;justify-content:space-between;align-items:flex-start">
   <div style="width:31%;padding:0 12px 0 0">
     <div style="border-bottom:1px solid #222;height:40px;display:flex;align-items:flex-end;justify-content:center">${assinaturaTransporte ? `<span style="font-family:'Brush Script MT',cursive;font-size:16pt;color:#1D4ED8">${esc(assinaturaTransporte)}</span>` : ''}</div>
+    ${assinaturaTransporte ? `<div style="text-align:center;font-size:8pt;color:#059669;padding-top:2px">✓ Assinado digitalmente</div>` : ''}
     <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA DO SETOR DE TRANSPORTE</div>
   </div>
   <div style="width:31%;padding:0 6px">
     <div style="border-bottom:1px solid #222;height:40px;display:flex;align-items:flex-end;justify-content:center">${assinaturaLogistica ? `<span style="font-family:'Brush Script MT',cursive;font-size:16pt;color:#1D4ED8">${esc(assinaturaLogistica)}</span>` : ''}</div>
+    ${assinaturaLogistica ? `<div style="text-align:center;font-size:8pt;color:#059669;padding-top:2px">✓ Assinado digitalmente</div>` : ''}
     <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA DO SETOR DE LOGÍSTICA</div>
   </div>
   <div style="width:31%;padding:0 0 0 12px">
     <div style="border-bottom:1px solid #222;height:40px;display:flex;align-items:flex-end;justify-content:center">${assinaturaMotorista ? `<span style="font-family:'Brush Script MT',cursive;font-size:16pt;color:#1D4ED8">${esc(assinaturaMotorista)}</span>` : ''}</div>
+    ${assinaturaMotorista ? `<div style="text-align:center;font-size:8pt;color:#059669;padding-top:2px">✓ Assinado digitalmente</div>` : ''}
     <div style="text-align:center;font-size:9pt;padding-top:3px">ASSINATURA MOTORISTA</div>
   </div>
 </div>

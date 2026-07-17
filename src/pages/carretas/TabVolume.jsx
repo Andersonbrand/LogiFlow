@@ -649,7 +649,12 @@ export default function TabVolume({ isAdmin }) {
             setModalFornec(false);
             setFormFornec({ nome: '', cnpj: '', observacoes: '' });
             load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        } catch (e) {
+            const msg = e.code === '23505' || /duplicate key|unique constraint/i.test(e.message)
+                ? 'Já existe um fornecedor cadastrado com este CNPJ.'
+                : 'Erro: ' + e.message;
+            showToast(msg, 'error');
+        }
         finally { setSavingFornec(false); }
     };
 
