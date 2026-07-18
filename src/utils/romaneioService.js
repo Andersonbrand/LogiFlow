@@ -30,7 +30,7 @@ export async function fetchRomaneios() {
         .select(`
             id, numero, motorista, motorista_id, placa, destino, status,
             aprovado, aprovado_por, aprovado_em, status_aprovacao, motivo_reprovacao,
-            peso_total, saida, observacoes, vehicle_id, paradas,
+            peso_total, saida, chegada, observacoes, vehicle_id, paradas,
             distancia_km, custo_combustivel, custo_pedagio,
             custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao,
             assinatura_diaria_admin, assinatura_diaria_admin_at, assinatura_diaria_admin_role,
@@ -53,7 +53,7 @@ export async function fetchRomaneioById(id) {
         .from('romaneios')
         .select(`
             id, numero, motorista, placa, destino, status,
-            peso_total, saida, observacoes, vehicle_id,
+            peso_total, saida, chegada, observacoes, vehicle_id,
             distancia_km, custo_combustivel, custo_pedagio,
             custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao,
             assinatura_diaria_admin, assinatura_diaria_admin_at, assinatura_diaria_admin_role,
@@ -122,6 +122,7 @@ function buildPayload(r) {
         status:                 r.status                 || 'Aguardando',
         peso_total:             r.peso_total             || 0,
         saida:                  localDatetimeToUTC(r.saida),
+        chegada:                localDatetimeToUTC(r.chegada),
         observacoes:            r.observacoes            || null,
         distancia_km:           r.distancia_km           || 0,
         custo_combustivel:      r.custo_combustivel      || 0,
@@ -485,7 +486,7 @@ export async function fetchRomaneiosPorMotorista(motoristaId, nomeMotorista) {
         .from('romaneios')
         .select(`
             id, numero, motorista, motorista_id, placa, destino, status,
-            aprovado, aprovado_em, peso_total, saida, created_at,
+            aprovado, aprovado_em, peso_total, saida, chegada, created_at,
             valor_frete, valor_frete_calculado,
             romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido),
             romaneio_itens(id, quantidade, peso_total, material_id,
@@ -511,7 +512,7 @@ export async function fetchRascunhos() {
         .from('romaneios')
         .select(`
             id, numero, motorista, motorista_id, placa, destino, status,
-            peso_total, saida, observacoes, vehicle_id,
+            peso_total, saida, chegada, observacoes, vehicle_id,
             valor_frete, valor_frete_calculado, valor_total_carga,
             is_rascunho, sugestao_veiculo, created_at,
             romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado, empresa),

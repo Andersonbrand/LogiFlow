@@ -5,7 +5,7 @@ import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import { subscribeTabela } from 'utils/supabaseClient';
-import { fetchOrdensServico, finalizarOrdemServico, reportarProblemaOS } from 'utils/carretasService';
+import { fetchOrdensServico, finalizarOrdemServico, reportarProblemaOS, updateOrdemServico } from 'utils/carretasService';
 import { printOrdemServico } from 'utils/excelUtils';
 
 const FMT_DATE = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -60,6 +60,9 @@ export default function MecanicoPage() {
     const [filtro, setFiltro]                 = useState('');
     const [modalFinalizar, setModalFinalizar] = useState(null);
     const [modalProblema, setModalProblema]   = useState(null);
+    const [modalPeca, setModalPeca]           = useState(null);
+    const [pecaItem, setPecaItem]             = useState('');
+    const [pecaQtd, setPecaQtd]               = useState('1');
     const [obsFinalizar, setObsFinalizar]     = useState('');
     const [descProblema, setDescProblema]     = useState('');
     const [pdfUrl, setPdfUrl]                 = useState(null);
@@ -97,6 +100,18 @@ export default function MecanicoPage() {
             await reportarProblemaOS(modalProblema.id, descProblema);
             showToast('Problema reportado! Aguardando análise do admin.', 'success');
             setModalProblema(null); setDescProblema(''); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleSolicitarPeca = async () => {
+        if (!pecaItem.trim()) { showToast('Informe o nome da peça', 'error'); return; }
+        const qtd = Number(pecaQtd) || 1;
+        try {
+            const novaPeca = { id: `${Date.now()}`, item: pecaItem.trim(), quantidade: qtd, status: 'Pendente', solicitado_em: new Date().toISOString() };
+            const lista = [...(modalPeca.pecas_solicitadas || []), novaPeca];
+            await updateOrdemServico(modalPeca.id, { pecas_solicitadas: lista });
+            showToast('Peça solicitada! Aguardando aprovação do admin.', 'success');
+            setModalPeca(null); setPecaItem(''); setPecaQtd('1'); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
@@ -242,6 +257,11 @@ export default function MecanicoPage() {
                                                         {o.prioridade === 'Urgente' && (
                                                             <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-600 text-white">URGENTE</span>
                                                         )}
+                                                        {o.tipo_manutencao && (
+                                                            <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: o.tipo_manutencao === 'Preventiva' ? '#DBEAFE' : '#FEF3C7', color: o.tipo_manutencao === 'Preventiva' ? '#1D4ED8' : '#92400E' }}>
+                                                                {o.tipo_manutencao}
+                                                            </span>
+                                                        )}
                                                         {o.assinatura_mecanico && (
                                                             <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700" title={`Assinado por ${o.assinatura_mecanico}`}>
                                                                 <Icon name="PenTool" size={10} />Assinado
@@ -252,6 +272,7 @@ export default function MecanicoPage() {
                                                         {FMT_DATE(o.created_at)}
                                                         {o.veiculo?.placa && <> · <span className="font-data font-medium">{o.veiculo.placa}</span></>}
                                                         {o.veiculo?.modelo && <span className="hidden sm:inline"> — {o.veiculo.modelo}</span>}
+                                                        {o.km_atual != null && <> · KM: <span className="font-data font-medium">{Number(o.km_atual).toLocaleString('pt-BR')}</span></>}
                                                     </p>
                                                 </div>
                                                 <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -292,6 +313,30 @@ export default function MecanicoPage() {
                                                 <p className="text-sm leading-relaxed" style={{ color: 'var(--color-text-primary)' }}>{o.descricao || '—'}</p>
                                             </div>
 
+                                            {o.observacoes && (
+                                                <div className="p-3 rounded-lg mb-3" style={{ backgroundColor: '#F1F5F9' }}>
+                                                    <p className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Observações do serviço:</p>
+                                                    <p className="text-sm leading-relaxed" style={{ color: 'var(--color-text-primary)' }}>{o.observacoes}</p>
+                                                </div>
+                                            )}
+
+                                            {(o.pecas_solicitadas || []).length > 0 && (
+                                                <div className="p-3 rounded-lg mb-3 space-y-1.5" style={{ backgroundColor: '#FAF5FF', border: '1px solid #E9D5FF' }}>
+                                                    <p className="text-xs font-medium flex items-center gap-1" style={{ color: '#6D28D9' }}>
+                                                        <Icon name="Package" size={13} color="#6D28D9" />Peças solicitadas
+                                                    </p>
+                                                    {(o.pecas_solicitadas || []).map((p, idx) => {
+                                                        const statusCor = p.status === 'Aprovado' ? { bg: '#D1FAE5', text: '#065F46' } : p.status === 'Reprovado' ? { bg: '#FEE2E2', text: '#991B1B' } : { bg: '#FEF9C3', text: '#B45309' };
+                                                        return (
+                                                            <div key={p.id || idx} className="flex items-center justify-between gap-2 text-xs px-2 py-1 rounded-lg bg-white">
+                                                                <span style={{ color: 'var(--color-text-primary)' }}>{p.item} × {p.quantidade}</span>
+                                                                <span className="px-2 py-0.5 rounded-full font-medium flex-shrink-0" style={{ backgroundColor: statusCor.bg, color: statusCor.text }}>{p.status || 'Pendente'}</span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
                                             {o.problema_encontrado && (
                                                 <div className="p-3 rounded-lg mb-3" style={{ backgroundColor: '#FEF2F2', border: '1px solid #FECACA' }}>
                                                     <p className="text-xs font-medium text-red-600 mb-1">⚠️ Problema reportado:</p>
@@ -314,6 +359,12 @@ export default function MecanicoPage() {
                                                         style={{ backgroundColor: '#059669' }}>
                                                         <Icon name="CheckCircle2" size={14} color="#fff" />
                                                         Finalizar OS
+                                                    </button>
+                                                    <button onClick={() => { setModalPeca(o); setPecaItem(''); setPecaQtd('1'); }}
+                                                        className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold border w-full sm:w-auto"
+                                                        style={{ borderColor: '#DDD6FE', color: '#6D28D9' }}>
+                                                        <Icon name="Package" size={14} color="#6D28D9" />
+                                                        Solicitar Peça
                                                     </button>
                                                     <button onClick={() => { setModalProblema(o); setDescProblema(''); }}
                                                         className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold border w-full sm:w-auto"
@@ -433,6 +484,59 @@ export default function MecanicoPage() {
                             style={{ backgroundColor: '#DC2626' }}>
                             <Icon name="Send" size={14} color="#fff" />
                             Enviar para Admin
+                        </button>
+                    </div>
+                </ModalOverlay>
+            )}
+
+            {/* Modal Solicitar Peça */}
+            {modalPeca && (
+                <ModalOverlay onClose={() => setModalPeca(null)}>
+                    <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
+                    <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#EDE9FE' }}>
+                                <Icon name="Package" size={18} color="#6D28D9" />
+                            </div>
+                            <h2 className="font-heading font-bold text-base sm:text-lg truncate" style={{ color: 'var(--color-text-primary)' }}>Solicitar Peça</h2>
+                        </div>
+                        <button onClick={() => setModalPeca(null)} className="p-1.5 rounded-lg hover:bg-gray-100 flex-shrink-0">
+                            <Icon name="X" size={18} color="var(--color-muted-foreground)" />
+                        </button>
+                    </div>
+                    <div className="px-4 sm:px-5 py-4 space-y-4">
+                        <div className="p-3 rounded-lg" style={{ backgroundColor: '#F8FAFC' }}>
+                            <p className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                                OS #{modalPeca.id?.slice(0, 8).toUpperCase()}
+                                {modalPeca.veiculo?.placa && <span className="font-data"> · {modalPeca.veiculo.placa}</span>}
+                            </p>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                                Item / peça <span className="text-red-500">*</span>
+                            </label>
+                            <input value={pecaItem} onChange={e => setPecaItem(e.target.value)}
+                                className={inputCls} style={inputStyle}
+                                placeholder="Ex: Pastilha de freio dianteira" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Quantidade</label>
+                            <input type="number" min="1" value={pecaQtd} onChange={e => setPecaQtd(e.target.value)}
+                                className={inputCls} style={inputStyle} />
+                        </div>
+                        <div className="p-3 rounded-xl text-xs" style={{ backgroundColor: '#FEF9C3', border: '1px solid #FDE68A' }}>
+                            <p className="text-amber-700">⚠️ A solicitação será enviada ao administrador, que poderá aprovar ou reprovar a compra.</p>
+                        </div>
+                    </div>
+                    <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 px-4 sm:px-5 pb-5 sm:justify-end">
+                        <button onClick={() => setModalPeca(null)}
+                            className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center"
+                            style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <button onClick={handleSolicitarPeca}
+                            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
+                            style={{ backgroundColor: '#6D28D9' }}>
+                            <Icon name="Send" size={14} color="#fff" />
+                            Enviar Solicitação
                         </button>
                     </div>
                 </ModalOverlay>

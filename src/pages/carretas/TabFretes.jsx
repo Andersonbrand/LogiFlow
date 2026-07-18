@@ -212,7 +212,7 @@ function PainelCaptacao({ isAdmin, onChange }) {
                     <span className="text-xs" style={{ color: '#3B5A99' }}>/saco</span>
                     {isAdmin && (
                         <button onClick={abrirEdicao} className="p-1.5 rounded-lg hover:bg-blue-100 transition-colors" title="Editar valor de captação">
-                            <Icon name="Pencil" size={15} color="#1D4ED8" />
+                            <Icon name="Pencil" size={16} color="#1D4ED8" />
                         </button>
                     )}
                 </div>
@@ -299,7 +299,7 @@ function PainelCustos({ isAdmin, onChange }) {
                     </div>
                     {isAdmin && (
                         <button onClick={abrirEdicao} className="p-1.5 rounded-lg hover:bg-orange-100 transition-colors" title="Editar custos">
-                            <Icon name="Pencil" size={15} color="#C2410C" />
+                            <Icon name="Pencil" size={16} color="#C2410C" />
                         </button>
                     )}
                 </div>
@@ -624,10 +624,10 @@ function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { cus
                                         <td className="px-4 py-3">
                                             <div className="flex items-center justify-center gap-1">
                                                 <button onClick={() => startEdit(row)} title="Editar" className="p-1.5 rounded-lg hover:bg-blue-100 transition-colors">
-                                                    <Icon name="Pencil" size={13} color="#2563EB" />
+                                                    <Icon name="Pencil" size={16} color="#2563EB" />
                                                 </button>
                                                 <button onClick={() => deleteRow(row)} title="Excluir" className="p-1.5 rounded-lg hover:bg-red-100 transition-colors">
-                                                    <Icon name="Trash2" size={13} color="#DC2626" />
+                                                    <Icon name="Trash2" size={16} color="#DC2626" />
                                                 </button>
                                             </div>
                                         </td>

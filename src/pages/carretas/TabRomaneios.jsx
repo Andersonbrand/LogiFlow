@@ -273,7 +273,7 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
             <div className="col-span-2 sm:col-span-1 flex items-end pb-0.5 pt-6">
                 <button onClick={() => onRemove(index)}
                     className="w-full flex items-center justify-center h-9 rounded-lg border border-red-200 hover:bg-red-50 transition-colors">
-                    <Icon name="Trash2" size={14} color="#DC2626" />
+                    <Icon name="Trash2" size={16} color="#DC2626" />
                 </button>
             </div>
         </div>
@@ -1182,12 +1182,12 @@ export default function TabRomaneios({ isAdmin }) {
                                                 <button onClick={() => setModal({ mode: 'edit', data: r })}
                                                     className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border hover:bg-blue-50 transition-colors"
                                                     style={{ borderColor: '#BFDBFE', color: '#1D4ED8' }}>
-                                                    <Icon name="Pencil" size={13} color="#1D4ED8" /> Editar
+                                                    <Icon name="Pencil" size={16} color="#1D4ED8" /> Editar
                                                 </button>
                                                 <button onClick={() => handleDelete(r.id)}
                                                     className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border hover:bg-red-50 transition-colors"
                                                     style={{ borderColor: '#FECACA', color: '#DC2626' }}>
-                                                    <Icon name="Trash2" size={13} color="#DC2626" /> Excluir
+                                                    <Icon name="Trash2" size={16} color="#DC2626" /> Excluir
                                                 </button>
                                             </>
                                         )}

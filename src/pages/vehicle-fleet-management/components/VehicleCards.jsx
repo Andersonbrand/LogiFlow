@@ -55,7 +55,7 @@ export default function VehicleCards({ vehicles, onEdit, onStatusChange, onViewH
                                 className="w-8 h-8 rounded-lg flex items-center justify-center"
                                 style={{ color: "var(--color-primary)", backgroundColor: "#EFF6FF" }}
                             >
-                                <Icon name="Pencil" size={14} color="currentColor" strokeWidth={2} />
+                                <Icon name="Pencil" size={16} color="currentColor" strokeWidth={2} />
                             </button>
                             <button
                                 title="Histórico"
@@ -80,7 +80,7 @@ export default function VehicleCards({ vehicles, onEdit, onStatusChange, onViewH
                                     className="w-8 h-8 rounded-lg flex items-center justify-center"
                                     style={{ color: "#DC2626", backgroundColor: "#FEF2F2" }}
                                 >
-                                    <Icon name="Trash2" size={14} color="currentColor" strokeWidth={2} />
+                                    <Icon name="Trash2" size={16} color="currentColor" strokeWidth={2} />
                                 </button>
                             )}
                         </div>

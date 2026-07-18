@@ -69,8 +69,8 @@ function LinhaItem({ item, categoria, cor, isAdmin, onSave, onDelete }) {
             <td className="px-3 py-2">
                 {isAdmin && (
                     <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => setEditando(true)} className="p-1.5 rounded-lg hover:bg-blue-100"><Icon name="Pencil" size={13} color="#2563EB" /></button>
-                        <button onClick={() => onDelete(item)} className="p-1.5 rounded-lg hover:bg-red-100"><Icon name="Trash2" size={13} color="#DC2626" /></button>
+                        <button onClick={() => setEditando(true)} className="p-1.5 rounded-lg hover:bg-blue-100"><Icon name="Pencil" size={16} color="#2563EB" /></button>
+                        <button onClick={() => onDelete(item)} className="p-1.5 rounded-lg hover:bg-red-100"><Icon name="Trash2" size={16} color="#DC2626" /></button>
                     </div>
                 )}
             </td>
@@ -233,8 +233,8 @@ function LinhaDestino({ destino, custoPorKm, custoPorDia, margemPadrao, isAdmin,
             <td className="px-3 py-2">
                 {isAdmin && (
                     <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => setEditando(true)} className="p-1.5 rounded-lg hover:bg-blue-100"><Icon name="Pencil" size={13} color="#2563EB" /></button>
-                        <button onClick={() => onDelete(destino)} className="p-1.5 rounded-lg hover:bg-red-100"><Icon name="Trash2" size={13} color="#DC2626" /></button>
+                        <button onClick={() => setEditando(true)} className="p-1.5 rounded-lg hover:bg-blue-100"><Icon name="Pencil" size={16} color="#2563EB" /></button>
+                        <button onClick={() => onDelete(destino)} className="p-1.5 rounded-lg hover:bg-red-100"><Icon name="Trash2" size={16} color="#DC2626" /></button>
                     </div>
                 )}
             </td>
@@ -365,7 +365,7 @@ function PainelCustos({ tipoVeiculo, isAdmin }) {
                                 <button onClick={() => { setMargemForm(config.margem_lucro_pct); setEditandoMargem(false); }} className="p-2.5 rounded-lg hover:bg-gray-200"><Icon name="X" size={22} color="#6B7280" /></button>
                             </div>
                         ) : (
-                            <button onClick={() => setEditandoMargem(true)} className="p-1.5 rounded-lg hover:bg-blue-100"><Icon name="Pencil" size={13} color="#2563EB" /></button>
+                            <button onClick={() => setEditandoMargem(true)} className="p-1.5 rounded-lg hover:bg-blue-100"><Icon name="Pencil" size={16} color="#2563EB" /></button>
                         )
                     )}
                 </div>

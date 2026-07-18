@@ -82,7 +82,7 @@ export default function VehicleTable({ vehicles, onEdit, onStatusChange, onViewH
                                             className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-150 hover:bg-blue-50"
                                             style={{ color: "var(--color-primary)" }}
                                         >
-                                            <Icon name="Pencil" size={15} color="currentColor" strokeWidth={2} />
+                                            <Icon name="Pencil" size={16} color="currentColor" strokeWidth={2} />
                                         </button>
                                         <button
                                             title="Ver histórico"
@@ -107,7 +107,7 @@ export default function VehicleTable({ vehicles, onEdit, onStatusChange, onViewH
                                                 className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-150 hover:bg-red-50"
                                                 style={{ color: "#DC2626" }}
                                             >
-                                                <Icon name="Trash2" size={15} color="currentColor" strokeWidth={2} />
+                                                <Icon name="Trash2" size={16} color="currentColor" strokeWidth={2} />
                                             </button>
                                         )}
                                     </div>

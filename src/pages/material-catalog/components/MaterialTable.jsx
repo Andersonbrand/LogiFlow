@@ -89,7 +89,7 @@ export default function MaterialTable({ materials, sortConfig, onSort, onEdit, o
                                             title="Editar material"
                                             aria-label={`Editar ${m?.nome}`}
                                         >
-                                            <Icon name="Pencil" size={15} color="currentColor" />
+                                            <Icon name="Pencil" size={16} color="currentColor" />
                                         </button>
                                         {onDelete && (
                                         <button
@@ -98,7 +98,7 @@ export default function MaterialTable({ materials, sortConfig, onSort, onEdit, o
                                             title="Excluir material"
                                             aria-label={`Excluir ${m?.nome}`}
                                         >
-                                            <Icon name="Trash2" size={15} color="currentColor" />
+                                            <Icon name="Trash2" size={16} color="currentColor" />
                                         </button>
                                         )}
                                     </div>

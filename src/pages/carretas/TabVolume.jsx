@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Icon from 'components/AppIcon';
+import { EditButton, DeleteButton, ActionButtonsGroup } from 'components/ActionButtons';
 import Button from 'components/ui/Button';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
@@ -287,7 +288,7 @@ export default function TabVolume({ isAdmin }) {
     const [motoristasProprios, setMotoristasProprios] = useState([]); // frota própria (modal retira)
     const [motoristasTerceiros, setMotoristasTerceiros] = useState([]); // terceirizados (modal terceiro)
     const [loading, setLoading] = useState(true);
-    const [subAba, setSubAba] = useState('dashboard'); // 'dashboard' | 'tabela' | 'terceiros' | 'retira' | 'fornecedores'
+    const [subAba, setSubAba] = useState('dashboard'); // 'dashboard' | 'tabela' | 'terceiros' | 'retira'
 
     // Modal carregamento
     const emptyForm = () => ({
@@ -788,7 +789,6 @@ export default function TabVolume({ isAdmin }) {
                     { id: 'tabela', label: 'Registros', icon: 'Table2' },
                     { id: 'terceiros', label: 'Terceiros', icon: 'Users' },
                     { id: 'retira', label: 'Retira de Clientes', icon: 'ShoppingBag' },
-                    { id: 'fornecedores', label: 'Fornecedores', icon: 'Building' },
                 ].map(s => (
                     <button
                         key={s.id}
@@ -839,14 +839,7 @@ export default function TabVolume({ isAdmin }) {
                     veiculos={veiculosTerceiros}
                     motoristas={motoristasTerceiros}
                 />
-            ) : (
-                <PainelFornecedores
-                    fornecedores={fornecedores}
-                    isAdmin={isAdmin}
-                    onNovo={() => { setFormFornec({ nome: '', cnpj: '', observacoes: '' }); setModalFornec(true); }}
-                    onDelete={handleDeleteFornec}
-                />
-            )}
+            ) : null}
 
             {/* ── Modal Carregamento ── */}
             {modal && isAdmin && (
@@ -1480,10 +1473,10 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo,
                                 </td>
                                 {isAdmin && (
                                     <td className="px-3 py-2.5">
-                                        <div className="flex items-center gap-1">
-                                            <button onClick={() => onEdit(r)} title="Editar" className="p-2.5 rounded-lg hover:bg-blue-100 transition-colors"><Icon name="Pencil" size={20} color="#1D4ED8" /></button>
-                                            <button onClick={() => onDelete(r.id)} title="Excluir" className="p-2.5 rounded-lg hover:bg-red-100 transition-colors"><Icon name="Trash2" size={20} color="#DC2626" /></button>
-                                        </div>
+                                        <ActionButtonsGroup>
+                                            <EditButton onClick={() => onEdit(r)} />
+                                            <DeleteButton onClick={() => onDelete(r.id)} />
+                                        </ActionButtonsGroup>
                                     </td>
                                 )}
                             </tr>
@@ -1519,9 +1512,7 @@ function PainelFornecedores({ fornecedores, isAdmin, onNovo, onDelete }) {
                             <div className="flex items-start justify-between mb-2">
                                 <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{f.nome}</p>
                                 {isAdmin && (
-                                    <button onClick={() => onDelete(f.id)} title="Excluir" className="p-2.5 rounded-lg hover:bg-red-100 transition-colors flex-shrink-0">
-                                        <Icon name="Trash2" size={20} color="#DC2626" />
-                                    </button>
+                                    <DeleteButton onClick={() => onDelete(f.id)} />
                                 )}
                             </div>
                             {f.cnpj && <p className="text-xs font-mono" style={{ color: 'var(--color-muted-foreground)' }}>📄 {f.cnpj}</p>}
@@ -1722,10 +1713,10 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
                                         <td className="px-3 py-2.5 font-mono font-semibold whitespace-nowrap" style={{ color: '#059669' }}>{frete > 0 ? BRL(frete) : '—'}</td>
                                         {isAdmin && (
                                             <td className="px-3 py-2.5">
-                                                <div className="flex items-center gap-1">
-                                                    <button onClick={() => onEdit(r)} title="Editar" className="p-2.5 rounded-lg hover:bg-blue-100 transition-colors"><Icon name="Pencil" size={20} color="#1D4ED8" /></button>
-                                                    <button onClick={() => onDelete(r.id)} title="Excluir" className="p-2.5 rounded-lg hover:bg-red-100 transition-colors"><Icon name="Trash2" size={20} color="#DC2626" /></button>
-                                                </div>
+                                                <ActionButtonsGroup>
+                                                    <EditButton onClick={() => onEdit(r)} />
+                                                    <DeleteButton onClick={() => onDelete(r.id)} />
+                                                </ActionButtonsGroup>
                                             </td>
                                         )}
                                     </tr>
@@ -1823,10 +1814,10 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                                         <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap" style={{ color: '#059669' }}>{(Number(r.quantidade) || 0).toLocaleString('pt-BR')}</td>
                                         {isAdmin && (
                                             <td className="px-3 py-2.5">
-                                                <div className="flex items-center gap-1">
-                                                    <button onClick={() => onEdit(r)} title="Editar" className="p-2.5 rounded-lg hover:bg-blue-100 transition-colors"><Icon name="Pencil" size={20} color="#1D4ED8" /></button>
-                                                    <button onClick={() => onDelete(r.id)} title="Excluir" className="p-2.5 rounded-lg hover:bg-red-100 transition-colors"><Icon name="Trash2" size={20} color="#DC2626" /></button>
-                                                </div>
+                                                <ActionButtonsGroup>
+                                                    <EditButton onClick={() => onEdit(r)} />
+                                                    <DeleteButton onClick={() => onDelete(r.id)} />
+                                                </ActionButtonsGroup>
                                             </td>
                                         )}
                                     </tr>

@@ -19,7 +19,7 @@ export const EMPRESAS = [
 ];
 
 const EMPTY_FORM = {
-    motorista:'', motorista_id:'', placa:'', destino:'', status:'Aguardando', saida:'', observacoes:'',
+    motorista:'', motorista_id:'', placa:'', destino:'', status:'Aguardando', saida:'', chegada:'', observacoes:'',
     vehicle_id:'', distancia_km:'', custo_combustivel:'', custo_pedagio:'', custo_motorista:'',
     dias_diaria:'1', valor_diaria_dia:'', diaria_descricao:'',
 };
@@ -108,6 +108,12 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     // Converte UTC do banco para horário local (Brasília UTC-3) para exibir corretamente no input
                     const d = new Date(editingRomaneio.saida);
                     const offset = d.getTimezoneOffset(); // minutos de diferença
+                    const local = new Date(d.getTime() - offset * 60000);
+                    return local.toISOString().slice(0, 16);
+                })() : '',
+                chegada:           editingRomaneio.chegada ? (() => {
+                    const d = new Date(editingRomaneio.chegada);
+                    const offset = d.getTimezoneOffset();
                     const local = new Date(d.getTime() - offset * 60000);
                     return local.toISOString().slice(0, 16);
                 })() : '',
@@ -772,6 +778,14 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                         className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white" />
                                 </div>
                                 <div>
+                                    <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Data/Hora de Chegada</label>
+                                    <input type="datetime-local" value={form.chegada} onChange={e => setF('chegada', e.target.value)}
+                                        min={form.saida || undefined}
+                                        className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white" />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
                                     <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Status</label>
                                     <select value={form.status} onChange={e => setF('status', e.target.value)}
                                         className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white">
@@ -853,7 +867,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                             <div className="flex items-center gap-1 flex-shrink-0">
                                                 <button onClick={e => { e.stopPropagation(); removePedido(pIdx); }}
                                                     className="p-1.5 rounded-lg hover:bg-red-100 transition-colors">
-                                                    <Icon name="Trash2" size={14} color="#DC2626" />
+                                                    <Icon name="Trash2" size={16} color="#DC2626" />
                                                 </button>
                                                 <Icon name={isExpanded ? 'ChevronUp' : 'ChevronDown'} size={16} color="var(--color-muted-foreground)" />
                                             </div>

@@ -746,7 +746,7 @@ export default function MotoristaDashboard() {
                                             </button>
                                             <button type="button" onClick={() => { setFotoPreview(null); setFormCheck(f => ({ ...f, foto_url: '' })); }}
                                                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-red-600 bg-white border border-red-200">
-                                                <Icon name="Trash2" size={13} /> Remover
+                                                <Icon name="Trash2" size={16} /> Remover
                                             </button>
                                         </div>
                                     </div>

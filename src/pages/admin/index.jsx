@@ -349,12 +349,12 @@ export default function AdminPanel() {
                                                     <button onClick={() => handleAbrirEdicaoUsuario(u)}
                                                         className="p-1.5 rounded-lg hover:bg-amber-50 text-slate-400 hover:text-amber-600 transition-colors"
                                                         title="Editar usuário">
-                                                        <Icon name="Pencil" size={14} color="currentColor" />
+                                                        <Icon name="Pencil" size={16} color="currentColor" />
                                                     </button>
                                                     <button onClick={() => setConfirmarExclusaoUsuario(u)}
                                                         className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
                                                         title="Excluir usuário">
-                                                        <Icon name="Trash2" size={14} color="currentColor" />
+                                                        <Icon name="Trash2" size={16} color="currentColor" />
                                                     </button>
                                                 </td>
                                             </tr>
@@ -1414,7 +1414,7 @@ function MotoristasManager({ showToast }) {
                                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium disabled:opacity-60 transition-colors">
                                     {deleting
                                         ? <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                                        : <Icon name="Trash2" size={14} color="#fff" />}
+                                        : <Icon name="Trash2" size={16} color="#fff" />}
                                     Excluir
                                 </button>
                             </div>
@@ -1490,13 +1490,13 @@ function MotoristasManager({ showToast }) {
                                                 <button onClick={() => { handleAbrirEdicao(m); setDetalhe(null); setShowForm(false); }}
                                                     className="p-1.5 rounded-lg hover:bg-amber-50 text-slate-400 hover:text-amber-600 transition-colors"
                                                     title="Editar motorista">
-                                                    <Icon name="Pencil" size={14} color="currentColor" />
+                                                    <Icon name="Pencil" size={16} color="currentColor" />
                                                 </button>
                                                 <button
                                                     onClick={() => setConfirmDelete(m)}
                                                     className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
                                                     title="Excluir motorista">
-                                                    <Icon name="Trash2" size={14} color="currentColor" />
+                                                    <Icon name="Trash2" size={16} color="currentColor" />
                                                 </button>
                                                 </div>
                                             </td>
@@ -1798,12 +1798,12 @@ function CorredoresManager({ showToast }) {
                                 <button
                                     onClick={() => abrirEdicao(corredor)}
                                     className="p-1.5 rounded-lg hover:bg-slate-200 transition-colors ml-1">
-                                    <Icon name="Pencil" size={13} color="#475569" />
+                                    <Icon name="Pencil" size={16} color="#475569" />
                                 </button>
                                 <button
                                     onClick={() => setConfirmDel(corredor.nome)}
                                     className="p-1.5 rounded-lg hover:bg-red-100 transition-colors">
-                                    <Icon name="Trash2" size={13} color="#DC2626" />
+                                    <Icon name="Trash2" size={16} color="#DC2626" />
                                 </button>
                             </div>
                         </div>

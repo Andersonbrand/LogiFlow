@@ -558,7 +558,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                         </button>
                                                     </>)}
                                                     <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 ml-auto">
-                                                        <Icon name="Trash2" size={13} />Excluir
+                                                        <Icon name="Trash2" size={16} />Excluir
                                                     </button>
                                                 </div>
                                             </div>
@@ -664,7 +664,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                                 <Icon name="Eye" size={13} color="#059669" />
                                                                             </button>
                                                                             <button onClick={() => handleDeleteRomaneio(r.id)} title="Excluir romaneio" className="p-1.5 rounded hover:bg-red-50">
-                                                                                <Icon name="Trash2" size={13} color="#DC2626" />
+                                                                                <Icon name="Trash2" size={16} color="#DC2626" />
                                                                             </button>
                                                                         </div>
                                                                     </td>
@@ -721,8 +721,8 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                 <td className="px-3 py-2.5">
                                                                     <div className="flex gap-1">
                                                                         <button onClick={() => setViewDiaria(d)} title="Visualizar diária" className="p-1.5 rounded hover:bg-indigo-50"><Icon name="Eye" size={13} color="#4F46E5" /></button>
-                                                                        <button onClick={() => openEditDiaria(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
-                                                                        <button onClick={() => handleDeleteDiaria(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={13} color="#DC2626" /></button>
+                                                                        <button onClick={() => openEditDiaria(d)} className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>
+                                                                        <button onClick={() => handleDeleteDiaria(d.id)} className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={16} color="#DC2626" /></button>
                                                                     </div>
                                                                 </td>
                                                             </tr>

@@ -1255,6 +1255,37 @@ export async function deleteBonificacaoExtra(id) {
 // PONTOS DE PARADA — registros de chegada/saída em locais
 // ═══════════════════════════════════════════════════════════════
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CATÁLOGO DE LOCAIS DE PARADA (tipos "Fábrica" e "Outro" — editável pelo admin)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchLocaisParada(tipoLocal) {
+    let q = supabase.from('carretas_locais_parada').select('*').order('nome', { ascending: true });
+    if (tipoLocal) q = q.eq('tipo_local', tipoLocal);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createLocalParada(local) {
+    const { data, error } = await supabase.from('carretas_locais_parada').insert(local).select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updateLocalParada(id, updates) {
+    const { data, error } = await supabase
+        .from('carretas_locais_parada')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deleteLocalParada(id) {
+    const { error } = await supabase.from('carretas_locais_parada').delete().eq('id', id);
+    if (error) throw error;
+}
+
 export async function fetchPontosParada(motoristaId) {
     const q = supabase
         .from('carretas_pontos_parada')

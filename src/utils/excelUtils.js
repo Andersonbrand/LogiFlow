@@ -1472,6 +1472,10 @@ export function printOrdemServico(ordem) {
     const prioridade = ordem.prioridade || 'Normal';
     const status     = ordem.status || 'Pendente';
     const descricao  = ordem.descricao || '';
+    const observacoes = ordem.observacoes || '';
+    const tipoManutencao = ordem.tipo_manutencao || '—';
+    const kmAtual     = ordem.km_atual != null ? Number(ordem.km_atual).toLocaleString('pt-BR') + ' km' : '—';
+    const pecas       = ordem.pecas_solicitadas || [];
     const abertura    = fmt(ordem.created_at);
     const finalizacao = ordem.finalizada_em ? fmt(ordem.finalizada_em) : null;
 
@@ -1516,6 +1520,14 @@ export function printOrdemServico(ordem) {
     <td>${esc(mecanico)}</td>
   </tr>
   <tr>
+    <td class="lbl">Tipo de manutencao:</td>
+    <td>${esc(tipoManutencao)}</td>
+  </tr>
+  <tr>
+    <td class="lbl">KM atual do veiculo:</td>
+    <td>${esc(kmAtual)}</td>
+  </tr>
+  <tr>
     <td class="lbl">Prioridade:</td>
     <td class="${prioridade === 'Urgente' ? 'urgente' : ''}">${esc(prioridade)}${prioridade === 'Urgente' ? ' !' : ''}</td>
   </tr>
@@ -1529,6 +1541,23 @@ export function printOrdemServico(ordem) {
   <tr><td class="sec" colspan="2">Servico Solicitado</td></tr>
   <tr><td colspan="2" style="min-height:24px">${esc(descricao)}</td></tr>
 </table>
+
+${observacoes ? `
+<table style="margin-top:8px">
+  <tr><td class="sec" colspan="2">Observacoes do Servico</td></tr>
+  <tr><td colspan="2">${esc(observacoes)}</td></tr>
+</table>` : ''}
+
+${pecas.length ? `
+<table style="margin-top:8px">
+  <tr><td class="sec" colspan="3">Pecas Solicitadas</td></tr>
+  <tr>
+    <td class="lbl" style="width:50%">Item</td>
+    <td class="lbl" style="width:20%">Qtd.</td>
+    <td class="lbl" style="width:30%">Status</td>
+  </tr>
+  ${pecas.map(p => `<tr><td>${esc(p.item)}</td><td>${esc(p.quantidade)}</td><td>${esc(p.status || 'Pendente')}</td></tr>`).join('')}
+</table>` : ''}
 
 ${ordem.problema_encontrado ? `
 <table style="margin-top:8px">

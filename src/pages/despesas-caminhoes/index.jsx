@@ -543,9 +543,9 @@ function ModalFornecedores({ onClose, onSelect }) {
                                         </button>
                                     )}
                                     <button onClick={() => { setForm({ nome: f.nome, cnpj: f.cnpj || '', telefone: f.telefone || '', email: f.email || '', endereco: f.endereco || '', categoria: f.categoria || '', observacoes: f.observacoes || '' }); setModal({ mode: 'edit', data: f }); }}
-                                        className="p-1.5 rounded hover:bg-blue-50 transition-colors"><Icon name="Pencil" size={13} color="#1D4ED8" /></button>
+                                        className="p-1.5 rounded hover:bg-blue-50 transition-colors"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>
                                     <button onClick={() => handleDelete(f.id)}
-                                        className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={13} color="#DC2626" /></button>
+                                        className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={16} color="#DC2626" /></button>
                                 </div>
                             </div>
                         ))}
@@ -1068,9 +1068,9 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
                                                     <>
                                                         <span className="flex-1 text-xs truncate" style={{ color: 'var(--color-text-primary)' }}>{cat}</span>
                                                         <button type="button" onClick={() => { setEditandoCategoria(cat); setTextoEdicaoCategoria(cat); }}
-                                                            className="shrink-0 p-1.5 rounded-md hover:bg-blue-50" style={{ color: '#1D4ED8' }} title="Renomear"><Icon name="Pencil" size={13} /></button>
+                                                            className="shrink-0 p-1.5 rounded-md hover:bg-blue-50" style={{ color: '#1D4ED8' }} title="Renomear"><Icon name="Pencil" size={16} /></button>
                                                         <button type="button" onClick={() => excluirCategoria(cat)}
-                                                            className="shrink-0 p-1.5 rounded-md text-red-600 hover:bg-red-50" title="Excluir"><Icon name="Trash2" size={13} /></button>
+                                                            className="shrink-0 p-1.5 rounded-md text-red-600 hover:bg-red-50" title="Excluir"><Icon name="Trash2" size={16} /></button>
                                                     </>
                                                 )}
                                             </div>
@@ -1654,10 +1654,10 @@ export default function DespesasCaminhoes() {
                                                     {admin && (
                                                         <>
                                                             <button onClick={() => setModal({ mode: 'edit', data: d })} className="p-1.5 rounded hover:bg-blue-50 transition-colors">
-                                                                <Icon name="Pencil" size={13} color="#1D4ED8" />
+                                                                <Icon name="Pencil" size={16} color="#1D4ED8" />
                                                             </button>
                                                             <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50 transition-colors">
-                                                                <Icon name="Trash2" size={13} color="#DC2626" />
+                                                                <Icon name="Trash2" size={16} color="#DC2626" />
                                                             </button>
                                                         </>
                                                     )}

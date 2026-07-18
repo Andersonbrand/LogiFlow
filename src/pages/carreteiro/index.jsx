@@ -3,6 +3,7 @@ import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
 import Icon from 'components/AppIcon';
+import { EditButton, DeleteButton, ActionButtonsGroup } from 'components/ActionButtons';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
@@ -23,6 +24,8 @@ import {
     createRomaneioFerragem,
     updateRomaneio, deleteRomaneio,
     fetchEmpresas,
+    fetchFretesCidades,
+    fetchLocaisParada,
 } from 'utils/carretasService';
 import { useConfirm } from 'components/ui/ConfirmDialog';
 import { useBonusConfig } from 'utils/settingsService';
@@ -107,6 +110,9 @@ export default function CarreteiroDashboard() {
     const [filtroPlaca, setFiltroPlaca] = useState(''); // filtra registros/abastecimentos/checklist por placa, quando o motorista dirige mais de um veículo
     const [postos, setPostos]     = useState([]);
     const [empresas, setEmpresas] = useState([]);
+    const [cidadesFrete, setCidadesFrete]   = useState([]);
+    const [locaisFabrica, setLocaisFabrica] = useState([]);
+    const [locaisOutro, setLocaisOutro]     = useState([]);
     const [loading, setLoading]   = useState(true);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
@@ -128,12 +134,24 @@ export default function CarreteiroDashboard() {
     const [modalPonto, setModalPonto] = useState(false);
     const [editandoPontoId, setEditandoPontoId] = useState(null);
     const [formPonto, setFormPonto] = useState({
-        local: '', tipo_local: 'Outro', veiculo_id: '',
+        tipo_local: 'Fábrica', local: '', veiculo_id: '',
         data_saida: new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '',
         data_chegada: '', horario_chegada: '', km_chegada: '',
         cupom_fiscal: '', observacoes: '',
         horarios_extras: [],
     });
+    // Lista de destinos disponíveis para cada tipo de local, evitando texto livre
+    // e reaproveitando os cadastros já existentes no LogiFlow.
+    const destinosParaTipo = useCallback((tipo) => {
+        switch (tipo) {
+            case 'Empresa': return empresas.map(e => e.nome).filter(Boolean);
+            case 'Fábrica':  return locaisFabrica.map(l => l.nome).filter(Boolean);
+            case 'Entrega': return cidadesFrete.map(c => c.cidade).filter(Boolean);
+            case 'Posto':    return postos.map(p => p.nome).filter(Boolean);
+            case 'Outro':    return locaisOutro.map(l => l.nome).filter(Boolean);
+            default: return [];
+        }
+    }, [empresas, locaisFabrica, cidadesFrete, postos, locaisOutro]);
     // Modal romaneio de ferragens (registrado pelo motorista)
     const [modalFerragem, setModalFerragem] = useState(false);
     const [editandoFerragemId, setEditandoFerragemId] = useState(null); // null = criar, string = editar
@@ -174,7 +192,7 @@ export default function CarreteiroDashboard() {
             const cut = new Date();
             cut.setDate(cut.getDate() - period);
             const dateStr = cut.toISOString().split('T')[0];
-            const [v, a, c, ve, cfg, p, emps] = await Promise.all([
+            const [v, a, c, ve, cfg, p, emps, cidades, fabricas, outros] = await Promise.all([
                 fetchViagens({ motoristaId: user.id, dataInicio: dateStr }),
                 fetchAbastecimentos({ motoristaId: user.id, dataInicio: dateStr }),
                 fetchChecklists({ motoristaId: user.id }),
@@ -182,10 +200,16 @@ export default function CarreteiroDashboard() {
                 fetchConfigAbastecimento(),
                 fetchPostos().catch(() => []),
                 fetchEmpresas().catch(() => []),
+                fetchFretesCidades().catch(() => []),
+                fetchLocaisParada('Fábrica').catch(() => []),
+                fetchLocaisParada('Outro').catch(() => []),
             ]);
             setViagens(v); setAbast(a); setChecklists(c); setVeiculos(ve);
             setPostos(p);
             setEmpresas(emps || []);
+            setCidadesFrete(cidades || []);
+            setLocaisFabrica(fabricas || []);
+            setLocaisOutro(outros || []);
             setConfigAbast(cfg || { preco_diesel: 0, preco_arla: 0 });
 
             // Carregamentos do motorista (nova fonte de dados para viagens e bônus)
@@ -1027,7 +1051,7 @@ export default function CarreteiroDashboard() {
                                                 <Button onClick={() => {
                                                     setEditandoPontoId(null);
                                                     setFormPonto({
-                                                        local: '', tipo_local: 'Outro', veiculo_id: '',
+                                                        tipo_local: 'Fábrica', local: '', veiculo_id: '',
                                                         data_saida: new Date().toISOString().split('T')[0],
                                                         horario_saida: '', km_saida: '',
                                                         data_chegada: '', horario_chegada: '', km_chegada: '',
@@ -1058,7 +1082,7 @@ export default function CarreteiroDashboard() {
                                                         <table className="w-full text-xs" style={{ minWidth: 700 }}>
                                                             <thead>
                                                                 <tr style={{ backgroundColor: '#1D4ED8' }}>
-                                                                    {['KM/Destino','Data Saída','Hor. Saída','KM Saída','Data Chegada','Hor. Chegada','KM Chegada','Obs.',''].map(h => (
+                                                                    {['KM/Destino','Data Saída','Hor. Saída','KM Saída','Data Chegada','Hor. Chegada','KM Chegada','Cupom','Obs.',''].map(h => (
                                                                         <th key={h} className="px-3 py-2.5 text-left font-semibold text-white whitespace-nowrap">{h}</th>
                                                                     ))}
                                                                 </tr>
@@ -1110,16 +1134,19 @@ export default function CarreteiroDashboard() {
                                                                             <td className="px-3 py-2.5 font-data text-right" style={{ color: '#059669' }}>
                                                                                 {p.km_chegada != null ? Number(p.km_chegada).toLocaleString('pt-BR') : '—'}
                                                                             </td>
+                                                                            <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
+                                                                                {p.cupom_fiscal || '—'}
+                                                                            </td>
                                                                             <td className="px-3 py-2.5 max-w-[120px] truncate" style={{ color: 'var(--color-muted-foreground)' }}
                                                                                 title={p.observacoes}>
                                                                                 {p.observacoes || ''}
                                                                             </td>
                                                                             <td className="px-2 py-2.5">
-                                                                                <div className="flex items-center gap-1">
-                                                                                    <button onClick={() => {
+                                                                                <ActionButtonsGroup>
+                                                                                    <EditButton title="Editar" onClick={() => {
                                                                                         setEditandoPontoId(p.id);
                                                                                         setFormPonto({
-                                                                                            local: p.local || '', tipo_local: p.tipo_local || 'Outro',
+                                                                                            tipo_local: p.tipo_local || 'Fábrica', local: p.local || '',
                                                                                             veiculo_id: p.veiculo_id || '',
                                                                                             data_saida: p.data_saida || '',
                                                                                             horario_saida: p.horario_saida || '', km_saida: p.km_saida ?? '',
@@ -1129,18 +1156,14 @@ export default function CarreteiroDashboard() {
                                                                                             horarios_extras: p.horarios_extras || [],
                                                                                         });
                                                                                         setModalPonto(true);
-                                                                                    }} className="p-1.5 rounded hover:bg-blue-50 transition-colors" title="Editar">
-                                                                                        <Icon name="Pencil" size={13} color="#1D4ED8" />
-                                                                                    </button>
-                                                                                    <button onClick={async () => {
+                                                                                    }} />
+                                                                                    <DeleteButton title="Excluir" onClick={async () => {
                                                                                         const ok = await confirm({ title: 'Excluir registro?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
                                                                                         if (!ok) return;
                                                                                         try { await deletePontoParada(p.id); showToast('Registro excluído.', 'success'); load(); }
                                                                                         catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                                                                                    }} className="p-1.5 rounded hover:bg-red-50 transition-colors" title="Excluir">
-                                                                                        <Icon name="Trash2" size={13} color="#DC2626" />
-                                                                                    </button>
-                                                                                </div>
+                                                                                    }} />
+                                                                                </ActionButtonsGroup>
                                                                             </td>
                                                                         </tr>
                                                                         {p.horarios_extras && p.horarios_extras.length > 0 && p.horarios_extras.map((ex, exIdx) => (
@@ -1306,10 +1329,10 @@ export default function CarreteiroDashboard() {
                                                                 {r.observacoes && <p className="text-xs mt-2 text-gray-500">{r.observacoes}</p>}
                                                                 <div className="flex justify-end gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                                                     <button onClick={() => handleDeleteRegistro(r.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
-                                                                        <Icon name="Trash2" size={13} />Excluir
+                                                                        <Icon name="Trash2" size={16} />Excluir
                                                                     </button>
                                                                     <button onClick={() => handleEditRegistro(r)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
-                                                                        <Icon name="Pencil" size={13} />Editar
+                                                                        <Icon name="Pencil" size={16} />Editar
                                                                     </button>
                                                                 </div>
                                                             </div>
@@ -1364,7 +1387,7 @@ export default function CarreteiroDashboard() {
                                                                                 } catch (e) { showToast('Erro: ' + e.message, 'error'); }
                                                                             }}
                                                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
-                                                                            <Icon name="Trash2" size={13} />Excluir
+                                                                            <Icon name="Trash2" size={16} />Excluir
                                                                         </button>
                                                                         <button
                                                                             onClick={() => {
@@ -1381,7 +1404,7 @@ export default function CarreteiroDashboard() {
                                                                                 setModalFerragem(true);
                                                                             }}
                                                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-200 text-amber-700 hover:bg-amber-50">
-                                                                            <Icon name="Pencil" size={13} />Editar
+                                                                            <Icon name="Pencil" size={16} />Editar
                                                                         </button>
                                                                     </div>
                                                                 </div>
@@ -1435,10 +1458,10 @@ export default function CarreteiroDashboard() {
                                                             )}
                                                             <div className="flex justify-end gap-2 mt-2 pt-2 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                                                 <button onClick={() => handleEditAbast(a)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
-                                                                    <Icon name="Pencil" size={13} />Editar
+                                                                    <Icon name="Pencil" size={16} />Editar
                                                                 </button>
                                                                 <button onClick={() => handleDeleteAbast(a.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
-                                                                    <Icon name="Trash2" size={13} />Excluir
+                                                                    <Icon name="Trash2" size={16} />Excluir
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -1481,7 +1504,7 @@ export default function CarreteiroDashboard() {
                                                         </div>
                                                         <div className="flex justify-end mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                                             <button onClick={() => handleEditCheck(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
-                                                                <Icon name="Pencil" size={13} />Editar
+                                                                <Icon name="Pencil" size={16} />Editar
                                                             </button>
                                                         </div>
                                                     </div>
@@ -1684,7 +1707,7 @@ export default function CarreteiroDashboard() {
                                             </button>
                                             <button type="button" onClick={() => { setFotoPreview(null); setFormCheck(f => ({ ...f, foto_url: '' })); }}
                                                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-red-600 bg-white border border-red-200">
-                                                <Icon name="Trash2" size={13} /> Remover
+                                                <Icon name="Trash2" size={16} /> Remover
                                             </button>
                                         </div>
                                     </div>
@@ -2006,26 +2029,38 @@ export default function CarreteiroDashboard() {
                         </div>
 
                         <div className="p-5 space-y-4 overflow-y-auto flex-1">
-                            {/* Local e tipo */}
+                            {/* Tipo e Local */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <Field label="Local / Destino" required>
-                                    <input
-                                        value={formPonto.local}
-                                        onChange={e => setFormPonto(f => ({ ...f, local: e.target.value }))}
-                                        className={inputCls} style={inputStyle}
-                                        placeholder="Ex: Fábrica Cachoeirinha, Estoque BA..."
-                                    />
-                                </Field>
                                 <Field label="Tipo de Local">
                                     <select value={formPonto.tipo_local}
-                                        onChange={e => setFormPonto(f => ({ ...f, tipo_local: e.target.value }))}
+                                        onChange={e => setFormPonto(f => ({ ...f, tipo_local: e.target.value, local: '' }))}
                                         className={inputCls} style={inputStyle}>
-                                        {['Fábrica','Empresa','Estoque','Entrega','Posto','Oficina','Outro'].map(t => (
+                                        {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
                                             <option key={t} value={t}>{t}</option>
                                         ))}
                                     </select>
                                 </Field>
+                                <Field label="Destino / Local" required>
+                                    <select
+                                        value={formPonto.local}
+                                        onChange={e => setFormPonto(f => ({ ...f, local: e.target.value }))}
+                                        className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione...</option>
+                                        {destinosParaTipo(formPonto.tipo_local).map(nome => (
+                                            <option key={nome} value={nome}>{nome}</option>
+                                        ))}
+                                    </select>
+                                </Field>
                             </div>
+
+                            <Field label="Cupom Fiscal / NF">
+                                <input
+                                    value={formPonto.cupom_fiscal}
+                                    onChange={e => setFormPonto(f => ({ ...f, cupom_fiscal: e.target.value }))}
+                                    className={inputCls} style={inputStyle}
+                                    placeholder="Nº do cupom fiscal / nota (opcional)"
+                                />
+                            </Field>
 
                             <Field label="Veículo">
                                 <select value={formPonto.veiculo_id}
@@ -2097,21 +2132,30 @@ export default function CarreteiroDashboard() {
                                         </button>
                                     </div>
                                     <div className="px-4 pb-3 space-y-3">
-                                        {/* Local e Tipo */}
+                                        {/* Tipo e Local */}
                                         <div className="grid grid-cols-2 gap-3">
-                                            <Field label="Local / Destino" required>
-                                                <input value={extra.local || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], local: e.target.value }; return { ...f, horarios_extras: h }; })}
-                                                    className={inputCls} style={inputStyle} placeholder="Ex: Estoque Ibotirama..." />
-                                            </Field>
                                             <Field label="Tipo de Local">
-                                                <select value={extra.tipo_local || 'Outro'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local: e.target.value }; return { ...f, horarios_extras: h }; })}
+                                                <select value={extra.tipo_local || 'Fábrica'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local: e.target.value, local: '' }; return { ...f, horarios_extras: h }; })}
                                                     className={inputCls} style={inputStyle}>
-                                                    {['Fábrica','Empresa','Estoque','Entrega','Posto','Oficina','Outro'].map(t => (
+                                                    {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
                                                         <option key={t} value={t}>{t}</option>
                                                     ))}
                                                 </select>
                                             </Field>
+                                            <Field label="Destino / Local" required>
+                                                <select value={extra.local || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], local: e.target.value }; return { ...f, horarios_extras: h }; })}
+                                                    className={inputCls} style={inputStyle}>
+                                                    <option value="">Selecione...</option>
+                                                    {destinosParaTipo(extra.tipo_local || 'Fábrica').map(nome => (
+                                                        <option key={nome} value={nome}>{nome}</option>
+                                                    ))}
+                                                </select>
+                                            </Field>
                                         </div>
+                                        <Field label="Cupom Fiscal / NF">
+                                            <input value={extra.cupom_fiscal || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], cupom_fiscal: e.target.value }; return { ...f, horarios_extras: h }; })}
+                                                className={inputCls} style={inputStyle} placeholder="Nº do cupom fiscal / nota (opcional)" />
+                                        </Field>
                                         <div className="p-3 rounded-lg border space-y-2" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
                                             <p className="text-xs font-bold flex items-center gap-1" style={{ color: '#1D4ED8' }}><Icon name="LogOut" size={12} color="#1D4ED8" />SAÍDA</p>
                                             <div className="grid grid-cols-3 gap-2">
@@ -2143,7 +2187,7 @@ export default function CarreteiroDashboard() {
                                     </div>
                                 </div>
                             ))}
-                            <button type="button" onClick={() => setFormPonto(f => ({ ...f, horarios_extras: [...(f.horarios_extras || []), { local: '', tipo_local: 'Outro', data_saida: formPonto.data_saida || new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '', data_chegada: '', horario_chegada: '', km_chegada: '' }] }))}
+                            <button type="button" onClick={() => setFormPonto(f => ({ ...f, horarios_extras: [...(f.horarios_extras || []), { tipo_local: 'Fábrica', local: '', cupom_fiscal: '', data_saida: formPonto.data_saida || new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '', data_chegada: '', horario_chegada: '', km_chegada: '' }] }))}
                                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed text-xs font-medium w-full justify-center hover:bg-purple-50 transition-colors"
                                 style={{ borderColor: '#C4B5FD', color: '#6D28D9' }}>
                                 <Icon name="Plus" size={14} color="#6D28D9" />

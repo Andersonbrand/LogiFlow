@@ -306,6 +306,7 @@ export default function Romaneios() {
                                             <th className="px-3 py-3 text-left font-medium hidden tab:table-cell">Placa</th>
                                             <th className="px-3 py-3 text-right font-medium hidden tab:table-cell">Peso</th>
                                             <th className="px-3 py-3 text-left font-medium hidden tab:table-cell">Saída</th>
+                                            <th className="px-3 py-3 text-left font-medium hidden tab:table-cell">Chegada</th>
                                             <th className="px-3 py-3 text-right font-medium hidden lg:table-cell">Frete</th>
                                             <th className="px-3 py-3 text-right font-medium hidden lg:table-cell">Margem</th>
                                             <th className="px-3 py-3 text-center font-medium hidden tab:table-cell">Aprovação</th>
@@ -349,6 +350,9 @@ export default function Romaneios() {
                                                     <td className="px-3 py-3 hidden tab:table-cell text-xs font-caption" style={{ color: 'var(--color-text-secondary)' }}>
                                                         {r.saida ? new Date(r.saida).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
                                                     </td>
+                                                    <td className="px-3 py-3 hidden tab:table-cell text-xs font-caption" style={{ color: 'var(--color-text-secondary)' }}>
+                                                        {r.chegada ? new Date(r.chegada).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                                                    </td>
                                                     <td className="px-3 py-3 text-right hidden lg:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                                                         {r.valor_frete ? Number(r.valor_frete).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
                                                     </td>
@@ -389,16 +393,16 @@ export default function Romaneios() {
                                                     <td className="px-4 py-3">
                                                         <div className="flex items-center justify-center gap-1">
                                                             <button onClick={() => setDetailModal({ open: true, romaneio: r })}
-                                                                className="p-1.5 rounded hover:bg-blue-50 transition-colors" title="Ver detalhes">
-                                                                <Icon name="Eye" size={14} color="var(--color-primary)" />
+                                                                className="p-1.5 rounded hover:bg-blue-50 transition-colors flex-shrink-0" title="Ver detalhes">
+                                                                <Icon name="Eye" size={16} color="var(--color-primary)" className="flex-shrink-0" />
                                                             </button>
                                                             <button onClick={() => setFormModal({ open: true, romaneio: r })}
                                                                 className="p-1.5 rounded hover:bg-gray-100 transition-colors" title="Editar">
-                                                                <Icon name="Pencil" size={14} color="var(--color-muted-foreground)" />
+                                                                <Icon name="Pencil" size={16} color="var(--color-muted-foreground)" />
                                                             </button>
                                                             <button onClick={() => handleDelete(r.id)}
                                                                 className="p-1.5 rounded hover:bg-red-50 transition-colors" title="Excluir">
-                                                                <Icon name="Trash2" size={14} color="var(--color-destructive)" />
+                                                                <Icon name="Trash2" size={16} color="var(--color-destructive)" />
                                                             </button>
                                                         </div>
                                                     </td>
@@ -428,14 +432,14 @@ export default function Romaneios() {
                                                                         onClick={() => setFormModal({ open: true, romaneio: r })}
                                                                         className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
                                                                         style={{ backgroundColor: '#1D4ED8', color: 'white', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                                                                        <Icon name="Pencil" size={11} color="white" />
+                                                                        <Icon name="Pencil" size={16} color="white" />
                                                                         Editar e reenviar
                                                                     </button>
                                                                     <button
                                                                         onClick={() => handleDelete(r.id)}
                                                                         className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg"
                                                                         style={{ backgroundColor: 'white', color: '#DC2626', border: '1px solid #FCA5A5', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                                                                        <Icon name="Trash2" size={11} color="#DC2626" />
+                                                                        <Icon name="Trash2" size={16} color="#DC2626" />
                                                                         Excluir
                                                                     </button>
                                                                 </div>
@@ -615,10 +619,10 @@ function RascunhoCard({ r, onEdit, onDelete, onPromover }) {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     <button onClick={() => onEdit(r)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-amber-50 transition-colors" style={{ borderColor: '#FDE68A', color: '#92400E' }}>
-                        <Icon name="Pencil" size={12} color="#92400E" /> Editar
+                        <Icon name="Pencil" size={16} color="#92400E" /> Editar
                     </button>
                     <button onClick={() => onDelete(r.id)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-red-50 transition-colors" style={{ borderColor: '#FECACA', color: '#DC2626' }}>
-                        <Icon name="Trash2" size={12} color="#DC2626" /> Excluir
+                        <Icon name="Trash2" size={16} color="#DC2626" /> Excluir
                     </button>
                     <button onClick={() => onPromover(r.id)} className="flex items-center gap-1 px-4 py-1.5 rounded-xl text-xs font-semibold text-white hover:opacity-90 transition-opacity" style={{ backgroundColor: '#059669' }}>
                         <Icon name="ArrowRightCircle" size={12} color="white" /> Promover para Romaneio
@@ -747,18 +751,10 @@ function buildResumoPorCarga(rascunhos) {
 function ResumoMateriaisCidadeModal({ rascunhos, onClose }) {
     const resumo = useMemo(() => buildResumoPorCarga(rascunhos), [rascunhos]);
     const semDados = resumo.length === 0;
-    // Só fecha se o clique COMEÇAR e TERMINAR no próprio fundo (evita fechar
-    // ao selecionar texto ou arrastar o scroll e soltar o mouse fora do card).
-    const mouseDownNoFundo = useRef(false);
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-            onMouseDown={e => { mouseDownNoFundo.current = e.target === e.currentTarget; }}
-            onClick={e => { if (e.target === e.currentTarget && mouseDownNoFundo.current) onClose(); }}
-        >
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 pt-16" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                     <div className="flex items-center gap-3 min-w-0">

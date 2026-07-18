@@ -149,7 +149,7 @@ const RomaneiosTable = ({ romaneios }) => {
                                                 aria-label="Editar romaneio"
                                                 onClick={() => navigate("/romaneios")}
                                             >
-                                                <Icon name="Pencil" size={15} color="#D97706" strokeWidth={2} />
+                                                <Icon name="Pencil" size={16} color="#D97706" strokeWidth={2} />
                                             </button>
                                         </div>
                                     </td>
@@ -208,7 +208,7 @@ const RomaneiosTable = ({ romaneios }) => {
                                             <Icon name="Eye" size={15} color="#1E3A5F" strokeWidth={2} />
                                         </button>
                                         <button className="p-1.5 rounded hover:bg-amber-100 transition-colors" title="Editar" onClick={() => navigate("/romaneios")}>
-                                            <Icon name="Pencil" size={15} color="#D97706" strokeWidth={2} />
+                                            <Icon name="Pencil" size={16} color="#D97706" strokeWidth={2} />
                                         </button>
                                     </div>
                                 </div>

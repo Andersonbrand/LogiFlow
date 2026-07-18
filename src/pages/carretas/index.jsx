@@ -7,6 +7,7 @@ import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
 import Icon from 'components/AppIcon';
+import { EditButton, DeleteButton, ActionButtonsGroup } from 'components/ActionButtons';
 import Toast from 'components/ui/Toast';
 import { useBonusConfig, useCaptacaoConfig } from 'utils/settingsService';
 import { useToast } from 'utils/useToast';
@@ -36,6 +37,8 @@ import {
     CATEGORIAS_DESPESA,
     CIDADES_BONUS_BAIXO, BONUS_BAIXO, BONUS_ALTO,
     fetchPostos, createPosto, updatePosto, deletePosto,
+    fetchFretesCidades,
+    fetchLocaisParada, createLocalParada, updateLocalParada, deleteLocalParada,
     STATUS_ROMANEIO_COLORS,
     fetchRomaneios,
     fetchBonificacoesExtras, createBonificacaoExtra, updateBonificacaoExtra, deleteBonificacaoExtra,
@@ -489,7 +492,7 @@ function TabViagens({ isAdmin }) {
                                                 <td className="px-3 py-3 max-w-[180px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{r.observacoes || '—'}</td>
                                                 <td className="px-3 py-3 whitespace-nowrap">
                                                     <button onClick={() => handleDeleteRegistroMotorista(r.id)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 transition-colors">
-                                                        <Icon name="Trash2" size={12} />Excluir
+                                                        <Icon name="Trash2" size={16} />Excluir
                                                     </button>
                                                 </td>
                                             </tr>
@@ -599,8 +602,8 @@ function TabVeiculos({ isAdmin }) {
                             </div>
                             {isAdmin && (
                                 <div className="flex gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
-                                    <button onClick={() => openEdit(v)} className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded"><Icon name="Pencil" size={13} />Editar</button>
-                                    <button onClick={() => handleDelete(v.id)} className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 rounded"><Icon name="Trash2" size={13} />Excluir</button>
+                                    <button onClick={() => openEdit(v)} className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded"><Icon name="Pencil" size={16} />Editar</button>
+                                    <button onClick={() => handleDelete(v.id)} className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-red-500 hover:bg-red-50 rounded"><Icon name="Trash2" size={16} />Excluir</button>
                                 </div>
                             )}
                         </div>
@@ -932,8 +935,8 @@ function TabAbastecimentos({ isAdmin, profile }) {
                                     <td className="px-3 py-3 font-data text-right font-semibold text-purple-600">{BRL(a.valor_total)}</td>
                                     <td className="px-3 py-3">
                                         <div className="flex items-center gap-1">
-                                            {isAdmin && <button onClick={() => handleEdit(a)} className="p-2 rounded hover:bg-blue-50" title="Editar"><Icon name="Pencil" size={15} color="#2563EB" /></button>}
-                                            {isAdmin && <button onClick={() => handleDelete(a.id)} className="p-2 rounded hover:bg-red-50" title="Excluir"><Icon name="Trash2" size={15} color="#DC2626" /></button>}
+                                            {isAdmin && <button onClick={() => handleEdit(a)} className="p-2 rounded hover:bg-blue-50" title="Editar"><Icon name="Pencil" size={16} color="#2563EB" /></button>}
+                                            {isAdmin && <button onClick={() => handleDelete(a.id)} className="p-2 rounded hover:bg-red-50" title="Excluir"><Icon name="Trash2" size={16} color="#DC2626" /></button>}
                                         </div>
                                     </td>
                                 </tr>
@@ -1138,8 +1141,8 @@ function TabAbastecimentos({ isAdmin, profile }) {
                                         <button onClick={() => {
                                             setEditPosto(p);
                                             setFormPosto({ nome: p.nome, cidade: p.cidade || '', cnpj: p.cnpj || '', preco_diesel: p.preco_diesel || '', preco_arla: p.preco_arla || '' });
-                                        }} className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={15} color="#1D4ED8" /></button>
-                                        <button onClick={() => handleDeletePosto(p.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={15} color="#DC2626" /></button>
+                                        }} className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>
+                                        <button onClick={() => handleDeletePosto(p.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={16} color="#DC2626" /></button>
                                     </div>
                                 </div>
                             ))}
@@ -1373,12 +1376,12 @@ function TabChecklist({ isAdmin, profile }) {
                                     <div className="flex flex-wrap gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                         <button onClick={() => handleAprovarClick(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"><Icon name="CheckCircle2" size={13} />Aprovar</button>
                                         <button onClick={() => { setModalManut(c.id); setObsManut(''); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-orange-300 text-orange-700 hover:bg-orange-50 transition-colors"><Icon name="Wrench" size={13} />Registrar Manutenção</button>
-                                        <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors ml-auto"><Icon name="Trash2" size={13} />Excluir</button>
+                                        <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors ml-auto"><Icon name="Trash2" size={16} />Excluir</button>
                                     </div>
                                 )}
                                 {isAdmin && c.aprovado && (
                                     <div className="flex justify-end pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
-                                        <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors"><Icon name="Trash2" size={13} />Excluir</button>
+                                        <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors"><Icon name="Trash2" size={16} />Excluir</button>
                                     </div>
                                 )}
                             </div>
@@ -1666,7 +1669,7 @@ function TabCarregamentos({ isAdmin }) {
                                     <td className="px-4 py-3 font-data text-right font-semibold text-purple-600">{BRL(c.valor_frete_calculado)}</td>
                                     <td className="px-4 py-3">
                                         <div className="flex items-center gap-1">
-                                            {isAdmin && <button onClick={() => handleDelete(c.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={15} color="#DC2626" /></button>}
+                                            {isAdmin && <button onClick={() => handleDelete(c.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={16} color="#DC2626" /></button>}
                                         </div>
                                     </td>
                                 </tr>
@@ -1787,7 +1790,7 @@ function TabEmpresas({ isAdmin }) {
                                     <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{e.nome}</td>
                                     <td className="px-4 py-3 font-data text-sm" style={{ color: 'var(--color-muted-foreground)' }}>{e.cnpj || '—'}</td>
                                     <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{e.observacoes || '—'}</td>
-                                    <td className="px-4 py-3">{isAdmin && <button onClick={() => handleDelete(e.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={15} color="#DC2626" /></button>}</td>
+                                    <td className="px-4 py-3">{isAdmin && <button onClick={() => handleDelete(e.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={16} color="#DC2626" /></button>}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -2212,8 +2215,8 @@ function TabBonificacoes({ isAdmin }) {
                                                     <td className="px-4 py-3">
                                                         {isAdmin && (
                                                             <div className="flex gap-1">
-                                                                <button onClick={() => abrirEditExtra(e)} className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={15} color="#1D4ED8" /></button>
-                                                                <button onClick={() => excluirExtra(e.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={15} color="#DC2626" /></button>
+                                                                <button onClick={() => abrirEditExtra(e)} className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>
+                                                                <button onClick={() => excluirExtra(e.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={16} color="#DC2626" /></button>
                                                             </div>
                                                         )}
                                                     </td>
@@ -2386,9 +2389,9 @@ function ModalFornecedoresCarretas({ onClose, onSelect }) {
                                             </button>
                                         )}
                                         <button onClick={() => { setForm({ nome: f.nome, cnpj: f.cnpj||'', telefone: f.telefone||'', email: f.email||'', endereco: f.endereco||'', categoria: f.categoria||'', observacoes: f.observacoes||'' }); setModal({ mode: 'edit', data: f }); }}
-                                            className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={15} color="#1D4ED8" /></button>
+                                            className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>
                                         <button onClick={() => handleDelete(f.id)}
-                                            className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={15} color="#DC2626" /></button>
+                                            className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={16} color="#DC2626" /></button>
                                     </div>
                                 </div>
                             ))}
@@ -3330,8 +3333,8 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                                     <Icon name="CheckCircle2" size={15} color="#059669" />
                                                 </button>
                                             )}
-                                            {isAdmin && <button onClick={() => openEdit(d)} className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={15} color="#1D4ED8" /></button>}
-                                            {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={15} color="#DC2626" /></button>}
+                                            {isAdmin && <button onClick={() => openEdit(d)} className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>}
+                                            {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={16} color="#DC2626" /></button>}
                                         </div>
                                     </td>
                                 </tr>
@@ -3755,11 +3758,11 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                                             <span className="flex-1 text-xs truncate" style={{ color: 'var(--color-text-primary)' }}>{cat}</span>
                                                             <button type="button" onClick={() => { setEditandoCategoria(cat); setTextoEdicaoCategoria(cat); }}
                                                                 className="shrink-0 p-1.5 rounded-md hover:bg-blue-50" style={{ color: '#1D4ED8' }} title="Renomear">
-                                                                <Icon name="Pencil" size={13} />
+                                                                <Icon name="Pencil" size={16} />
                                                             </button>
                                                             <button type="button" onClick={() => excluirCategoria(cat)}
                                                                 className="shrink-0 p-1.5 rounded-md text-red-600 hover:bg-red-50" title="Excluir">
-                                                                <Icon name="Trash2" size={13} />
+                                                                <Icon name="Trash2" size={16} />
                                                             </button>
                                                         </>
                                                     )}
@@ -4287,8 +4290,8 @@ function TabDiarias({ isAdmin, profile }) {
                                                 title="Visualizar diária">
                                                 <Icon name="Eye" size={15} color="#4F46E5" />
                                             </button>
-                                            {isAdmin && <button onClick={() => openEdit(d)} className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={15} color="#1D4ED8" /></button>}
-                                            {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={15} color="#DC2626" /></button>}
+                                            {isAdmin && <button onClick={() => openEdit(d)} className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>}
+                                            {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={16} color="#DC2626" /></button>}
                                         </div>
                                     </td>
                                 </tr>
@@ -5256,7 +5259,7 @@ function TabOrdensServico({ isAdmin, profile }) {
     const [pdfFile, setPdfFile]   = useState(null);
     const [uploading, setUploading] = useState(false);
     const [viewPdf, setViewPdf]   = useState(null);
-    const FORM_VAZIO = { veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '', assinatura_admin: '' };
+    const FORM_VAZIO = { veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '', assinatura_admin: '', km_atual: '', observacoes: '', tipo_manutencao: 'Corretiva' };
     const [form, setForm] = useState(FORM_VAZIO);
     const [assinarComoAdmin, setAssinarComoAdmin] = useState(false);
 
@@ -5332,6 +5335,9 @@ function TabOrdensServico({ isAdmin, profile }) {
             prioridade: o.prioridade || 'Normal',
             pdf_url: o.pdf_url || '',
             assinatura_admin: o.assinatura_admin || '',
+            km_atual: o.km_atual ?? '',
+            observacoes: o.observacoes || '',
+            tipo_manutencao: o.tipo_manutencao || 'Corretiva',
         });
         setPdfFile(null);
         setEditingId(o.id);
@@ -5346,7 +5352,7 @@ function TabOrdensServico({ isAdmin, profile }) {
         if (!form.veiculo_id || !form.descricao) { showToast('Veículo e descrição são obrigatórios', 'error'); return; }
         setUploading(true);
         try {
-            const payload = { ...form, assinatura_admin: assinarComoAdmin ? (profile?.assinatura_digital || '') : null };
+            const payload = { ...form, km_atual: form.km_atual === '' ? null : Number(form.km_atual), assinatura_admin: assinarComoAdmin ? (profile?.assinatura_digital || '') : null };
             if (editingId) {
                 const updates = { ...payload };
                 if (enviar && editingStatus === 'Rascunho') updates.status = 'Pendente';
@@ -5435,6 +5441,11 @@ function TabOrdensServico({ isAdmin, profile }) {
                                             </span>
                                             <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{o.status}</span>
                                             {o.prioridade === 'Urgente' && <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white">URGENTE</span>}
+                                            {o.tipo_manutencao && (
+                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: o.tipo_manutencao === 'Preventiva' ? '#DBEAFE' : '#FEF3C7', color: o.tipo_manutencao === 'Preventiva' ? '#1D4ED8' : '#92400E' }}>
+                                                    {o.tipo_manutencao}
+                                                </span>
+                                            )}
                                             {o.checklist_id && (
                                                 <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700" title="Gerada automaticamente a partir de um checklist">
                                                     <Icon name="ClipboardCheck" size={10} />Do checklist
@@ -5453,6 +5464,7 @@ function TabOrdensServico({ isAdmin, profile }) {
                                         </div>
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
                                             {o.veiculo?.placa || '—'} {o.veiculo?.modelo ? `— ${o.veiculo.modelo}` : ''} · Mecânico: {o.mecanico?.name || '—'}
+                                            {o.km_atual != null && ` · KM: ${Number(o.km_atual).toLocaleString('pt-BR')}`}
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-1 flex-wrap">
@@ -5481,13 +5493,13 @@ function TabOrdensServico({ isAdmin, profile }) {
                                         {isAdmin && (
                                             <button onClick={() => abrirEdicaoOS(o)} title="Editar OS"
                                                 className="p-1.5 rounded hover:bg-blue-50 transition-colors">
-                                                <Icon name="Pencil" size={14} color="#1D4ED8" />
+                                                <Icon name="Pencil" size={16} color="#1D4ED8" />
                                             </button>
                                         )}
                                         {isAdmin && (
                                             <button onClick={() => handleDeleteOS(o.id)}
                                                 className="p-1.5 rounded hover:bg-red-50 transition-colors" title="Excluir OS">
-                                                <Icon name="Trash2" size={14} color="#DC2626" />
+                                                <Icon name="Trash2" size={16} color="#DC2626" />
                                             </button>
                                         )}
                                     </div>
@@ -5495,6 +5507,43 @@ function TabOrdensServico({ isAdmin, profile }) {
                                 <div className="p-3 rounded-lg text-sm mb-2 whitespace-pre-line" style={{ backgroundColor: '#F8FAFC' }}>
                                     <p style={{ color: 'var(--color-text-primary)' }}>{o.descricao}</p>
                                 </div>
+                                {o.observacoes && (
+                                    <div className="p-3 rounded-lg text-sm mb-2 whitespace-pre-line" style={{ backgroundColor: '#F1F5F9' }}>
+                                        <p className="text-xs font-semibold mb-1" style={{ color: 'var(--color-text-secondary)' }}>Observações do serviço</p>
+                                        <p style={{ color: 'var(--color-text-primary)' }}>{o.observacoes}</p>
+                                    </div>
+                                )}
+                                {(o.pecas_solicitadas || []).length > 0 && (
+                                    <div className="p-3 rounded-lg text-xs mb-2 space-y-2" style={{ backgroundColor: '#FAF5FF', border: '1px solid #E9D5FF' }}>
+                                        <p className="font-semibold flex items-center gap-1" style={{ color: '#6D28D9' }}>
+                                            <Icon name="Package" size={13} color="#6D28D9" />Peças solicitadas pelo mecânico
+                                        </p>
+                                        {(o.pecas_solicitadas || []).map((p, idx) => {
+                                            const statusCor = p.status === 'Aprovado' ? { bg: '#D1FAE5', text: '#065F46' } : p.status === 'Reprovado' ? { bg: '#FEE2E2', text: '#991B1B' } : { bg: '#FEF9C3', text: '#B45309' };
+                                            const responderPeca = async (novoStatus) => {
+                                                const lista = (o.pecas_solicitadas || []).map((pp, i) => i === idx ? { ...pp, status: novoStatus, respondido_em: new Date().toISOString() } : pp);
+                                                try { await updateOrdemServico(o.id, { pecas_solicitadas: lista }); showToast(`Peça ${novoStatus.toLowerCase()}!`, 'success'); load(); }
+                                                catch (e) { showToast('Erro: ' + e.message, 'error'); }
+                                            };
+                                            return (
+                                                <div key={p.id || idx} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg bg-white border" style={{ borderColor: '#E9D5FF' }}>
+                                                    <div className="min-w-0">
+                                                        <p className="font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{p.item} <span style={{ color: 'var(--color-muted-foreground)' }}>× {p.quantidade}</span></p>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                        <span className="px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: statusCor.bg, color: statusCor.text }}>{p.status || 'Pendente'}</span>
+                                                        {isAdmin && (p.status === 'Pendente' || !p.status) && (
+                                                            <>
+                                                                <button onClick={() => responderPeca('Aprovado')} title="Aprovar" className="p-1 rounded hover:bg-green-100"><Icon name="Check" size={14} color="#059669" /></button>
+                                                                <button onClick={() => responderPeca('Reprovado')} title="Reprovar" className="p-1 rounded hover:bg-red-100"><Icon name="X" size={14} color="#DC2626" /></button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                                 {o.problema_encontrado && (
                                     <div className="p-3 rounded-lg text-xs mb-2" style={{ backgroundColor: '#FEF2F2', border: '1px solid #FECACA' }}>
                                         <p className="font-medium text-red-600 mb-1">⚠️ Problema reportado pelo mecânico:</p>
@@ -5522,7 +5571,7 @@ function TabOrdensServico({ isAdmin, profile }) {
                                         </span>
                                         <div className="flex gap-2 ml-auto">
                                             <button onClick={() => abrirEdicaoOS(o)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors">
-                                                <Icon name="Pencil" size={13} />Conferir e Editar
+                                                <Icon name="Pencil" size={16} />Conferir e Editar
                                             </button>
                                             <button onClick={() => handleEnviarRascunho(o)} disabled={!o.mecanico_id} title={!o.mecanico_id ? 'Defina um mecânico responsável antes de enviar' : ''} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                                 <Icon name="Send" size={13} />Enviar OS
@@ -5564,11 +5613,28 @@ function TabOrdensServico({ isAdmin, profile }) {
                                 <option value="Urgente">Urgente</option>
                             </select>
                         </Field>
+                        <Field label="Tipo de manutenção">
+                            <select value={form.tipo_manutencao} onChange={e => setForm(f => ({ ...f, tipo_manutencao: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <option value="Corretiva">Corretiva</option>
+                                <option value="Preventiva">Preventiva</option>
+                            </select>
+                        </Field>
+                        <Field label="KM atual do veículo">
+                            <input type="number" value={form.km_atual} onChange={e => setForm(f => ({ ...f, km_atual: e.target.value }))}
+                                className={inputCls} style={inputStyle} placeholder="Ex: 245800" />
+                        </Field>
                         <div className="sm:col-span-2">
                             <Field label="Descrição do serviço" required>
                                 <textarea value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
                                     className={inputCls} style={inputStyle} rows={4}
                                     placeholder="Descreva o serviço a ser realizado..." />
+                            </Field>
+                        </div>
+                        <div className="sm:col-span-2">
+                            <Field label="Observações do serviço">
+                                <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
+                                    className={inputCls} style={inputStyle} rows={3}
+                                    placeholder="Observações adicionais sobre o serviço (opcional)..." />
                             </Field>
                         </div>
                         <div className="sm:col-span-2">
@@ -6781,7 +6847,7 @@ function TabDistribuicaoAco() {
                                 <span className="text-xs ml-2" style={{ color: 'var(--color-muted-foreground)' }}>{FMT(e.data_envio)}{e.destino ? ` · ${e.destino}` : ''}</span>
                             </span>
                             <button onClick={() => excluir(e.id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="Excluir registro">
-                                <Icon name="Trash2" size={15} />
+                                <Icon name="Trash2" size={16} />
                             </button>
                         </div>
                     ))}
@@ -6825,19 +6891,47 @@ function TabPontosParada({ isAdmin }) {
     const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
     const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
 
+    const [empresasRef, setEmpresasRef] = useState([]);
+    const [cidadesRef, setCidadesRef] = useState([]);
+    const [postosRef, setPostosRef] = useState([]);
+    const [locaisFabricaRef, setLocaisFabricaRef] = useState([]);
+    const [locaisOutroRef, setLocaisOutroRef] = useState([]);
+    const [gerenciarLocaisModal, setGerenciarLocaisModal] = useState(false);
+
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [p, m] = await Promise.all([
+            const [p, m, emps, cidades, postosData, fabricas, outros] = await Promise.all([
                 fetchPontosParada(null), // null = todos os motoristas
                 isAdmin ? fetchTodosMotoristas() : Promise.resolve([]),
+                fetchEmpresas().catch(() => []),
+                fetchFretesCidades().catch(() => []),
+                fetchPostos().catch(() => []),
+                fetchLocaisParada('Fábrica').catch(() => []),
+                fetchLocaisParada('Outro').catch(() => []),
             ]);
             setPontos(p);
             setMotoristas(m);
+            setEmpresasRef(emps || []);
+            setCidadesRef(cidades || []);
+            setPostosRef(postosData || []);
+            setLocaisFabricaRef(fabricas || []);
+            setLocaisOutroRef(outros || []);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, []); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+
+    const destinosParaTipo = useCallback((tipo) => {
+        switch (tipo) {
+            case 'Empresa': return empresasRef.map(e => e.nome).filter(Boolean);
+            case 'Fábrica':  return locaisFabricaRef.map(l => l.nome).filter(Boolean);
+            case 'Entrega': return cidadesRef.map(c => c.cidade).filter(Boolean);
+            case 'Posto':    return postosRef.map(p => p.nome).filter(Boolean);
+            case 'Outro':    return locaisOutroRef.map(l => l.nome).filter(Boolean);
+            default: return [];
+        }
+    }, [empresasRef, locaisFabricaRef, cidadesRef, postosRef, locaisOutroRef]);
 
     const TIPO_COLOR = {
         'Fábrica': '#EFF6FF', 'Empresa': '#FEF3C7', 'Estoque': '#FEF9C3',
@@ -6882,8 +6976,9 @@ function TabPontosParada({ isAdmin }) {
 
     const openEdit = (p) => {
         setFormEdit({
+            tipo_local: p.tipo_local || 'Fábrica',
             local: p.local || '',
-            tipo_local: p.tipo_local || 'Outro',
+            cupom_fiscal: p.cupom_fiscal || '',
             data_saida: p.data_saida || '',
             horario_saida: p.horario_saida || '',
             km_saida: p.km_saida ?? '',
@@ -6902,6 +6997,7 @@ function TabPontosParada({ isAdmin }) {
             await updatePontoParada(editModal.id, {
                 local: formEdit.local,
                 tipo_local: formEdit.tipo_local,
+                cupom_fiscal: formEdit.cupom_fiscal || null,
                 data_saida: formEdit.data_saida || null,
                 horario_saida: formEdit.horario_saida || null,
                 km_saida: formEdit.km_saida !== '' ? Number(formEdit.km_saida) : null,
@@ -6964,7 +7060,7 @@ function TabPontosParada({ isAdmin }) {
                         <table className="w-full text-xs" style={{ minWidth: 820 }}>
                             <thead>
                                 <tr style={{ backgroundColor: '#1D4ED8' }}>
-                                    {['Motorista','KM/Destino','Data Saída','Hor. Saída','KM Saída','Data Chegada','Hor. Chegada','KM Chegada','Obs.','Ações'].map(h => (
+                                    {['Motorista','KM/Destino','Data Saída','Hor. Saída','KM Saída','Data Chegada','Hor. Chegada','KM Chegada','Cupom','Obs.','Ações'].map(h => (
                                         <th key={h} className="px-3 py-2.5 text-left font-semibold text-white whitespace-nowrap">{h}</th>
                                     ))}
                                 </tr>
@@ -7004,19 +7100,16 @@ function TabPontosParada({ isAdmin }) {
                                         <td className="px-3 py-2.5 font-data text-right" style={{ color: '#059669' }}>
                                             {p.km_chegada != null ? Number(p.km_chegada).toLocaleString('pt-BR') : '—'}
                                         </td>
+                                        <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
+                                            {p.cupom_fiscal || '—'}
+                                        </td>
                                         <td className="px-3 py-2.5 max-w-[120px] truncate" style={{ color: 'var(--color-muted-foreground)' }}
                                             title={p.observacoes}>{p.observacoes || ''}</td>
                                         <td className="px-2 py-2.5">
-                                            <div className="flex items-center gap-1">
-                                                <button onClick={() => openEdit(p)}
-                                                    className="p-2 rounded hover:bg-blue-50 transition-colors" title="Editar">
-                                                    <Icon name="Pencil" size={15} color="#1D4ED8" />
-                                                </button>
-                                                <button onClick={() => handleDelete(p.id)}
-                                                    className="p-2 rounded hover:bg-red-50 transition-colors" title="Excluir">
-                                                    <Icon name="Trash2" size={15} color="#DC2626" />
-                                                </button>
-                                            </div>
+                                            <ActionButtonsGroup>
+                                                <EditButton onClick={() => openEdit(p)} />
+                                                <DeleteButton onClick={() => handleDelete(p.id)} />
+                                            </ActionButtonsGroup>
                                         </td>
                                     </tr>
                                     {/* Pontos extras registrados pelo motorista */}
@@ -7066,15 +7159,30 @@ function TabPontosParada({ isAdmin }) {
                         </div>
                         <div className="overflow-y-auto flex-1 p-5 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="col-span-2 flex flex-col gap-1.5">
-                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Local</label>
-                                    <input value={formEdit.local} onChange={e => setFormEdit(f => ({ ...f, local: e.target.value }))} className={inputCls} style={inputStyle} />
-                                </div>
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Tipo</label>
-                                    <select value={formEdit.tipo_local} onChange={e => setFormEdit(f => ({ ...f, tipo_local: e.target.value }))} className={inputCls} style={inputStyle}>
-                                        {['Fábrica','Empresa','Estoque','Entrega','Posto','Oficina','Outro'].map(t => <option key={t}>{t}</option>)}
+                                    <select value={formEdit.tipo_local} onChange={e => setFormEdit(f => ({ ...f, tipo_local: e.target.value, local: '' }))} className={inputCls} style={inputStyle}>
+                                        {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => <option key={t}>{t}</option>)}
                                     </select>
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Destino / Local</label>
+                                    <select value={formEdit.local} onChange={e => setFormEdit(f => ({ ...f, local: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione...</option>
+                                        {formEdit.local && !destinosParaTipo(formEdit.tipo_local).includes(formEdit.local) && (
+                                            <option value={formEdit.local}>{formEdit.local} (atual)</option>
+                                        )}
+                                        {destinosParaTipo(formEdit.tipo_local).map(nome => <option key={nome} value={nome}>{nome}</option>)}
+                                    </select>
+                                </div>
+                                <div className="col-span-2 flex items-center justify-end -mt-1">
+                                    <button type="button" onClick={() => setGerenciarLocaisModal(true)} className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--color-primary)' }}>
+                                        <Icon name="Settings" size={12} color="var(--color-primary)" />Gerenciar locais de Fábrica/Outro
+                                    </button>
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Cupom Fiscal / NF</label>
+                                    <input value={formEdit.cupom_fiscal} onChange={e => setFormEdit(f => ({ ...f, cupom_fiscal: e.target.value }))} className={inputCls} style={inputStyle} />
                                 </div>
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Observações</label>
@@ -7118,13 +7226,108 @@ function TabPontosParada({ isAdmin }) {
                 </div>
             )}
 
+            {gerenciarLocaisModal && (
+                <GerenciarLocaisModal
+                    locaisFabrica={locaisFabricaRef}
+                    locaisOutro={locaisOutroRef}
+                    onClose={() => setGerenciarLocaisModal(false)}
+                    onChanged={load}
+                    showToast={showToast}
+                />
+            )}
+
             <Toast toast={toast} />
             {ConfirmDialog}
         </div>
     );
 }
 
-// ─── TAB: Detector de Duplicatas ─────────────────────────────────────────────
+// ─── Modal: gerenciar catálogo de locais (Fábrica / Outro) ───────────────────
+function GerenciarLocaisModal({ locaisFabrica, locaisOutro, onClose, onChanged, showToast }) {
+    const { confirm, ConfirmDialog } = useConfirm();
+    const [tab, setTab] = useState('Fábrica');
+    const [novoNome, setNovoNome] = useState('');
+    const [editandoId, setEditandoId] = useState(null);
+    const [editandoNome, setEditandoNome] = useState('');
+    const [salvando, setSalvando] = useState(false);
+    const lista = tab === 'Fábrica' ? locaisFabrica : locaisOutro;
+
+    const handleAdd = async () => {
+        if (!novoNome.trim()) return;
+        setSalvando(true);
+        try {
+            await createLocalParada({ tipo_local: tab, nome: novoNome.trim() });
+            setNovoNome('');
+            showToast('Local adicionado!', 'success');
+            onChanged();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSalvando(false); }
+    };
+
+    const handleEditSave = async (id) => {
+        if (!editandoNome.trim()) return;
+        try {
+            await updateLocalParada(id, { nome: editandoNome.trim() });
+            setEditandoId(null);
+            showToast('Local atualizado!', 'success');
+            onChanged();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleDelete = async (id) => {
+        const ok = await confirm({ title: 'Excluir local?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deleteLocalParada(id); showToast('Local excluído.', 'success'); onChanged(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
+            onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[80vh] overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                    <h3 className="font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Gerenciar Locais</h3>
+                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={16} color="var(--color-muted-foreground)" /></button>
+                </div>
+                <div className="flex gap-2 px-5 pt-3">
+                    {['Fábrica', 'Outro'].map(t => (
+                        <button key={t} onClick={() => setTab(t)}
+                            className="px-3 py-1.5 rounded-lg text-sm font-medium"
+                            style={{ backgroundColor: tab === t ? 'var(--color-primary)' : '#F1F5F9', color: tab === t ? '#fff' : 'var(--color-text-secondary)' }}>
+                            {t}
+                        </button>
+                    ))}
+                </div>
+                <div className="overflow-y-auto flex-1 p-5 space-y-2">
+                    {lista.length === 0 && <p className="text-xs text-center py-6" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum local cadastrado neste tipo.</p>}
+                    {lista.map(l => (
+                        <div key={l.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--color-border)' }}>
+                            {editandoId === l.id ? (
+                                <input autoFocus value={editandoNome} onChange={e => setEditandoNome(e.target.value)}
+                                    className="flex-1 px-2 py-1 rounded border text-sm outline-none" style={{ borderColor: 'var(--color-border)' }} />
+                            ) : (
+                                <span className="flex-1 text-sm" style={{ color: 'var(--color-text-primary)' }}>{l.nome}</span>
+                            )}
+                            {editandoId === l.id ? (
+                                <button onClick={() => handleEditSave(l.id)} className="p-1.5 rounded hover:bg-green-50"><Icon name="Check" size={15} color="#059669" /></button>
+                            ) : (
+                                <EditButton onClick={() => { setEditandoId(l.id); setEditandoNome(l.nome); }} />
+                            )}
+                            <DeleteButton onClick={() => handleDelete(l.id)} />
+                        </div>
+                    ))}
+                    <div className="flex items-center gap-2 pt-2">
+                        <input value={novoNome} onChange={e => setNovoNome(e.target.value)} placeholder={`Novo local de ${tab}...`}
+                            onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                            className="flex-1 px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: 'var(--color-border)' }} />
+                        <Button onClick={handleAdd} size="sm" iconName="Plus" disabled={salvando || !novoNome.trim()}>Adicionar</Button>
+                    </div>
+                </div>
+            </div>
+            {ConfirmDialog}
+        </div>
+    );
+}
 function TabDuplicatas() {
     const { toast, showToast } = useToast();
     const [mes, setMes]           = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}`; });

@@ -53,7 +53,7 @@ export default function MaterialCardMobile({ material, onEdit, onDelete }) {
                             onClick={() => onEdit(material)}
                             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md border border-blue-200 text-blue-600 bg-blue-50 text-sm font-medium"
                         >
-                            <Icon name="Pencil" size={14} color="currentColor" />
+                            <Icon name="Pencil" size={16} color="currentColor" />
                             Editar
                         </button>
                         {onDelete && (
@@ -61,7 +61,7 @@ export default function MaterialCardMobile({ material, onEdit, onDelete }) {
                             onClick={() => onDelete(material)}
                             className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md border border-red-200 text-red-500 bg-red-50 text-sm font-medium"
                         >
-                            <Icon name="Trash2" size={14} color="currentColor" />
+                            <Icon name="Trash2" size={16} color="currentColor" />
                             Excluir
                         </button>
                         )}

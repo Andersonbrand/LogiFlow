@@ -152,6 +152,7 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                                 <InfoCard icon="Truck"   label="Placa"         value={romaneio.placa || '—'} />
                                 <InfoCard icon="MapPin"  label="Destino"       value={romaneio.destino || '—'} />
                                 <InfoCard icon="Clock"   label="Saída Prevista" value={romaneio.saida ? new Date(romaneio.saida).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'} />
+                                <InfoCard icon="CheckCircle2" label="Chegada" value={romaneio.chegada ? new Date(romaneio.chegada).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'} />
                                 <InfoCard icon="Weight"  label="Peso Total"    value={`${pesoTotal.toLocaleString('pt-BR',{minimumFractionDigits:2})} kg`} />
                                 <InfoCard icon="ShoppingCart" label="Pedidos"  value={`${pedidos.length} pedido(s)`} />
                             </div>
