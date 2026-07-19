@@ -8,7 +8,7 @@ import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import {
-    fetchViagens, fetchCarretasVeiculos,
+    fetchViagens, fetchCarretasVeiculos, fetchVeiculosProprios,
     fetchAbastecimentos, createAbastecimento, updateAbastecimento, deleteAbastecimento,
     fetchChecklists, createChecklist, updateChecklist, deleteChecklist,
     fetchRegistrosViagem, createRegistroViagem, updateRegistroViagem, deleteRegistroViagem,
@@ -196,7 +196,7 @@ export default function CarreteiroDashboard() {
                 fetchViagens({ motoristaId: user.id, dataInicio: dateStr }),
                 fetchAbastecimentos({ motoristaId: user.id, dataInicio: dateStr }),
                 fetchChecklists({ motoristaId: user.id }),
-                fetchCarretasVeiculos(),
+                fetchVeiculosProprios(),
                 fetchConfigAbastecimento(),
                 fetchPostos().catch(() => []),
                 fetchEmpresas().catch(() => []),

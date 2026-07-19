@@ -33,12 +33,13 @@ export async function fetchRomaneios() {
             peso_total, saida, chegada, observacoes, vehicle_id, paradas,
             distancia_km, custo_combustivel, custo_pedagio,
             custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao,
-            assinatura_diaria_admin, assinatura_diaria_admin_at, assinatura_diaria_admin_role,
+            assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at,
             valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,
             romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado, empresa),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
-                materials(id, nome, unidade, peso, categoria_frete, percentual_frete))
+                is_telha_zinco, comprimento_telha, metros_totais, peso_unit,
+                materials(id, nome, unidade, peso, categoria_frete, percentual_frete, is_telha_zinco, peso_base_metro))
         `)
         .eq('is_rascunho', false)
         .order('created_at', { ascending: false })
@@ -56,12 +57,13 @@ export async function fetchRomaneioById(id) {
             peso_total, saida, chegada, observacoes, vehicle_id,
             distancia_km, custo_combustivel, custo_pedagio,
             custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao,
-            assinatura_diaria_admin, assinatura_diaria_admin_at, assinatura_diaria_admin_role,
+            assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at,
             valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,
             romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado, empresa),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
-                materials(id, nome, unidade, peso, categoria_frete, percentual_frete))
+                is_telha_zinco, comprimento_telha, metros_totais, peso_unit,
+                materials(id, nome, unidade, peso, categoria_frete, percentual_frete, is_telha_zinco, peso_base_metro))
         `)
         .eq('id', id).single();
     if (error) throw error;
@@ -236,6 +238,10 @@ export async function createRomaneio(romaneio, itens = []) {
                 quantidade:  i.quantidade,
                 peso_total:  i.peso_total,
                 pedido_id:   pedidoIdMap[i.pedido_index] || null,
+                is_telha_zinco:    i.is_telha_zinco || false,
+                comprimento_telha: i.comprimento_telha != null ? Number(i.comprimento_telha) : null,
+                metros_totais:     i.metros_totais != null ? Number(i.metros_totais) : null,
+                peso_unit:         i.peso_unit != null ? Number(i.peso_unit) : null,
             }))
         );
         if (ie) throw ie;
@@ -247,6 +253,8 @@ export async function createRomaneio(romaneio, itens = []) {
 export async function duplicateRomaneio(romaneio) {
     const itens = (romaneio.romaneio_itens || []).map(i => ({
         material_id: i.material_id, quantidade: i.quantidade, peso_total: i.peso_total,
+        is_telha_zinco: i.is_telha_zinco, comprimento_telha: i.comprimento_telha,
+        metros_totais: i.metros_totais, peso_unit: i.peso_unit,
     }));
     const pedidos = (romaneio.romaneio_pedidos || []).map(p => ({
         numero_pedido:    p.numero_pedido,
@@ -315,6 +323,10 @@ export async function updateRomaneio(id, romaneio, itens) {
                 quantidade:  i.quantidade,
                 peso_total:  i.peso_total,
                 pedido_id:   pedidoIdMap[i.pedido_index] || null,
+                is_telha_zinco:    i.is_telha_zinco || false,
+                comprimento_telha: i.comprimento_telha != null ? Number(i.comprimento_telha) : null,
+                metros_totais:     i.metros_totais != null ? Number(i.metros_totais) : null,
+                peso_unit:         i.peso_unit != null ? Number(i.peso_unit) : null,
             }))
         );
         if (ie) throw ie;
@@ -385,17 +397,17 @@ export async function updateRomaneioStatus(id, status) {
 // define em qual campo da ficha impressa o nome aparece — Transporte (admin) ou
 // Logística (operador). É guardado à parte do id porque o cargo do usuário pode
 // mudar depois, e isso não deve alterar retroativamente uma diária já assinada.
-export async function assinarDiariaRomaneio(id, assinaturaTexto, assinanteId = null, assinanteRole = null) {
+export async function assinarDiariaRomaneio(id, campo, assinaturaTexto, assinanteId = null) {
+    if (!['logistica', 'transporte'].includes(campo)) throw new Error('Campo de assinatura inválido');
     const { data, error } = await supabase
         .from('romaneios')
         .update({
-            assinatura_diaria_admin: assinaturaTexto,
-            assinatura_diaria_admin_at: new Date().toISOString(),
-            assinatura_diaria_admin_por: assinanteId,
-            assinatura_diaria_admin_role: assinanteRole,
+            [`assinatura_diaria_${campo}`]: assinaturaTexto,
+            [`assinatura_diaria_${campo}_at`]: new Date().toISOString(),
+            [`assinatura_diaria_${campo}_por`]: assinanteId,
         })
         .eq('id', id)
-        .select('id, numero, assinatura_diaria_admin, assinatura_diaria_admin_at, assinatura_diaria_admin_role')
+        .select('id, numero, assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at')
         .single();
     if (error) throw error;
     return data;
@@ -403,17 +415,17 @@ export async function assinarDiariaRomaneio(id, assinaturaTexto, assinanteId = n
 
 // Remove a assinatura digital da diária gerada pelo romaneio, voltando ao
 // estado "sem assinatura" (ação reservada a administradores na UI).
-export async function desassinarDiariaRomaneio(id) {
+export async function desassinarDiariaRomaneio(id, campo) {
+    if (!['logistica', 'transporte'].includes(campo)) throw new Error('Campo de assinatura inválido');
     const { data, error } = await supabase
         .from('romaneios')
         .update({
-            assinatura_diaria_admin: null,
-            assinatura_diaria_admin_at: null,
-            assinatura_diaria_admin_por: null,
-            assinatura_diaria_admin_role: null,
+            [`assinatura_diaria_${campo}`]: null,
+            [`assinatura_diaria_${campo}_at`]: null,
+            [`assinatura_diaria_${campo}_por`]: null,
         })
         .eq('id', id)
-        .select('id, numero, assinatura_diaria_admin, assinatura_diaria_admin_at, assinatura_diaria_admin_role')
+        .select('id, numero, assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at')
         .single();
     if (error) throw error;
     return data;
@@ -490,7 +502,8 @@ export async function fetchRomaneiosPorMotorista(motoristaId, nomeMotorista) {
             valor_frete, valor_frete_calculado,
             romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido),
             romaneio_itens(id, quantidade, peso_total, material_id,
-                materials(id, nome, unidade, peso, categoria_frete))
+                is_telha_zinco, comprimento_telha, metros_totais, peso_unit,
+                materials(id, nome, unidade, peso, categoria_frete, is_telha_zinco, peso_base_metro))
         `)
         .or(partes.join(','))
         .order('created_at', { ascending: false });
@@ -517,7 +530,8 @@ export async function fetchRascunhos() {
             is_rascunho, sugestao_veiculo, created_at,
             romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, percentual_frete, frete_calculado, empresa),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
-                materials(id, nome, unidade, peso, categoria_frete, percentual_frete))
+                is_telha_zinco, comprimento_telha, metros_totais, peso_unit,
+                materials(id, nome, unidade, peso, categoria_frete, percentual_frete, is_telha_zinco, peso_base_metro))
         `)
         .eq('is_rascunho', true)
         .order('created_at', { ascending: false });
@@ -557,6 +571,10 @@ export async function createRascunho(romaneio, itens = []) {
                 quantidade:  Number(i.quantidade) || 1,
                 peso_total:  i.peso_total != null ? Number(i.peso_total) : null,
                 pedido_id:   pedidoIdMap[i.pedido_index] ?? null,
+                is_telha_zinco:    i.is_telha_zinco || false,
+                comprimento_telha: i.comprimento_telha != null ? Number(i.comprimento_telha) : null,
+                metros_totais:     i.metros_totais != null ? Number(i.metros_totais) : null,
+                peso_unit:         i.peso_unit != null ? Number(i.peso_unit) : null,
             }))
         );
         if (ie) throw ie;
@@ -592,6 +610,10 @@ export async function updateRascunho(id, romaneio, itens) {
                 quantidade:  Number(i.quantidade) || 1,
                 peso_total:  i.peso_total != null ? Number(i.peso_total) : null,
                 pedido_id:   pedidoIdMap[i.pedido_index] ?? null,
+                is_telha_zinco:    i.is_telha_zinco || false,
+                comprimento_telha: i.comprimento_telha != null ? Number(i.comprimento_telha) : null,
+                metros_totais:     i.metros_totais != null ? Number(i.metros_totais) : null,
+                peso_unit:         i.peso_unit != null ? Number(i.peso_unit) : null,
             }))
         );
         if (ie) throw ie;

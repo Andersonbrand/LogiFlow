@@ -39,6 +39,7 @@ import {
     fetchPostos, createPosto, updatePosto, deletePosto,
     fetchFretesCidades,
     fetchLocaisParada, createLocalParada, updateLocalParada, deleteLocalParada,
+    fetchPecasCatalogo, createPecaCatalogo, updatePecaCatalogo, deletePecaCatalogo,
     STATUS_ROMANEIO_COLORS,
     fetchRomaneios,
     fetchBonificacoesExtras, createBonificacaoExtra, updateBonificacaoExtra, deleteBonificacaoExtra,
@@ -1209,7 +1210,7 @@ function TabChecklist({ isAdmin, profile }) {
                 f.dataInicio = `${filtroMes}-01`;
                 f.dataFim    = `${filtroMes}-${String(lastDay).padStart(2, '0')}`;
             }
-            const [c, v, m] = await Promise.all([fetchChecklists(f), fetchCarretasVeiculos(), fetchCarreteirosPropriosOnly()]);
+            const [c, v, m] = await Promise.all([fetchChecklists(f), fetchVeiculosProprios(), fetchCarreteirosPropriosOnly()]);
             setChecklists(c); setVeiculos(v); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -1262,8 +1263,9 @@ function TabChecklist({ isAdmin, profile }) {
             try {
                 if (checklist) await criarRascunhoOSDeChecklist({ ...checklist, observacoes_livres: [checklist.observacoes_livres, obsManut].filter(Boolean).join(' | ') }, profile.id);
                 showToast('Manutenção registrada! Rascunho de OS criado na aba Ordens de Serviço.', 'success');
-            } catch {
-                showToast('Manutenção registrada! (Não foi possível gerar o rascunho de OS automaticamente — crie manualmente na aba Ordens de Serviço.)', 'warning');
+            } catch (errOS) {
+                console.error('Falha ao criar rascunho de OS a partir do checklist:', errOS);
+                showToast(`Manutenção registrada! (Falha ao gerar o rascunho de OS: ${errOS.message || 'erro desconhecido'} — crie manualmente na aba Ordens de Serviço.)`, 'warning');
             }
             setModalManut(null); setObsManut(''); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
@@ -5262,6 +5264,7 @@ function TabOrdensServico({ isAdmin, profile }) {
     const FORM_VAZIO = { veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '', assinatura_admin: '', km_atual: '', observacoes: '', tipo_manutencao: 'Corretiva' };
     const [form, setForm] = useState(FORM_VAZIO);
     const [assinarComoAdmin, setAssinarComoAdmin] = useState(false);
+    const [gerenciarPecasModal, setGerenciarPecasModal] = useState(false);
 
     // Fix 4: Quando abre o PDF, empurra um estado no histórico para que o botão
     // Voltar do navegador feche o viewer em vez de sair da página.
@@ -5286,7 +5289,7 @@ function TabOrdensServico({ isAdmin, profile }) {
             }
             const [o, v, m] = await Promise.all([
                 fetchOrdensServico(f),
-                fetchCarretasVeiculos(),
+                fetchVeiculosProprios(),
                 fetchMecanicos(),
             ]);
             setOrdens(o); setVeiculos(v); setMecanicos(m);
@@ -5416,6 +5419,12 @@ function TabOrdensServico({ isAdmin, profile }) {
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                     </button>
+                    {isAdmin && (
+                        <button onClick={() => setGerenciarPecasModal(true)}
+                            className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Gerenciar catálogo de peças">
+                            <Icon name="Package" size={14} color="var(--color-muted-foreground)" />
+                        </button>
+                    )}
                     {isAdmin && <Button onClick={abrirNovaOS} iconName="Plus" size="sm">Nova OS</Button>}
                 </div>
             </div>
@@ -5739,7 +5748,133 @@ function TabOrdensServico({ isAdmin, profile }) {
                     )}
                 </div>
             )}
+            {gerenciarPecasModal && (
+                <GerenciarPecasModal onClose={() => setGerenciarPecasModal(false)} showToast={showToast} />
+            )}
             <Toast toast={toast} />
+            {ConfirmDialog}
+        </div>
+    );
+}
+
+// ─── Modal: gerenciar catálogo de peças (para solicitação nas OS) ────────────
+function GerenciarPecasModal({ onClose, showToast }) {
+    const { confirm, ConfirmDialog } = useConfirm();
+    const [pecas, setPecas] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [filtroCategoria, setFiltroCategoria] = useState('');
+    const [novoNome, setNovoNome] = useState('');
+    const [novaCategoria, setNovaCategoria] = useState('Ambos');
+    const [editandoId, setEditandoId] = useState(null);
+    const [editandoNome, setEditandoNome] = useState('');
+    const [editandoCategoria, setEditandoCategoria] = useState('Ambos');
+    const [salvando, setSalvando] = useState(false);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const { data, error } = await supabase.from('carretas_pecas_catalogo').select('*').order('nome', { ascending: true });
+            if (error) throw error;
+            setPecas(data || []);
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    }, []); // eslint-disable-line
+    useEffect(() => { load(); }, [load]);
+
+    const listaFiltrada = filtroCategoria ? pecas.filter(p => p.categoria === filtroCategoria) : pecas;
+
+    const handleAdd = async () => {
+        if (!novoNome.trim()) return;
+        setSalvando(true);
+        try {
+            await createPecaCatalogo({ nome: novoNome.trim(), categoria: novaCategoria });
+            setNovoNome('');
+            showToast('Peça adicionada!', 'success');
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSalvando(false); }
+    };
+
+    const handleEditSave = async (id) => {
+        if (!editandoNome.trim()) return;
+        try {
+            await updatePecaCatalogo(id, { nome: editandoNome.trim(), categoria: editandoCategoria });
+            setEditandoId(null);
+            showToast('Peça atualizada!', 'success');
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const handleDelete = async (id) => {
+        const ok = await confirm({ title: 'Excluir peça do catálogo?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deletePecaCatalogo(id); showToast('Peça excluída.', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const inputClsLocal = 'px-2.5 py-1.5 rounded-lg border text-sm outline-none';
+    const inputStyleLocal = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
+
+    return (
+        <div className="fixed inset-0 z-[210] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
+            onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col max-h-[85vh] overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="flex items-center gap-2">
+                        <Icon name="Package" size={18} color="var(--color-primary)" />
+                        <h3 className="font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Catálogo de Peças</h3>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={16} color="var(--color-muted-foreground)" /></button>
+                </div>
+                <div className="flex gap-2 px-5 pt-3">
+                    {['', 'Caminhão', 'Carreta', 'Ambos'].map(t => (
+                        <button key={t || 'todas'} onClick={() => setFiltroCategoria(t)}
+                            className="px-2.5 py-1 rounded-lg text-xs font-medium"
+                            style={{ backgroundColor: filtroCategoria === t ? 'var(--color-primary)' : '#F1F5F9', color: filtroCategoria === t ? '#fff' : 'var(--color-text-secondary)' }}>
+                            {t || 'Todas'}
+                        </button>
+                    ))}
+                </div>
+                <div className="overflow-y-auto flex-1 p-5 space-y-2">
+                    {loading ? (
+                        <div className="flex justify-center py-6"><div className="animate-spin h-6 w-6 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div>
+                    ) : listaFiltrada.length === 0 ? (
+                        <p className="text-xs text-center py-6" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma peça cadastrada.</p>
+                    ) : listaFiltrada.map(p => (
+                        <div key={p.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border" style={{ borderColor: 'var(--color-border)' }}>
+                            {editandoId === p.id ? (
+                                <>
+                                    <input autoFocus value={editandoNome} onChange={e => setEditandoNome(e.target.value)}
+                                        className={`flex-1 ${inputClsLocal}`} style={inputStyleLocal} />
+                                    <select value={editandoCategoria} onChange={e => setEditandoCategoria(e.target.value)} className={inputClsLocal} style={inputStyleLocal}>
+                                        {['Ambos', 'Caminhão', 'Carreta'].map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="flex-1 text-sm" style={{ color: 'var(--color-text-primary)' }}>{p.nome}</span>
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: '#F1F5F9', color: 'var(--color-text-secondary)' }}>{p.categoria}</span>
+                                </>
+                            )}
+                            {editandoId === p.id ? (
+                                <button onClick={() => handleEditSave(p.id)} className="p-1.5 rounded hover:bg-green-50"><Icon name="Check" size={15} color="#059669" /></button>
+                            ) : (
+                                <EditButton onClick={() => { setEditandoId(p.id); setEditandoNome(p.nome); setEditandoCategoria(p.categoria); }} />
+                            )}
+                            <DeleteButton onClick={() => handleDelete(p.id)} />
+                        </div>
+                    ))}
+                    <div className="flex items-center gap-2 pt-2">
+                        <input value={novoNome} onChange={e => setNovoNome(e.target.value)} placeholder="Nova peça..."
+                            onKeyDown={e => e.key === 'Enter' && handleAdd()}
+                            className={`flex-1 ${inputClsLocal}`} style={inputStyleLocal} />
+                        <select value={novaCategoria} onChange={e => setNovaCategoria(e.target.value)} className={inputClsLocal} style={inputStyleLocal}>
+                            {['Ambos', 'Caminhão', 'Carreta'].map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <Button onClick={handleAdd} size="sm" iconName="Plus" disabled={salvando || !novoNome.trim()}>Add</Button>
+                    </div>
+                </div>
+            </div>
             {ConfirmDialog}
         </div>
     );
@@ -6942,7 +7077,13 @@ function TabPontosParada({ isAdmin }) {
         'Entrega': '#065F46', 'Posto': '#7C3AED', 'Oficina': '#B91C1C', 'Outro': '#6B7280',
     };
 
-    const pontosFiltrados = pontos.filter(p => {
+    // Ordena por motorista e, dentro de cada motorista, em ordem cronológica de
+    // saída — assim a lista reflete a sequência real da rota do veículo
+    // (saída da empresa → chegada na fábrica → saída da fábrica → chegada...),
+    // facilitando a conferência do admin.
+    const chaveDataHora = (data, hora) => `${data || '9999-99-99'}T${hora || '99:99'}`;
+    const pontosFiltrados = pontos
+        .filter(p => {
         if (filtroMotorista && p.motorista_id !== filtroMotorista) return false;
         if (periodoPreset === 'personalizado' && (periodo.inicio || periodo.fim)) {
             const d = p.data_saida || '';
@@ -6965,7 +7106,16 @@ function TabPontosParada({ isAdmin }) {
             );
         }
         return true;
-    });
+    })
+        .map(p => (p.horarios_extras && p.horarios_extras.length > 1)
+            ? { ...p, horarios_extras: [...p.horarios_extras].sort((a, b) => chaveDataHora(a.data_saida, a.horario_saida).localeCompare(chaveDataHora(b.data_saida, b.horario_saida))) }
+            : p)
+        .sort((a, b) => {
+            const nomeA = motoristas.find(m => m.id === a.motorista_id)?.name || '';
+            const nomeB = motoristas.find(m => m.id === b.motorista_id)?.name || '';
+            if (nomeA !== nomeB) return nomeA.localeCompare(nomeB, 'pt-BR');
+            return chaveDataHora(a.data_saida, a.horario_saida).localeCompare(chaveDataHora(b.data_saida, b.horario_saida));
+        });
 
     const handleDelete = async (id) => {
         const ok = await confirm({ title: 'Excluir ponto de parada?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });

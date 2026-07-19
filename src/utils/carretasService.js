@@ -659,7 +659,7 @@ export async function reprovarChecklistComNotificacao(id, adminId, motoristaId, 
 export async function fetchOrdensServico(filters = {}) {
     let q = supabase
         .from('carretas_ordens_servico')
-        .select('*, veiculo:veiculo_id(id, placa, modelo), mecanico:mecanico_id(id, name)')
+        .select('*, veiculo:veiculo_id(id, placa, modelo, tipo_composicao, is_terceiro), mecanico:mecanico_id(id, name)')
         .order('created_at', { ascending: false });
     if (filters.mecanicoId) q = q.eq('mecanico_id', filters.mecanicoId);
     if (filters.status)     q = q.eq('status', filters.status);
@@ -940,20 +940,17 @@ export async function deleteDiaria(id) {
     if (error) throw error;
 }
 
-// Assina digitalmente a diária como responsável (admin ou operador).
-// A assinatura em si é o texto já cadastrado no perfil do usuário (assinatura_digital).
-// `assinanteRole` (role do usuário no momento da assinatura: 'admin' | 'operador')
-// define em qual campo da ficha impressa o nome aparece — Transporte (admin) ou
-// Logística (operador). É guardado à parte do id porque o cargo do usuário pode
-// mudar depois, e isso não deve alterar retroativamente uma diária já assinada.
-export async function assinarDiaria(id, assinaturaTexto, assinanteId = null, assinanteRole = null) {
+// Assina digitalmente a diária no setor correspondente — 'logistica' (operador)
+// ou 'transporte' (admin). Cada setor assina de forma independente, sem
+// sobrescrever a assinatura do outro (igual às OS: mecânico + admin).
+export async function assinarDiaria(id, campo, assinaturaTexto, assinanteId = null) {
+    if (!['logistica', 'transporte'].includes(campo)) throw new Error('Campo de assinatura inválido');
     const { data, error } = await supabase
         .from('carretas_diarias')
         .update({
-            assinatura_admin: assinaturaTexto,
-            assinatura_admin_at: new Date().toISOString(),
-            assinatura_admin_por: assinanteId,
-            assinatura_admin_role: assinanteRole,
+            [`assinatura_${campo}`]: assinaturaTexto,
+            [`assinatura_${campo}_at`]: new Date().toISOString(),
+            [`assinatura_${campo}_por`]: assinanteId,
             updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -963,16 +960,15 @@ export async function assinarDiaria(id, assinaturaTexto, assinanteId = null, ass
     return data;
 }
 
-// Remove a assinatura digital do responsável, voltando a diária ao estado
-// "sem assinatura" (ação reservada a administradores na UI).
-export async function desassinarDiaria(id) {
+// Remove a assinatura digital de um dos setores (ação reservada a administradores na UI).
+export async function desassinarDiaria(id, campo) {
+    if (!['logistica', 'transporte'].includes(campo)) throw new Error('Campo de assinatura inválido');
     const { data, error } = await supabase
         .from('carretas_diarias')
         .update({
-            assinatura_admin: null,
-            assinatura_admin_at: null,
-            assinatura_admin_por: null,
-            assinatura_admin_role: null,
+            [`assinatura_${campo}`]: null,
+            [`assinatura_${campo}_at`]: null,
+            [`assinatura_${campo}_por`]: null,
             updated_at: new Date().toISOString(),
         })
         .eq('id', id)
@@ -1258,6 +1254,37 @@ export async function deleteBonificacaoExtra(id) {
 // ─────────────────────────────────────────────────────────────────────────────
 // CATÁLOGO DE LOCAIS DE PARADA (tipos "Fábrica" e "Outro" — editável pelo admin)
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// CATÁLOGO DE PEÇAS (usado no select de "Solicitar Peça" nas OS)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchPecasCatalogo(categoria) {
+    let q = supabase.from('carretas_pecas_catalogo').select('*').eq('ativo', true).order('nome', { ascending: true });
+    if (categoria) q = q.in('categoria', [categoria, 'Ambos']);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
+export async function createPecaCatalogo(peca) {
+    const { data, error } = await supabase.from('carretas_pecas_catalogo').insert(peca).select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updatePecaCatalogo(id, updates) {
+    const { data, error } = await supabase
+        .from('carretas_pecas_catalogo')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deletePecaCatalogo(id) {
+    const { error } = await supabase.from('carretas_pecas_catalogo').delete().eq('id', id);
+    if (error) throw error;
+}
+
 export async function fetchLocaisParada(tipoLocal) {
     let q = supabase.from('carretas_locais_parada').select('*').order('nome', { ascending: true });
     if (tipoLocal) q = q.eq('tipo_local', tipoLocal);

@@ -5,7 +5,7 @@ import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import { subscribeTabela } from 'utils/supabaseClient';
-import { fetchOrdensServico, finalizarOrdemServico, reportarProblemaOS, updateOrdemServico } from 'utils/carretasService';
+import { fetchOrdensServico, finalizarOrdemServico, reportarProblemaOS, updateOrdemServico, fetchPecasCatalogo } from 'utils/carretasService';
 import { printOrdemServico } from 'utils/excelUtils';
 
 const FMT_DATE = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
@@ -43,9 +43,9 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 
 function ModalOverlay({ children, onClose }) {
     return (
-        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
+        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4"
             style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
-            <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl max-h-[85vh] sm:max-h-[88vh] overflow-y-auto">
                 {children}
             </div>
         </div>
@@ -56,12 +56,14 @@ export default function MecanicoPage() {
     const { user, profile } = useAuth();
     const { toast, showToast } = useToast();
     const [ordens, setOrdens]                 = useState([]);
+    const [pecasCatalogo, setPecasCatalogo]   = useState([]);
     const [loading, setLoading]               = useState(true);
     const [filtro, setFiltro]                 = useState('');
     const [modalFinalizar, setModalFinalizar] = useState(null);
     const [modalProblema, setModalProblema]   = useState(null);
     const [modalPeca, setModalPeca]           = useState(null);
     const [pecaItem, setPecaItem]             = useState('');
+    const [pecaItemOutro, setPecaItemOutro]   = useState('');
     const [pecaQtd, setPecaQtd]               = useState('1');
     const [obsFinalizar, setObsFinalizar]     = useState('');
     const [descProblema, setDescProblema]     = useState('');
@@ -72,8 +74,12 @@ export default function MecanicoPage() {
         if (!user?.id) return;
         setLoading(true);
         try {
-            const data = await fetchOrdensServico({ mecanicoId: user.id, status: filtro || undefined });
+            const [data, pecas] = await Promise.all([
+                fetchOrdensServico({ mecanicoId: user.id, status: filtro || undefined }),
+                fetchPecasCatalogo().catch(() => []),
+            ]);
             setOrdens(data);
+            setPecasCatalogo(pecas || []);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [user?.id, filtro]); // eslint-disable-line
@@ -104,14 +110,15 @@ export default function MecanicoPage() {
     };
 
     const handleSolicitarPeca = async () => {
-        if (!pecaItem.trim()) { showToast('Informe o nome da peça', 'error'); return; }
+        const nomeItem = pecaItem === '__outro__' ? pecaItemOutro.trim() : pecaItem;
+        if (!nomeItem) { showToast('Selecione ou informe o nome da peça', 'error'); return; }
         const qtd = Number(pecaQtd) || 1;
         try {
-            const novaPeca = { id: `${Date.now()}`, item: pecaItem.trim(), quantidade: qtd, status: 'Pendente', solicitado_em: new Date().toISOString() };
+            const novaPeca = { id: `${Date.now()}`, item: nomeItem, quantidade: qtd, status: 'Pendente', solicitado_em: new Date().toISOString() };
             const lista = [...(modalPeca.pecas_solicitadas || []), novaPeca];
             await updateOrdemServico(modalPeca.id, { pecas_solicitadas: lista });
             showToast('Peça solicitada! Aguardando aprovação do admin.', 'success');
-            setModalPeca(null); setPecaItem(''); setPecaQtd('1'); load();
+            setModalPeca(null); setPecaItem(''); setPecaItemOutro(''); setPecaQtd('1'); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
@@ -360,7 +367,7 @@ export default function MecanicoPage() {
                                                         <Icon name="CheckCircle2" size={14} color="#fff" />
                                                         Finalizar OS
                                                     </button>
-                                                    <button onClick={() => { setModalPeca(o); setPecaItem(''); setPecaQtd('1'); }}
+                                                    <button onClick={() => { setModalPeca(o); setPecaItem(''); setPecaItemOutro(''); setPecaQtd('1'); }}
                                                         className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold border w-full sm:w-auto"
                                                         style={{ borderColor: '#DDD6FE', color: '#6D28D9' }}>
                                                         <Icon name="Package" size={14} color="#6D28D9" />
@@ -515,9 +522,19 @@ export default function MecanicoPage() {
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
                                 Item / peça <span className="text-red-500">*</span>
                             </label>
-                            <input value={pecaItem} onChange={e => setPecaItem(e.target.value)}
-                                className={inputCls} style={inputStyle}
-                                placeholder="Ex: Pastilha de freio dianteira" />
+                            <select value={pecaItem} onChange={e => setPecaItem(e.target.value)}
+                                className={inputCls} style={inputStyle}>
+                                <option value="">Selecione a peça...</option>
+                                {pecasCatalogo
+                                    .filter(p => !modalPeca.veiculo?.tipo || p.categoria === 'Ambos' || p.categoria === modalPeca.veiculo.tipo)
+                                    .map(p => <option key={p.id} value={p.nome}>{p.nome}</option>)}
+                                <option value="__outro__">Outro (especificar)...</option>
+                            </select>
+                            {pecaItem === '__outro__' && (
+                                <input value={pecaItemOutro} onChange={e => setPecaItemOutro(e.target.value)}
+                                    className={`${inputCls} mt-2`} style={inputStyle}
+                                    placeholder="Digite o nome da peça" autoFocus />
+                            )}
                         </div>
                         <div>
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Quantidade</label>

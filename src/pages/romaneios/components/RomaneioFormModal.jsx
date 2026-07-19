@@ -7,6 +7,7 @@ import { fetchPostos } from 'utils/carretasService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { fetchMaterials } from 'utils/materialService';
 import { FRETE_CATEGORIAS, detectarCategoriaFrete, calcularFretePedido, getCategoriaConfig, fmtPct } from 'utils/freteConfig';
+import { getTelhaInfo } from 'utils/telhaUtils';
 
 const STATUS_OPTIONS = ['Aguardando', 'Carregando', 'Em Trânsito', 'Finalizado', 'Cancelado'];
 const brl = v => Number(v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
@@ -152,11 +153,13 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                         .filter(i => i.pedido_id === p.id)
                         .map(i => {
                             itensVinculados.add(i.id);
+                            const { isTelha, compTelha, metros } = getTelhaInfo(i);
                             return {
                                 material_id: i.material_id, quantidade: i.quantidade,
                                 peso_total: i.peso_total,
                                 nome: i.materials?.nome || '', unidade: i.materials?.unidade || '',
-                                peso_unit: i.materials?.peso || 0,
+                                peso_unit: i.peso_unit || (i.quantidade ? i.peso_total / i.quantidade : 0) || i.materials?.peso || 0,
+                                is_telha_zinco: isTelha, comprimento_telha: compTelha || null, metros_totais: metros || null,
                             };
                         });
                     return {
@@ -172,23 +175,31 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 // Itens órfãos (sem pedido_id válido): adicionar ao primeiro pedido
                 const itensOrfaos = todosItens
                     .filter(i => !itensVinculados.has(i.id))
-                    .map(i => ({
-                        material_id: i.material_id, quantidade: i.quantidade,
-                        peso_total: i.peso_total,
-                        nome: i.materials?.nome || '', unidade: i.materials?.unidade || '',
-                        peso_unit: i.materials?.peso || 0,
-                    }));
+                    .map(i => {
+                        const { isTelha, compTelha, metros } = getTelhaInfo(i);
+                        return {
+                            material_id: i.material_id, quantidade: i.quantidade,
+                            peso_total: i.peso_total,
+                            nome: i.materials?.nome || '', unidade: i.materials?.unidade || '',
+                            peso_unit: i.peso_unit || (i.quantidade ? i.peso_total / i.quantidade : 0) || i.materials?.peso || 0,
+                            is_telha_zinco: isTelha, comprimento_telha: compTelha || null, metros_totais: metros || null,
+                        };
+                    });
                 if (itensOrfaos.length > 0 && pedidosMapped.length > 0) {
                     pedidosMapped[0].itens = [...pedidosMapped[0].itens, ...itensOrfaos];
                 }
                 setPedidos(pedidosMapped);
             } else {
                 // Legacy: no pedidos — show items as one default pedido
-                const itensHerdados = (editingRomaneio.romaneio_itens || []).map(i => ({
-                    material_id: i.material_id, quantidade: i.quantidade, peso_total: i.peso_total,
-                    nome: i.materials?.nome || '', unidade: i.materials?.unidade || '',
-                    peso_unit: i.materials?.peso || 0,
-                }));
+                const itensHerdados = (editingRomaneio.romaneio_itens || []).map(i => {
+                    const { isTelha, compTelha, metros } = getTelhaInfo(i);
+                    return {
+                        material_id: i.material_id, quantidade: i.quantidade, peso_total: i.peso_total,
+                        nome: i.materials?.nome || '', unidade: i.materials?.unidade || '',
+                        peso_unit: i.peso_unit || (i.quantidade ? i.peso_total / i.quantidade : 0) || i.materials?.peso || 0,
+                        is_telha_zinco: isTelha, comprimento_telha: compTelha || null, metros_totais: metros || null,
+                    };
+                });
                 setPedidos(itensHerdados.length > 0 ? [{
                     numero_pedido:'', valor_pedido:'', categoria_frete:'Ferragens', itens: itensHerdados
                 }] : []);
@@ -277,7 +288,10 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
 
         setPedidos(prev => prev.map((p, i) => {
             if (i !== pedidoIdx) return p;
-            const existing = p.itens.findIndex(it => String(it.material_id) === String(mat.id));
+            const existing = p.itens.findIndex(it =>
+                String(it.material_id) === String(mat.id) &&
+                (!isTelha || Number(it.comprimento_telha) === compTelha)
+            );
             if (existing >= 0) {
                 // Merge: soma telhas calculadas (não metros) para manter unidade coerente
                 const newItens = p.itens.map((it, j) => j !== existing ? it : {
@@ -484,6 +498,10 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     quantidade:     i.quantidade,
                     peso_total:     i.peso_total,
                     pedido_index:   pIdx,
+                    is_telha_zinco:    i.is_telha_zinco || false,
+                    comprimento_telha: i.comprimento_telha ?? null,
+                    metros_totais:     i.metros_totais ?? null,
+                    peso_unit:         i.peso_unit ?? null,
                 }))
             );
             await onSave({
@@ -984,7 +1002,14 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                             <tbody>
                                                                 {pedido.itens.map((item, iIdx) => (
                                                                     <tr key={iIdx} className="border-t" style={{ borderColor:'var(--color-border)' }}>
-                                                                        <td className="px-3 py-2 font-caption">{item.nome}</td>
+                                                                        <td className="px-3 py-2 font-caption">
+                                                                            {item.nome}
+                                                                            {item.is_telha_zinco && item.comprimento_telha ? (
+                                                                                <span className="block text-[10px]" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                                    peça {Number(item.comprimento_telha).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}m · total {Number(item.metros_totais || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}m
+                                                                                </span>
+                                                                            ) : null}
+                                                                        </td>
                                                                         <td className="px-3 py-2 text-center">
                                                                             <input type="number" min="0.001" step="0.001" value={item.quantidade}
                                                                                 onChange={e => {
@@ -992,12 +1017,16 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                                                     setPedidos(prev => prev.map((p, pi) =>
                                                                                         pi !== pIdx ? p : {
                                                                                             ...p, itens: p.itens.map((it, ii) =>
-                                                                                                ii !== iIdx ? it : { ...it, quantidade:qty, peso_total:qty*it.peso_unit }
+                                                                                                ii !== iIdx ? it : {
+                                                                                                    ...it, quantidade:qty, peso_total:qty*it.peso_unit,
+                                                                                                    metros_totais: it.is_telha_zinco ? qty * Number(it.comprimento_telha || 0) : it.metros_totais,
+                                                                                                }
                                                                                             )
                                                                                         }
                                                                                     ));
                                                                                 }}
                                                                                 className="w-16 text-center px-2 py-1 rounded border border-gray-200 font-data focus:outline-none" />
+                                                                            {item.is_telha_zinco && <span className="block text-[10px] mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>peças</span>}
                                                                         </td>
                                                                         <td className="px-3 py-2 text-right font-data">
                                                                             {n(item.peso_total).toLocaleString('pt-BR',{minimumFractionDigits:2})} kg

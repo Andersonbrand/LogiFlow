@@ -15,6 +15,7 @@ import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { fetchMaterials } from 'utils/materialService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { useToast } from 'utils/useToast';
+import { getTelhaInfo } from 'utils/telhaUtils';
 import { subscribeTabela } from 'utils/supabaseClient';
 
 const STATUS_COLORS = {
@@ -713,15 +714,18 @@ function buildResumoPorCarga(rascunhos) {
                 const cidade  = (i.pedido_id && cidadePorPedido[i.pedido_id]) || cidadeFallback;
                 const matNome = i.materials?.nome    || 'Material não identificado';
                 const unidade = i.materials?.unidade || '';
-                const matKey  = i.material_id || matNome;
+                const { isTelha, compTelha, metros } = getTelhaInfo(i);
+                // Telhas com comprimentos de corte diferentes não podem ser somadas juntas.
+                const matKey  = String(i.material_id || matNome) + (isTelha ? `@${compTelha.toFixed(2)}` : '');
                 const qtd     = Number(i.quantidade) || 0;
                 const peso    = Number(i.peso_total) || 0;
 
                 if (!cidadesMap.has(cidade)) cidadesMap.set(cidade, { materiais: {}, pesoTotal: 0, qtdTotal: 0 });
                 const cEntry = cidadesMap.get(cidade);
-                if (!cEntry.materiais[matKey]) cEntry.materiais[matKey] = { nome: matNome, unidade, quantidade: 0, peso: 0 };
+                if (!cEntry.materiais[matKey]) cEntry.materiais[matKey] = { nome: matNome, unidade, isTelha, compTelha, quantidade: 0, peso: 0, metros: 0 };
                 cEntry.materiais[matKey].quantidade += qtd;
                 cEntry.materiais[matKey].peso       += peso;
+                cEntry.materiais[matKey].metros      += metros;
                 cEntry.pesoTotal += peso;
                 cEntry.qtdTotal  += qtd;
             });
@@ -820,9 +824,20 @@ function ResumoMateriaisCidadeModal({ rascunhos, onClose }) {
                                                 </thead>
                                                 <tbody>
                                                     {cid.materiais.map(m => (
-                                                        <tr key={m.nome} className="border-t" style={{ borderColor: '#FDF1D6' }}>
-                                                            <td className="px-4 py-1.5">{m.nome}</td>
-                                                            <td className="px-4 py-1.5 text-right font-mono whitespace-nowrap">{m.quantidade.toLocaleString('pt-BR')}{m.unidade ? ` ${m.unidade}` : ''}</td>
+                                                        <tr key={`${m.nome}-${m.compTelha || ''}`} className="border-t" style={{ borderColor: '#FDF1D6' }}>
+                                                            <td className="px-4 py-1.5">
+                                                                {m.nome}
+                                                                {m.isTelha && m.compTelha > 0 && (
+                                                                    <span className="ml-1 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                        (peça {m.compTelha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}m)
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-1.5 text-right font-mono whitespace-nowrap">
+                                                                {m.isTelha
+                                                                    ? <>{m.quantidade.toLocaleString('pt-BR')} pç <span style={{ color: 'var(--color-muted-foreground)' }}>({m.metros.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} m)</span></>
+                                                                    : <>{m.quantidade.toLocaleString('pt-BR')}{m.unidade ? ` ${m.unidade}` : ''}</>}
+                                                            </td>
                                                             <td className="px-4 py-1.5 text-right font-mono whitespace-nowrap">{m.peso > 0 ? m.peso.toLocaleString('pt-BR') : '—'}</td>
                                                         </tr>
                                                     ))}

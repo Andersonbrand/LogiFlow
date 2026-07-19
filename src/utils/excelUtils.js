@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { FRETE_CATEGORIAS, fmtPct } from 'utils/freteConfig';
+import { getTelhaInfo } from 'utils/telhaUtils';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function today() { return new Date().toLocaleDateString('pt-BR').replace(/\//g,'-'); }
@@ -287,25 +288,30 @@ export function exportRomaneioModelo1(romaneio) {
 
     const grupos = {};
     itens.forEach(item => {
-        const mat     = item.materials || {};
-        const pedido  = pedMap[item.pedido_id] || {};
-        const cidade  = pedido.cidade_destino || romaneio.destino || '—';
-        const empresa = pedido.empresa || '—';
-        const mid     = String(item.material_id || mat.nome || 'x');
+        const mat        = item.materials || {};
+        const pedido     = pedMap[item.pedido_id] || {};
+        const cidade     = pedido.cidade_destino || romaneio.destino || '—';
+        const empresa    = pedido.empresa || '—';
+        const { isTelha, compTelha, metros: metrosItem } = getTelhaInfo(item);
+        // Para telhas, cada comprimento de corte vira uma linha própria — não
+        // podemos somar peças de comprimentos diferentes na mesma linha.
+        const mid = String(item.material_id || mat.nome || 'x') + (isTelha ? `@${compTelha.toFixed(2)}` : '');
 
         if (!grupos[cidade]) grupos[cidade] = {};
         if (!grupos[cidade][empresa]) grupos[cidade][empresa] = {};
         if (!grupos[cidade][empresa][mid]) {
             grupos[cidade][empresa][mid] = {
-                nome:     mat.nome     || `#${mid}`,
+                nome:     mat.nome     || `#${item.material_id}`,
                 unidade:  mat.unidade  || '',
-                pesoUnit: Number(mat.peso || 0),
-                quant: 0, pesoTotal: 0, peds: [],
+                isTelha, compTelha,
+                pesoUnit: Number(item.peso_unit || mat.peso || 0),
+                quant: 0, pesoTotal: 0, metrosTotais: 0, peds: [],
                 pedidoIds: new Set(),
             };
         }
-        grupos[cidade][empresa][mid].quant     += Number(item.quantidade  || 0);
-        grupos[cidade][empresa][mid].pesoTotal += Number(item.peso_total  || 0);
+        grupos[cidade][empresa][mid].quant        += Number(item.quantidade    || 0);
+        grupos[cidade][empresa][mid].pesoTotal     += Number(item.peso_total    || 0);
+        grupos[cidade][empresa][mid].metrosTotais  += metrosItem;
         const np = pedido.numero_pedido;
         if (np && !grupos[cidade][empresa][mid].peds.includes(np)) grupos[cidade][empresa][mid].peds.push(np);
         if (item.pedido_id) grupos[cidade][empresa][mid].pedidoIds.add(item.pedido_id);
@@ -412,9 +418,13 @@ export function exportRomaneioModelo1(romaneio) {
             let pesoEmpresa = 0;
             itensEmpresa.forEach(item => {
                 pesoEmpresa += item.pesoTotal;
+                const nomeExibido = item.isTelha && item.compTelha
+                    ? `${item.nome} (peça ${item.compTelha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}m — total ${item.metrosTotais.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}m)`
+                    : item.nome;
+                const unidadeExibida = item.isTelha ? 'PC' : item.unidade;
                 rowsData.push([
-                    c(item.nome, 7),
-                    c(item.unidade, 8),
+                    c(nomeExibido, 7),
+                    c(unidadeExibida, 8),
                     n(item.quant, 8),
                     n(item.pesoUnit > 0 ? item.pesoUnit : 0, 8),
                     n(Math.round(item.pesoTotal*100)/100, 8),
@@ -1014,11 +1024,10 @@ export function exportDiariaModelo(diaria) {
     const vlTotal  = Number(diaria.valor_total || 0) || diasQtd * valorDia;
     const descr    = diaria.descricao || '';
     const assinaturaMotorista = diaria.motorista?.assinatura_digital || diaria.assinatura_motorista || '';
-    const assinaturaAdmin = diaria.assinatura_admin || '';
-    // Admin assina como responsável do setor de Transporte; Operador (ex.: diária de
-    // caminhão gerada dentro de um romaneio) assina como responsável do setor de Logística.
-    const assinaturaTransporte = assinaturaAdmin && diaria.assinatura_admin_role === 'admin' ? assinaturaAdmin : '';
-    const assinaturaLogistica  = assinaturaAdmin && diaria.assinatura_admin_role !== 'admin' ? assinaturaAdmin : '';
+    // Diárias avulsas usam assinatura_logistica/assinatura_transporte; diárias
+    // geradas por romaneio usam assinatura_diaria_logistica/assinatura_diaria_transporte.
+    const assinaturaTransporte = diaria.assinatura_transporte || diaria.assinatura_diaria_transporte || '';
+    const assinaturaLogistica  = diaria.assinatura_logistica  || diaria.assinatura_diaria_logistica  || '';
     const brl2 = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 
     // ── Shared strings ────────────────────────────────────────────────────────
@@ -1362,11 +1371,10 @@ export function printDiaria(diaria) {
     const descr    = diaria.descricao || '';
     const destino  = diaria.destino || diaria.viagem?.destino || '';
     const assinaturaMotorista = diaria.motorista?.assinatura_digital || diaria.assinatura_motorista || '';
-    const assinaturaAdmin = diaria.assinatura_admin || '';
-    // Admin assina como responsável do setor de Transporte; Operador (ex.: diária de
-    // caminhão gerada dentro de um romaneio) assina como responsável do setor de Logística.
-    const assinaturaTransporte = assinaturaAdmin && diaria.assinatura_admin_role === 'admin' ? assinaturaAdmin : '';
-    const assinaturaLogistica  = assinaturaAdmin && diaria.assinatura_admin_role !== 'admin' ? assinaturaAdmin : '';
+    // Diárias avulsas usam assinatura_logistica/assinatura_transporte; diárias
+    // geradas por romaneio usam assinatura_diaria_logistica/assinatura_diaria_transporte.
+    const assinaturaTransporte = diaria.assinatura_transporte || diaria.assinatura_diaria_transporte || '';
+    const assinaturaLogistica  = diaria.assinatura_logistica  || diaria.assinatura_diaria_logistica  || '';
 
     const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 

@@ -3,6 +3,7 @@ import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 import { exportRomaneioModelo1 } from 'utils/excelUtils';
 import { getCategoriaConfig, fmtPct } from 'utils/freteConfig';
+import { getTelhaInfo } from 'utils/telhaUtils';
 import { useAuth } from 'utils/AuthContext';
 
 const STATUS_COLORS = {
@@ -177,13 +178,27 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {itens.map((item, i) => (
-                                                    <tr key={i} className="border-t" style={{ borderColor:'var(--color-border)' }}>
-                                                        <td className="px-3 py-2" style={{ color:'var(--color-text-primary)' }}>{item.materials?.nome || `Material #${item.material_id}`}</td>
-                                                        <td className="px-3 py-2 text-center font-data text-xs" style={{ color:'var(--color-text-secondary)' }}>{item.quantidade} {item.materials?.unidade}</td>
-                                                        <td className="px-3 py-2 text-right font-data text-xs" style={{ color:'var(--color-text-secondary)' }}>{n(item.peso_total).toLocaleString('pt-BR',{minimumFractionDigits:2})} kg</td>
-                                                    </tr>
-                                                ))}
+                                                {itens.map((item, i) => {
+                                                    const { isTelha, compTelha, metros } = getTelhaInfo(item);
+                                                    return (
+                                                        <tr key={i} className="border-t" style={{ borderColor:'var(--color-border)' }}>
+                                                            <td className="px-3 py-2" style={{ color:'var(--color-text-primary)' }}>
+                                                                {item.materials?.nome || `Material #${item.material_id}`}
+                                                                {isTelha && compTelha > 0 && (
+                                                                    <span className="ml-1 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                        (peça {compTelha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}m)
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-center font-data text-xs" style={{ color:'var(--color-text-secondary)' }}>
+                                                                {isTelha
+                                                                    ? <>{item.quantidade} pç <span style={{ color: 'var(--color-muted-foreground)' }}>({metros.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} m)</span></>
+                                                                    : <>{item.quantidade} {item.materials?.unidade}</>}
+                                                            </td>
+                                                            <td className="px-3 py-2 text-right font-data text-xs" style={{ color:'var(--color-text-secondary)' }}>{n(item.peso_total).toLocaleString('pt-BR',{minimumFractionDigits:2})} kg</td>
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>
@@ -249,11 +264,15 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                                             <div className="px-4 pb-3">
                                                 <p className="text-xs font-caption text-gray-400 mb-1.5">Materiais deste pedido</p>
                                                 <div className="flex flex-wrap gap-1">
-                                                    {pedItens.map((it, j) => (
+                                                    {pedItens.map((it, j) => {
+                                                        const { isTelha: itTelha, compTelha: itComp } = getTelhaInfo(it);
+                                                        return (
                                                         <span key={j} className="text-[11px] px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-caption">
                                                             {it.materials?.nome || `Mat.${it.material_id}`} × {it.quantidade}
+                                                            {itTelha && itComp > 0 ? ` (${itComp.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}m/pç)` : ''}
                                                         </span>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         )}
