@@ -43,9 +43,9 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 
 function ModalOverlay({ children, onClose }) {
     return (
-        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4"
+        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4 sm:pt-16"
             style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
-            <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl max-h-[85vh] sm:max-h-[88vh] overflow-y-auto">
+            <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl max-h-[85vh] sm:max-h-[80vh] overflow-y-auto">
                 {children}
             </div>
         </div>
@@ -394,7 +394,7 @@ export default function MecanicoPage() {
             {modalFinalizar && (
                 <ModalOverlay onClose={() => setModalFinalizar(null)}>
                     <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
-                    <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b sticky top-0 bg-white z-10" style={{ borderColor: 'var(--color-border)' }}>
                         <div className="flex items-center gap-3 min-w-0">
                             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#D1FAE5' }}>
                                 <Icon name="CheckCircle2" size={18} color="#059669" />
@@ -452,7 +452,7 @@ export default function MecanicoPage() {
             {modalProblema && (
                 <ModalOverlay onClose={() => setModalProblema(null)}>
                     <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
-                    <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b sticky top-0 bg-white z-10" style={{ borderColor: 'var(--color-border)' }}>
                         <div className="flex items-center gap-3 min-w-0">
                             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#FEE2E2' }}>
                                 <Icon name="AlertTriangle" size={18} color="#DC2626" />
@@ -500,7 +500,7 @@ export default function MecanicoPage() {
             {modalPeca && (
                 <ModalOverlay onClose={() => setModalPeca(null)}>
                     <div className="flex justify-center pt-3 pb-1 sm:hidden"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
-                    <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b sticky top-0 bg-white z-10" style={{ borderColor: 'var(--color-border)' }}>
                         <div className="flex items-center gap-3 min-w-0">
                             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#EDE9FE' }}>
                                 <Icon name="Package" size={18} color="#6D28D9" />

@@ -6,7 +6,7 @@ import { fetchMotoristas, fetchMotoristasComId, fetchDestinos } from 'utils/roma
 import { fetchPostos } from 'utils/carretasService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { fetchMaterials } from 'utils/materialService';
-import { FRETE_CATEGORIAS, detectarCategoriaFrete, calcularFretePedido, getCategoriaConfig, fmtPct } from 'utils/freteConfig';
+import { FRETE_CATEGORIAS, detectarCategoriaFrete, calcularFretePedido, calcularFretePedidoMulti, getCategoriaConfig, fmtPct } from 'utils/freteConfig';
 import { getTelhaInfo } from 'utils/telhaUtils';
 
 const STATUS_OPTIONS = ['Aguardando', 'Carregando', 'Em Trânsito', 'Finalizado', 'Cancelado'];
@@ -24,7 +24,7 @@ const EMPTY_FORM = {
     vehicle_id:'', distancia_km:'', custo_combustivel:'', custo_pedagio:'', custo_motorista:'',
     dias_diaria:'1', valor_diaria_dia:'', diaria_descricao:'',
 };
-const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', empresa:'Comercial Araguaia', itens:[] };
+const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', categorias_extra:[], empresa:'Comercial Araguaia', itens:[] };
 
 export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRomaneio, vehicles: vehiclesProp=[], materials: materialsProp=[] }) {
     const [form, setForm]           = useState(EMPTY_FORM);
@@ -168,6 +168,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                         cidade_destino:  p.cidade_destino || '',
                         valor_pedido:    String(p.valor_pedido || ''),
                         categoria_frete: p.categoria_frete || 'Ferragens',
+                        categorias_extra: Array.isArray(p.categorias_extra) ? p.categorias_extra : [],
                         empresa:         p.empresa || 'Comercial Araguaia',
                         itens: itensDoPedido,
                     };
@@ -341,13 +342,30 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         setPedidos(prev => prev.map((p, i) => i !== idx ? p : { ...p, [k]: v }));
     };
 
+    // ── Categorias extras (mais de uma categoria de material por pedido) ──
+    const addCategoriaExtra = (idx) => {
+        setPedidos(prev => prev.map((p, i) => i !== idx ? p : {
+            ...p,
+            categorias_extra: [...(p.categorias_extra || []), { categoria: 'Outros', valor: '' }],
+        }));
+    };
+    const updateCategoriaExtra = (idx, extraIdx, k, v) => {
+        setPedidos(prev => prev.map((p, i) => i !== idx ? p : {
+            ...p,
+            categorias_extra: (p.categorias_extra || []).map((e, j) => j !== extraIdx ? e : { ...e, [k]: v }),
+        }));
+    };
+    const removeCategoriaExtra = (idx, extraIdx) => {
+        setPedidos(prev => prev.map((p, i) => i !== idx ? p : {
+            ...p,
+            categorias_extra: (p.categorias_extra || []).filter((_, j) => j !== extraIdx),
+        }));
+    };
+
     // ── Totais calculados ──────────────────────────────────────
     const totais = useMemo(() => {
         const valorTotalCarga    = pedidos.reduce((a, p) => a + n(p.valor_pedido), 0);
-        const freteCalculado     = pedidos.reduce((a, p) => {
-            const pct = FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05;
-            return a + n(p.valor_pedido) * pct;
-        }, 0);
+        const freteCalculado     = pedidos.reduce((a, p) => a + calcularFretePedidoMulti(p).total, 0);
         const pesoTotal          = pedidos.flatMap(p => p.itens).reduce((a, i) => a + n(i.peso_total), 0);
         const totalItens         = pedidos.flatMap(p => p.itens).length;
         const custoOperacional   = n(form.custo_combustivel) + n(form.custo_pedagio) + n(form.custo_motorista);
@@ -355,15 +373,21 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         return { valorTotalCarga, freteCalculado, pesoTotal, totalItens, custoOperacional, margem };
     }, [pedidos, form.custo_combustivel, form.custo_pedagio, form.custo_motorista]);
 
-    // ── Breakdown do frete por categoria ──────────────────────
+    // ── Breakdown do frete por categoria (considerando categorias extras) ──
     const freteBreakdown = useMemo(() => {
         const map = {};
         pedidos.forEach(p => {
-            const pct = FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05;
-            const frete = n(p.valor_pedido) * pct;
+            const { valorPrincipal, fretePrincipal } = calcularFretePedidoMulti(p);
             if (!map[p.categoria_frete]) map[p.categoria_frete] = { valor:0, pedidos:0 };
-            map[p.categoria_frete].valor += frete;
+            map[p.categoria_frete].valor += fretePrincipal;
             map[p.categoria_frete].pedidos++;
+            (p.categorias_extra || []).forEach(e => {
+                if (!n(e.valor)) return;
+                const freteExtra = calcularFretePedido(e.valor, e.categoria);
+                if (!map[e.categoria]) map[e.categoria] = { valor:0, pedidos:0 };
+                map[e.categoria].valor += freteExtra;
+                map[e.categoria].pedidos += 0; // já contado no pedido principal, evita duplicar contagem de pedidos
+            });
         });
         return Object.entries(map).map(([cat, d]) => ({ cat, ...d, cfg: getCategoriaConfig(cat) }));
     }, [pedidos]);
@@ -524,8 +548,10 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     cidade_destino:  p.cidade_destino || '',
                     valor_pedido:    n(p.valor_pedido),
                     categoria_frete: p.categoria_frete || 'Outros',
+                    categorias_extra: (p.categorias_extra || []).filter(e => n(e.valor) > 0).map(e => ({ categoria: e.categoria, valor: n(e.valor) })),
                     empresa:         p.empresa || 'Comercial Araguaia',
                     percentual_frete: FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05,
+                    frete_calculado: calcularFretePedidoMulti(p).total,
                 })),
             }, allItens);
         } catch (err) {
@@ -836,7 +862,9 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                             )}
 
                             {pedidos.map((pedido, pIdx) => {
-                                const pedidoFrete = calcularFretePedido(pedido.valor_pedido, pedido.categoria_frete);
+                                const freteMulti = calcularFretePedidoMulti(pedido);
+                                const pedidoFrete = freteMulti.total;
+                                const temExtras = (pedido.categorias_extra || []).some(e => n(e.valor) > 0);
                                 const cfg = getCategoriaConfig(pedido.categoria_frete);
                                 const isExpanded = expandedPedido === pIdx;
                                 const pesoPedido = pedido.itens.reduce((a, i) => a + n(i.peso_total), 0);
@@ -878,7 +906,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                         Valor: {brl(pedido.valor_pedido)}
                                                     </span>
                                                     <span className="text-xs font-data font-semibold" style={{ color: cfg.cor }}>
-                                                        Frete: {brl(pedidoFrete)} ({fmtPct(FRETE_CATEGORIAS.find(f=>f.categoria===pedido.categoria_frete)?.percentual||0)})
+                                                        Frete: {brl(pedidoFrete)} ({temExtras ? `${fmtPct(freteMulti.percentualEfetivo)} médio` : fmtPct(FRETE_CATEGORIAS.find(f=>f.categoria===pedido.categoria_frete)?.percentual||0)})
                                                     </span>
                                                 </div>
                                             </div>
@@ -946,6 +974,57 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                             ))}
                                                         </select>
                                                     </div>
+                                                </div>
+
+                                                {/* Categorias extras — quando o pedido mistura materiais de mais de uma
+                                                    categoria de frete, cada uma com seu próprio percentual */}
+                                                <div className="rounded-lg border p-3" style={{ borderColor:'#E5E7EB', backgroundColor:'#F9FAFB' }}>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <label className="text-xs font-medium font-caption" style={{ color:'var(--color-text-primary)' }}>
+                                                            Outras categorias neste pedido
+                                                        </label>
+                                                        <button type="button" onClick={() => addCategoriaExtra(pIdx)}
+                                                            className="flex items-center gap-1 text-xs font-semibold font-caption px-2 py-1 rounded-lg hover:bg-blue-50"
+                                                            style={{ color: 'var(--color-primary)' }}>
+                                                            <Icon name="Plus" size={12} /> Adicionar categoria
+                                                        </button>
+                                                    </div>
+                                                    {(pedido.categorias_extra || []).length === 0 ? (
+                                                        <p className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
+                                                            Use isso quando o pedido tiver materiais de mais de uma categoria (ex: Telha 2% + Vergalhão 6% no mesmo pedido).
+                                                        </p>
+                                                    ) : (
+                                                        <div className="flex flex-col gap-2">
+                                                            <p className="text-[11px] font-caption" style={{ color:'var(--color-muted-foreground)' }}>
+                                                                A categoria principal acima ({pedido.categoria_frete}) passa a valer sobre o restante do valor do pedido: {brl(freteMulti.valorPrincipal)}.
+                                                            </p>
+                                                            {pedido.categorias_extra.map((extra, eIdx) => (
+                                                                <div key={eIdx} className="flex items-center gap-2">
+                                                                    <select value={extra.categoria}
+                                                                        onChange={e => updateCategoriaExtra(pIdx, eIdx, 'categoria', e.target.value)}
+                                                                        className="flex-1 h-9 px-2 rounded-lg border border-gray-200 text-xs bg-white">
+                                                                        {FRETE_CATEGORIAS.map(f => (
+                                                                            <option key={f.categoria} value={f.categoria}>{f.label} – {fmtPct(f.percentual)}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                    <input type="number" min="0" step="0.01" value={extra.valor}
+                                                                        onChange={e => updateCategoriaExtra(pIdx, eIdx, 'valor', e.target.value)}
+                                                                        placeholder="Valor (R$)"
+                                                                        className="w-32 h-9 px-3 rounded-lg border border-gray-200 text-xs bg-white font-data" />
+                                                                    <button type="button" onClick={() => removeCategoriaExtra(pIdx, eIdx)}
+                                                                        className="p-1.5 rounded-lg hover:bg-red-50 flex-shrink-0">
+                                                                        <Icon name="X" size={14} color="#DC2626" />
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                            {freteMulti.valorExtras > n(pedido.valor_pedido) && (
+                                                                <p className="text-xs font-caption text-red-600 flex items-center gap-1">
+                                                                    <Icon name="AlertTriangle" size={12} />
+                                                                    A soma das categorias extras ultrapassa o valor do pedido.
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 {/* Add material to pedido */}
@@ -1188,7 +1267,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
                                                 <label className="block text-[11px] font-caption mb-1" style={{ color:'var(--color-muted-foreground)' }}>Quantidade de dias</label>
-                                                <input type="number" name="dias_diaria" value={form.dias_diaria} min="0" step="1"
+                                                <input type="number" name="dias_diaria" value={form.dias_diaria} min="0" step="0.5"
                                                     onChange={e => setF(e.target.name, e.target.value)}
                                                     className="w-full h-10 px-3 rounded-lg border text-sm font-data focus:outline-none bg-white"
                                                     style={{ borderColor:'#E5E7EB' }} />

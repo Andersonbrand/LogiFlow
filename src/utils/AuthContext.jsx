@@ -137,7 +137,7 @@ export function AuthProvider({ children }) {
         verMeusRomaneios:   () => isMotorista(),
         gerenciarUsuarios:  () => isAdmin(),
         gerenciarVeiculos:  () => isAdmin(),
-        gerenciarMateriais: () => isAdmin(),
+        gerenciarMateriais: () => isAdmin() || isOperador(),
         verFinanceiro:      () => isAdmin(),
         verBonificacoes:    () => isAdmin() || isMotorista() || isCarreteiro(),
     };

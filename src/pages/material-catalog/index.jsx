@@ -22,7 +22,7 @@ const DEFAULT_FILTERS = { categoria: 'Todas', unidade: 'Todas', pesoMax: 50000 }
 const DEFAULT_SORT = { key: 'nome', dir: 'asc' };
 
 export default function MaterialCatalog() {
-    const { isAdmin } = useAuth();
+    const { isAdmin, can } = useAuth();
     const [materials, setMaterials] = useState([]);
     const [dbLoading, setDbLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -111,7 +111,7 @@ export default function MaterialCatalog() {
     const isPaginated = !search?.trim() && filters?.categoria === 'Todas' && filters?.unidade === 'Todas' && filters?.pesoMax >= 50000;
 
     const handleSave = async (data) => {
-        if (!isAdmin()) { setAccessDenied(true); return; }
+        if (!can.gerenciarMateriais()) { setAccessDenied(true); return; }
         try {
             if (data?.id) {
                 const updated = await updateMaterial(data.id, data);
@@ -128,7 +128,7 @@ export default function MaterialCatalog() {
     };
 
     const handleDelete = async (id) => {
-        if (!isAdmin()) { setAccessDenied(true); return; }
+        if (!can.gerenciarMateriais()) { setAccessDenied(true); return; }
         try {
             const mat = materials?.find((m) => m?.id === id);
             await deleteMaterial(id);
@@ -146,7 +146,7 @@ export default function MaterialCatalog() {
     };
 
     const handleImportExcel = async (file) => {
-        if (!isAdmin()) { setAccessDenied(true); return; }
+        if (!can.gerenciarMateriais()) { setAccessDenied(true); return; }
         try {
             const parsed = await parseMaterialsFromFile(file);
             if (!parsed.length) { showToast('Nenhum material válido encontrado no arquivo.', 'warning'); return; }
@@ -172,8 +172,8 @@ export default function MaterialCatalog() {
         }
     };
 
-    const openAdd  = () => { if (!isAdmin()) { setAccessDenied(true); return; } setEditingMaterial(null); setModalOpen(true); };
-    const openEdit = (m) => { if (!isAdmin()) { setAccessDenied(true); return; } setEditingMaterial(m); setModalOpen(true); };
+    const openAdd  = () => { if (!can.gerenciarMateriais()) { setAccessDenied(true); return; } setEditingMaterial(null); setModalOpen(true); };
+    const openEdit = (m) => { if (!can.gerenciarMateriais()) { setAccessDenied(true); return; } setEditingMaterial(m); setModalOpen(true); };
 
     return (
         <div className="min-h-screen bg-[var(--color-background)]">
@@ -283,7 +283,7 @@ export default function MaterialCatalog() {
                                     sortConfig={sortConfig}
                                     onSort={handleSort}
                                     onEdit={openEdit}
-                                    onDelete={isAdmin() ? setDeletingMaterial : null}
+                                    onDelete={can.gerenciarMateriais() ? setDeletingMaterial : null}
                                     loading={false}
                                 />
                             </div>
@@ -302,7 +302,7 @@ export default function MaterialCatalog() {
                                             key={m?.id}
                                             material={m}
                                             onEdit={openEdit}
-                                            onDelete={isAdmin() ? setDeletingMaterial : null}
+                                            onDelete={can.gerenciarMateriais() ? setDeletingMaterial : null}
                                         />
                                     ))
                                 )}

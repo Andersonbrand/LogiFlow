@@ -244,6 +244,8 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                                                     {aberto && (
                                                         <p className="text-xs font-caption" style={{ color: cfg.cor, opacity:.7 }}>
                                                             {p.categoria_frete} · {fmtPct(p.percentual_frete)}
+                                                            {Array.isArray(p.categorias_extra) && p.categorias_extra.length > 0 &&
+                                                                ` + ${p.categorias_extra.map(e => `${e.categoria} (${brl(e.valor)})`).join(', ')}`}
                                                         </p>
                                                     )}
                                                 </div>

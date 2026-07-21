@@ -1604,12 +1604,12 @@ export default function DespesasAdmTransporte() {
                                                 <div className="flex items-center gap-1">
                                                     <button onClick={() => setViewDespesa(d)} title="Visualizar despesa"
                                                         className="p-1.5 rounded hover:bg-indigo-50 transition-colors">
-                                                        <Icon name="Eye" size={13} color="#4F46E5" />
+                                                        <Icon name="Eye" size={16} color="#4F46E5" />
                                                     </button>
                                                     {((d.boletos || []).length > 0 || (d.parcelas_cartao || []).length > 0) && (
                                                         <button onClick={() => setModalBaixa(d)} title="Gerenciar pagamentos"
                                                             className="p-1.5 rounded hover:bg-green-50 transition-colors">
-                                                            <Icon name="CheckCircle2" size={13} color="#059669" />
+                                                            <Icon name="CheckCircle2" size={16} color="#059669" />
                                                         </button>
                                                     )}
                                                     {admin && (

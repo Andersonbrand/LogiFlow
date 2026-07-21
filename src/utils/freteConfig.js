@@ -68,6 +68,31 @@ export function calcularFretePedido(valorPedido, categoria) {
     return Number(valorPedido || 0) * pct;
 }
 
+// Calcula o frete de um pedido que pode ter mais de uma categoria de material,
+// cada uma com seu próprio percentual, dentro do mesmo pedido.
+// `pedido.categorias_extra` é uma lista de { categoria, valor } que representa
+// uma fração do valor_pedido pertencente a outra categoria além da principal
+// (pedido.categoria_frete). O restante do valor_pedido (valor_pedido - soma das
+// frações extras) é calculado com o percentual da categoria principal.
+// Sem categorias_extra, o resultado é idêntico ao cálculo simples de sempre.
+export function calcularFretePedidoMulti(pedido) {
+    const valorTotal = Number(pedido?.valor_pedido || 0);
+    const extras = Array.isArray(pedido?.categorias_extra) ? pedido.categorias_extra : [];
+    const valorExtras = extras.reduce((acc, e) => acc + Number(e.valor || 0), 0);
+    const valorPrincipal = Math.max(0, valorTotal - valorExtras);
+    const fretePrincipal = calcularFretePedido(valorPrincipal, pedido?.categoria_frete);
+    const freteExtras = extras.reduce((acc, e) => acc + calcularFretePedido(e.valor, e.categoria), 0);
+    return {
+        total: fretePrincipal + freteExtras,
+        valorPrincipal,
+        fretePrincipal,
+        valorExtras,
+        freteExtras,
+        // Percentual efetivo médio (útil para exibição em relatórios que esperam um único número)
+        percentualEfetivo: valorTotal > 0 ? (fretePrincipal + freteExtras) / valorTotal : (FRETE_PERCENTUAL[pedido?.categoria_frete] ?? 0.05),
+    };
+}
+
 export function getCategoriaConfig(categoria) {
     return FRETE_CATEGORIAS.find(f => f.categoria === categoria) || FRETE_CATEGORIAS[FRETE_CATEGORIAS.length - 1];
 }

@@ -3332,7 +3332,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                                 <button onClick={() => setModalBaixa(d)}
                                                     className="p-2 rounded hover:bg-green-50"
                                                     title="Dar baixa em pagamentos">
-                                                    <Icon name="CheckCircle2" size={15} color="#059669" />
+                                                    <Icon name="CheckCircle2" size={16} color="#059669" />
                                                 </button>
                                             )}
                                             {isAdmin && <button onClick={() => openEdit(d)} className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>}
@@ -4181,29 +4181,32 @@ function TabDiarias({ isAdmin, profile }) {
     const [viewDiaria, setViewDiaria] = useState(null);
     const [assinando, setAssinando] = useState(false);
     const canSign = profile?.role === 'admin' || profile?.role === 'operador';
+    // Assina a diária no setor do usuário logado (admin -> transporte, operador -> logística).
+    // Cada setor assina de forma independente, sem sobrescrever o outro.
+    const meuCampoAssinatura = profile?.role === 'admin' ? 'transporte' : profile?.role === 'operador' ? 'logistica' : null;
     const handleAssinarDiaria = async () => {
-        if (!viewDiaria?.id || !canSign || !profile?.assinatura_digital) return;
+        if (!viewDiaria?.id || !canSign || !profile?.assinatura_digital || !meuCampoAssinatura) return;
         setAssinando(true);
         try {
             const texto = profile.assinatura_digital;
-            const role  = profile.role;
-            await assinarDiaria(viewDiaria.id, texto, profile.id, role);
+            const campo = meuCampoAssinatura;
+            await assinarDiaria(viewDiaria.id, campo, texto, profile.id);
             setDiarias(ds => ds.map(d => d.id === viewDiaria.id
-                ? { ...d, assinatura_admin: texto, assinatura_admin_at: new Date().toISOString(), assinatura_admin_role: role } : d));
-            setViewDiaria(v => ({ ...v, assinatura_admin: texto, assinatura_admin_at: new Date().toISOString(), assinatura_admin_role: role }));
+                ? { ...d, [`assinatura_${campo}`]: texto, [`assinatura_${campo}_at`]: new Date().toISOString() } : d));
+            setViewDiaria(v => ({ ...v, [`assinatura_${campo}`]: texto, [`assinatura_${campo}_at`]: new Date().toISOString() }));
             showToast('Diária assinada digitalmente!', 'success');
         } catch (e) { showToast('Erro ao assinar: ' + e.message, 'error'); }
         finally { setAssinando(false); }
     };
-    // Remove a assinatura (volta ao estado sem assinatura) — restrito a admins.
-    const handleDesassinarDiaria = async () => {
-        if (!viewDiaria?.id || !isAdmin) return;
+    // Remove a assinatura de um setor específico (ação reservada a administradores na UI).
+    const handleDesassinarDiaria = async (campo) => {
+        if (!viewDiaria?.id || !isAdmin || !campo) return;
         setAssinando(true);
         try {
-            await desassinarDiaria(viewDiaria.id);
+            await desassinarDiaria(viewDiaria.id, campo);
             setDiarias(ds => ds.map(d => d.id === viewDiaria.id
-                ? { ...d, assinatura_admin: null, assinatura_admin_at: null, assinatura_admin_role: null } : d));
-            setViewDiaria(v => ({ ...v, assinatura_admin: null, assinatura_admin_at: null, assinatura_admin_role: null }));
+                ? { ...d, [`assinatura_${campo}`]: null, [`assinatura_${campo}_at`]: null } : d));
+            setViewDiaria(v => ({ ...v, [`assinatura_${campo}`]: null, [`assinatura_${campo}_at`]: null }));
             showToast('Assinatura removida.', 'success');
         } catch (e) { showToast('Erro ao remover assinatura: ' + e.message, 'error'); }
         finally { setAssinando(false); }
@@ -4290,7 +4293,7 @@ function TabDiarias({ isAdmin, profile }) {
                                             <button onClick={() => setViewDiaria(d)}
                                                 className="p-2 rounded hover:bg-indigo-50"
                                                 title="Visualizar diária">
-                                                <Icon name="Eye" size={15} color="#4F46E5" />
+                                                <Icon name="Eye" size={16} color="#4F46E5" />
                                             </button>
                                             {isAdmin && <button onClick={() => openEdit(d)} className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>}
                                             {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={16} color="#DC2626" /></button>}
@@ -4393,33 +4396,57 @@ function TabDiarias({ isAdmin, profile }) {
                             </div>
                         )}
                         {canSign && (
-                            viewDiaria.assinatura_admin ? (
-                                <label className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg ${isAdmin ? 'cursor-pointer' : ''}`}
-                                    style={{ backgroundColor: '#EFF6FF', border: '1px solid #93C5FD' }}
-                                    title={isAdmin ? 'Desmarque para remover a assinatura' : undefined}>
-                                    <input type="checkbox" checked readOnly={!isAdmin} disabled={!isAdmin || assinando}
-                                        onChange={() => isAdmin && handleDesassinarDiaria()} className="w-4 h-4" />
-                                    <Icon name="BadgeCheck" size={14} color="#1D4ED8" />
-                                    <span className="text-xs font-medium" style={{ color: '#1D4ED8' }}>
-                                        Assinado digitalmente por {viewDiaria.assinatura_admin} como responsável
-                                        {viewDiaria.assinatura_admin_at && ` em ${new Date(viewDiaria.assinatura_admin_at).toLocaleDateString('pt-BR')}`}
-                                        {isAdmin && ' — desmarque para remover'}
-                                    </span>
-                                </label>
-                            ) : profile?.assinatura_digital ? (
-                                <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer" style={{ backgroundColor: 'var(--color-muted)', border: '1px solid var(--color-border)' }}>
-                                    <input type="checkbox" checked={false} disabled={assinando} onChange={handleAssinarDiaria} className="w-4 h-4" />
-                                    <Icon name="PenTool" size={14} color="var(--color-muted-foreground)" />
-                                    <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                                        {assinando ? 'Assinando...' : `Assinar digitalmente como responsável (${profile.assinatura_digital})`}
-                                    </span>
-                                </label>
-                            ) : (
-                                <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-muted-foreground)' }}>
-                                    <Icon name="Info" size={12} />
-                                    Você ainda não tem uma assinatura digital cadastrada. Cadastre em Admin &gt; Configurações.
-                                </p>
-                            )
+                            <div className="space-y-2">
+                                {[
+                                    { campo: 'logistica', titulo: 'Logística (operador)', cor: '#1D4ED8', bg: '#EFF6FF', border: '#93C5FD' },
+                                    { campo: 'transporte', titulo: 'Transporte (admin)', cor: '#7C3AED', bg: '#F5F3FF', border: '#C4B5FD' },
+                                ].map(({ campo, titulo, cor, bg, border }) => {
+                                    const assinado = viewDiaria[`assinatura_${campo}`];
+                                    const assinadoEm = viewDiaria[`assinatura_${campo}_at`];
+                                    const souEu = meuCampoAssinatura === campo;
+                                    if (assinado) {
+                                        return (
+                                            <label key={campo} className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg ${isAdmin ? 'cursor-pointer' : ''}`}
+                                                style={{ backgroundColor: bg, border: `1px solid ${border}` }}
+                                                title={isAdmin ? 'Desmarque para remover a assinatura' : undefined}>
+                                                <input type="checkbox" checked readOnly={!isAdmin} disabled={!isAdmin || assinando}
+                                                    onChange={() => isAdmin && handleDesassinarDiaria(campo)} className="w-4 h-4" />
+                                                <Icon name="BadgeCheck" size={14} color={cor} />
+                                                <span className="text-xs font-medium" style={{ color: cor }}>
+                                                    <strong>{titulo}:</strong> {assinado}
+                                                    {assinadoEm && ` em ${new Date(assinadoEm).toLocaleDateString('pt-BR')}`}
+                                                    {isAdmin && ' — desmarque para remover'}
+                                                </span>
+                                            </label>
+                                        );
+                                    }
+                                    if (souEu && profile?.assinatura_digital) {
+                                        return (
+                                            <label key={campo} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer" style={{ backgroundColor: 'var(--color-muted)', border: '1px solid var(--color-border)' }}>
+                                                <input type="checkbox" checked={false} disabled={assinando} onChange={handleAssinarDiaria} className="w-4 h-4" />
+                                                <Icon name="PenTool" size={14} color="var(--color-muted-foreground)" />
+                                                <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                                    {assinando ? 'Assinando...' : `Assinar como ${titulo} (${profile.assinatura_digital})`}
+                                                </span>
+                                            </label>
+                                        );
+                                    }
+                                    return (
+                                        <div key={campo} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg" style={{ backgroundColor: 'var(--color-muted)', border: '1px dashed var(--color-border)' }}>
+                                            <Icon name="Clock" size={14} color="var(--color-muted-foreground)" />
+                                            <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                Aguardando assinatura de <strong>{titulo}</strong>
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                                {!profile?.assinatura_digital && meuCampoAssinatura && (
+                                    <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-muted-foreground)' }}>
+                                        <Icon name="Info" size={12} />
+                                        Você ainda não tem uma assinatura digital cadastrada. Cadastre em Admin &gt; Configurações.
+                                    </p>
+                                )}
+                            </div>
                         )}
                         {viewDiaria.descricao && (
                             <div className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
@@ -7867,7 +7894,7 @@ export default function CarretasPage() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-2xl mx-auto">
+                <div className="max-w-[1920px] mx-auto">
                     <div className="flex">
 
                         {/* ── Sidebar desktop (lg+) ──────────────────────── */}
