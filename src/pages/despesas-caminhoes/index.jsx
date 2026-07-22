@@ -38,6 +38,10 @@ const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', cur
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
 const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
+const TIPO_PAGAMENTO_LABEL = {
+    pix: 'PIX', dinheiro: 'Dinheiro', transferencia_m: 'Transferência', cartao: 'Cartão à vista',
+    boleto: 'Boleto', cartao_prazo: 'Cartão Parcelado', cheque: 'Cheque', permuta: 'Permuta',
+};
 
 // ─── Reutilizáveis ────────────────────────────────────────────────────────────
 function ModalOverlay({ children, onClose, wide }) {
@@ -282,6 +286,17 @@ function ModalBaixa({ despesa, onClose, onBaixado, isAdmin }) {
                                 </div>
                             ))}
                         </div>
+                    </div>
+                )}
+                {boletos.length === 0 && parcelas.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
+                        <Icon name="CheckCircle2" size={32} color="#9CA3AF" />
+                        <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                            Nenhum pagamento pendente para baixa
+                        </p>
+                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                            Forma de pagamento: {TIPO_PAGAMENTO_LABEL[despesa.tipo_pagamento] || (despesa.forma_pagamento === 'a_vista' ? 'À Vista' : despesa.forma_pagamento === 'a_prazo' ? 'A Prazo' : 'não informada')}
+                        </p>
                     </div>
                 )}
             </div>
@@ -1645,12 +1660,10 @@ export default function DespesasCaminhoes() {
                                                         className="p-1.5 rounded hover:bg-indigo-50 transition-colors">
                                                         <Icon name="Eye" size={16} color="#4F46E5" />
                                                     </button>
-                                                    {((d.boletos || []).some(b => !b.pago) || (d.parcelas_cartao || []).some(p => !p.pago)) && (
-                                                        <button onClick={() => setModalBaixa(d)} title="Dar baixa em pagamentos"
-                                                            className="p-1.5 rounded hover:bg-green-50 transition-colors">
-                                                            <Icon name="CheckCircle2" size={16} color="#059669" />
-                                                        </button>
-                                                    )}
+                                                    <button onClick={() => setModalBaixa(d)} title="Dar baixa em pagamentos"
+                                                        className="p-1.5 rounded hover:bg-green-50 transition-colors">
+                                                        <Icon name="CheckCircle2" size={16} color={((d.boletos || []).some(b => !b.pago) || (d.parcelas_cartao || []).some(p => !p.pago)) ? "#059669" : "#9CA3AF"} />
+                                                    </button>
                                                     {admin && (
                                                         <>
                                                             <button onClick={() => setModal({ mode: 'edit', data: d })} className="p-1.5 rounded hover:bg-blue-50 transition-colors">

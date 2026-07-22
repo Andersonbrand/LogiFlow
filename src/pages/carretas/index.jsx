@@ -65,6 +65,10 @@ import { somarDespesasPorVencimento, agruparDespesasPorCategoriaVencimento } fro
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT_DATE = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+const TIPO_PAGAMENTO_LABEL = {
+    pix: 'PIX', dinheiro: 'Dinheiro', transferencia_m: 'Transferência', cartao: 'Cartão à vista',
+    boleto: 'Boleto', cartao_prazo: 'Cartão Parcelado', cheque: 'Cheque', permuta: 'Permuta',
+};
 
 // Baixa uma imagem (data URL base64 ou URL remota) forçando o download no navegador
 // Identifica o tipo de um anexo a partir do data URL (usado no anexo da OS)
@@ -2627,9 +2631,14 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado, isAdmin }) {
                     </div>
                 )}
                 {boletos.length === 0 && parcelas.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-8 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
-                        <Icon name="CheckCircle2" size={28} color="var(--color-muted-foreground)" />
-                        <p className="text-sm">Nenhum boleto ou parcela encontrado</p>
+                    <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
+                        <Icon name="CheckCircle2" size={32} color="#9CA3AF" />
+                        <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                            Nenhum pagamento pendente para baixa
+                        </p>
+                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                            Forma de pagamento: {TIPO_PAGAMENTO_LABEL[despesa.tipo_pagamento] || (despesa.forma_pagamento === 'a_vista' ? 'À Vista' : despesa.forma_pagamento === 'a_prazo' ? 'A Prazo' : 'não informada')}
+                        </p>
                     </div>
                 )}
             </div>
@@ -3328,13 +3337,11 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                     <td className="px-3 py-3 font-data font-semibold text-red-600">{BRL(d.valor)}</td>
                                     <td className="px-3 py-3">
                                         <div className="flex gap-1 items-center">
-                                            {d.forma_pagamento === 'a_prazo' && (d.boletos?.length > 0 || d.parcelas_cartao?.length > 0) && (
-                                                <button onClick={() => setModalBaixa(d)}
-                                                    className="p-2 rounded hover:bg-green-50"
-                                                    title="Dar baixa em pagamentos">
-                                                    <Icon name="CheckCircle2" size={16} color="#059669" />
-                                                </button>
-                                            )}
+                                            <button onClick={() => setModalBaixa(d)}
+                                                className="p-2 rounded hover:bg-green-50"
+                                                title="Dar baixa em pagamentos">
+                                                <Icon name="CheckCircle2" size={16} color={(d.forma_pagamento === 'a_prazo' && (d.boletos?.length > 0 || d.parcelas_cartao?.length > 0)) ? "#059669" : "#9CA3AF"} />
+                                            </button>
                                             {isAdmin && <button onClick={() => openEdit(d)} className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>}
                                             {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={16} color="#DC2626" /></button>}
                                         </div>
@@ -4398,7 +4405,6 @@ function TabDiarias({ isAdmin, profile }) {
                         {canSign && (
                             <div className="space-y-2">
                                 {[
-                                    { campo: 'logistica', titulo: 'Logística (operador)', cor: '#1D4ED8', bg: '#EFF6FF', border: '#93C5FD' },
                                     { campo: 'transporte', titulo: 'Transporte (admin)', cor: '#7C3AED', bg: '#F5F3FF', border: '#C4B5FD' },
                                 ].map(({ campo, titulo, cor, bg, border }) => {
                                     const assinado = viewDiaria[`assinatura_${campo}`];

@@ -1060,7 +1060,7 @@ function TabMotoristas({ adminProfile }) {
 
 // ─── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
 export default function VehicleFleetManagement() {
-    const { isAdmin, profile } = useAuth();
+    const { isAdmin, isOperador, profile } = useAuth();
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
     const [accessDenied, setAccessDenied] = useState(false);
@@ -1194,7 +1194,7 @@ export default function VehicleFleetManagement() {
                                 <VehicleTable
                                     vehicles={filtered}
                                     onEdit={v => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: v }); }}
-                                    onStatusChange={v => { if (!isAdmin()) { setAccessDenied(true); return; } setStatusModal({ open: true, vehicle: v }); }}
+                                    onStatusChange={v => { if (!isAdmin() && !isOperador()) { setAccessDenied(true); return; } setStatusModal({ open: true, vehicle: v }); }}
                                     onViewHistory={v => setHistoryModal({ open: true, vehicle: v })}
                                     onDelete={v => { if (!isAdmin()) { setAccessDenied(true); return; } handleDelete(v.id); }}
                                 />
@@ -1203,7 +1203,7 @@ export default function VehicleFleetManagement() {
                                 <VehicleCards
                                     vehicles={filtered}
                                     onEdit={v => { if (!isAdmin()) { setAccessDenied(true); return; } setFormModal({ open: true, vehicle: v }); }}
-                                    onStatusChange={v => { if (!isAdmin()) { setAccessDenied(true); return; } setStatusModal({ open: true, vehicle: v }); }}
+                                    onStatusChange={v => { if (!isAdmin() && !isOperador()) { setAccessDenied(true); return; } setStatusModal({ open: true, vehicle: v }); }}
                                     onViewHistory={v => setHistoryModal({ open: true, vehicle: v })}
                                     onDelete={v => { if (!isAdmin()) { setAccessDenied(true); return; } handleDelete(v.id); }}
                                 />
