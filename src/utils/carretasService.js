@@ -1568,7 +1568,7 @@ export async function fetchMotoristasProprios() {
     const { data, error } = await supabase
         .from('user_profiles')
         .select('id, name, role, tipo_veiculo, is_terceiro')
-        .eq('role', 'motorista')
+        .in('role', ['motorista', 'carreteiro'])
         .neq('is_terceiro', true)
         .order('name', { ascending: true });
     if (error) throw error;

@@ -23,6 +23,7 @@ import PerfilUsuario         from "pages/perfil-usuario";
 import EmailConfirmado       from "pages/email-confirmado";
 import DespesasCaminhoes    from "pages/despesas-caminhoes";
 import DespesasAdmTransporte from "pages/despesas-adm-transporte";
+import EntregasAcessorios   from "pages/entregas-acessorios";
 
 const Routes = () => (
     <BrowserRouter>
@@ -62,6 +63,9 @@ const Routes = () => (
 
                     {/* Módulo Despesas Administrativas — Transporte (admin apenas) */}
                     <Route path="/despesas-adm-transporte"  element={<AdminRoute><DespesasAdmTransporte /></AdminRoute>} />
+
+                    {/* Entregas de Acessórios aos motoristas (admin apenas) */}
+                    <Route path="/entregas-acessorios"      element={<AdminRoute><EntregasAcessorios /></AdminRoute>} />
 
 
                     {/* Rota do carreteiro */}

@@ -14,6 +14,7 @@ const NAV_ITEMS = [
     { id: 'relatorios',   name: 'Relatórios', path: '/relatorios',               icon: 'BarChart3',       roles: ['admin','operador'] },
     { id: 'despesas-cam', name: 'Despesas',   path: '/despesas-caminhoes',       icon: 'Receipt',         roles: ['admin'] },
     { id: 'despesas-adm', name: 'Desp. Adm', path: '/despesas-adm-transporte',  icon: 'ShoppingCart',    roles: ['admin'] },
+    { id: 'acessorios',   name: 'Acessórios', path: '/entregas-acessorios',    icon: 'Package',         roles: ['admin'] },
     { id: 'admin',        name: 'Admin',      path: '/admin',                    icon: 'Shield',          roles: ['admin'] },
     // Carretas (admin apenas) — botão destacado, fora do fluxo normal
     { id: 'carretas',     name: 'Carretas',   path: '/carretas',                 icon: 'Truck',           roles: ['admin'] },

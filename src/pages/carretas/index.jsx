@@ -2647,6 +2647,98 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado, isAdmin }) {
     );
 }
 
+// ─── Modal de Visualização de Despesa (somente leitura) ───────────────────────
+function ModalVisualizacaoDespesaCarreta({ despesa, onClose }) {
+    const boletos  = despesa.boletos         || [];
+    const parcelas = despesa.parcelas_cartao || [];
+    const temParcelas = boletos.length > 0 || parcelas.length > 0;
+    const statusGeral = () => {
+        const todas = [...boletos, ...parcelas];
+        if (!todas.length) return null;
+        const pagas = todas.filter(x => x.pago).length;
+        return pagas === todas.length ? 'quitado' : pagas > 0 ? 'parcial' : 'aberto';
+    };
+    const sg = statusGeral();
+
+    return (
+        <ModalOverlay onClose={onClose}>
+            <ModalHeader title="Detalhes da Despesa" icon="Receipt" onClose={onClose} />
+            <div className="p-5 overflow-y-auto flex-1 space-y-5">
+                <div className="grid grid-cols-2 gap-3">
+                    {[
+                        { l: 'Categoria',          v: despesa.categoria       || '—' },
+                        { l: 'Data',               v: FMT_DATE(despesa.data_despesa) },
+                        { l: 'Placa',              v: despesa.veiculo?.placa  || '—' },
+                        { l: 'Fornecedor',         v: despesa.fornecedor      || '—' },
+                        { l: 'Nota Fiscal',        v: despesa.nota_fiscal     || '—' },
+                        { l: 'Forma de Pagamento', v: TIPO_PAGAMENTO_LABEL[despesa.tipo_pagamento] || despesa.forma_pagamento || '—' },
+                    ].map(({ l, v }) => (
+                        <div key={l} className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
+                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{l}</p>
+                            <p className="text-sm font-semibold">{v}</p>
+                        </div>
+                    ))}
+                    {despesa.descricao && (
+                        <div className="col-span-2 p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
+                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Descrição</p>
+                            <p className="text-sm">{despesa.descricao}</p>
+                        </div>
+                    )}
+                    {despesa.observacoes && (
+                        <div className="col-span-2 p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
+                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Observações</p>
+                            <p className="text-sm">{despesa.observacoes}</p>
+                        </div>
+                    )}
+                </div>
+                <div className="p-4 rounded-xl flex items-center justify-between" style={{ backgroundColor: '#FFF1F2', border: '1px solid #FCA5A5' }}>
+                    <div>
+                        <p className="text-xs text-red-600 font-medium mb-0.5">Valor Total</p>
+                        <p className="text-3xl font-bold font-data text-red-700">{BRL(despesa.valor)}</p>
+                    </div>
+                    {sg && <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${sg === 'quitado' ? 'bg-green-100 text-green-700' : sg === 'parcial' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{sg === 'quitado' ? '✅ Quitado' : sg === 'parcial' ? '⚠️ Parcialmente pago' : '🔴 Em Aberto'}</span>}
+                </div>
+                {boletos.length > 0 && (
+                    <div>
+                        <p className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>Boletos</p>
+                        <div className="space-y-2">
+                            {boletos.map((b, idx) => (
+                                <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: b.pago ? '#F0FDF4' : '#FFFBEB' }}>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold font-data">{b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Boleto ${idx + 1}`} — {BRL(b.valor)}</p>
+                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Venc.: {FMT_DATE(b.vencimento)}</p>
+                                        {b.pago && <p className="text-xs text-green-600 font-medium">✓ Pago em {b.pago_em ? new Date(b.pago_em).toLocaleDateString('pt-BR') : '—'}</p>}
+                                        <p className={`text-xs mt-1 ${b.entregue_financeiro ? 'text-blue-600 font-medium' : 'text-gray-400'}`}>{b.entregue_financeiro ? '✓ Entregue ao financeiro' : 'Ainda não entregue ao financeiro'}</p>
+                                    </div>
+                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-medium flex-shrink-0 ${b.pago ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{b.pago ? 'Pago' : 'Pendente'}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {parcelas.length > 0 && (
+                    <div>
+                        <p className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>Parcelas do Cartão</p>
+                        <div className="space-y-2">
+                            {parcelas.map((p, idx) => (
+                                <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: p.pago ? '#F0FDF4' : '#FAF5FF' }}>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold font-data">Parcela {idx + 1} — {BRL(p.valor)}</p>
+                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Venc.: {FMT_DATE(p.vencimento)}{p.cartao ? ` · ${p.cartao}` : ''}</p>
+                                        {p.pago && <p className="text-xs text-green-600 font-medium">✓ Pago em {p.pago_em ? new Date(p.pago_em).toLocaleDateString('pt-BR') : '—'}</p>}
+                                    </div>
+                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-medium flex-shrink-0 ${p.pago ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}`}>{p.pago ? 'Pago' : 'Pendente'}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                {!temParcelas && <p className="text-xs text-center py-4" style={{ color: 'var(--color-muted-foreground)' }}>Pagamento à vista — sem parcelas ou boletos vinculados.</p>}
+            </div>
+        </ModalOverlay>
+    );
+}
+
 function TabDespesasExtras({ isAdmin, profile }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
@@ -2656,6 +2748,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
     const [modal, setModal]         = useState(null);
     const [showFornecedores, setShowFornecedores] = useState(false);
     const [modalBaixa, setModalBaixa] = useState(null);
+    const [viewDespesa, setViewDespesa] = useState(null);
     const corpoModalRef = useRef(null);
     const mesAtualDespesas = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; })();
     const [filtro, setFiltro]       = useState(() => {
@@ -3337,13 +3430,17 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                     <td className="px-3 py-3 font-data font-semibold text-red-600">{BRL(d.valor)}</td>
                                     <td className="px-3 py-3">
                                         <div className="flex gap-1 items-center">
+                                            <button onClick={() => setViewDespesa(d)} title="Visualizar despesa"
+                                                className="p-1.5 rounded hover:bg-indigo-50 transition-colors">
+                                                <Icon name="Eye" size={16} color="#4F46E5" />
+                                            </button>
                                             <button onClick={() => setModalBaixa(d)}
-                                                className="p-2 rounded hover:bg-green-50"
+                                                className="p-1.5 rounded hover:bg-green-50 transition-colors"
                                                 title="Dar baixa em pagamentos">
                                                 <Icon name="CheckCircle2" size={16} color={(d.forma_pagamento === 'a_prazo' && (d.boletos?.length > 0 || d.parcelas_cartao?.length > 0)) ? "#059669" : "#9CA3AF"} />
                                             </button>
-                                            {isAdmin && <button onClick={() => openEdit(d)} className="p-2 rounded hover:bg-blue-50"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>}
-                                            {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-2 rounded hover:bg-red-50"><Icon name="Trash2" size={16} color="#DC2626" /></button>}
+                                            {isAdmin && <button onClick={() => openEdit(d)} className="p-1.5 rounded hover:bg-blue-50 transition-colors"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>}
+                                            {isAdmin && <button onClick={() => handleDelete(d.id)} className="p-1.5 rounded hover:bg-red-50 transition-colors"><Icon name="Trash2" size={16} color="#DC2626" /></button>}
                                         </div>
                                     </td>
                                 </tr>
@@ -4052,6 +4149,12 @@ function TabDespesasExtras({ isAdmin, profile }) {
                     onClose={() => setModalBaixa(null)}
                     onBaixado={() => { load(); setModalBaixa(null); }}
                     isAdmin={isAdmin}
+                />
+            )}
+            {viewDespesa && (
+                <ModalVisualizacaoDespesaCarreta
+                    despesa={viewDespesa}
+                    onClose={() => setViewDespesa(null)}
                 />
             )}
         </div>
@@ -7150,6 +7253,19 @@ function TabPontosParada({ isAdmin }) {
             return chaveDataHora(a.data_saida, a.horario_saida).localeCompare(chaveDataHora(b.data_saida, b.horario_saida));
         });
 
+    // Marca o início de cada bloco de motorista e alterna a cor de fundo por
+    // bloco (em vez de por linha), para deixar claro onde termina um motorista
+    // e começa o próximo — evita que os registros fiquem "grudados".
+    let __grupoAnterior;
+    let __grupoIdx = -1;
+    const pontosComGrupo = pontosFiltrados.map(p => {
+        const chave = p.motorista_id || '—';
+        const novoGrupo = chave !== __grupoAnterior;
+        if (novoGrupo) __grupoIdx++;
+        __grupoAnterior = chave;
+        return { ...p, __novoGrupo: novoGrupo, __grupoIdx };
+    });
+
     const handleDelete = async (id) => {
         const ok = await confirm({ title: 'Excluir ponto de parada?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
         if (!ok) return;
@@ -7249,13 +7365,21 @@ function TabPontosParada({ isAdmin }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {pontosFiltrados.map((p, idx) => (
+                                {pontosComGrupo.map((p, idx) => (
                                     <React.Fragment key={p.id}>
+                                    {p.__novoGrupo && idx > 0 && (
+                                        <tr aria-hidden="true">
+                                            <td colSpan={11} style={{ padding: 0, height: 10, backgroundColor: 'var(--color-background)', borderBottom: '2px solid #1D4ED8' }} />
+                                        </tr>
+                                    )}
                                     <tr
-                                        className="border-t transition-colors hover:bg-blue-50/30"
-                                        style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                        className="transition-colors hover:bg-blue-50/30"
+                                        style={{
+                                            borderTop: p.__novoGrupo && idx === 0 ? 'none' : '1px solid var(--color-border)',
+                                            backgroundColor: p.__grupoIdx % 2 === 0 ? 'white' : '#F3F6FB',
+                                        }}>
                                         <td className="px-3 py-2.5">
-                                            <span className="font-medium text-xs" style={{ color: 'var(--color-text-primary)' }}>
+                                            <span className="font-semibold text-xs" style={{ color: '#1D4ED8' }}>
                                                 {motoristas.find(m => m.id === p.motorista_id)?.name || '—'}
                                             </span>
                                             {p.veiculo?.placa && (
