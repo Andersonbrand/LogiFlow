@@ -6,6 +6,7 @@ import { EditButton, DeleteButton, ActionButtonsGroup } from 'components/ActionB
 import { useToast } from 'utils/useToast';
 import { useConfirm } from 'components/ui/ConfirmDialog';
 import { fetchVeiculosProprios, fetchMotoristasProprios } from 'utils/carretasService';
+import { fetchCaminhoesPlacas } from 'utils/vehicleService';
 import SearchableSelect from 'components/ui/SearchableSelect';
 import {
     fetchCatalogoPneus, addItemCatalogoPneus, updateItemCatalogoPneus, deleteItemCatalogoPneus, fetchCatalogoPneusRaw,
@@ -244,6 +245,7 @@ export default function TabPneus({ isAdmin }) {
     const [compras, setCompras] = useState([]);
     const [despesasPneus, setDespesasPneus] = useState([]);
     const [veiculos, setVeiculos] = useState([]);
+    const [caminhoes, setCaminhoes] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
     const [catalogo, setCatalogo] = useState({ marca: [], modelo: [], medida: [], eixo: [] });
     const [loading, setLoading] = useState(true);
@@ -251,11 +253,11 @@ export default function TabPneus({ isAdmin }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [p, c, d, v, m, cat] = await Promise.all([
+            const [p, c, d, v, ca, m, cat] = await Promise.all([
                 fetchPneus(), fetchComprasPneus(), fetchDespesasAdmPneus(),
-                fetchVeiculosProprios(), fetchMotoristasProprios(), fetchCatalogoPneus(),
+                fetchVeiculosProprios(), fetchCaminhoesPlacas(), fetchMotoristasProprios(), fetchCatalogoPneus(),
             ]);
-            setPneus(p); setCompras(c); setDespesasPneus(d); setVeiculos(v); setMotoristas(m); setCatalogo(cat);
+            setPneus(p); setCompras(c); setDespesasPneus(d); setVeiculos(v); setCaminhoes(ca); setMotoristas(m); setCatalogo(cat);
         } catch (e) { showToast('Erro ao carregar pneus: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [showToast]);
@@ -299,7 +301,7 @@ export default function TabPneus({ isAdmin }) {
                     <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
                 </div>
             ) : subAba === 'pneus' ? (
-                <PainelPneus {...{ pneus, compras, veiculos, motoristas, catalogo, isAdmin, showToast, confirm, load, handleAddCatalogo }} />
+                <PainelPneus {...{ pneus, compras, veiculos, caminhoes, motoristas, catalogo, isAdmin, showToast, confirm, load, handleAddCatalogo }} />
             ) : subAba === 'compras' ? (
                 <PainelCompras {...{ compras, despesasPneus, catalogo, isAdmin, showToast, confirm, load, handleAddCatalogo, pneus }} />
             ) : (
@@ -313,7 +315,7 @@ export default function TabPneus({ isAdmin }) {
 }
 
 // ─── Painel: Lista/cadastro de pneus ───────────────────────────────────────
-function PainelPneus({ pneus, compras, veiculos, motoristas, catalogo, isAdmin, showToast, confirm, load, handleAddCatalogo }) {
+function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo, isAdmin, showToast, confirm, load, handleAddCatalogo }) {
     const [busca, setBusca] = useState('');
     const [filtroStatus, setFiltroStatus] = useState('todos'); // todos | em_uso | substituido
     const [modal, setModal] = useState(null); // { mode: 'create'|'edit', pneu }
@@ -330,6 +332,13 @@ function PainelPneus({ pneus, compras, veiculos, motoristas, catalogo, isAdmin, 
 
     const comprasComSaldo = useMemo(() => compras.map(c => ({ ...c, saldo: saldoCompra(c, pneus) })), [compras, pneus]);
 
+    // Lista combinada de veículos (carretas + caminhões da página Veículos) para
+    // o campo "Veículo" do formulário — usa prefixo cv:/vh: para diferenciar.
+    const veiculoOptions = useMemo(() => ([
+        ...veiculos.map(v => ({ value: `cv:${v.id}`, label: v.placa, sublabel: v.modelo ? `${v.modelo} · Carreta` : 'Carreta' })),
+        ...caminhoes.map(v => ({ value: `vh:${v.id}`, label: v.placa, sublabel: v.modelo ? `${v.modelo} · Caminhão` : 'Caminhão' })),
+    ]), [veiculos, caminhoes]);
+
     const filtrados = pneus.filter(p => {
         if (filtroStatus !== 'todos' && p.status !== filtroStatus) return false;
         if (busca.trim()) {
@@ -338,6 +347,7 @@ function PainelPneus({ pneus, compras, veiculos, motoristas, catalogo, isAdmin, 
                 (p.marca || '').toLowerCase().includes(q) ||
                 (p.modelo || '').toLowerCase().includes(q) ||
                 (p.veiculo?.placa || '').toLowerCase().includes(q) ||
+                (p.veiculo_caminhao_placa || '').toLowerCase().includes(q) ||
                 (p.motorista?.name || '').toLowerCase().includes(q)
             );
         }
@@ -349,7 +359,8 @@ function PainelPneus({ pneus, compras, veiculos, motoristas, catalogo, isAdmin, 
         setForm({
             marca: p.marca || '', modelo: p.modelo || '', medida: p.medida || '',
             categoria_bandagem: p.categoria_bandagem || 'mista',
-            veiculo_id: p.veiculo_id || '', motorista_id: p.motorista_id || '',
+            veiculo_id: p.veiculo_id ? `cv:${p.veiculo_id}` : (p.veiculo_caminhao_id ? `vh:${p.veiculo_caminhao_id}` : ''),
+            motorista_id: p.motorista_id || '',
             eixo_trocado: p.eixo_trocado || '',
             km_atual: p.km_atual ?? '', km_final: p.km_final ?? '',
             data_instalacao: p.data_instalacao || '', data_substituicao: p.data_substituicao || '',
@@ -363,10 +374,16 @@ function PainelPneus({ pneus, compras, veiculos, motoristas, catalogo, isAdmin, 
         if (!form.veiculo_id) { showToast('Selecione o veículo.', 'error'); return; }
         setSaving(true);
         try {
+            const [tipo, id] = form.veiculo_id.split(':');
+            const caminhaoSel = tipo === 'vh' ? caminhoes.find(c => String(c.id) === id) : null;
             const payload = {
                 marca: form.marca, modelo: form.modelo || null, medida: form.medida || null,
                 categoria_bandagem: form.categoria_bandagem || null,
-                veiculo_id: form.veiculo_id, motorista_id: form.motorista_id || null,
+                veiculo_id: tipo === 'cv' ? id : null,
+                veiculo_caminhao_id: tipo === 'vh' ? id : null,
+                veiculo_caminhao_placa: caminhaoSel?.placa || null,
+                veiculo_caminhao_modelo: caminhaoSel?.modelo || null,
+                motorista_id: form.motorista_id || null,
                 eixo_trocado: form.eixo_trocado || null,
                 km_atual: form.km_atual !== '' ? Number(form.km_atual) : null,
                 km_final: form.km_final !== '' ? Number(form.km_final) : null,
@@ -447,7 +464,7 @@ function PainelPneus({ pneus, compras, veiculos, motoristas, catalogo, isAdmin, 
                                     return (
                                         <tr key={p.id} className="border-t hover:bg-blue-50/30 transition-colors"
                                             style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                                            <td className="px-3 py-2.5 font-semibold whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{p.veiculo?.placa || '—'}</td>
+                                            <td className="px-3 py-2.5 font-semibold whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{p.veiculo?.placa || p.veiculo_caminhao_placa || '—'}</td>
                                             <td className="px-3 py-2.5 whitespace-nowrap">{p.motorista?.name || '—'}</td>
                                             <td className="px-3 py-2.5 whitespace-nowrap">{p.marca}{p.modelo ? ` — ${p.modelo}` : ''}</td>
                                             <td className="px-3 py-2.5 font-data">{p.medida || '—'}</td>
@@ -532,7 +549,7 @@ function PainelPneus({ pneus, compras, veiculos, motoristas, catalogo, isAdmin, 
                                     <SearchableSelect
                                         value={form.veiculo_id}
                                         onChange={v => setForm(f => ({ ...f, veiculo_id: v }))}
-                                        options={veiculos.map(v => ({ value: v.id, label: v.placa, sublabel: v.modelo }))}
+                                        options={veiculoOptions}
                                         placeholder="Selecione..." emptyLabel="Nenhum veículo da frota própria encontrado" />
                                 </Field>
                                 <Field label="Motorista">

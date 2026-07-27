@@ -199,6 +199,10 @@ export async function fetchAbastecimentos(filters = {}) {
     if (filters.veiculoId)   q = q.eq('veiculo_id', filters.veiculoId);
     if (filters.dataInicio)  q = q.gte('data_abastecimento', filters.dataInicio);
     if (filters.dataFim)     q = q.lte('data_abastecimento', filters.dataFim);
+    // Módulo Carretas: abastecimentos de caminhões (lançados pela tela do motorista
+    // de caminhão, com veiculo_caminhao_id preenchido) já são contabilizados na DRE
+    // de Caminhões — nunca devem entrar nas listagens/relatórios de Carretas.
+    if (filters.apenasCarretas) q = q.is('veiculo_caminhao_id', null);
 
     const { data, error } = await q;
     if (error) throw error;

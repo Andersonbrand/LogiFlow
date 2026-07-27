@@ -714,8 +714,16 @@ function TabAbastecimentos({ isAdmin, profile }) {
             } else if (filtro.dia) {
                 f.dataInicio = filtro.dia; f.dataFim = filtro.dia;
             } else if (filtro.mes) { f.dataInicio = filtro.mes + '-01'; f.dataFim = filtro.mes + '-' + String(new Date(Number(filtro.mes.split('-')[0]), Number(filtro.mes.split('-')[1]), 0).getDate()).padStart(2,'0'); }
-            const [a, v, m, p] = await Promise.all([fetchAbastecimentos(f), fetchCarretasVeiculos(), fetchCarreteirosPropriosOnly(), fetchPostos().catch(() => [])]);
-            setAbast(a); setVeiculos(v); setMotoristas(m); setPostos(p);
+            const [a, v, m, p, camPlacas] = await Promise.all([fetchAbastecimentos({ ...f, apenasCarretas: true }), fetchCarretasVeiculos(), fetchCarreteirosPropriosOnly(), fetchPostos().catch(() => []), fetchCaminhoesPlacas().catch(() => [])]);
+            // Segunda camada de proteção: além de excluir pelo campo veiculo_caminhao_id,
+            // remove qualquer registro cuja placa também exista no cadastro de caminhões
+            // (página Veículos) — cobre casos legados sem o vínculo explícito.
+            const placasCaminhao = new Set((camPlacas || []).map(c => (c.placa || '').toUpperCase().trim()));
+            const aSoCarretas = (a || []).filter(r => {
+                const placa = (r.veiculo?.placa || r.veiculo_caminhao_placa || '').toUpperCase().trim();
+                return !placa || !placasCaminhao.has(placa);
+            });
+            setAbast(aSoCarretas); setVeiculos(v); setMotoristas(m); setPostos(p);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtro, periodoPreset, periodo]); // eslint-disable-line
@@ -1932,6 +1940,8 @@ function TabBonificacoes({ isAdmin }) {
         try { sessionStorage.setItem('carretas_bonif_filtroMes', v); } catch {}
     };
     const [filtroDia,       setFiltroDia]       = useState('');
+    const [periodoCustom, setPeriodoCustom] = useState({ inicio: '', fim: '' }); // tem prioridade sobre dia/mês
+    const [usarPeriodo, setUsarPeriodo] = useState(false);
     const [loading,  setLoading]  = useState(true);
     const [subTab,   setSubTab]   = useState('viagens'); // 'viagens' | 'extras'
     const [modalExtra, setModalExtra] = useState(null);  // null | {mode, data?}
@@ -1943,7 +1953,9 @@ function TabBonificacoes({ isAdmin }) {
         try {
             const f = {};
             if (filtroMotorista) f.motorista_id = filtroMotorista;
-            if (filtroDia) {
+            if (usarPeriodo && periodoCustom.inicio && periodoCustom.fim) {
+                f.dataInicio = periodoCustom.inicio; f.dataFim = periodoCustom.fim;
+            } else if (filtroDia) {
                 f.dataInicio = filtroDia; f.dataFim = filtroDia;
             } else if (filtroMes) {
                 f.dataInicio = filtroMes + '-01';
@@ -1951,7 +1963,7 @@ function TabBonificacoes({ isAdmin }) {
             }
             const fCarr = {};
             if (filtroMotorista) fCarr.motoristaId = filtroMotorista;
-            if (filtroDia || filtroMes) { fCarr.dataInicio = f.dataInicio; fCarr.dataFim = f.dataFim; }
+            if (filtroDia || filtroMes || (usarPeriodo && periodoCustom.inicio && periodoCustom.fim)) { fCarr.dataInicio = f.dataInicio; fCarr.dataFim = f.dataFim; }
             fCarr.is_terceiro = false; // Carregamentos de terceiros NUNCA entram no cálculo de bônus
 
             const [c, e, m] = await Promise.all([
@@ -1962,7 +1974,7 @@ function TabBonificacoes({ isAdmin }) {
             setCarregamentos(c); setExtras(e); setMotoristas(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filtroMotorista, filtroMes, filtroDia]); // eslint-disable-line
+    }, [filtroMotorista, filtroMes, filtroDia, usarPeriodo, periodoCustom]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
     // ── Cálculos ─────────────────────────────────────────────────────────────────
@@ -2089,12 +2101,28 @@ function TabBonificacoes({ isAdmin }) {
                         <option value="">Todos motoristas</option>
                         {carreteiros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                     </select>
-                    <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltroDia(''); }}
+                    <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltroDia(''); setUsarPeriodo(false); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
-                    <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); handleSetFiltroMes(''); }}
+                    <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); handleSetFiltroMes(''); setUsarPeriodo(false); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
-                    {(filtroMes || filtroDia) && (
-                        <button onClick={() => { handleSetFiltroMes(''); setFiltroDia(''); }}
+                    <button type="button" onClick={() => setUsarPeriodo(v => !v)}
+                        className="px-2.5 py-2 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap"
+                        style={usarPeriodo
+                            ? { backgroundColor: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE' }
+                            : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                        {usarPeriodo ? '✓ Período ativo' : 'Usar período'}
+                    </button>
+                    {usarPeriodo && (
+                        <>
+                            <input type="date" value={periodoCustom.inicio} onChange={e => setPeriodoCustom(p => ({ ...p, inicio: e.target.value }))}
+                                className="px-2.5 py-2 rounded-lg border text-sm" style={inputStyle} title="Data inicial" />
+                            <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>até</span>
+                            <input type="date" value={periodoCustom.fim} onChange={e => setPeriodoCustom(p => ({ ...p, fim: e.target.value }))}
+                                className="px-2.5 py-2 rounded-lg border text-sm" style={inputStyle} title="Data final" />
+                        </>
+                    )}
+                    {(filtroMes || filtroDia || usarPeriodo) && (
+                        <button onClick={() => { handleSetFiltroMes(''); setFiltroDia(''); setUsarPeriodo(false); setPeriodoCustom({ inicio: '', fim: '' }); }}
                             className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
@@ -4641,16 +4669,22 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const filtrosDiarias = { dataInicio, dataFim };
             if (idsCarretas.length > 0) filtrosDiarias.motoristasIds = idsCarretas;
 
-            const [carregamentos, abastecimentos, viagens, despesasExtras, diariasLancadas, romaneiosCarga, bonificacoesExtras, dadosMargem] = await Promise.all([
+            const [carregamentos, abastecimentosRaw, viagens, despesasExtras, diariasLancadas, romaneiosCarga, bonificacoesExtras, dadosMargem, camPlacasDre] = await Promise.all([
                 fetchCarregamentos(filtros),
-                fetchAbastecimentos({ dataInicio, dataFim }),
+                fetchAbastecimentos({ dataInicio, dataFim, apenasCarretas: true }),
                 fetchViagens({ dataInicio, dataFim }),
                 fetchDespesasExtras({}),
                 fetchDiarias(filtrosDiarias),
                 fetchRomaneios({ dataInicio, dataFim }),
                 fetchBonificacoesExtras({ dataInicio, dataFim }),
                 fetchDadosMargemFrete('carreta').catch(() => null),
+                fetchCaminhoesPlacas().catch(() => []),
             ]);
+            const placasCaminhaoDre = new Set((camPlacasDre || []).map(c => (c.placa || '').toUpperCase().trim()));
+            const abastecimentos = (abastecimentosRaw || []).filter(r => {
+                const placa = (r.veiculo?.placa || r.veiculo_caminhao_placa || '').toUpperCase().trim();
+                return !placa || !placasCaminhaoDre.has(placa);
+            });
 
             // ── Receitas (fretes de carregamentos) ────────────────────────
             const receitaCarregamentos = carregamentos.reduce((s, c) => s + Number(c.valor_frete_calculado || 0), 0);

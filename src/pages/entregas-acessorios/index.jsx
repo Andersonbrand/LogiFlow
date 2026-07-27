@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -87,13 +88,39 @@ const FORM_VAZIO = { motorista_id: '', placa: '', item: '', quantidade: '1', dat
 function SearchSelect({ value, onChange, options, placeholder = 'Selecione...', freeText = false, emptyLabel = 'Nenhum resultado', allowClear = false, clearLabel = 'Todos' }) {
     const [open, setOpen] = useState(false);
     const [q, setQ] = useState('');
+    const [coords, setCoords] = useState(null);
     const ref = useRef();
+    const inputRef = useRef();
+    const panelRef = useRef();
+
+    const updateCoords = useCallback(() => {
+        if (!inputRef.current) return;
+        const r = inputRef.current.getBoundingClientRect();
+        setCoords({ top: r.bottom + 4, left: r.left, width: r.width });
+    }, []);
 
     useEffect(() => {
-        const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        const handler = e => {
+            if (ref.current && ref.current.contains(e.target)) return;
+            if (panelRef.current && panelRef.current.contains(e.target)) return;
+            setOpen(false);
+        };
         document.addEventListener('mousedown', handler);
         return () => document.removeEventListener('mousedown', handler);
     }, []);
+
+    useEffect(() => {
+        if (!open) return;
+        updateCoords();
+        // Captura scroll de qualquer ancestral (inclusive o corpo do modal) para
+        // manter o painel colado no campo, já que ele é renderizado via portal.
+        window.addEventListener('scroll', updateCoords, true);
+        window.addEventListener('resize', updateCoords);
+        return () => {
+            window.removeEventListener('scroll', updateCoords, true);
+            window.removeEventListener('resize', updateCoords);
+        };
+    }, [open, updateCoords]);
 
     const selected = options.find(o => o.value === value);
     const displayValue = open ? q : (selected?.label || (freeText ? value : ''));
@@ -103,10 +130,10 @@ function SearchSelect({ value, onChange, options, placeholder = 'Selecione...', 
         <div ref={ref} className="relative">
             <div className="relative">
                 <input
+                    ref={inputRef}
                     value={displayValue}
-                    readOnly={!freeText}
                     onChange={e => { setQ(e.target.value); setOpen(true); if (freeText) onChange(e.target.value); }}
-                    onFocus={() => { setOpen(true); setQ(''); }}
+                    onFocus={() => setOpen(true) || setQ('')}
                     placeholder={placeholder}
                     className={inputCls + ' pr-8 cursor-pointer'}
                     style={inputStyle}
@@ -114,8 +141,9 @@ function SearchSelect({ value, onChange, options, placeholder = 'Selecione...', 
                 <Icon name="ChevronDown" size={14} color="var(--color-muted-foreground)"
                     style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
             </div>
-            {open && (
-                <div className="absolute z-50 w-full mt-1 bg-white rounded-xl border shadow-lg overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+            {open && coords && createPortal(
+                <div ref={panelRef} className="fixed z-[300] bg-white rounded-xl border shadow-lg overflow-hidden"
+                    style={{ borderColor: 'var(--color-border)', top: coords.top, left: coords.left, width: coords.width }}>
                     <div className="max-h-52 overflow-y-auto">
                         {allowClear && (
                             <button type="button" onClick={() => { onChange(''); setQ(''); setOpen(false); }}
@@ -135,7 +163,8 @@ function SearchSelect({ value, onChange, options, placeholder = 'Selecione...', 
                             </button>
                         ))}
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );
@@ -366,12 +395,12 @@ export default function EntregasAcessorios() {
                         </div>
                         <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                             <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Item mais distribuído</p>
-                            <p className="text-base font-bold truncate" style={{ color: '#1D4ED8' }}>{resumo.itemTop ? resumo.itemTop[0] : '—'}</p>
+                            <p className="text-base font-bold break-words" style={{ color: '#1D4ED8' }}>{resumo.itemTop ? resumo.itemTop[0] : '—'}</p>
                             {resumo.itemTop && <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{resumo.itemTop[1]} unidade(s)</p>}
                         </div>
                         <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                             <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Motorista com mais retiradas</p>
-                            <p className="text-base font-bold truncate" style={{ color: '#059669' }}>{resumo.motoristaTop ? resumo.motoristaTop.nome : '—'}</p>
+                            <p className="text-base font-bold break-words" style={{ color: '#059669' }}>{resumo.motoristaTop ? resumo.motoristaTop.nome : '—'}</p>
                             {resumo.motoristaTop && <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{resumo.motoristaTop.quantidade} item(ns) · {resumo.motoristaTop.entregas} entrega(s)</p>}
                         </div>
                     </div>

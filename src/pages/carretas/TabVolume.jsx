@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Icon from 'components/AppIcon';
-import { EditButton, DeleteButton, ActionButtonsGroup } from 'components/ActionButtons';
+import { EditButton, DeleteButton, ActionButtonsGroup, ACTION_ICON_SIZE } from 'components/ActionButtons';
 import Button from 'components/ui/Button';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
@@ -1732,7 +1732,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                     <table className="w-full text-sm min-w-[900px]">
                         <thead className="text-xs border-b" style={{ background: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}>
                             <tr>
-                                {['Data', 'Motorista', 'Placa', 'Tipo', 'Empresa', 'Fornecedor/Origem', 'Destino', 'Pedido', 'NF', 'Qtd (sacos)', 'Frete', 'Pagamento', ''].map(h => (
+                                {['Data', 'Motorista', 'Placa', 'Tipo', 'Empresa', 'Fornecedor/Origem', 'Destino', 'Pedido', 'NF', 'Qtd (sacos)', 'Frete', 'Pagamento'].map(h => (
                                     <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
@@ -1756,27 +1756,24 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                                         <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap" style={{ color: '#D97706' }}>{(Number(r.quantidade)||0).toLocaleString('pt-BR')}</td>
                                         <td className="px-3 py-2.5 font-mono font-semibold whitespace-nowrap" style={{ color: '#059669' }}>{frete > 0 ? BRL(frete) : '—'}</td>
                                         <td className="px-3 py-2.5">
-                                            <div className="flex items-center gap-1.5">
-                                                <span className={`px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${r.frete_pago ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                    {r.frete_pago ? 'Pago' : 'Pendente'}
-                                                </span>
-                                                {isAdmin && (
-                                                    <button onClick={() => onTogglePago?.(r)}
-                                                        title={r.frete_pago ? 'Desfazer pagamento' : 'Marcar frete como pago'}
-                                                        className="p-1.5 rounded hover:bg-green-50 transition-colors flex-shrink-0">
-                                                        <Icon name="CheckCircle2" size={16} color={r.frete_pago ? '#059669' : '#9CA3AF'} />
+                                            <ActionButtonsGroup>
+                                                {isAdmin ? (
+                                                    <button type="button" onClick={() => onTogglePago?.(r)}
+                                                        title={r.frete_pago ? 'Pago — clique para desfazer' : 'Pendente — clique para marcar como pago'}
+                                                        className="p-1.5 rounded-lg hover:bg-green-100 transition-colors flex-shrink-0">
+                                                        <Icon name="CheckCircle2" size={ACTION_ICON_SIZE} color={r.frete_pago ? '#059669' : '#9CA3AF'} className="flex-shrink-0" />
                                                     </button>
+                                                ) : (
+                                                    <Icon name="CheckCircle2" size={ACTION_ICON_SIZE} color={r.frete_pago ? '#059669' : '#9CA3AF'} />
                                                 )}
-                                            </div>
+                                                {isAdmin && (
+                                                    <>
+                                                        <EditButton onClick={() => onEdit(r)} />
+                                                        <DeleteButton onClick={() => onDelete(r.id)} />
+                                                    </>
+                                                )}
+                                            </ActionButtonsGroup>
                                         </td>
-                                        {isAdmin && (
-                                            <td className="px-3 py-2.5">
-                                                <ActionButtonsGroup>
-                                                    <EditButton onClick={() => onEdit(r)} />
-                                                    <DeleteButton onClick={() => onDelete(r.id)} />
-                                                </ActionButtonsGroup>
-                                            </td>
-                                        )}
                                     </tr>
                                 );
                             })}
