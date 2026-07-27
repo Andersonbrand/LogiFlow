@@ -99,6 +99,9 @@ export default function CarreteiroDashboard() {
     const { bonusConfig } = useBonusConfig();
     const [tab, setTab]           = useState('viagens');
     const [period, setPeriod]     = useState(30);
+    // Período personalizado (usado na aba Bonificações) — quando preenchido,
+    // sobrepõe o filtro de "últimos N dias" acima.
+    const [periodoCustom, setPeriodoCustom] = useState(null); // { inicio: 'YYYY-MM-DD', fim: 'YYYY-MM-DD' } | null
     const [viagens, setViagens]   = useState([]);
     const [carregamentos, setCarregamentos] = useState([]);
     const [romaneiosPrincipais, setRomaneiosPrincipais] = useState([]);
@@ -136,6 +139,7 @@ export default function CarreteiroDashboard() {
     const [formPonto, setFormPonto] = useState({
         tipo_local: 'Fábrica', local: '', veiculo_id: '',
         data_saida: new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '',
+        tipo_local_chegada: 'Fábrica', local_chegada: '',
         data_chegada: '', horario_chegada: '', km_chegada: '',
         cupom_fiscal: '', observacoes: '',
         horarios_extras: [],
@@ -189,12 +193,19 @@ export default function CarreteiroDashboard() {
         if (!user?.id) return;
         setLoading(true);
         try {
-            const cut = new Date();
-            cut.setDate(cut.getDate() - period);
-            const dateStr = cut.toISOString().split('T')[0];
+            let dateStr, dateFimStr = null;
+            if (periodoCustom?.inicio && periodoCustom?.fim) {
+                dateStr = periodoCustom.inicio;
+                dateFimStr = periodoCustom.fim;
+            } else {
+                const cut = new Date();
+                cut.setDate(cut.getDate() - period);
+                dateStr = cut.toISOString().split('T')[0];
+            }
+            const fimParam = dateFimStr ? { dataFim: dateFimStr } : {};
             const [v, a, c, ve, cfg, p, emps, cidades, fabricas, outros] = await Promise.all([
-                fetchViagens({ motoristaId: user.id, dataInicio: dateStr }),
-                fetchAbastecimentos({ motoristaId: user.id, dataInicio: dateStr }),
+                fetchViagens({ motoristaId: user.id, dataInicio: dateStr, ...fimParam }),
+                fetchAbastecimentos({ motoristaId: user.id, dataInicio: dateStr, ...fimParam }),
                 fetchChecklists({ motoristaId: user.id }),
                 fetchVeiculosProprios(),
                 fetchConfigAbastecimento(),
@@ -215,8 +226,8 @@ export default function CarreteiroDashboard() {
             // Carregamentos do motorista (nova fonte de dados para viagens e bônus)
             try {
                 const [carreg, extras] = await Promise.all([
-                    fetchCarregamentos({ motoristaId: user.id, dataInicio: dateStr, is_terceiro: false }),
-                    fetchBonificacoesExtras({ motorista_id: user.id, dataInicio: dateStr }),
+                    fetchCarregamentos({ motoristaId: user.id, dataInicio: dateStr, ...fimParam, is_terceiro: false }),
+                    fetchBonificacoesExtras({ motorista_id: user.id, dataInicio: dateStr, ...fimParam }),
                 ]);
                 setCarregamentos(carreg || []);
                 setBonusExtras(extras || []);
@@ -226,7 +237,7 @@ export default function CarreteiroDashboard() {
             try {
                 // Tenta pelo serviço primeiro
                 const roms = await fetchRomaneiosPorMotorista(user.id, profile?.name);
-                setRomaneiosPrincipais(roms || []);
+                setRomaneiosPrincipais(dateFimStr ? (roms || []).filter(r => (r.created_at || r.saida || '') <= dateFimStr + 'T23:59:59') : (roms || []));
             } catch (eRom) {
                 console.warn('[Carreteiro] fetchRomaneiosPorMotorista falhou, tentando query direta:', eRom?.message);
                 // Fallback: query direta ao supabase
@@ -237,11 +248,13 @@ export default function CarreteiroDashboard() {
                     if (profile?.name) partes.push('motorista.ilike."' + profile.name + '"');
                     if (partes.length === 0) { setRomaneiosPrincipais([]); }
                     else {
-                        const { data: romsDir, error: errDir } = await supabase
+                        let romQuery = supabase
                             .from('romaneios')
-                            .select('id, numero, motorista, motorista_id, placa, destino, status, saida, valor_frete, valor_frete_calculado, romaneio_pedidos(id, numero_pedido)')
+                            .select('id, numero, motorista, motorista_id, placa, destino, status, saida, valor_frete, valor_frete_calculado, created_at, romaneio_pedidos(id, numero_pedido)')
                             .or(partes.join(','))
-                            .order('created_at', { ascending: false });
+                            .gte('created_at', dateStr);
+                        if (dateFimStr) romQuery = romQuery.lte('created_at', dateFimStr + 'T23:59:59');
+                        const { data: romsDir, error: errDir } = await romQuery.order('created_at', { ascending: false });
                         if (errDir) { console.error('[Carreteiro] Query direta erro:', errDir); setRomaneiosPrincipais([]); }
                         else { console.log('[Carreteiro] Romaneios OK:', romsDir?.length); setRomaneiosPrincipais(romsDir || []); }
                     }
@@ -282,7 +295,7 @@ export default function CarreteiroDashboard() {
             } catch { setRomaneiosCarreteiro([]); setRomaneiosFerragem([]); }
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [user?.id, period, profile?.name]); // eslint-disable-line
+    }, [user?.id, period, periodoCustom, profile?.name]); // eslint-disable-line
 
     useEffect(() => {
         load();
@@ -569,7 +582,7 @@ export default function CarreteiroDashboard() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-xl mx-auto">
+                <div className="max-w-[1920px] mx-auto">
                     <div className="flex">
 
                         {/* ── Sidebar desktop (lg+) ──────────────────────── */}
@@ -1054,6 +1067,7 @@ export default function CarreteiroDashboard() {
                                                         tipo_local: 'Fábrica', local: '', veiculo_id: '',
                                                         data_saida: new Date().toISOString().split('T')[0],
                                                         horario_saida: '', km_saida: '',
+                                                        tipo_local_chegada: 'Fábrica', local_chegada: '',
                                                         data_chegada: '', horario_chegada: '', km_chegada: '',
                                                         cupom_fiscal: '', observacoes: '',
                                                         horarios_extras: [],
@@ -1082,7 +1096,7 @@ export default function CarreteiroDashboard() {
                                                         <table className="w-full text-xs" style={{ minWidth: 700 }}>
                                                             <thead>
                                                                 <tr style={{ backgroundColor: '#1D4ED8' }}>
-                                                                    {['KM/Destino','Data Saída','Hor. Saída','KM Saída','Data Chegada','Hor. Chegada','KM Chegada','Cupom','Obs.',''].map(h => (
+                                                                    {['Saída','Data Saída','Hor. Saída','KM Saída','Chegada','Data Chegada','Hor. Chegada','KM Chegada','Cupom','Obs.',''].map(h => (
                                                                         <th key={h} className="px-3 py-2.5 text-left font-semibold text-white whitespace-nowrap">{h}</th>
                                                                     ))}
                                                                 </tr>
@@ -1125,6 +1139,17 @@ export default function CarreteiroDashboard() {
                                                                             <td className="px-3 py-2.5 font-data text-right" style={{ color: '#1D4ED8' }}>
                                                                                 {p.km_saida != null ? Number(p.km_saida).toLocaleString('pt-BR') : '—'}
                                                                             </td>
+                                                                            <td className="px-3 py-2.5">
+                                                                                {p.local_chegada ? (
+                                                                                    <div>
+                                                                                        <p className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{p.local_chegada}</p>
+                                                                                        <span className="inline-block px-1.5 py-0.5 rounded text-xs font-medium mt-0.5"
+                                                                                            style={{ backgroundColor: TIPO_COLOR[p.tipo_local_chegada] || '#F3F4F6', color: TIPO_TEXT[p.tipo_local_chegada] || '#6B7280' }}>
+                                                                                            {p.tipo_local_chegada}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                ) : '—'}
+                                                                            </td>
                                                                             <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
                                                                                 {p.data_chegada ? FMT_DATE(p.data_chegada) : '—'}
                                                                             </td>
@@ -1150,6 +1175,7 @@ export default function CarreteiroDashboard() {
                                                                                             veiculo_id: p.veiculo_id || '',
                                                                                             data_saida: p.data_saida || '',
                                                                                             horario_saida: p.horario_saida || '', km_saida: p.km_saida ?? '',
+                                                                                            tipo_local_chegada: p.tipo_local_chegada || 'Fábrica', local_chegada: p.local_chegada || '',
                                                                                             data_chegada: p.data_chegada || '',
                                                                                             horario_chegada: p.horario_chegada || '', km_chegada: p.km_chegada ?? '',
                                                                                             cupom_fiscal: p.cupom_fiscal || '', observacoes: p.observacoes || '',
@@ -1179,6 +1205,16 @@ export default function CarreteiroDashboard() {
                                                                                 <td className="px-3 py-1.5 font-data text-xs whitespace-nowrap" style={{ color: '#6D28D9' }}>{ex.data_saida ? FMT_DATE(ex.data_saida) : '—'}</td>
                                                                                 <td className="px-3 py-1.5 font-data text-xs" style={{ color: '#6D28D9' }}>{ex.horario_saida || '—'}</td>
                                                                                 <td className="px-3 py-1.5 font-data text-xs text-right" style={{ color: '#1D4ED8' }}>{ex.km_saida != null ? Number(ex.km_saida).toLocaleString('pt-BR') : '—'}</td>
+                                                                                <td className="px-3 py-1.5">
+                                                                                    {ex.local_chegada ? (
+                                                                                        <div>
+                                                                                            <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                                                                                {ex.local_chegada}
+                                                                                            </span>
+                                                                                            {ex.tipo_local_chegada && <span className="ml-1 text-xs" style={{ color: '#9CA3AF' }}>{ex.tipo_local_chegada}</span>}
+                                                                                        </div>
+                                                                                    ) : '—'}
+                                                                                </td>
                                                                                 <td className="px-3 py-1.5 font-data text-xs whitespace-nowrap" style={{ color: '#6D28D9' }}>{ex.data_chegada ? FMT_DATE(ex.data_chegada) : '—'}</td>
                                                                                 <td className="px-3 py-1.5 font-data text-xs" style={{ color: '#6D28D9' }}>{ex.horario_chegada || '—'}</td>
                                                                                 <td className="px-3 py-1.5 font-data text-xs text-right" style={{ color: '#059669' }}>{ex.km_chegada != null ? Number(ex.km_chegada).toLocaleString('pt-BR') : '—'}</td>
@@ -1201,6 +1237,41 @@ export default function CarreteiroDashboard() {
 
                                     {tab === 'bonificacoes' && (
                                         <div className="flex flex-col gap-4">
+                                            {/* Filtro de período personalizado */}
+                                            <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                                                    <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Filtrar por período específico</h3>
+                                                    {periodoCustom && (
+                                                        <button onClick={() => setPeriodoCustom(null)}
+                                                            className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--color-primary)' }}>
+                                                            <Icon name="X" size={12} /> Limpar filtro
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-end gap-2 flex-wrap">
+                                                    <div>
+                                                        <label className="block text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>De</label>
+                                                        <input type="date" value={periodoCustom?.inicio || ''}
+                                                            onChange={e => setPeriodoCustom(pc => ({ inicio: e.target.value, fim: pc?.fim || e.target.value }))}
+                                                            className="h-10 px-3 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Até</label>
+                                                        <input type="date" value={periodoCustom?.fim || ''}
+                                                            onChange={e => setPeriodoCustom(pc => ({ inicio: pc?.inicio || e.target.value, fim: e.target.value }))}
+                                                            className="h-10 px-3 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }} />
+                                                    </div>
+                                                    <Button size="sm" iconName="Search" disabled={!periodoCustom?.inicio || !periodoCustom?.fim} onClick={load}>
+                                                        Buscar viagens
+                                                    </Button>
+                                                </div>
+                                                {periodoCustom?.inicio && periodoCustom?.fim && (
+                                                    <p className="text-xs mt-2" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                        <Icon name="Info" size={11} className="inline mr-1" />
+                                                        Os cards abaixo mostram os valores de {new Date(periodoCustom.inicio + 'T00:00:00').toLocaleDateString('pt-BR')} até {new Date(periodoCustom.fim + 'T00:00:00').toLocaleDateString('pt-BR')}, em vez do filtro de "{PERIOD_OPTIONS.find(p=>p.days===period)?.label || period + ' dias'}" da barra lateral.
+                                                    </p>
+                                                )}
+                                            </div>
                                             {/* Resumo */}
                                             <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                 <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: 'var(--color-text-primary)' }}>Resumo do Período</h3>
@@ -2029,30 +2100,6 @@ export default function CarreteiroDashboard() {
                         </div>
 
                         <div className="p-5 space-y-4 overflow-y-auto flex-1">
-                            {/* Tipo e Local */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <Field label="Tipo de Local">
-                                    <select value={formPonto.tipo_local}
-                                        onChange={e => setFormPonto(f => ({ ...f, tipo_local: e.target.value, local: '' }))}
-                                        className={inputCls} style={inputStyle}>
-                                        {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
-                                            <option key={t} value={t}>{t}</option>
-                                        ))}
-                                    </select>
-                                </Field>
-                                <Field label="Destino / Local" required>
-                                    <select
-                                        value={formPonto.local}
-                                        onChange={e => setFormPonto(f => ({ ...f, local: e.target.value }))}
-                                        className={inputCls} style={inputStyle}>
-                                        <option value="">Selecione...</option>
-                                        {destinosParaTipo(formPonto.tipo_local).map(nome => (
-                                            <option key={nome} value={nome}>{nome}</option>
-                                        ))}
-                                    </select>
-                                </Field>
-                            </div>
-
                             <Field label="Cupom Fiscal / NF">
                                 <input
                                     value={formPonto.cupom_fiscal}
@@ -2071,12 +2118,34 @@ export default function CarreteiroDashboard() {
                                 </select>
                             </Field>
 
-                            {/* Bloco SAÍDA */}
+                            {/* Bloco SAÍDA — de onde o motorista está saindo */}
                             <div className="p-4 rounded-xl border space-y-3"
                                 style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
                                 <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#1D4ED8' }}>
                                     <Icon name="LogOut" size={14} color="#1D4ED8" />SAÍDA
                                 </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <Field label="Tipo de Local">
+                                        <select value={formPonto.tipo_local}
+                                            onChange={e => setFormPonto(f => ({ ...f, tipo_local: e.target.value, local: '' }))}
+                                            className={inputCls} style={inputStyle}>
+                                            {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
+                                                <option key={t} value={t}>{t}</option>
+                                            ))}
+                                        </select>
+                                    </Field>
+                                    <Field label="Destino / Local" required>
+                                        <select
+                                            value={formPonto.local}
+                                            onChange={e => setFormPonto(f => ({ ...f, local: e.target.value }))}
+                                            className={inputCls} style={inputStyle}>
+                                            <option value="">Selecione...</option>
+                                            {destinosParaTipo(formPonto.tipo_local).map(nome => (
+                                                <option key={nome} value={nome}>{nome}</option>
+                                            ))}
+                                        </select>
+                                    </Field>
+                                </div>
                                 <div className="grid grid-cols-3 gap-3">
                                     <Field label="Data" required>
                                         <input type="date" value={formPonto.data_saida}
@@ -2096,12 +2165,34 @@ export default function CarreteiroDashboard() {
                                 </div>
                             </div>
 
-                            {/* Bloco CHEGADA */}
+                            {/* Bloco CHEGADA — para onde o motorista está indo */}
                             <div className="p-4 rounded-xl border space-y-3"
                                 style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
                                 <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#065F46' }}>
                                     <Icon name="LogIn" size={14} color="#065F46" />CHEGADA
                                 </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <Field label="Tipo de Local">
+                                        <select value={formPonto.tipo_local_chegada}
+                                            onChange={e => setFormPonto(f => ({ ...f, tipo_local_chegada: e.target.value, local_chegada: '' }))}
+                                            className={inputCls} style={inputStyle}>
+                                            {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
+                                                <option key={t} value={t}>{t}</option>
+                                            ))}
+                                        </select>
+                                    </Field>
+                                    <Field label="Destino / Local">
+                                        <select
+                                            value={formPonto.local_chegada}
+                                            onChange={e => setFormPonto(f => ({ ...f, local_chegada: e.target.value }))}
+                                            className={inputCls} style={inputStyle}>
+                                            <option value="">Selecione...</option>
+                                            {destinosParaTipo(formPonto.tipo_local_chegada).map(nome => (
+                                                <option key={nome} value={nome}>{nome}</option>
+                                            ))}
+                                        </select>
+                                    </Field>
+                                </div>
                                 <div className="grid grid-cols-3 gap-3">
                                     <Field label="Data">
                                         <input type="date" value={formPonto.data_chegada}
@@ -2132,32 +2223,31 @@ export default function CarreteiroDashboard() {
                                         </button>
                                     </div>
                                     <div className="px-4 pb-3 space-y-3">
-                                        {/* Tipo e Local */}
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <Field label="Tipo de Local">
-                                                <select value={extra.tipo_local || 'Fábrica'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local: e.target.value, local: '' }; return { ...f, horarios_extras: h }; })}
-                                                    className={inputCls} style={inputStyle}>
-                                                    {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
-                                                        <option key={t} value={t}>{t}</option>
-                                                    ))}
-                                                </select>
-                                            </Field>
-                                            <Field label="Destino / Local" required>
-                                                <select value={extra.local || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], local: e.target.value }; return { ...f, horarios_extras: h }; })}
-                                                    className={inputCls} style={inputStyle}>
-                                                    <option value="">Selecione...</option>
-                                                    {destinosParaTipo(extra.tipo_local || 'Fábrica').map(nome => (
-                                                        <option key={nome} value={nome}>{nome}</option>
-                                                    ))}
-                                                </select>
-                                            </Field>
-                                        </div>
                                         <Field label="Cupom Fiscal / NF">
                                             <input value={extra.cupom_fiscal || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], cupom_fiscal: e.target.value }; return { ...f, horarios_extras: h }; })}
                                                 className={inputCls} style={inputStyle} placeholder="Nº do cupom fiscal / nota (opcional)" />
                                         </Field>
                                         <div className="p-3 rounded-lg border space-y-2" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
                                             <p className="text-xs font-bold flex items-center gap-1" style={{ color: '#1D4ED8' }}><Icon name="LogOut" size={12} color="#1D4ED8" />SAÍDA</p>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <Field label="Tipo de Local">
+                                                    <select value={extra.tipo_local || 'Fábrica'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local: e.target.value, local: '' }; return { ...f, horarios_extras: h }; })}
+                                                        className={inputCls} style={inputStyle}>
+                                                        {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
+                                                            <option key={t} value={t}>{t}</option>
+                                                        ))}
+                                                    </select>
+                                                </Field>
+                                                <Field label="Destino / Local" required>
+                                                    <select value={extra.local || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], local: e.target.value }; return { ...f, horarios_extras: h }; })}
+                                                        className={inputCls} style={inputStyle}>
+                                                        <option value="">Selecione...</option>
+                                                        {destinosParaTipo(extra.tipo_local || 'Fábrica').map(nome => (
+                                                            <option key={nome} value={nome}>{nome}</option>
+                                                        ))}
+                                                    </select>
+                                                </Field>
+                                            </div>
                                             <div className="grid grid-cols-3 gap-2">
                                                 <Field label="Data" required>
                                                     <input type="date" value={extra.data_saida || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], data_saida: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} />
@@ -2172,6 +2262,25 @@ export default function CarreteiroDashboard() {
                                         </div>
                                         <div className="p-3 rounded-lg border space-y-2" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
                                             <p className="text-xs font-bold flex items-center gap-1" style={{ color: '#065F46' }}><Icon name="LogIn" size={12} color="#065F46" />CHEGADA</p>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <Field label="Tipo de Local">
+                                                    <select value={extra.tipo_local_chegada || 'Fábrica'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local_chegada: e.target.value, local_chegada: '' }; return { ...f, horarios_extras: h }; })}
+                                                        className={inputCls} style={inputStyle}>
+                                                        {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
+                                                            <option key={t} value={t}>{t}</option>
+                                                        ))}
+                                                    </select>
+                                                </Field>
+                                                <Field label="Destino / Local">
+                                                    <select value={extra.local_chegada || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], local_chegada: e.target.value }; return { ...f, horarios_extras: h }; })}
+                                                        className={inputCls} style={inputStyle}>
+                                                        <option value="">Selecione...</option>
+                                                        {destinosParaTipo(extra.tipo_local_chegada || 'Fábrica').map(nome => (
+                                                            <option key={nome} value={nome}>{nome}</option>
+                                                        ))}
+                                                    </select>
+                                                </Field>
+                                            </div>
                                             <div className="grid grid-cols-3 gap-2">
                                                 <Field label="Data">
                                                     <input type="date" value={extra.data_chegada || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], data_chegada: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} />
@@ -2187,12 +2296,21 @@ export default function CarreteiroDashboard() {
                                     </div>
                                 </div>
                             ))}
-                            <button type="button" onClick={() => setFormPonto(f => ({ ...f, horarios_extras: [...(f.horarios_extras || []), { tipo_local: 'Fábrica', local: '', cupom_fiscal: '', data_saida: formPonto.data_saida || new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '', data_chegada: '', horario_chegada: '', km_chegada: '' }] }))}
-                                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed text-xs font-medium w-full justify-center hover:bg-purple-50 transition-colors"
-                                style={{ borderColor: '#C4B5FD', color: '#6D28D9' }}>
-                                <Icon name="Plus" size={14} color="#6D28D9" />
-                                Adicionar mais um registro de saída e chegada
-                            </button>
+                            {(formPonto.horarios_extras || []).length === 0 ? (
+                                <button type="button" onClick={() => setFormPonto(f => ({ ...f, horarios_extras: [...(f.horarios_extras || []), { tipo_local: 'Fábrica', local: '', cupom_fiscal: '', data_saida: formPonto.data_saida || new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '', data_chegada: '', horario_chegada: '', km_chegada: '' }] }))}
+                                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed text-xs font-medium w-full justify-center hover:bg-purple-50 transition-colors"
+                                    style={{ borderColor: '#C4B5FD', color: '#6D28D9' }}>
+                                    <Icon name="Plus" size={14} color="#6D28D9" />
+                                    Adicionar mais um registro de saída e chegada
+                                </button>
+                            ) : (
+                                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg" style={{ backgroundColor: '#FEF3C7', border: '1px solid #FDE68A' }}>
+                                    <Icon name="Info" size={14} color="#B45309" />
+                                    <p className="text-xs" style={{ color: '#92400E' }}>
+                                        Cada registro de parada permite no máximo um ponto principal e um ponto extra. Crie um novo registro de parada para adicionar outro ponto.
+                                    </p>
+                                </div>
+                            )}
 
                             {/* Observações */}
                             <div>
@@ -2212,6 +2330,9 @@ export default function CarreteiroDashboard() {
                             <Button onClick={async () => {
                                 if (!formPonto.local?.trim() || !formPonto.data_saida) {
                                     showToast('Local e data de saída são obrigatórios', 'error'); return;
+                                }
+                                if ((formPonto.horarios_extras || []).length > 1) {
+                                    showToast('Cada registro permite no máximo um ponto principal e um ponto extra. Crie um novo registro de parada.', 'error'); return;
                                 }
                                 const payload = {
                                     ...formPonto,

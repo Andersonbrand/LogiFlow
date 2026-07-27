@@ -19,6 +19,10 @@ import {
     revogarBoletoAdmTransporte,
     pagarParcelaCartaoAdmTransporte,
     revogarParcelaCartaoAdmTransporte,
+    fetchCategoriasDespesaAdm,
+    createCategoriaDespesaAdm,
+    renameCategoriaDespesaAdm,
+    deleteCategoriaDespesaAdm,
 } from 'utils/despesasAdmTransporteService';
 import {
     fetchFornecedores as fetchFornecedoresAdmTransporte,
@@ -567,9 +571,10 @@ function ModalFornecedoresAdmTransporte({ onClose, onSelect }) {
 }
 
 // ─── Modal de Formulário ──────────────────────────────────────────────────────
-function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
+function ModalDespesa({ modal, despesasExistentes = [], categorias, onCategoriasChange, onClose, onSaved }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
+    const { profile } = useAuth();
     const xmlRef = useRef(null);
     const comprovanteRef = useRef(null);
     const permutaRef = useRef(null);
@@ -579,18 +584,7 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
     const [barcodeBuffer, setBarcodeBuffer] = useState('');
     const [loadingNFe, setLoadingNFe] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [categorias, setCategorias] = useState(() => {
-        try {
-            const v2 = localStorage.getItem('adm_transporte_categorias_v2');
-            if (v2) return JSON.parse(v2);
-            const extras = JSON.parse(localStorage.getItem('adm_transporte_categorias_extras') || '[]');
-            return [...CATEGORIAS_DESPESA_ADM, ...extras];
-        } catch { return [...CATEGORIAS_DESPESA_ADM]; }
-    });
-    const salvarCategorias = (novas) => {
-        setCategorias(novas);
-        try { localStorage.setItem('adm_transporte_categorias_v2', JSON.stringify(novas)); } catch {}
-    };
+    const [savingCategoria, setSavingCategoria] = useState(false);
     const [novaCategoria, setNovaCategoria] = useState('');
     const [showNovaCategoria, setShowNovaCategoria] = useState(false);
     const [novoBoleto, setNovoBoleto] = useState({ numero_boleto: '', vencimento: '', valor: '' });
@@ -635,13 +629,20 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
 
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-    const adicionarCategoria = () => {
+    const adicionarCategoria = async () => {
         const cat = novaCategoria.trim();
-        if (!cat || todasCategorias.includes(cat)) { showToast(cat ? 'Categoria já existe' : 'Digite o nome', 'error'); return; }
-        salvarCategorias([...categorias, cat]);
-        set('categoria', cat);
-        setNovaCategoria(''); setShowNovaCategoria(false);
-        showToast(`Categoria "${cat}" criada!`, 'success');
+        if (!cat || (categorias || []).includes(cat)) { showToast(cat ? 'Categoria já existe' : 'Digite o nome', 'error'); return; }
+        setSavingCategoria(true);
+        try {
+            await createCategoriaDespesaAdm(cat, profile?.id || null);
+            await onCategoriasChange();
+            set('categoria', cat);
+            setNovaCategoria(''); setShowNovaCategoria(false);
+            showToast(`Categoria "${cat}" criada!`, 'success');
+        } catch (e) {
+            const msg = /duplicate key|unique constraint/i.test(e.message) ? 'Categoria já existe' : 'Erro: ' + e.message;
+            showToast(msg, 'error');
+        } finally { setSavingCategoria(false); }
     };
 
     // Renomeia qualquer categoria (padrão ou criada pelo usuário) e atualiza em
@@ -650,11 +651,12 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
         const catNova = catNovaBruta.trim();
         if (!catNova) { showToast('Digite o nome da categoria', 'error'); return; }
         if (catNova === catAntiga) return;
-        if (todasCategorias.includes(catNova)) { showToast('Já existe uma categoria com esse nome', 'error'); return; }
+        if ((categorias || []).includes(catNova)) { showToast('Já existe uma categoria com esse nome', 'error'); return; }
         try {
             const afetadas = despesasExistentes.filter(d => d.categoria === catAntiga);
             await Promise.all(afetadas.map(d => updateDespesaAdmTransporte(d.id, { categoria: catNova })));
-            salvarCategorias(categorias.map(c => c === catAntiga ? catNova : c));
+            await renameCategoriaDespesaAdm(catAntiga, catNova);
+            await onCategoriasChange();
             if (form.categoria === catAntiga) set('categoria', catNova);
             showToast(`Categoria renomeada para "${catNova}"${afetadas.length ? ` (${afetadas.length} despesa(s) atualizada(s))` : ''}!`, 'success');
         } catch (e) { showToast('Erro ao renomear categoria: ' + e.message, 'error'); }
@@ -663,7 +665,7 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
     // Exclui uma categoria da lista de opções (não apaga despesas já lançadas
     // com esse texto — elas mantêm o valor salvo).
     const excluirCategoria = async (cat) => {
-        if (categorias.length <= 1) { showToast('É preciso manter ao menos uma categoria', 'error'); return; }
+        if ((categorias || []).length <= 1) { showToast('É preciso manter ao menos uma categoria', 'error'); return; }
         const emUso = despesasExistentes.filter(d => d.categoria === cat).length;
         const ok = await confirm({
             title: 'Excluir categoria?',
@@ -673,10 +675,13 @@ function ModalDespesa({ modal, despesasExistentes = [], onClose, onSaved }) {
             confirmLabel: 'Excluir', variant: 'danger',
         });
         if (!ok) return;
-        const novas = categorias.filter(c => c !== cat);
-        salvarCategorias(novas);
-        if (form.categoria === cat) set('categoria', novas[0] || '');
-        showToast('Categoria excluída!', 'success');
+        try {
+            await deleteCategoriaDespesaAdm(cat);
+            const novas = (categorias || []).filter(c => c !== cat);
+            await onCategoriasChange();
+            if (form.categoria === cat) set('categoria', novas[0] || '');
+            showToast('Categoria excluída!', 'success');
+        } catch (e) { showToast('Erro ao excluir categoria: ' + e.message, 'error'); }
     };
     const [editandoCategoria, setEditandoCategoria] = useState(null);
     const [textoEdicaoCategoria, setTextoEdicaoCategoria] = useState('');
@@ -1310,15 +1315,13 @@ export default function DespesasAdmTransporte() {
             (d.parcelas_cartao || []).some(p => (p.cartao || '').toLowerCase().includes(q))
         );
     }, [despesas, busca]);
-    const [categoriasExtras]          = useState(() => {
-        try {
-            const v2 = localStorage.getItem('adm_transporte_categorias_v2');
-            if (v2) return JSON.parse(v2);
-            return [...CATEGORIAS_DESPESA_ADM, ...JSON.parse(localStorage.getItem('adm_transporte_categorias_extras') || '[]')];
-        } catch { return [...CATEGORIAS_DESPESA_ADM]; }
-    });
+    const [todasCategorias, setTodasCategorias] = useState(() => [...CATEGORIAS_DESPESA_ADM]);
+    const recarregarCategorias = useCallback(async () => {
+        try { setTodasCategorias(await fetchCategoriasDespesaAdm()); }
+        catch (e) { showToast('Erro ao carregar categorias: ' + e.message, 'error'); }
+    }, [showToast]);
+    useEffect(() => { recarregarCategorias(); }, [recarregarCategorias]);
 
-    const todasCategorias = categoriasExtras;
     const [guiaDespesas, setGuiaDespesas] = useState('registros');
     const [relatorioPeriodo, setRelatorioPeriodo] = useState(() => {
         const h = new Date();
@@ -1426,7 +1429,7 @@ export default function DespesasAdmTransporte() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-2xl mx-auto px-4 lg:px-8 py-6">
+                <div className="max-w-[1920px] mx-auto px-4 lg:px-8 py-6">
                     <BreadcrumbTrail className="mb-4" />
 
                     {/* Header */}
@@ -1750,7 +1753,7 @@ export default function DespesasAdmTransporte() {
             </main>
 
             {modal && (
-                <ModalDespesa modal={modal} despesasExistentes={despesas} onClose={() => setModal(null)} onSaved={load} />
+                <ModalDespesa modal={modal} despesasExistentes={despesas} categorias={todasCategorias} onCategoriasChange={recarregarCategorias} onClose={() => setModal(null)} onSaved={load} />
             )}
             {viewDespesa && (
                 <ModalVisualizacaoDespesa

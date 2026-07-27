@@ -80,9 +80,11 @@ function SearchInput({ value, onChange, placeholder = 'Buscar...', width = '240p
     );
 }
 
-// ─── Dropdown pesquisável (substitui <select>/<datalist> nativos, que
-//     estouravam a altura do modal com listas longas sem estilo) ─────────────
-function SearchSelect({ value, onChange, options, placeholder = 'Selecione...', freeText = false, emptyLabel = 'Nenhum resultado' }) {
+const FORM_VAZIO = { motorista_id: '', placa: '', item: '', quantidade: '1', data_entrega: new Date().toISOString().split('T')[0], observacoes: '' };
+
+// ─── Dropdown pesquisável (substitui <select>/<datalist> nativos, que exigiam
+//     rolar a lista inteira pra achar um item) ────────────────────────────────
+function SearchSelect({ value, onChange, options, placeholder = 'Selecione...', freeText = false, emptyLabel = 'Nenhum resultado', allowClear = false, clearLabel = 'Todos' }) {
     const [open, setOpen] = useState(false);
     const [q, setQ] = useState('');
     const ref = useRef();
@@ -95,7 +97,6 @@ function SearchSelect({ value, onChange, options, placeholder = 'Selecione...', 
 
     const selected = options.find(o => o.value === value);
     const displayValue = open ? q : (selected?.label || (freeText ? value : ''));
-
     const filtered = options.filter(o => o.label.toLowerCase().includes((open ? q : '').toLowerCase()));
 
     return (
@@ -116,6 +117,13 @@ function SearchSelect({ value, onChange, options, placeholder = 'Selecione...', 
             {open && (
                 <div className="absolute z-50 w-full mt-1 bg-white rounded-xl border shadow-lg overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
                     <div className="max-h-52 overflow-y-auto">
+                        {allowClear && (
+                            <button type="button" onClick={() => { onChange(''); setQ(''); setOpen(false); }}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors font-medium"
+                                style={{ color: 'var(--color-muted-foreground)' }}>
+                                {clearLabel}
+                            </button>
+                        )}
                         {filtered.length === 0 ? (
                             <div className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{emptyLabel}</div>
                         ) : filtered.map(o => (
@@ -132,8 +140,6 @@ function SearchSelect({ value, onChange, options, placeholder = 'Selecione...', 
         </div>
     );
 }
-
-const FORM_VAZIO = { motorista_id: '', placa: '', item: '', quantidade: '1', data_entrega: new Date().toISOString().split('T')[0], observacoes: '' };
 
 export default function EntregasAcessorios() {
     const { profile, isAdmin } = useAuth();
@@ -326,7 +332,7 @@ export default function EntregasAcessorios() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+                <div className="max-w-[1920px] mx-auto px-4 sm:px-6 py-6">
                     <BreadcrumbTrail className="mb-4" />
 
                     <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
@@ -422,16 +428,26 @@ export default function EntregasAcessorios() {
 
                     {/* Toolbar */}
                     <div className="flex flex-wrap items-center gap-3 mb-4">
-                        <select value={filtroMotorista} onChange={e => setFiltroMotorista(e.target.value)}
-                            className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
-                            <option value="">Todos os motoristas</option>
-                            {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                        <select value={filtroItem} onChange={e => setFiltroItem(e.target.value)}
-                            className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
-                            <option value="">Todos os itens</option>
-                            {itensDisponiveis.map(i => <option key={i} value={i}>{i}</option>)}
-                        </select>
+                        <div className="w-48">
+                            <SearchSelect
+                                value={filtroMotorista}
+                                onChange={setFiltroMotorista}
+                                options={motoristas.map(m => ({ value: m.id, label: m.name }))}
+                                placeholder="Todos os motoristas"
+                                allowClear
+                                clearLabel="Todos os motoristas"
+                            />
+                        </div>
+                        <div className="w-48">
+                            <SearchSelect
+                                value={filtroItem}
+                                onChange={setFiltroItem}
+                                options={itensDisponiveis.map(i => ({ value: i, label: i }))}
+                                placeholder="Todos os itens"
+                                allowClear
+                                clearLabel="Todos os itens"
+                            />
+                        </div>
                         <PeriodRangeFilter presets={['personalizado']} preset={periodoPreset} onPresetChange={aplicarPeriodoPreset} periodo={periodo} onPeriodoChange={setPeriodo} label="Período" />
                         <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, placa, item..." width="220px" />
                         <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors ml-auto" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">

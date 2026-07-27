@@ -9,6 +9,25 @@ export const CATEGORIAS_DESPESA_CAMINHOES = [
     'Pedágio', 'Multas', 'Combustível extra', 'Outros',
 ];
 
+export async function fetchCategoriasDespesaCaminhoes() {
+    const { data, error } = await supabase.from('caminhoes_despesas_categorias').select('*').order('nome', { ascending: true });
+    if (error) throw error;
+    return (data || []).map(c => c.nome);
+}
+export async function createCategoriaDespesaCaminhoes(nome, criadoPor = null) {
+    const { data, error } = await supabase.from('caminhoes_despesas_categorias').insert({ nome, criado_por: criadoPor }).select().single();
+    if (error) throw error;
+    return data;
+}
+export async function renameCategoriaDespesaCaminhoes(nomeAntigo, nomeNovo) {
+    const { error } = await supabase.from('caminhoes_despesas_categorias').update({ nome: nomeNovo }).eq('nome', nomeAntigo);
+    if (error) throw error;
+}
+export async function deleteCategoriaDespesaCaminhoes(nome) {
+    const { error } = await supabase.from('caminhoes_despesas_categorias').delete().eq('nome', nome);
+    if (error) throw error;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DESPESAS
 // ─────────────────────────────────────────────────────────────────────────────

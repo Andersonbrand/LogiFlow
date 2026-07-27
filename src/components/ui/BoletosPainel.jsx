@@ -10,6 +10,9 @@ const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', cur
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
 const hojeISO = () => new Date().toISOString().slice(0, 10);
 
+// Larguras FIXAS e iguais para cabeçalho e linhas: checkbox | fornecedor/categoria | nº boleto | vencimento | valor | status
+const BOLETOS_COLS = 'grid-cols-[28px_minmax(0,1fr)_140px_100px_110px_170px]';
+
 /**
  * BoletosPainel — aba de boletos "Lançados para baixa" dentro de cada tela de
  * despesas (Carretas, Caminhões, Adm. Transporte), mostrando só os boletos
@@ -182,53 +185,57 @@ export default function BoletosPainel({ origem, onChanged }) {
             )}
 
             {/* Lista */}
-            <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-3 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide" style={{ backgroundColor: '#F9FAFB', color: 'var(--color-muted-foreground)' }}>
-                    <span>
-                        <input type="checkbox" checked={todosFiltradosSelecionados} disabled={selecionaveisFiltrados.length === 0} onChange={toggleTodos} />
-                    </span>
-                    <span>Fornecedor / Categoria</span>
-                    <span>Nº Boleto</span>
-                    <span>Vencimento</span>
-                    <span>Valor</span>
-                    <span>Status</span>
+            {/* Colunas com largura FIXA (não "auto"): cabeçalho e linhas usam o mesmo template,
+                então o conteúdo de uma linha (ex: nº de boleto longo) nunca desalinha as demais. */}
+            <div className="rounded-2xl border overflow-hidden overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="min-w-[720px]">
+                    <div className={`grid ${BOLETOS_COLS} gap-3 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide`} style={{ backgroundColor: '#F9FAFB', color: 'var(--color-muted-foreground)' }}>
+                        <span>
+                            <input type="checkbox" checked={todosFiltradosSelecionados} disabled={selecionaveisFiltrados.length === 0} onChange={toggleTodos} />
+                        </span>
+                        <span>Fornecedor / Categoria</span>
+                        <span className="truncate">Nº Boleto</span>
+                        <span className="truncate">Vencimento</span>
+                        <span className="text-right">Valor</span>
+                        <span className="text-right">Status</span>
+                    </div>
+                    {loading ? (
+                        <p className="p-6 text-sm text-center" style={{ color: 'var(--color-muted-foreground)' }}>Carregando boletos...</p>
+                    ) : filtrados.length === 0 ? (
+                        <p className="p-6 text-sm text-center" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum boleto encontrado com esses filtros.</p>
+                    ) : (
+                        filtrados.map(b => {
+                            const vencido = !b.pago && b.vencimento && b.vencimento < hojeISO();
+                            return (
+                                <div key={b.key} className={`grid ${BOLETOS_COLS} gap-3 px-4 py-3 items-center border-t text-sm`} style={{ borderColor: 'var(--color-border)' }}>
+                                    <span>
+                                        <input type="checkbox" checked={selecionados.has(b.key)} disabled={b.pago} onChange={() => toggleSel(b.key)} />
+                                    </span>
+                                    <span className="min-w-0 truncate">
+                                        <p className="font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{b.fornecedor || '—'}</p>
+                                        <p className="text-xs truncate" style={{ color: 'var(--color-muted-foreground)' }}>{b.categoria}{b.nota_fiscal ? ` · NF ${b.nota_fiscal}` : ''}</p>
+                                    </span>
+                                    <span className="font-data truncate" title={b.numero_boleto || ''}>{b.numero_boleto || '—'}</span>
+                                    <span className={`truncate ${vencido ? 'text-red-600 font-semibold' : ''}`}>{FMT(b.vencimento)}</span>
+                                    <span className="font-semibold text-right whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{BRL(b.valor)}</span>
+                                    <span className="flex items-center gap-2 justify-end flex-wrap">
+                                        {b.pago ? (
+                                            <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-green-100 text-green-700 whitespace-nowrap">Pago</span>
+                                        ) : (
+                                            <>
+                                                {vencido && <span className="px-2 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-700 whitespace-nowrap">Vencido</span>}
+                                                <button onClick={() => darBaixaUnica(b)} disabled={processando}
+                                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-60 whitespace-nowrap">
+                                                    <Icon name="Check" size={12} /> Dar baixa
+                                                </button>
+                                            </>
+                                        )}
+                                    </span>
+                                </div>
+                            );
+                        })
+                    )}
                 </div>
-                {loading ? (
-                    <p className="p-6 text-sm text-center" style={{ color: 'var(--color-muted-foreground)' }}>Carregando boletos...</p>
-                ) : filtrados.length === 0 ? (
-                    <p className="p-6 text-sm text-center" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum boleto encontrado com esses filtros.</p>
-                ) : (
-                    filtrados.map(b => {
-                        const vencido = !b.pago && b.vencimento && b.vencimento < hojeISO();
-                        return (
-                            <div key={b.key} className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-3 px-4 py-3 items-center border-t text-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                <span>
-                                    <input type="checkbox" checked={selecionados.has(b.key)} disabled={b.pago} onChange={() => toggleSel(b.key)} />
-                                </span>
-                                <span className="truncate">
-                                    <p className="font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{b.fornecedor || '—'}</p>
-                                    <p className="text-xs truncate" style={{ color: 'var(--color-muted-foreground)' }}>{b.categoria}{b.nota_fiscal ? ` · NF ${b.nota_fiscal}` : ''}</p>
-                                </span>
-                                <span className="font-data whitespace-nowrap">{b.numero_boleto || '—'}</span>
-                                <span className={`whitespace-nowrap ${vencido ? 'text-red-600 font-semibold' : ''}`}>{FMT(b.vencimento)}</span>
-                                <span className="font-semibold whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{BRL(b.valor)}</span>
-                                <span className="flex items-center gap-2 justify-end">
-                                    {b.pago ? (
-                                        <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-green-100 text-green-700 whitespace-nowrap">Pago</span>
-                                    ) : (
-                                        <>
-                                            {vencido && <span className="px-2 py-1 rounded-lg text-xs font-medium bg-red-100 text-red-700 whitespace-nowrap">Vencido</span>}
-                                            <button onClick={() => darBaixaUnica(b)} disabled={processando}
-                                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-60 whitespace-nowrap">
-                                                <Icon name="Check" size={12} /> Dar baixa
-                                            </button>
-                                        </>
-                                    )}
-                                </span>
-                            </div>
-                        );
-                    })
-                )}
             </div>
             <Toast toast={toast} />
             {ConfirmDialog}

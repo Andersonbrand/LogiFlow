@@ -13,7 +13,7 @@ import {
     fetchVeiculosProprios, fetchVeiculosTerceiros,
     fetchMotoristasProprios, fetchMotoristasTerceiros, fetchCarreteirosPropriosOnly,
     calcularFrete, TIPOS_CALCULO_FRETE,
-    fetchFretesCidades,
+    fetchFretesCidades, marcarFreteCarregamentoPago,
 } from 'utils/carretasService';
 import {
     fetchFornecedores as fetchFornecedoresCarretas,
@@ -573,6 +573,22 @@ export default function TabVolume({ isAdmin }) {
         try { await deleteCarregamento(id); showToast('Excluído!', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
+    const handleTogglePagoTerceiro = async (row) => {
+        const marcarComoPago = !row.frete_pago;
+        if (marcarComoPago) {
+            const ok = await confirm({
+                title: 'Marcar frete como pago?',
+                message: `Confirma o pagamento do frete de ${row.motorista?.name || 'terceiro'}?`,
+                confirmLabel: 'Marcar como pago', variant: 'info',
+            });
+            if (!ok) return;
+        }
+        try {
+            await marcarFreteCarregamentoPago(row.id, marcarComoPago);
+            showToast(marcarComoPago ? 'Frete marcado como pago!' : 'Frete marcado como pendente.', 'success');
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
 
     // ── Handlers retira ───────────────────────────────────────────────────────
     const openCreateRetira = () => { setFormRetira(emptyFormRetira()); setModalRetira({ mode: 'create' }); };
@@ -825,6 +841,7 @@ export default function TabVolume({ isAdmin }) {
                     onNovo={openCreateTerceiro}
                     onEdit={openEditTerceiro}
                     onDelete={handleDeleteTerceiro}
+                    onTogglePago={handleTogglePagoTerceiro}
                     fretosTerceiros={fretosTerceiros}
                     motoristas={motoristasTerceiros}
                     mes={mes}
@@ -1526,8 +1543,9 @@ function PainelFornecedores({ fornecedores, isAdmin, onNovo, onDelete }) {
 }
 
 // ─── Sub-componente: Tabela Terceiros ─────────────────────────────────────────
-function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fretosTerceiros = [], motoristas = [], mes }) {
+function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onTogglePago, fretosTerceiros = [], motoristas = [], mes }) {
     const [filtroMotoristaTer, setFiltroMotoristaTer] = useState('');
+    const [filtroPago, setFiltroPago] = useState('todos'); // 'todos' | 'pendentes' | 'pagos'
 
     // Calcula frete de cada carregamento: usa valor_frete_calculado se existir,
     // senão busca na tabela de fretes pelo destino
@@ -1541,6 +1559,8 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
 
     const totalSacos = carregamentos.reduce((s, r) => s + (Number(r.quantidade) || 0), 0);
     const totalFrete = carregamentos.reduce((s, r) => s + calcFrete(r), 0);
+    const totalFretePago = carregamentos.reduce((s, r) => s + (r.frete_pago ? calcFrete(r) : 0), 0);
+    const totalFretePendente = totalFrete - totalFretePago;
 
     // Agrupamento por motorista para o card de resumo
     const porMotorista = (() => {
@@ -1559,9 +1579,10 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
 
     const [buscaTer, setBuscaTer] = useState('');
 
-    const carrBase = filtroMotoristaTer
+    const carrBase = (filtroMotoristaTer
         ? carregamentos.filter(r => r.motorista_id === filtroMotoristaTer)
-        : carregamentos;
+        : carregamentos
+    ).filter(r => filtroPago === 'todos' ? true : filtroPago === 'pagos' ? !!r.frete_pago : !r.frete_pago);
 
     const carr = buscaTer
         ? carrBase.filter(r => {
@@ -1600,16 +1621,39 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
                     <p className="text-2xl font-black" style={{ color: '#D97706' }}>{totalSacos.toLocaleString('pt-BR')}</p>
                     <p className="text-xs mt-0.5" style={{ color: '#B45309' }}>{carregamentos.length} registros</p>
                 </div>
-                <div className="rounded-xl p-4 border" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
-                    <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#065F46' }}>Frete Total (mês)</p>
-                    <p className="text-2xl font-black" style={{ color: '#059669' }}>{BRL(totalFrete)}</p>
-                    <p className="text-xs mt-0.5" style={{ color: '#065F46' }}>soma dos fretes calculados</p>
+                <div className="rounded-xl p-4 border" style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA' }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#B91C1C' }}>Frete Pendente</p>
+                    <p className="text-2xl font-black" style={{ color: '#DC2626' }}>{BRL(totalFretePendente)}</p>
+                    <p className="text-xs mt-0.5" style={{ color: '#B91C1C' }}>ainda não pago</p>
                 </div>
-                <div className="rounded-xl p-4 border col-span-2" style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }}>
+                <div className="rounded-xl p-4 border" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#065F46' }}>Frete Pago</p>
+                    <p className="text-2xl font-black" style={{ color: '#059669' }}>{BRL(totalFretePago)}</p>
+                    <p className="text-xs mt-0.5" style={{ color: '#065F46' }}>já quitado</p>
+                </div>
+                <div className="rounded-xl p-4 border" style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }}>
                     <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: '#1E3A5F' }}>Motoristas ativos (mês)</p>
                     <p className="text-2xl font-black" style={{ color: '#1D4ED8' }}>{porMotorista.length}</p>
                     <p className="text-xs mt-0.5" style={{ color: '#1E3A5F' }}>motoristas com carregamentos</p>
                 </div>
+            </div>
+
+            {/* Filtro por status de pagamento */}
+            <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Pagamento:</span>
+                {[
+                    { v: 'todos', label: 'Todos' },
+                    { v: 'pendentes', label: 'Pendentes' },
+                    { v: 'pagos', label: 'Pagos' },
+                ].map(op => (
+                    <button key={op.v} onClick={() => setFiltroPago(op.v)}
+                        className="px-3 py-1 rounded-full text-xs font-medium border transition-colors"
+                        style={filtroPago === op.v
+                            ? { backgroundColor: '#D97706', color: '#fff', borderColor: '#D97706' }
+                            : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                        {op.label}
+                    </button>
+                ))}
             </div>
 
             {/* Card de resumo por motorista */}
@@ -1685,10 +1729,10 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
                 </div>
             ) : (
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: '#FDE68A' }}>
-                    <table className="w-full text-sm min-w-[850px]">
+                    <table className="w-full text-sm min-w-[900px]">
                         <thead className="text-xs border-b" style={{ background: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}>
                             <tr>
-                                {['Data', 'Motorista', 'Placa', 'Tipo', 'Empresa', 'Fornecedor/Origem', 'Destino', 'Pedido', 'NF', 'Qtd (sacos)', 'Frete', ''].map(h => (
+                                {['Data', 'Motorista', 'Placa', 'Tipo', 'Empresa', 'Fornecedor/Origem', 'Destino', 'Pedido', 'NF', 'Qtd (sacos)', 'Frete', 'Pagamento', ''].map(h => (
                                     <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
@@ -1711,6 +1755,20 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, fre
                                         <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>
                                         <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap" style={{ color: '#D97706' }}>{(Number(r.quantidade)||0).toLocaleString('pt-BR')}</td>
                                         <td className="px-3 py-2.5 font-mono font-semibold whitespace-nowrap" style={{ color: '#059669' }}>{frete > 0 ? BRL(frete) : '—'}</td>
+                                        <td className="px-3 py-2.5">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className={`px-1.5 py-0.5 rounded text-xs font-medium whitespace-nowrap ${r.frete_pago ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                    {r.frete_pago ? 'Pago' : 'Pendente'}
+                                                </span>
+                                                {isAdmin && (
+                                                    <button onClick={() => onTogglePago?.(r)}
+                                                        title={r.frete_pago ? 'Desfazer pagamento' : 'Marcar frete como pago'}
+                                                        className="p-1.5 rounded hover:bg-green-50 transition-colors flex-shrink-0">
+                                                        <Icon name="CheckCircle2" size={16} color={r.frete_pago ? '#059669' : '#9CA3AF'} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
                                         {isAdmin && (
                                             <td className="px-3 py-2.5">
                                                 <ActionButtonsGroup>

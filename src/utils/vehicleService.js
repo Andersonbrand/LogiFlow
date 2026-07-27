@@ -30,6 +30,15 @@ export async function fetchVehicles() {
     return data.map(toFront);
 }
 
+// Apenas os caminhões cadastrados na página de Veículos (tipo = 'Caminhão').
+// Usado em outros módulos (Ordens de Serviço, motoristas de caminhão) que
+// precisam do filtro/seleção de placas de caminhão vindas do cadastro central
+// de veículos, e não do cadastro específico de frota de carretas.
+export async function fetchCaminhoesPlacas() {
+    const all = await fetchVehicles();
+    return all.filter(v => v.tipo === 'Caminhão');
+}
+
 export async function createVehicle(vehicle) {
     const payload = toDb(vehicle);
     const { data, error } = await supabase

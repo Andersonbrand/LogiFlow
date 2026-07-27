@@ -277,8 +277,8 @@ export default function MecanicoPage() {
                                                     </div>
                                                     <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
                                                         {FMT_DATE(o.created_at)}
-                                                        {o.veiculo?.placa && <> · <span className="font-data font-medium">{o.veiculo.placa}</span></>}
-                                                        {o.veiculo?.modelo && <span className="hidden sm:inline"> — {o.veiculo.modelo}</span>}
+                                                        {(o.veiculo?.placa || o.veiculo_caminhao_placa) && <> · <span className="font-data font-medium">{o.veiculo?.placa || o.veiculo_caminhao_placa}</span></>}
+                                                        {(o.veiculo?.modelo || o.veiculo_caminhao_modelo) && <span className="hidden sm:inline"> — {o.veiculo?.modelo || o.veiculo_caminhao_modelo}</span>}
                                                         {o.km_atual != null && <> · KM: <span className="font-data font-medium">{Number(o.km_atual).toLocaleString('pt-BR')}</span></>}
                                                     </p>
                                                 </div>
@@ -409,7 +409,7 @@ export default function MecanicoPage() {
                         <div className="p-3 rounded-lg" style={{ backgroundColor: '#F8FAFC' }}>
                             <p className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>
                                 OS #{modalFinalizar.id?.slice(0, 8).toUpperCase()}
-                                {modalFinalizar.veiculo?.placa && <span className="font-data"> · {modalFinalizar.veiculo.placa}</span>}
+                                {(modalFinalizar.veiculo?.placa || modalFinalizar.veiculo_caminhao_placa) && <span className="font-data"> · {modalFinalizar.veiculo?.placa || modalFinalizar.veiculo_caminhao_placa}</span>}
                             </p>
                             <p className="text-xs mt-1 line-clamp-2" style={{ color: 'var(--color-muted-foreground)' }}>{modalFinalizar.descricao}</p>
                         </div>
@@ -467,7 +467,7 @@ export default function MecanicoPage() {
                         <div className="p-3 rounded-lg" style={{ backgroundColor: '#F8FAFC' }}>
                             <p className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>
                                 OS #{modalProblema.id?.slice(0, 8).toUpperCase()}
-                                {modalProblema.veiculo?.placa && <span className="font-data"> · {modalProblema.veiculo.placa}</span>}
+                                {(modalProblema.veiculo?.placa || modalProblema.veiculo_caminhao_placa) && <span className="font-data"> · {modalProblema.veiculo?.placa || modalProblema.veiculo_caminhao_placa}</span>}
                             </p>
                         </div>
                         <div>
@@ -515,7 +515,7 @@ export default function MecanicoPage() {
                         <div className="p-3 rounded-lg" style={{ backgroundColor: '#F8FAFC' }}>
                             <p className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>
                                 OS #{modalPeca.id?.slice(0, 8).toUpperCase()}
-                                {modalPeca.veiculo?.placa && <span className="font-data"> · {modalPeca.veiculo.placa}</span>}
+                                {(modalPeca.veiculo?.placa || modalPeca.veiculo_caminhao_placa) && <span className="font-data"> · {modalPeca.veiculo?.placa || modalPeca.veiculo_caminhao_placa}</span>}
                             </p>
                         </div>
                         <div>

@@ -3,6 +3,7 @@ import TabRomaneios from './TabRomaneios';
 import TabVolume from './TabVolume';
 import TabFretes from './TabFretes';
 import TabCustos from './TabCustos';
+import TabPneus from './TabPneus';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -35,6 +36,8 @@ import {
     fetchDespesasExtras, createDespesaExtra, updateDespesaExtra, deleteDespesaExtra,
     fetchDiarias, createDiaria, updateDiaria, deleteDiaria, assinarDiaria, desassinarDiaria,
     CATEGORIAS_DESPESA,
+    fetchCategoriasDespesaCarretas, createCategoriaDespesaCarretas,
+    renameCategoriaDespesaCarretas, deleteCategoriaDespesaCarretas,
     CIDADES_BONUS_BAIXO, BONUS_BAIXO, BONUS_ALTO,
     fetchPostos, createPosto, updatePosto, deletePosto,
     fetchFretesCidades,
@@ -58,6 +61,7 @@ import {
 import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf, garantirFornecedorCadastrado, EMPRESAS_LOGIFLOW } from 'utils/parcelasGenerator';
 import * as XLSX from 'xlsx';
 import { exportDiariaModelo, exportDiariasRomaneiosModelo, printDiaria, printOrdemServico } from 'utils/excelUtils';
+import { fetchCaminhoesPlacas } from 'utils/vehicleService';
 import PeriodRangeFilter, { usePeriodRangeFilter } from 'components/ui/PeriodRangeFilter';
 import { updateUserProfile } from 'utils/userService';
 import { fetchDadosMargemFrete, calcularAbatimentoCustosFrota } from 'utils/custosFrotaService';
@@ -2762,18 +2766,13 @@ function TabDespesasExtras({ isAdmin, profile }) {
         setFiltro(f => ({ ...f, mes }));
         try { sessionStorage.setItem('carretas_despesas_filtroMes', mes); } catch {}
     };
-    const [categorias, setCategorias] = useState(() => {
-        try {
-            const v2 = localStorage.getItem('carretas_categorias_v2');
-            if (v2) return JSON.parse(v2);
-            const extras = JSON.parse(localStorage.getItem('carretas_categorias_extras') || '[]');
-            return [...CATEGORIAS_DESPESA, ...extras];
-        } catch { return [...CATEGORIAS_DESPESA]; }
-    });
-    const salvarCategorias = (novas) => {
-        setCategorias(novas);
-        try { localStorage.setItem('carretas_categorias_v2', JSON.stringify(novas)); } catch {}
-    };
+    const [categorias, setCategorias] = useState(() => [...CATEGORIAS_DESPESA]);
+    const [savingCategoria, setSavingCategoria] = useState(false);
+    const recarregarCategorias = useCallback(async () => {
+        try { setCategorias(await fetchCategoriasDespesaCarretas()); }
+        catch (e) { showToast('Erro ao carregar categorias: ' + e.message, 'error'); }
+    }, []);
+    useEffect(() => { recarregarCategorias(); }, [recarregarCategorias]);
     const [novaCategoria, setNovaCategoria] = useState('');
     const [showNovaCategoria, setShowNovaCategoria] = useState(false);
     const xmlRef = useRef(null);
@@ -2873,15 +2872,22 @@ function TabDespesasExtras({ isAdmin, profile }) {
     }, [despesasFiltradas, relatorioPeriodo]);
 
 
-    const adicionarCategoria = () => {
+    const adicionarCategoria = async () => {
         const cat = novaCategoria.trim();
         if (!cat) { showToast('Digite o nome da categoria', 'error'); return; }
         if (todasCategorias.includes(cat)) { showToast('Categoria já existe', 'error'); return; }
-        salvarCategorias([...categorias, cat]);
-        setForm(f => ({ ...f, categoria: cat }));
-        setNovaCategoria('');
-        setShowNovaCategoria(false);
-        showToast(`Categoria "${cat}" criada!`, 'success');
+        setSavingCategoria(true);
+        try {
+            await createCategoriaDespesaCarretas(cat, profile?.id || null);
+            await recarregarCategorias();
+            setForm(f => ({ ...f, categoria: cat }));
+            setNovaCategoria('');
+            setShowNovaCategoria(false);
+            showToast(`Categoria "${cat}" criada!`, 'success');
+        } catch (e) {
+            const msg = /duplicate key|unique constraint/i.test(e.message) ? 'Categoria já existe' : 'Erro: ' + e.message;
+            showToast(msg, 'error');
+        } finally { setSavingCategoria(false); }
     };
 
     // Renomeia qualquer categoria (padrão ou criada pelo usuário) e atualiza em
@@ -2895,7 +2901,8 @@ function TabDespesasExtras({ isAdmin, profile }) {
         try {
             const afetadas = despesas.filter(d => d.categoria === catAntiga);
             await Promise.all(afetadas.map(d => updateDespesaExtra(d.id, { categoria: catNova })));
-            salvarCategorias(categorias.map(c => c === catAntiga ? catNova : c));
+            await renameCategoriaDespesaCarretas(catAntiga, catNova);
+            await recarregarCategorias();
             if (form.categoria === catAntiga) setForm(f => ({ ...f, categoria: catNova }));
             showToast(`Categoria renomeada para "${catNova}"${afetadas.length ? ` (${afetadas.length} despesa(s) atualizada(s))` : ''}!`, 'success');
             load();
@@ -2906,7 +2913,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
     // lançadas com essa categoria (o texto continua salvo nelas) — apenas
     // avisa quantas existem antes de confirmar.
     const excluirCategoria = async (cat) => {
-        if (categorias.length <= 1) { showToast('É preciso manter ao menos uma categoria', 'error'); return; }
+        if (todasCategorias.length <= 1) { showToast('É preciso manter ao menos uma categoria', 'error'); return; }
         const emUso = despesas.filter(d => d.categoria === cat).length;
         const ok = await confirm({
             title: 'Excluir categoria?',
@@ -2916,10 +2923,13 @@ function TabDespesasExtras({ isAdmin, profile }) {
             confirmLabel: 'Excluir', variant: 'danger',
         });
         if (!ok) return;
-        const novas = categorias.filter(c => c !== cat);
-        salvarCategorias(novas);
-        if (form.categoria === cat) setForm(f => ({ ...f, categoria: novas[0] || '' }));
-        showToast('Categoria excluída!', 'success');
+        try {
+            await deleteCategoriaDespesaCarretas(cat);
+            const novas = todasCategorias.filter(c => c !== cat);
+            await recarregarCategorias();
+            if (form.categoria === cat) setForm(f => ({ ...f, categoria: novas[0] || '' }));
+            showToast('Categoria excluída!', 'success');
+        } catch (e) { showToast('Erro ao excluir categoria: ' + e.message, 'error'); }
     };
     const [editandoCategoria, setEditandoCategoria] = useState(null); // nome da categoria em edição inline
     const [textoEdicaoCategoria, setTextoEdicaoCategoria] = useState('');
@@ -5380,6 +5390,7 @@ function TabOrdensServico({ isAdmin, profile }) {
     const { confirm, ConfirmDialog } = useConfirm();
     const [ordens, setOrdens]     = useState([]);
     const [veiculos, setVeiculos] = useState([]);
+    const [caminhoes, setCaminhoes] = useState([]); // caminhões da página de Veículos (item 1)
     const [mecanicos, setMecanicos] = useState([]);
     const [loading, setLoading]   = useState(true);
     const [filtroStatus, setFiltroStatus] = useState('');
@@ -5397,7 +5408,7 @@ function TabOrdensServico({ isAdmin, profile }) {
     const [pdfFile, setPdfFile]   = useState(null);
     const [uploading, setUploading] = useState(false);
     const [viewPdf, setViewPdf]   = useState(null);
-    const FORM_VAZIO = { veiculo_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '', assinatura_admin: '', km_atual: '', observacoes: '', tipo_manutencao: 'Corretiva' };
+    const FORM_VAZIO = { veiculo_id: '', veiculo_caminhao_id: '', mecanico_id: '', descricao: '', prioridade: 'Normal', pdf_url: '', assinatura_admin: '', km_atual: '', observacoes: '', tipo_manutencao: 'Corretiva' };
     const [form, setForm] = useState(FORM_VAZIO);
     const [assinarComoAdmin, setAssinarComoAdmin] = useState(false);
     const [gerenciarPecasModal, setGerenciarPecasModal] = useState(false);
@@ -5423,28 +5434,36 @@ function TabOrdensServico({ isAdmin, profile }) {
                 f.dataInicio = `${filtroMes}-01`;
                 f.dataFim    = `${filtroMes}-${String(lastDay).padStart(2, '0')}`;
             }
-            const [o, v, m] = await Promise.all([
+            const [o, v, c, m] = await Promise.all([
                 fetchOrdensServico(f),
                 fetchVeiculosProprios(),
+                fetchCaminhoesPlacas(),
                 fetchMecanicos(),
             ]);
-            setOrdens(o); setVeiculos(v); setMecanicos(m);
+            setOrdens(o); setVeiculos(v); setCaminhoes(c); setMecanicos(m);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtroStatus, filtroMes]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
     const [pesquisa, setPesquisa] = useState('');
+    const [filtroPlacaOS, setFiltroPlacaOS] = useState('');
     const ordensFiltradas = useMemo(() => {
-        if (!pesquisa.trim()) return ordens;
+        let base = ordens;
+        if (filtroPlacaOS) {
+            const [tipo, id] = filtroPlacaOS.split(':');
+            base = base.filter(o => tipo === 'cv' ? o.veiculo_id === id : String(o.veiculo_caminhao_id) === id);
+        }
+        if (!pesquisa.trim()) return base;
         const q = pesquisa.toLowerCase();
-        return ordens.filter(o =>
+        return base.filter(o =>
             (o.veiculo?.placa || '').toLowerCase().includes(q) ||
+            (o.veiculo_caminhao_placa || '').toLowerCase().includes(q) ||
             (o.descricao || '').toLowerCase().includes(q) ||
             (o.mecanico?.name || '').toLowerCase().includes(q) ||
             (o.prioridade || '').toLowerCase().includes(q)
         );
-    }, [ordens, pesquisa]);
+    }, [ordens, pesquisa, filtroPlacaOS]);
 
     const TIPOS_ANEXO_OS = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
     const EXT_ANEXO_OS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.webp', '.heic'];
@@ -5469,6 +5488,7 @@ function TabOrdensServico({ isAdmin, profile }) {
     const abrirEdicaoOS = (o) => {
         setForm({
             veiculo_id: o.veiculo_id || '',
+            veiculo_caminhao_id: o.veiculo_caminhao_id || '',
             mecanico_id: o.mecanico_id || '',
             descricao: o.descricao || '',
             prioridade: o.prioridade || 'Normal',
@@ -5488,10 +5508,19 @@ function TabOrdensServico({ isAdmin, profile }) {
     // Salva as edições. Quando `enviar` é true e a OS era um rascunho, o status
     // passa para "Pendente" (visível ao mecânico); caso contrário mantém o status atual.
     const handleSalvar = async (enviar = false) => {
-        if (!form.veiculo_id || !form.descricao) { showToast('Veículo e descrição são obrigatórios', 'error'); return; }
+        if ((!form.veiculo_id && !form.veiculo_caminhao_id) || !form.descricao) { showToast('Veículo e descrição são obrigatórios', 'error'); return; }
         setUploading(true);
         try {
-            const payload = { ...form, km_atual: form.km_atual === '' ? null : Number(form.km_atual), assinatura_admin: assinarComoAdmin ? (profile?.assinatura_digital || '') : null };
+            const caminhaoSel = form.veiculo_caminhao_id ? caminhoes.find(c => String(c.id) === form.veiculo_caminhao_id) : null;
+            const payload = {
+                ...form,
+                veiculo_id: form.veiculo_id || null,
+                veiculo_caminhao_id: form.veiculo_caminhao_id || null,
+                veiculo_caminhao_placa: caminhaoSel?.placa || null,
+                veiculo_caminhao_modelo: caminhaoSel?.modelo || null,
+                km_atual: form.km_atual === '' ? null : Number(form.km_atual),
+                assinatura_admin: assinarComoAdmin ? (profile?.assinatura_digital || '') : null,
+            };
             if (editingId) {
                 const updates = { ...payload };
                 if (enviar && editingStatus === 'Rascunho') updates.status = 'Pendente';
@@ -5551,6 +5580,20 @@ function TabOrdensServico({ isAdmin, profile }) {
                     )}
                 </div>
                 <div className="flex gap-2 items-center">
+                    <select value={filtroPlacaOS} onChange={e => setFiltroPlacaOS(e.target.value)}
+                        className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por placa">
+                        <option value="">Todas as placas</option>
+                        {veiculos.length > 0 && (
+                            <optgroup label="Frota Carretas">
+                                {veiculos.map(v => <option key={`cv:${v.id}`} value={`cv:${v.id}`}>{v.placa} — {v.modelo}</option>)}
+                            </optgroup>
+                        )}
+                        {caminhoes.length > 0 && (
+                            <optgroup label="Caminhões (Veículos)">
+                                {caminhoes.map(v => <option key={`vh:${v.id}`} value={`vh:${v.id}`}>{v.placa} — {v.modelo}</option>)}
+                            </optgroup>
+                        )}
+                    </select>
                     <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Placa, tipo, descrição..." width="210px" />
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
@@ -5608,7 +5651,7 @@ function TabOrdensServico({ isAdmin, profile }) {
                                             )}
                                         </div>
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                            {o.veiculo?.placa || '—'} {o.veiculo?.modelo ? `— ${o.veiculo.modelo}` : ''} · Mecânico: {o.mecanico?.name || '—'}
+                                            {o.veiculo?.placa || o.veiculo_caminhao_placa || '—'} {(o.veiculo?.modelo || o.veiculo_caminhao_modelo) ? `— ${o.veiculo?.modelo || o.veiculo_caminhao_modelo}` : ''} · Mecânico: {o.mecanico?.name || '—'}
                                             {o.km_atual != null && ` · KM: ${Number(o.km_atual).toLocaleString('pt-BR')}`}
                                         </p>
                                     </div>
@@ -5741,9 +5784,28 @@ function TabOrdensServico({ isAdmin, profile }) {
                             </div>
                         )}
                         <Field label="Veículo" required>
-                            <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <select
+                                value={form.veiculo_id ? `cv:${form.veiculo_id}` : (form.veiculo_caminhao_id ? `vh:${form.veiculo_caminhao_id}` : '')}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    if (!val) { setForm(f => ({ ...f, veiculo_id: '', veiculo_caminhao_id: '' })); return; }
+                                    const [tipo, id] = val.split(':');
+                                    setForm(f => tipo === 'cv'
+                                        ? { ...f, veiculo_id: id, veiculo_caminhao_id: '' }
+                                        : { ...f, veiculo_id: '', veiculo_caminhao_id: id });
+                                }}
+                                className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
-                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                {veiculos.length > 0 && (
+                                    <optgroup label="Frota Carretas">
+                                        {veiculos.map(v => <option key={`cv:${v.id}`} value={`cv:${v.id}`}>{v.placa} — {v.modelo}</option>)}
+                                    </optgroup>
+                                )}
+                                {caminhoes.length > 0 && (
+                                    <optgroup label="Caminhões (Veículos)">
+                                        {caminhoes.map(v => <option key={`vh:${v.id}`} value={`vh:${v.id}`}>{v.placa} — {v.modelo}</option>)}
+                                    </optgroup>
+                                )}
                             </select>
                         </Field>
                         <Field label="Mecânico responsável">
@@ -7236,6 +7298,8 @@ function TabPontosParada({ isAdmin }) {
             return (
                 (p.local || '').toLowerCase().includes(q) ||
                 (p.tipo_local || '').toLowerCase().includes(q) ||
+                (p.local_chegada || '').toLowerCase().includes(q) ||
+                (p.tipo_local_chegada || '').toLowerCase().includes(q) ||
                 (p.veiculo?.placa || '').toLowerCase().includes(q) ||
                 motoristaNome.toLowerCase().includes(q) ||
                 extrasTexto.toLowerCase().includes(q)
@@ -7277,6 +7341,8 @@ function TabPontosParada({ isAdmin }) {
         setFormEdit({
             tipo_local: p.tipo_local || 'Fábrica',
             local: p.local || '',
+            tipo_local_chegada: p.tipo_local_chegada || 'Fábrica',
+            local_chegada: p.local_chegada || '',
             cupom_fiscal: p.cupom_fiscal || '',
             data_saida: p.data_saida || '',
             horario_saida: p.horario_saida || '',
@@ -7296,6 +7362,8 @@ function TabPontosParada({ isAdmin }) {
             await updatePontoParada(editModal.id, {
                 local: formEdit.local,
                 tipo_local: formEdit.tipo_local,
+                local_chegada: formEdit.local_chegada || null,
+                tipo_local_chegada: formEdit.tipo_local_chegada || null,
                 cupom_fiscal: formEdit.cupom_fiscal || null,
                 data_saida: formEdit.data_saida || null,
                 horario_saida: formEdit.horario_saida || null,
@@ -7359,7 +7427,7 @@ function TabPontosParada({ isAdmin }) {
                         <table className="w-full text-xs" style={{ minWidth: 820 }}>
                             <thead>
                                 <tr style={{ backgroundColor: '#1D4ED8' }}>
-                                    {['Motorista','KM/Destino','Data Saída','Hor. Saída','KM Saída','Data Chegada','Hor. Chegada','KM Chegada','Cupom','Obs.','Ações'].map(h => (
+                                    {['Motorista','Saída','Data Saída','Hor. Saída','KM Saída','Chegada','Data Chegada','Hor. Chegada','KM Chegada','Cupom','Obs.','Ações'].map(h => (
                                         <th key={h} className="px-3 py-2.5 text-left font-semibold text-white whitespace-nowrap">{h}</th>
                                     ))}
                                 </tr>
@@ -7369,7 +7437,7 @@ function TabPontosParada({ isAdmin }) {
                                     <React.Fragment key={p.id}>
                                     {p.__novoGrupo && idx > 0 && (
                                         <tr aria-hidden="true">
-                                            <td colSpan={11} style={{ padding: 0, height: 10, backgroundColor: 'var(--color-background)', borderBottom: '2px solid #1D4ED8' }} />
+                                            <td colSpan={12} style={{ padding: 0, height: 10, backgroundColor: 'var(--color-background)', borderBottom: '2px solid #1D4ED8' }} />
                                         </tr>
                                     )}
                                     <tr
@@ -7399,6 +7467,17 @@ function TabPontosParada({ isAdmin }) {
                                         <td className="px-3 py-2.5 font-data whitespace-nowrap">{p.horario_saida || '—'}</td>
                                         <td className="px-3 py-2.5 font-data text-right" style={{ color: '#1D4ED8' }}>
                                             {p.km_saida != null ? Number(p.km_saida).toLocaleString('pt-BR') : '—'}
+                                        </td>
+                                        <td className="px-3 py-2.5">
+                                            {p.local_chegada ? (
+                                                <>
+                                                    <p className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{p.local_chegada}</p>
+                                                    <span className="inline-block px-1.5 py-0.5 rounded text-xs font-medium mt-0.5"
+                                                        style={{ backgroundColor: TIPO_COLOR[p.tipo_local_chegada] || '#F3F4F6', color: TIPO_TEXT[p.tipo_local_chegada] || '#6B7280' }}>
+                                                        {p.tipo_local_chegada}
+                                                    </span>
+                                                </>
+                                            ) : '—'}
                                         </td>
                                         <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
                                             {p.data_chegada ? FMT_DATE(p.data_chegada) : '—'}
@@ -7434,10 +7513,20 @@ function TabPontosParada({ isAdmin }) {
                                             <td className="px-3 py-1.5 font-data text-xs whitespace-nowrap" style={{ color: '#6D28D9' }}>{ex.data_saida ? FMT_DATE(ex.data_saida) : '—'}</td>
                                             <td className="px-3 py-1.5 font-data text-xs" style={{ color: '#6D28D9' }}>{ex.horario_saida || '—'}</td>
                                             <td className="px-3 py-1.5 font-data text-xs text-right" style={{ color: '#1D4ED8' }}>{ex.km_saida != null ? Number(ex.km_saida).toLocaleString('pt-BR') : '—'}</td>
+                                            <td className="px-3 py-1.5">
+                                                {ex.local_chegada ? (
+                                                    <>
+                                                        <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                                            {ex.local_chegada}
+                                                        </span>
+                                                        {ex.tipo_local_chegada && <span className="ml-1 text-xs" style={{ color: '#9CA3AF' }}>{ex.tipo_local_chegada}</span>}
+                                                    </>
+                                                ) : '—'}
+                                            </td>
                                             <td className="px-3 py-1.5 font-data text-xs whitespace-nowrap" style={{ color: '#6D28D9' }}>{ex.data_chegada ? FMT_DATE(ex.data_chegada) : '—'}</td>
                                             <td className="px-3 py-1.5 font-data text-xs" style={{ color: '#6D28D9' }}>{ex.horario_chegada || '—'}</td>
                                             <td className="px-3 py-1.5 font-data text-xs text-right" style={{ color: '#059669' }}>{ex.km_chegada != null ? Number(ex.km_chegada).toLocaleString('pt-BR') : '—'}</td>
-                                            <td colSpan={2} />
+                                            <td colSpan={3} />
                                         </tr>
                                     ))}
                                     </React.Fragment>
@@ -7466,22 +7555,6 @@ function TabPontosParada({ isAdmin }) {
                         </div>
                         <div className="overflow-y-auto flex-1 p-5 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Tipo</label>
-                                    <select value={formEdit.tipo_local} onChange={e => setFormEdit(f => ({ ...f, tipo_local: e.target.value, local: '' }))} className={inputCls} style={inputStyle}>
-                                        {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => <option key={t}>{t}</option>)}
-                                    </select>
-                                </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Destino / Local</label>
-                                    <select value={formEdit.local} onChange={e => setFormEdit(f => ({ ...f, local: e.target.value }))} className={inputCls} style={inputStyle}>
-                                        <option value="">Selecione...</option>
-                                        {formEdit.local && !destinosParaTipo(formEdit.tipo_local).includes(formEdit.local) && (
-                                            <option value={formEdit.local}>{formEdit.local} (atual)</option>
-                                        )}
-                                        {destinosParaTipo(formEdit.tipo_local).map(nome => <option key={nome} value={nome}>{nome}</option>)}
-                                    </select>
-                                </div>
                                 <div className="col-span-2 flex items-center justify-end -mt-1">
                                     <button type="button" onClick={() => setGerenciarLocaisModal(true)} className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--color-primary)' }}>
                                         <Icon name="Settings" size={12} color="var(--color-primary)" />Gerenciar locais de Fábrica/Outro
@@ -7495,29 +7568,83 @@ function TabPontosParada({ isAdmin }) {
                                     <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Observações</label>
                                     <input value={formEdit.observacoes} onChange={e => setFormEdit(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} />
                                 </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Data Saída</label>
-                                    <input type="date" value={formEdit.data_saida} onChange={e => setFormEdit(f => ({ ...f, data_saida: e.target.value }))} className={inputCls} style={inputStyle} />
+                            </div>
+
+                            {/* Bloco SAÍDA — de onde saiu */}
+                            <div className="p-4 rounded-xl border space-y-3" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
+                                <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#1D4ED8' }}>
+                                    <Icon name="LogOut" size={14} color="#1D4ED8" />SAÍDA
+                                </p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Tipo</label>
+                                        <select value={formEdit.tipo_local} onChange={e => setFormEdit(f => ({ ...f, tipo_local: e.target.value, local: '' }))} className={inputCls} style={inputStyle}>
+                                            {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => <option key={t}>{t}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Destino / Local</label>
+                                        <select value={formEdit.local} onChange={e => setFormEdit(f => ({ ...f, local: e.target.value }))} className={inputCls} style={inputStyle}>
+                                            <option value="">Selecione...</option>
+                                            {formEdit.local && !destinosParaTipo(formEdit.tipo_local).includes(formEdit.local) && (
+                                                <option value={formEdit.local}>{formEdit.local} (atual)</option>
+                                            )}
+                                            {destinosParaTipo(formEdit.tipo_local).map(nome => <option key={nome} value={nome}>{nome}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Horário Saída</label>
-                                    <input type="time" value={formEdit.horario_saida} onChange={e => setFormEdit(f => ({ ...f, horario_saida: e.target.value }))} className={inputCls} style={inputStyle} />
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Data Saída</label>
+                                        <input type="date" value={formEdit.data_saida} onChange={e => setFormEdit(f => ({ ...f, data_saida: e.target.value }))} className={inputCls} style={inputStyle} />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Horário Saída</label>
+                                        <input type="time" value={formEdit.horario_saida} onChange={e => setFormEdit(f => ({ ...f, horario_saida: e.target.value }))} className={inputCls} style={inputStyle} />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>KM Saída</label>
+                                        <input type="number" value={formEdit.km_saida} onChange={e => setFormEdit(f => ({ ...f, km_saida: e.target.value }))} className={inputCls} style={inputStyle} />
+                                    </div>
                                 </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>KM Saída</label>
-                                    <input type="number" value={formEdit.km_saida} onChange={e => setFormEdit(f => ({ ...f, km_saida: e.target.value }))} className={inputCls} style={inputStyle} />
+                            </div>
+
+                            {/* Bloco CHEGADA — para onde foi */}
+                            <div className="p-4 rounded-xl border space-y-3" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
+                                <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#065F46' }}>
+                                    <Icon name="LogIn" size={14} color="#065F46" />CHEGADA
+                                </p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Tipo</label>
+                                        <select value={formEdit.tipo_local_chegada} onChange={e => setFormEdit(f => ({ ...f, tipo_local_chegada: e.target.value, local_chegada: '' }))} className={inputCls} style={inputStyle}>
+                                            {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => <option key={t}>{t}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Destino / Local</label>
+                                        <select value={formEdit.local_chegada} onChange={e => setFormEdit(f => ({ ...f, local_chegada: e.target.value }))} className={inputCls} style={inputStyle}>
+                                            <option value="">Selecione...</option>
+                                            {formEdit.local_chegada && !destinosParaTipo(formEdit.tipo_local_chegada).includes(formEdit.local_chegada) && (
+                                                <option value={formEdit.local_chegada}>{formEdit.local_chegada} (atual)</option>
+                                            )}
+                                            {destinosParaTipo(formEdit.tipo_local_chegada).map(nome => <option key={nome} value={nome}>{nome}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Data Chegada</label>
-                                    <input type="date" value={formEdit.data_chegada} onChange={e => setFormEdit(f => ({ ...f, data_chegada: e.target.value }))} className={inputCls} style={inputStyle} />
-                                </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Horário Chegada</label>
-                                    <input type="time" value={formEdit.horario_chegada} onChange={e => setFormEdit(f => ({ ...f, horario_chegada: e.target.value }))} className={inputCls} style={inputStyle} />
-                                </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>KM Chegada</label>
-                                    <input type="number" value={formEdit.km_chegada} onChange={e => setFormEdit(f => ({ ...f, km_chegada: e.target.value }))} className={inputCls} style={inputStyle} />
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Data Chegada</label>
+                                        <input type="date" value={formEdit.data_chegada} onChange={e => setFormEdit(f => ({ ...f, data_chegada: e.target.value }))} className={inputCls} style={inputStyle} />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Horário Chegada</label>
+                                        <input type="time" value={formEdit.horario_chegada} onChange={e => setFormEdit(f => ({ ...f, horario_chegada: e.target.value }))} className={inputCls} style={inputStyle} />
+                                    </div>
+                                    <div className="flex flex-col gap-1.5">
+                                        <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>KM Chegada</label>
+                                        <input type="number" value={formEdit.km_chegada} onChange={e => setFormEdit(f => ({ ...f, km_chegada: e.target.value }))} className={inputCls} style={inputStyle} />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -7966,6 +8093,7 @@ const TABS = [
     { id: 'diarias',       label: 'Diárias',           icon: 'CalendarDays',  group: 'Financeiro' },
     { id: 'financeiro',    label: 'Rel. Financeiro',   icon: 'BarChart3',     group: 'Financeiro' },
     { id: 'ordens',        label: 'Ordens de Serviço', icon: 'Wrench',        group: 'Gestão' },
+    { id: 'pneus',         label: 'Pneus',             icon: 'Disc',          group: 'Gestão' },
     { id: 'empresas',      label: 'Empresas',          icon: 'Building2',     group: 'Gestão' },
     { id: 'duplicatas',    label: 'Duplicatas',        icon: 'AlertTriangle', group: 'Gestão' },
 ];
@@ -8074,6 +8202,7 @@ export default function CarretasPage() {
                             {tab === 'diarias'         && <TabDiarias         isAdmin={admin} profile={profile} />}
                             {tab === 'financeiro'     && <TabRelatorioFinanceiro isAdmin={admin} />}
                             {tab === 'ordens'          && <TabOrdensServico  isAdmin={admin} profile={profile} />}
+                            {tab === 'pneus'           && <TabPneus          isAdmin={admin} />}
                             {tab === 'empresas'       && <TabEmpresas       isAdmin={admin} />}
                             {tab === 'duplicatas'     && admin && <TabDuplicatas />}
                             

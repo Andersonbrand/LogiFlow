@@ -260,7 +260,7 @@ export default function AdminPanel() {
             <NavigationBar />
             <main className="main-content">
                 <div className="border-b border-slate-200 bg-white">
-                    <div className="max-w-screen-xl mx-auto px-4 md:px-6 py-4 flex flex-col xs:flex-row xs:items-center xs:justify-between gap-3">
+                    <div className="max-w-[1920px] mx-auto px-4 md:px-6 py-4 flex flex-col xs:flex-row xs:items-center xs:justify-between gap-3">
                         <div>
                             <BreadcrumbTrail items={[{ label: 'Dashboard', path: '/' }, { label: 'Administração' }]} />
                             <h1 className="text-xl font-bold text-slate-800 mt-1">Painel Administrativo</h1>
@@ -271,7 +271,7 @@ export default function AdminPanel() {
                     </div>
                 </div>
 
-                <div className="max-w-screen-xl mx-auto px-4 md:px-6 py-6 space-y-6">
+                <div className="max-w-[1920px] mx-auto px-4 md:px-6 py-6 space-y-6">
                     {/* Tabs */}
                     <div className="flex gap-1 bg-slate-100 rounded-lg p-1 overflow-x-auto">
                         {TABS.map(t => (

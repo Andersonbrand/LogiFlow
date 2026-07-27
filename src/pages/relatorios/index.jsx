@@ -12,7 +12,7 @@ import { fetchRomaneios } from 'utils/romaneioService';
 import { fetchDespesasCaminhoes } from 'utils/caminhoesDespesasService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { fetchMaterials } from 'utils/materialService';
-import { fetchDiarias, fetchMotoristasCaminhao } from 'utils/carretasService';
+import { fetchDiarias, fetchMotoristasCaminhao, fetchAbastecimentos } from 'utils/carretasService';
 import { fetchDadosMargemFrete, encontrarCustoDestino, calcularCustoDestino } from 'utils/custosFrotaService';
 import { somarDespesasPorVencimento, agruparDespesasPorCategoriaVencimento, despesaTemVencimentoNoPeriodo, expandirDespesaParcelas } from 'utils/despesasParcelasUtils';
 import { useToast } from 'utils/useToast';
@@ -75,6 +75,7 @@ export default function Relatorios() {
     const [vehicles, setVehicles] = useState([]);
     const [despesasCaminhoes, setDespesasCaminhoes] = useState([]);
     const [diariasAvulsasCaminhao, setDiariasAvulsasCaminhao] = useState([]);
+    const [abastecimentosCaminhao, setAbastecimentosCaminhao] = useState([]);
     const [dadosMargemCaminhao, setDadosMargemCaminhao] = useState(null);
     const [loading, setLoading] = useState(true);
     const [periodo, setPeriodo] = useState('30');
@@ -101,6 +102,12 @@ export default function Relatorios() {
                     ? await fetchDiarias({ motoristasIds: idsCaminhao })
                     : [];
                 setDiariasAvulsasCaminhao(diavs);
+                // Custo real de combustível: vem dos registros de abastecimento feitos
+                // por cada motorista de caminhão (cadastro de motorista), não da previsão
+                // de consumo lançada dentro do romaneio.
+                const todosAbast = await fetchAbastecimentos();
+                const idsCaminhaoSet = new Set(idsCaminhao);
+                setAbastecimentosCaminhao((todosAbast || []).filter(a => idsCaminhaoSet.has(a.motorista_id)));
             } catch (err) { showToast('Erro: ' + err.message, 'error'); }
             finally { setLoading(false); }
         })();
@@ -117,6 +124,27 @@ export default function Relatorios() {
     const cutoff = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - Number(periodo)); return d; }, [periodo]);
     const romFiltrados = useMemo(() => romaneios.filter(r => r.saida && new Date(r.saida) >= cutoff), [romaneios, cutoff]);
     const romFinalizados = romFiltrados.filter(r => r.status === 'Finalizado');
+
+    // Custo real de combustível (diesel + Arla) por mês, a partir dos registros
+    // de abastecimento lançados por cada motorista de caminhão — esse é o custo
+    // efetivo, diferente da previsão de consumo lançada dentro do romaneio.
+    const custoCombustivelRealPorMes = useMemo(() => {
+        const map = {};
+        abastecimentosCaminhao.forEach(a => {
+            const dia = (a.data_abastecimento || '').slice(0, 10);
+            if (!dia) return;
+            const m = dia.slice(0, 7);
+            map[m] = (map[m] || 0) + Number(a.valor_total || 0);
+        });
+        return map;
+    }, [abastecimentosCaminhao]);
+    const somaCustoCombustivelReal = (dataInicioISO, dataFimISO) => Object.entries(custoCombustivelRealPorMes)
+        .reduce((s, [m, v]) => {
+            const dia = `${m}-01`;
+            if (dataInicioISO && dia.slice(0, 7) < dataInicioISO.slice(0, 7)) return s;
+            if (dataFimISO && dia.slice(0, 7) > dataFimISO.slice(0, 7)) return s;
+            return s + v;
+        }, 0);
 
     // ─── Período mensal do DRE de Caminhões (independente do filtro "Operacional") ───
     const dreInicioISO = `${dreMesInicio}-01`;
@@ -161,18 +189,24 @@ export default function Relatorios() {
     }, [romFiltrados]);
 
     // ─── Financeiro KPIs ──────────────────────────────────────
+    const cutoffISO = cutoff.toISOString().slice(0, 10);
+    const custoCombustivelRealPeriodo = useMemo(
+        () => somaCustoCombustivelReal(cutoffISO, null),
+        [custoCombustivelRealPorMes, cutoffISO] // eslint-disable-line
+    );
     const receitaTotal = romFinalizados.reduce((s, r) => s + (r.valor_frete || 0), 0);
-    const custoTotal = romFinalizados.reduce((s, r) =>
-        s + (r.custo_combustivel || 0) + (r.custo_pedagio || 0) + (r.custo_motorista || 0), 0);
+    const custoTotal = custoCombustivelRealPeriodo + romFinalizados.reduce((s, r) =>
+        s + (r.custo_pedagio || 0) + (r.custo_motorista || 0), 0);
     const margemLucro = receitaTotal > 0 ? ((receitaTotal - custoTotal) / receitaTotal * 100) : 0;
     const ticketMedio = finalizados > 0 ? receitaTotal / finalizados : 0;
 
-    // Custo por componente
+    // Custo por componente — combustível vem dos abastecimentos reais, não da
+    // previsão lançada dentro do romaneio.
     const custosBreakdown = useMemo(() => [
-        { name: 'Combustível', value: romFinalizados.reduce((s, r) => s + (r.custo_combustivel || 0), 0) },
+        { name: 'Combustível', value: custoCombustivelRealPeriodo },
         { name: 'Pedágio',     value: romFinalizados.reduce((s, r) => s + (r.custo_pedagio || 0), 0) },
         { name: 'Motorista',   value: romFinalizados.reduce((s, r) => s + (r.custo_motorista || 0), 0) },
-    ].filter(c => c.value > 0), [romFinalizados]);
+    ].filter(c => c.value > 0), [romFinalizados, custoCombustivelRealPeriodo]);
 
     // Receita vs Custo por mês
     const financeiroPorMes = useMemo(() => {
@@ -182,10 +216,12 @@ export default function Relatorios() {
             if (!m) return;
             if (!map[m]) map[m] = { mes: m.slice(5), receita: 0, custo: 0 };
             map[m].receita += r.valor_frete || 0;
-            map[m].custo += (r.custo_combustivel || 0) + (r.custo_pedagio || 0) + (r.custo_motorista || 0);
+            map[m].custo += (r.custo_pedagio || 0) + (r.custo_motorista || 0);
         });
+        // Soma o custo real de combustível de cada mês (dos abastecimentos)
+        Object.keys(map).forEach(m => { map[m].custo += (custoCombustivelRealPorMes[m] || 0); });
         return Object.values(map).sort((a, b) => a.mes.localeCompare(b.mes));
-    }, [romFinalizados]);
+    }, [romFinalizados, custoCombustivelRealPorMes]);
 
     // Top rotas por receita
     const topRotas = useMemo(() => {
@@ -261,7 +297,6 @@ export default function Relatorios() {
                 viagens: 0,
             };
             map[m].receita          += r.valor_frete          || 0;
-            map[m].custoCombustivel += r.custo_combustivel     || 0;
             map[m].custoPedagio     += r.custo_pedagio         || 0;
             map[m].custoMotorista   += r.custo_motorista       || 0;
             map[m].viagens++;
@@ -291,6 +326,22 @@ export default function Relatorios() {
                 custoMotorista: 0, despesasCaminhoes: 0, custoRodagem: 0, viagens: 0,
             };
             map[m].custoMotorista += Number(d.valor_total || 0);
+        });
+
+        // Custo real de combustível (diesel + Arla) por mês, a partir dos registros
+        // de abastecimento lançados por cada motorista de caminhão — restrito ao
+        // período do DRE selecionado. Este é o custo efetivo; a previsão de consumo
+        // lançada dentro do romaneio continua disponível apenas para análise por viagem.
+        abastecimentosCaminhao.forEach(a => {
+            const dia = (a.data_abastecimento || '').slice(0, 10);
+            if (!dia || dia < dreInicioISO || dia > dreFimISO) return;
+            const m = dia.slice(0, 7);
+            if (!map[m]) map[m] = {
+                mes: m, mesLabel: m.slice(5),
+                receita: 0, custoCombustivel: 0, custoPedagio: 0,
+                custoMotorista: 0, despesasCaminhoes: 0, custoRodagem: 0, viagens: 0,
+            };
+            map[m].custoCombustivel += Number(a.valor_total || 0);
         });
 
         // Soma despesas de caminhões (manutenção, pneus, etc.) por mês —
@@ -325,7 +376,7 @@ export default function Relatorios() {
                 const margemPct        = m.receita > 0 ? (resultadoLiquido / m.receita) * 100 : 0;
                 return { ...m, custoOperacional, totalDespesas, margemBruta, resultadoLiquido, margemPct };
             });
-    }, [romFinalizadosDre, despesasCaminhoes, diariasAvulsasCaminhao, dadosMargemCaminhao, dreInicioISO, dreFimISO]);
+    }, [romFinalizadosDre, despesasCaminhoes, diariasAvulsasCaminhao, abastecimentosCaminhao, dadosMargemCaminhao, dreInicioISO, dreFimISO]);
 
     // Totais consolidados da DRE
     const dreTotais = useMemo(() => {
@@ -483,7 +534,7 @@ export default function Relatorios() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-2xl mx-auto px-4 tab:px-6 lg:px-8 py-6">
+                <div className="max-w-[1920px] mx-auto px-4 tab:px-6 lg:px-8 py-6">
                     <BreadcrumbTrail className="mb-4" />
 
                     {/* Header */}

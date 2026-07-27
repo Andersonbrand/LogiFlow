@@ -15,7 +15,8 @@ import {
     fetchDespesasCaminhoes, createDespesaCaminhao, updateDespesaCaminhao, deleteDespesaCaminhao,
     pagarBoletoCaminhao, pagarParcelaCartaoCaminhao,
     revogarBoletoCaminhao, revogarParcelaCartaoCaminhao,
-
+    fetchCategoriasDespesaCaminhoes, createCategoriaDespesaCaminhoes,
+    renameCategoriaDespesaCaminhoes, deleteCategoriaDespesaCaminhoes,
 } from 'utils/caminhoesDespesasService';
 import {
     fetchFornecedores as fetchFornecedoresCaminhoes,
@@ -608,9 +609,10 @@ function ModalFornecedores({ onClose, onSelect }) {
 }
 
 // ─── Modal de Formulário de Despesa ──────────────────────────────────────────
-function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSaved }) {
+function ModalDespesa({ modal, veiculos, despesasExistentes = [], categorias, onCategoriasChange, onClose, onSaved }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
+    const { profile } = useAuth();
     const xmlRef = useRef(null);
     const comprovanteRef = useRef(null);
     const permutaRef = useRef(null);
@@ -621,20 +623,7 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
     const [loadingNFe, setLoadingNFe] = useState(false);
     const [saving, setSaving] = useState(false);
     const [showFornecedores, setShowFornecedores] = useState(false);
-    const [categorias, setCategorias] = useState(() => {
-        try {
-            const v2 = localStorage.getItem('caminhoes_categorias_v2');
-            if (v2) return JSON.parse(v2);
-            // Migração: existiam apenas as categorias extras criadas pelo usuário;
-            // agora a lista completa (padrão + extras) fica editável.
-            const extras = JSON.parse(localStorage.getItem('caminhoes_categorias_extras') || '[]');
-            return [...CATEGORIAS_DESPESA_CAMINHOES, ...extras];
-        } catch { return [...CATEGORIAS_DESPESA_CAMINHOES]; }
-    });
-    const salvarCategorias = (novas) => {
-        setCategorias(novas);
-        try { localStorage.setItem('caminhoes_categorias_v2', JSON.stringify(novas)); } catch {}
-    };
+    const [savingCategoria, setSavingCategoria] = useState(false);
     const [novaCategoria, setNovaCategoria] = useState('');
     const [showNovaCategoria, setShowNovaCategoria] = useState(false);
     const [novoBoleto, setNovoBoleto] = useState({ numero_boleto: '', vencimento: '', valor: '' });
@@ -677,13 +666,20 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
 
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-    const adicionarCategoria = () => {
+    const adicionarCategoria = async () => {
         const cat = novaCategoria.trim();
         if (!cat || todasCategorias.includes(cat)) { showToast(cat ? 'Categoria já existe' : 'Digite o nome', 'error'); return; }
-        salvarCategorias([...categorias, cat]);
-        set('categoria', cat);
-        setNovaCategoria(''); setShowNovaCategoria(false);
-        showToast(`Categoria "${cat}" criada!`, 'success');
+        setSavingCategoria(true);
+        try {
+            await createCategoriaDespesaCaminhoes(cat, profile?.id || null);
+            await onCategoriasChange();
+            set('categoria', cat);
+            setNovaCategoria(''); setShowNovaCategoria(false);
+            showToast(`Categoria "${cat}" criada!`, 'success');
+        } catch (e) {
+            const msg = /duplicate key|unique constraint/i.test(e.message) ? 'Categoria já existe' : 'Erro: ' + e.message;
+            showToast(msg, 'error');
+        } finally { setSavingCategoria(false); }
     };
 
     // Renomeia qualquer categoria (padrão ou criada pelo usuário) e atualiza em
@@ -696,7 +692,8 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
         try {
             const afetadas = despesasExistentes.filter(d => d.categoria === catAntiga);
             await Promise.all(afetadas.map(d => updateDespesaCaminhao(d.id, { categoria: catNova })));
-            salvarCategorias(categorias.map(c => c === catAntiga ? catNova : c));
+            await renameCategoriaDespesaCaminhoes(catAntiga, catNova);
+            await onCategoriasChange();
             if (form.categoria === catAntiga) set('categoria', catNova);
             showToast(`Categoria renomeada para "${catNova}"${afetadas.length ? ` (${afetadas.length} despesa(s) atualizada(s))` : ''}!`, 'success');
         } catch (e) { showToast('Erro ao renomear categoria: ' + e.message, 'error'); }
@@ -705,7 +702,7 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
     // Exclui uma categoria da lista de opções (não apaga despesas já lançadas
     // com esse texto — elas mantêm o valor salvo).
     const excluirCategoria = async (cat) => {
-        if (categorias.length <= 1) { showToast('É preciso manter ao menos uma categoria', 'error'); return; }
+        if (todasCategorias.length <= 1) { showToast('É preciso manter ao menos uma categoria', 'error'); return; }
         const emUso = despesasExistentes.filter(d => d.categoria === cat).length;
         const ok = await confirm({
             title: 'Excluir categoria?',
@@ -715,10 +712,13 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], onClose, onSav
             confirmLabel: 'Excluir', variant: 'danger',
         });
         if (!ok) return;
-        const novas = categorias.filter(c => c !== cat);
-        salvarCategorias(novas);
-        if (form.categoria === cat) set('categoria', novas[0] || '');
-        showToast('Categoria excluída!', 'success');
+        try {
+            await deleteCategoriaDespesaCaminhoes(cat);
+            const novas = todasCategorias.filter(c => c !== cat);
+            await onCategoriasChange();
+            if (form.categoria === cat) set('categoria', novas[0] || '');
+            showToast('Categoria excluída!', 'success');
+        } catch (e) { showToast('Erro ao excluir categoria: ' + e.message, 'error'); }
     };
     const [editandoCategoria, setEditandoCategoria] = useState(null);
     const [textoEdicaoCategoria, setTextoEdicaoCategoria] = useState('');
@@ -1360,15 +1360,13 @@ export default function DespesasCaminhoes() {
             (d.parcelas_cartao || []).some(p => (p.cartao || '').toLowerCase().includes(q))
         );
     }, [despesas, busca]);
-    const [categoriasExtras]          = useState(() => {
-        try {
-            const v2 = localStorage.getItem('caminhoes_categorias_v2');
-            if (v2) return JSON.parse(v2);
-            return [...CATEGORIAS_DESPESA_CAMINHOES, ...JSON.parse(localStorage.getItem('caminhoes_categorias_extras') || '[]')];
-        } catch { return [...CATEGORIAS_DESPESA_CAMINHOES]; }
-    });
+    const [todasCategorias, setTodasCategorias] = useState(() => [...CATEGORIAS_DESPESA_CAMINHOES]);
+    const recarregarCategorias = useCallback(async () => {
+        try { setTodasCategorias(await fetchCategoriasDespesaCaminhoes()); }
+        catch (e) { showToast('Erro ao carregar categorias: ' + e.message, 'error'); }
+    }, [showToast]);
+    useEffect(() => { recarregarCategorias(); }, [recarregarCategorias]);
 
-    const todasCategorias = categoriasExtras;
     const [guiaDespesas, setGuiaDespesas] = useState('registros');
     const [relatorioPeriodo, setRelatorioPeriodo] = useState(() => {
         const h = new Date();
@@ -1477,7 +1475,7 @@ export default function DespesasCaminhoes() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-2xl mx-auto px-4 lg:px-8 py-6">
+                <div className="max-w-[1920px] mx-auto px-4 lg:px-8 py-6">
                     <BreadcrumbTrail className="mb-4" />
 
                     {/* Header */}
@@ -1801,6 +1799,8 @@ export default function DespesasCaminhoes() {
                     modal={modal}
                     veiculos={veiculos}
                     despesasExistentes={despesas}
+                    categorias={todasCategorias}
+                    onCategoriasChange={recarregarCategorias}
                     onClose={() => setModal(null)}
                     onSaved={load}
                 />

@@ -255,7 +255,7 @@ export default function MainDashboard() {
             <main className="main-content">
                 {/* Header */}
                 <div className="border-b border-slate-200 bg-white">
-                    <div className="max-w-screen-2xl mx-auto px-4 tab:px-6 lg:px-8 py-4">
+                    <div className="max-w-[1920px] mx-auto px-4 tab:px-6 lg:px-8 py-4">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
                                 <BreadcrumbTrail />
@@ -281,7 +281,7 @@ export default function MainDashboard() {
                     </div>
                 </div>
 
-                <div className="max-w-screen-2xl mx-auto px-4 tab:px-6 lg:px-8 py-5 tab:py-6 lg:py-8 flex flex-col gap-6">
+                <div className="max-w-[1920px] mx-auto px-4 tab:px-6 lg:px-8 py-5 tab:py-6 lg:py-8 flex flex-col gap-6">
 
                     {/* Maintenance Alerts Banner */}
                     {maintenanceAlerts.length > 0 && (

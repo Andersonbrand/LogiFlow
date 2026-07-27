@@ -10,31 +10,19 @@ export async function fetchItensAcessorios({ apenasAtivos = true } = {}) {
 }
 
 export async function createItemAcessorio(item) {
-    const { data, error } = await supabase
-        .from('acessorios_itens')
-        .insert(item)
-        .select()
-        .single();
+    const { data, error } = await supabase.from('acessorios_itens').insert(item).select().single();
     if (error) throw error;
     return data;
 }
 
 export async function updateItemAcessorio(id, updates) {
-    const { data, error } = await supabase
-        .from('acessorios_itens')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
+    const { data, error } = await supabase.from('acessorios_itens').update(updates).eq('id', id).select().single();
     if (error) throw error;
     return data;
 }
 
 export async function deleteItemAcessorio(id) {
-    const { error } = await supabase
-        .from('acessorios_itens')
-        .delete()
-        .eq('id', id);
+    const { error } = await supabase.from('acessorios_itens').delete().eq('id', id);
     if (error) throw error;
 }
 

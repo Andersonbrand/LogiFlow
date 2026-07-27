@@ -5,16 +5,17 @@ import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
+import { useConfirm } from 'components/ui/ConfirmDialog';
 import { supabase, subscribeTabela } from 'utils/supabaseClient';
 import { calcularBonificacao } from 'utils/bonificacaoService';
 import {
-    fetchAbastecimentos, createAbastecimento,
-    fetchChecklists, createChecklist,
-    fetchCarretasVeiculos,
+    fetchAbastecimentos, createAbastecimento, updateAbastecimento, deleteAbastecimento,
+    fetchChecklists, createChecklist, updateChecklist, deleteChecklist,
     fetchPostos,
     fetchConfigAbastecimento,
     CHECKLIST_ITENS,
 } from 'utils/carretasService';
+import { fetchCaminhoesPlacas } from 'utils/vehicleService';
 import * as XLSX from 'xlsx';
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -49,32 +50,39 @@ function Field({ label, children, required }) {
 export default function MotoristaDashboard() {
     const { user, profile } = useAuth();
     const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
     const fotoRef = useRef(null);
 
     const [tab, setTab]               = useState('viagens');
     const [period, setPeriod]         = useState(30);
+    // Período personalizado (usado na aba Bonificações) — quando preenchido,
+    // sobrepõe o filtro de "últimos N dias" acima.
+    const [periodoCustom, setPeriodoCustom] = useState(null); // { inicio: 'YYYY-MM-DD', fim: 'YYYY-MM-DD' } | null
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [loading, setLoading]       = useState(true);
 
     const [romaneios, setRomaneios]   = useState([]);
     const [abast, setAbast]           = useState([]);
     const [checklists, setChecklists] = useState([]);
-    const [veiculos, setVeiculos]     = useState([]);
+    const [veiculos, setVeiculos]     = useState([]); // caminhões da página de Veículos (item 7)
     const [postos, setPostos]         = useState([]);
     const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
+    const [filtroPlaca, setFiltroPlaca] = useState('');
 
     const [modalAbast, setModalAbast] = useState(false);
     const [modalCheck, setModalCheck] = useState(false);
     const [fotoPreview, setFotoPreview] = useState(null);
+    const [editingAbastId, setEditingAbastId] = useState(null);
+    const [editingCheckId, setEditingCheckId] = useState(null);
 
     const emptyAbast = () => ({
-        veiculo_id: '', posto_id: '',
+        veiculo_caminhao_id: '', posto_id: '',
         data_abastecimento: new Date().toISOString().split('T')[0],
         horario: '', litros_diesel: '', valor_diesel: '',
         litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '',
     });
     const emptyCheck = () => ({
-        veiculo_id: '', itens: {}, problemas: '', necessidades: '',
+        veiculo_caminhao_id: '', itens: {}, problemas: '', necessidades: '',
         observacoes_livres: '', foto_url: '',
     });
     const [formAbast, setFormAbast] = useState(emptyAbast());
@@ -87,22 +95,30 @@ export default function MotoristaDashboard() {
         if (!user?.id || !profile?.name) return;
         setLoading(true);
         try {
-            const cut = new Date(); cut.setDate(cut.getDate() - period);
-            const dateStr = cut.toISOString().split('T')[0];
+            let dateStr, dateFimStr = null;
+            if (periodoCustom?.inicio && periodoCustom?.fim) {
+                dateStr = periodoCustom.inicio;
+                dateFimStr = periodoCustom.fim;
+            } else {
+                const cut = new Date(); cut.setDate(cut.getDate() - period);
+                dateStr = cut.toISOString().split('T')[0];
+            }
+
+            let romQuery = supabase.from('romaneios')
+                .select(`id, numero, motorista, motorista_id, placa, destino, status,
+                    aprovado, aprovado_em, peso_total, saida, created_at,
+                    romaneio_itens(id, quantidade, peso_total, material_id,
+                        materials(id, nome, unidade, peso, categoria_frete))`)
+                .or(`motorista_id.eq.${user.id},motorista.ilike."${profile.name}"`)
+                .gte('created_at', dateStr);
+            if (dateFimStr) romQuery = romQuery.lte('created_at', dateFimStr + 'T23:59:59');
+            romQuery = romQuery.order('created_at', { ascending: false });
 
             const [roms, a, c, ve, p, cfg] = await Promise.all([
-                supabase.from('romaneios')
-                    .select(`id, numero, motorista, motorista_id, placa, destino, status,
-                        aprovado, aprovado_em, peso_total, saida, created_at,
-                        romaneio_itens(id, quantidade, peso_total, material_id,
-                            materials(id, nome, unidade, peso, categoria_frete))`)
-                    .or(`motorista_id.eq.${user.id},motorista.ilike."${profile.name}"`)
-                    .gte('created_at', dateStr)
-                    .order('created_at', { ascending: false })
-                    .then(r => r.data || []),
-                fetchAbastecimentos({ motoristaId: user.id, dataInicio: dateStr }),
+                romQuery.then(r => r.data || []),
+                fetchAbastecimentos({ motoristaId: user.id, dataInicio: dateStr, ...(dateFimStr ? { dataFim: dateFimStr } : {}) }),
                 fetchChecklists({ motoristaId: user.id }),
-                fetchCarretasVeiculos(),
+                fetchCaminhoesPlacas(),
                 fetchPostos().catch(() => []),
                 fetchConfigAbastecimento().catch(() => ({ preco_diesel: 0, preco_arla: 0 })),
             ]);
@@ -113,7 +129,7 @@ export default function MotoristaDashboard() {
             setConfigAbast(cfg || { preco_diesel: 0, preco_arla: 0 });
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [user?.id, profile?.name, period]); // eslint-disable-line
+    }, [user?.id, profile?.name, period, periodoCustom]); // eslint-disable-line
 
     useEffect(() => {
         load();
@@ -173,7 +189,7 @@ export default function MotoristaDashboard() {
 
     // ── Handlers ─────────────────────────────────────────────────────────────
     const handleAbast = async () => {
-        if (!formAbast.veiculo_id || !formAbast.data_abastecimento) {
+        if (!formAbast.veiculo_caminhao_id || !formAbast.data_abastecimento) {
             showToast('Veículo e data são obrigatórios', 'error'); return;
         }
         if (!formAbast.cupom_fiscal?.trim()) {
@@ -181,15 +197,53 @@ export default function MotoristaDashboard() {
         }
         setSavingAbast(true);
         try {
-            const payload = { ...formAbast, motorista_id: user.id };
+            const caminhao = veiculos.find(v => String(v.id) === formAbast.veiculo_caminhao_id);
+            const payload = {
+                ...formAbast, motorista_id: user.id,
+                veiculo_caminhao_placa: caminhao?.placa || null,
+                veiculo_caminhao_modelo: caminhao?.modelo || null,
+            };
             if (!payload.posto_id) delete payload.posto_id;
             const posto = postos.find(p => p.id === formAbast.posto_id);
             if (posto) payload.posto = posto.nome;
-            await createAbastecimento(payload);
-            showToast('Abastecimento registrado!', 'success');
-            setModalAbast(false); setFormAbast(emptyAbast()); load();
+            if (editingAbastId) {
+                await updateAbastecimento(editingAbastId, payload);
+                showToast('Abastecimento atualizado!', 'success');
+            } else {
+                await createAbastecimento(payload);
+                showToast('Abastecimento registrado!', 'success');
+            }
+            setModalAbast(false); setFormAbast(emptyAbast()); setEditingAbastId(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setSavingAbast(false); }
+    };
+
+    const abrirEdicaoAbast = (a) => {
+        setEditingAbastId(a.id);
+        setFormAbast({
+            veiculo_caminhao_id: a.veiculo_caminhao_id || '',
+            posto_id: a.posto_id || '',
+            data_abastecimento: a.data_abastecimento || new Date().toISOString().split('T')[0],
+            horario: a.horario || '',
+            litros_diesel: a.litros_diesel ?? '', valor_diesel: a.valor_diesel ?? '',
+            litros_arla: a.litros_arla ?? '', valor_arla: a.valor_arla ?? '',
+            cupom_fiscal: a.cupom_fiscal || '', observacoes: a.observacoes || '',
+        });
+        setModalAbast(true);
+    };
+
+    const excluirAbast = async (a) => {
+        const ok = await confirm({
+            title: 'Excluir abastecimento',
+            message: `Excluir o abastecimento de ${a.veiculo?.placa || a.veiculo_caminhao_placa || 'veículo'} em ${a.data_abastecimento ? new Date(a.data_abastecimento + 'T00:00:00').toLocaleDateString('pt-BR') : ''}?`,
+            confirmText: 'Excluir', variant: 'danger',
+        });
+        if (!ok) return;
+        try {
+            await deleteAbastecimento(a.id);
+            showToast('Abastecimento excluído', 'success');
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
     const handleFoto = (e) => {
@@ -205,15 +259,53 @@ export default function MotoristaDashboard() {
     };
 
     const handleCheck = async () => {
-        if (!formCheck.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
+        if (!formCheck.veiculo_caminhao_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
         setSavingCheck(true);
         try {
-            await createChecklist({ ...formCheck, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
-            showToast('Checklist enviado!', 'success');
-            setModalCheck(false); setFotoPreview(null); setFormCheck(emptyCheck()); load();
+            const caminhao = veiculos.find(v => String(v.id) === formCheck.veiculo_caminhao_id);
+            const payload = {
+                ...formCheck, motorista_id: user.id,
+                veiculo_caminhao_placa: caminhao?.placa || null,
+                veiculo_caminhao_modelo: caminhao?.modelo || null,
+            };
+            if (editingCheckId) {
+                await updateChecklist(editingCheckId, payload);
+                showToast('Checklist atualizado!', 'success');
+            } else {
+                payload.semana_ref = semana.toISOString().split('T')[0];
+                await createChecklist(payload);
+                showToast('Checklist enviado!', 'success');
+            }
+            setModalCheck(false); setFotoPreview(null); setFormCheck(emptyCheck()); setEditingCheckId(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setSavingCheck(false); }
+    };
+
+    const abrirEdicaoCheck = (c) => {
+        setEditingCheckId(c.id);
+        setFormCheck({
+            veiculo_caminhao_id: c.veiculo_caminhao_id || '',
+            itens: c.itens || {},
+            problemas: c.problemas || '', necessidades: c.necessidades || '',
+            observacoes_livres: c.observacoes_livres || '', foto_url: c.foto_url || '',
+        });
+        setFotoPreview(c.foto_url || null);
+        setModalCheck(true);
+    };
+
+    const excluirCheck = async (c) => {
+        const ok = await confirm({
+            title: 'Excluir checklist',
+            message: `Excluir o checklist de ${c.veiculo?.placa || c.veiculo_caminhao_placa || 'veículo'}?`,
+            confirmText: 'Excluir', variant: 'danger',
+        });
+        if (!ok) return;
+        try {
+            await deleteChecklist(c.id);
+            showToast('Checklist excluído', 'success');
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
     const exportar = () => {
@@ -250,7 +342,7 @@ export default function MotoristaDashboard() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-xl mx-auto">
+                <div className="max-w-[1920px] mx-auto">
                     <div className="flex">
 
                         {/* ── Sidebar desktop ── */}
@@ -361,7 +453,7 @@ export default function MotoristaDashboard() {
 
                             {/* Quick actions */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-                                <button onClick={() => { setFormAbast(emptyAbast()); setModalAbast(true); }}
+                                <button onClick={() => { setEditingAbastId(null); setFormAbast(emptyAbast()); setModalAbast(true); }}
                                     className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all"
                                     style={{ borderColor: 'var(--color-border)' }}>
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#D1FAE5' }}>
@@ -372,7 +464,7 @@ export default function MotoristaDashboard() {
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Diesel + Arla</p>
                                     </div>
                                 </button>
-                                <button onClick={() => { setFormCheck(emptyCheck()); setFotoPreview(null); setModalCheck(true); }}
+                                <button onClick={() => { setEditingCheckId(null); setFormCheck(emptyCheck()); setFotoPreview(null); setModalCheck(true); }}
                                     className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all"
                                     style={{ borderColor: 'var(--color-border)' }}>
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#EFF6FF' }}>
@@ -426,6 +518,13 @@ export default function MotoristaDashboard() {
                                     {/* Abastecimentos */}
                                     {tab === 'abastecimentos' && (
                                         <div className="flex flex-col gap-3">
+                                            {veiculos.length > 0 && (
+                                                <select value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
+                                                    className="px-3 py-2 rounded-lg border text-sm self-start" style={inputStyle}>
+                                                    <option value="">Todas as placas</option>
+                                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                                </select>
+                                            )}
                                             <div className="grid grid-cols-2 gap-3 mb-2">
                                                 {[
                                                     { l: 'Diesel (L)', v: totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#1D4ED8', bg: '#EFF6FF', i: 'Fuel' },
@@ -440,16 +539,24 @@ export default function MotoristaDashboard() {
                                                     </div>
                                                 ))}
                                             </div>
-                                            {abast.length === 0
+                                            {abast.filter(a => !filtroPlaca || String(a.veiculo_caminhao_id) === filtroPlaca).length === 0
                                                 ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Fuel" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento no período</span></div>
-                                                : abast.map(a => (
+                                                : abast.filter(a => !filtroPlaca || String(a.veiculo_caminhao_id) === filtroPlaca).map(a => (
                                                     <div key={a.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                         <div className="flex items-start justify-between mb-2 gap-2">
                                                             <div>
                                                                 <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{a.posto || postos.find(p => p.id === a.posto_id)?.nome || '—'}</p>
-                                                                <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{FMT(a.data_abastecimento)}{a.horario ? ` · ${a.horario}` : ''} · {a.veiculo?.placa || '—'}</p>
+                                                                <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{FMT(a.data_abastecimento)}{a.horario ? ` · ${a.horario}` : ''} · {a.veiculo?.placa || a.veiculo_caminhao_placa || '—'}</p>
                                                             </div>
-                                                            <p className="text-base font-bold font-data text-purple-600 flex-shrink-0">{BRL(a.valor_total)}</p>
+                                                            <div className="flex items-center gap-1 flex-shrink-0">
+                                                                <p className="text-base font-bold font-data text-purple-600">{BRL(a.valor_total)}</p>
+                                                                <button onClick={() => abrirEdicaoAbast(a)} className="p-1.5 rounded-lg hover:bg-gray-100" title="Editar">
+                                                                    <Icon name="Pencil" size={14} color="var(--color-muted-foreground)" />
+                                                                </button>
+                                                                <button onClick={() => excluirAbast(a)} className="p-1.5 rounded-lg hover:bg-red-50" title="Excluir">
+                                                                    <Icon name="Trash2" size={14} color="#DC2626" />
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                         <div className="grid grid-cols-2 gap-2 text-xs">
                                                             {Number(a.litros_diesel||0) > 0 && (
@@ -472,22 +579,37 @@ export default function MotoristaDashboard() {
                                     {/* Checklist */}
                                     {tab === 'checklist' && (
                                         <div className="flex flex-col gap-4">
-                                            {checklists.length === 0
+                                            {veiculos.length > 0 && (
+                                                <select value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
+                                                    className="px-3 py-2 rounded-lg border text-sm self-start" style={inputStyle}>
+                                                    <option value="">Todas as placas</option>
+                                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                                </select>
+                                            )}
+                                            {checklists.filter(c => !filtroPlaca || String(c.veiculo_caminhao_id) === filtroPlaca).length === 0
                                                 ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="ClipboardCheck" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum checklist enviado</span></div>
-                                                : checklists.map(c => {
+                                                : checklists.filter(c => !filtroPlaca || String(c.veiculo_caminhao_id) === filtroPlaca).map(c => {
                                                     const itens = c.itens || {};
                                                     const ok = Object.values(itens).filter(Boolean).length;
                                                     return (
                                                         <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                             <div className="flex items-center justify-between mb-2">
                                                                 <div>
-                                                                    <p className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.veiculo?.placa || '—'}</p>
+                                                                    <p className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.veiculo?.placa || c.veiculo_caminhao_placa || '—'}</p>
                                                                     <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Semana de {c.semana_ref ? FMT(c.semana_ref) : '—'}</p>
                                                                 </div>
-                                                                {c.aprovado
-                                                                    ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"><Icon name="CheckCircle2" size={11} />Aprovado</span>
-                                                                    : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Icon name="Clock" size={11} />Pendente</span>
-                                                                }
+                                                                <div className="flex items-center gap-1">
+                                                                    {c.aprovado
+                                                                        ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"><Icon name="CheckCircle2" size={11} />Aprovado</span>
+                                                                        : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Icon name="Clock" size={11} />Pendente</span>
+                                                                    }
+                                                                    <button onClick={() => abrirEdicaoCheck(c)} className="p-1.5 rounded-lg hover:bg-gray-100" title="Editar">
+                                                                        <Icon name="Pencil" size={14} color="var(--color-muted-foreground)" />
+                                                                    </button>
+                                                                    <button onClick={() => excluirCheck(c)} className="p-1.5 rounded-lg hover:bg-red-50" title="Excluir">
+                                                                        <Icon name="Trash2" size={14} color="#DC2626" />
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                             <div className="flex items-center justify-between text-xs mb-1">
                                                                 <span style={{ color: 'var(--color-muted-foreground)' }}>Itens OK</span>
@@ -509,6 +631,40 @@ export default function MotoristaDashboard() {
                                     {/* Bonificações */}
                                     {tab === 'bonificacoes' && (
                                         <div className="flex flex-col gap-4">
+                                            <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                                                    <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Filtrar por período específico</h3>
+                                                    {periodoCustom && (
+                                                        <button onClick={() => setPeriodoCustom(null)}
+                                                            className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--color-primary)' }}>
+                                                            <Icon name="X" size={12} /> Limpar filtro
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-end gap-2 flex-wrap">
+                                                    <div>
+                                                        <label className="block text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>De</label>
+                                                        <input type="date" value={periodoCustom?.inicio || ''}
+                                                            onChange={e => setPeriodoCustom(pc => ({ inicio: e.target.value, fim: pc?.fim || e.target.value }))}
+                                                            className="h-10 px-3 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }} />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Até</label>
+                                                        <input type="date" value={periodoCustom?.fim || ''}
+                                                            onChange={e => setPeriodoCustom(pc => ({ inicio: pc?.inicio || e.target.value, fim: e.target.value }))}
+                                                            className="h-10 px-3 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }} />
+                                                    </div>
+                                                    <Button size="sm" iconName="Search" disabled={!periodoCustom?.inicio || !periodoCustom?.fim} onClick={load}>
+                                                        Buscar viagens
+                                                    </Button>
+                                                </div>
+                                                {periodoCustom?.inicio && periodoCustom?.fim && (
+                                                    <p className="text-xs mt-2" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                        <Icon name="Info" size={11} className="inline mr-1" />
+                                                        Os cards abaixo mostram os valores de {new Date(periodoCustom.inicio + 'T00:00:00').toLocaleDateString('pt-BR')} até {new Date(periodoCustom.fim + 'T00:00:00').toLocaleDateString('pt-BR')}, em vez do filtro de "{PERIOD_OPTIONS.find(p=>p.days===period)?.label || period + ' dias'}" da barra lateral.
+                                                    </p>
+                                                )}
+                                            </div>
                                             <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                 <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: 'var(--color-text-primary)' }}>Resumo do Período</h3>
                                                 <div className="grid grid-cols-2 gap-3">
@@ -602,15 +758,15 @@ export default function MotoristaDashboard() {
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-50">
                                     <Icon name="Fuel" size={18} color="#059669" />
                                 </div>
-                                <h2 className="font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>Registrar Abastecimento</h2>
+                                <h2 className="font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>{editingAbastId ? 'Editar Abastecimento' : 'Registrar Abastecimento'}</h2>
                             </div>
-                            <button onClick={() => setModalAbast(false)} className="p-1.5 rounded-lg hover:bg-gray-100">
+                            <button onClick={() => { setModalAbast(false); setEditingAbastId(null); }} className="p-1.5 rounded-lg hover:bg-gray-100">
                                 <Icon name="X" size={18} color="var(--color-muted-foreground)" />
                             </button>
                         </div>
                         <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                             <Field label="Veículo" required>
-                                <select value={formAbast.veiculo_id} onChange={e => setFormAbast(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <select value={formAbast.veiculo_caminhao_id} onChange={e => setFormAbast(f => ({ ...f, veiculo_caminhao_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </select>
@@ -690,10 +846,10 @@ export default function MotoristaDashboard() {
                             </div>
                         </div>
                         <div className="flex gap-3 p-5 border-t flex-shrink-0 justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => setModalAbast(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <button onClick={() => { setModalAbast(false); setEditingAbastId(null); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <button onClick={handleAbast} disabled={savingAbast} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed" style={{ backgroundColor: 'var(--color-primary)' }}>
                                 {savingAbast ? <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Icon name="Check" size={15} color="white" />}
-                                {savingAbast ? 'Salvando...' : 'Salvar'}
+                                {savingAbast ? 'Salvando...' : (editingAbastId ? 'Salvar alterações' : 'Salvar')}
                             </button>
                         </div>
                     </div>
@@ -713,15 +869,15 @@ export default function MotoristaDashboard() {
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50">
                                     <Icon name="ClipboardCheck" size={18} color="#1D4ED8" />
                                 </div>
-                                <h2 className="font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>Checklist Semanal</h2>
+                                <h2 className="font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>{editingCheckId ? 'Editar Checklist' : 'Checklist Semanal'}</h2>
                             </div>
-                            <button onClick={() => setModalCheck(false)} className="p-1.5 rounded-lg hover:bg-gray-100">
+                            <button onClick={() => { setModalCheck(false); setEditingCheckId(null); }} className="p-1.5 rounded-lg hover:bg-gray-100">
                                 <Icon name="X" size={18} color="var(--color-muted-foreground)" />
                             </button>
                         </div>
                         <div className="p-5 space-y-4 overflow-y-auto flex-1">
                             <Field label="Veículo" required>
-                                <select value={formCheck.veiculo_id} onChange={e => setFormCheck(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <select value={formCheck.veiculo_caminhao_id} onChange={e => setFormCheck(f => ({ ...f, veiculo_caminhao_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </select>
@@ -784,10 +940,10 @@ export default function MotoristaDashboard() {
                             </Field>
                         </div>
                         <div className="flex gap-3 p-5 border-t flex-shrink-0 justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => setModalCheck(false)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <button onClick={() => { setModalCheck(false); setEditingCheckId(null); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <button onClick={handleCheck} disabled={savingCheck} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed" style={{ backgroundColor: 'var(--color-primary)' }}>
                                 {savingCheck ? <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Icon name="Send" size={15} color="white" />}
-                                {savingCheck ? 'Enviando...' : 'Enviar'}
+                                {savingCheck ? 'Enviando...' : (editingCheckId ? 'Salvar alterações' : 'Enviar')}
                             </button>
                         </div>
                     </div>
@@ -795,6 +951,7 @@ export default function MotoristaDashboard() {
             )}
 
             <Toast toast={toast} />
+            {ConfirmDialog}
         </div>
     );
 }

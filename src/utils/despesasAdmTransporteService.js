@@ -25,6 +25,43 @@ export const CATEGORIAS_DESPESA_ADM = [
     'Outros',
 ];
 
+// Categorias agora vivem no banco (tabela despesas_adm_categorias), não mais em
+// localStorage — assim ficam iguais para todo mundo, em qualquer dispositivo.
+export async function fetchCategoriasDespesaAdm() {
+    const { data, error } = await supabase
+        .from('despesas_adm_categorias')
+        .select('*')
+        .order('nome', { ascending: true });
+    if (error) throw error;
+    return (data || []).map(c => c.nome);
+}
+
+export async function createCategoriaDespesaAdm(nome, criadoPor = null) {
+    const { data, error } = await supabase
+        .from('despesas_adm_categorias')
+        .insert({ nome, criado_por: criadoPor })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function renameCategoriaDespesaAdm(nomeAntigo, nomeNovo) {
+    const { error } = await supabase
+        .from('despesas_adm_categorias')
+        .update({ nome: nomeNovo })
+        .eq('nome', nomeAntigo);
+    if (error) throw error;
+}
+
+export async function deleteCategoriaDespesaAdm(nome) {
+    const { error } = await supabase
+        .from('despesas_adm_categorias')
+        .delete()
+        .eq('nome', nome);
+    if (error) throw error;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DESPESAS ADM
 // ─────────────────────────────────────────────────────────────────────────────

@@ -128,7 +128,7 @@ export default function Consolidacao() {
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-xl mx-auto px-4 md:px-6 lg:px-8 py-6">
+                <div className="max-w-[1920px] mx-auto px-4 md:px-6 lg:px-8 py-6">
                     <BreadcrumbTrail className="mb-4" />
                     <div className="flex items-center gap-3 mb-4">
                         <div className="flex items-center justify-center rounded-xl" style={{ width: 44, height: 44, backgroundColor: '#FEF3C7' }}>

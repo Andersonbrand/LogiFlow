@@ -459,6 +459,20 @@ export async function deleteCarregamento(id) {
     if (error) throw error;
 }
 
+// Marca/desmarca o frete de um carregamento (tipicamente terceiro) como pago.
+// Usa um UPDATE dedicado (sem recalcular valor_frete_calculado) para nunca
+// zerar o frete já registrado do carregamento.
+export async function marcarFreteCarregamentoPago(id, pago = true) {
+    const { data, error } = await supabase
+        .from('carretas_carregamentos')
+        .update({ frete_pago: pago, frete_pago_em: pago ? new Date().toISOString() : null })
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // EMPRESAS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -772,6 +786,25 @@ export const CATEGORIAS_DESPESA = [
     'Pneus', 'Peças', 'Acessórios', 'Oficina / Mão de obra',
     'Depreciação', 'Seguro', 'IPVA / Licenciamento', 'Lavagem', 'Outros',
 ];
+
+export async function fetchCategoriasDespesaCarretas() {
+    const { data, error } = await supabase.from('carretas_despesas_categorias').select('*').order('nome', { ascending: true });
+    if (error) throw error;
+    return (data || []).map(c => c.nome);
+}
+export async function createCategoriaDespesaCarretas(nome, criadoPor = null) {
+    const { data, error } = await supabase.from('carretas_despesas_categorias').insert({ nome, criado_por: criadoPor }).select().single();
+    if (error) throw error;
+    return data;
+}
+export async function renameCategoriaDespesaCarretas(nomeAntigo, nomeNovo) {
+    const { error } = await supabase.from('carretas_despesas_categorias').update({ nome: nomeNovo }).eq('nome', nomeAntigo);
+    if (error) throw error;
+}
+export async function deleteCategoriaDespesaCarretas(nome) {
+    const { error } = await supabase.from('carretas_despesas_categorias').delete().eq('nome', nome);
+    if (error) throw error;
+}
 
 export async function fetchDespesasExtras(filters = {}) {
     let q = supabase

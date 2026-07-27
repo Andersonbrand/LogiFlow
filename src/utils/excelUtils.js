@@ -1474,8 +1474,8 @@ export function printOrdemServico(ordem) {
     const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
     const numeroOS   = ordem.id ? ordem.id.slice(0, 8).toUpperCase() : '—';
-    const placa      = ordem.veiculo?.placa  || '—';
-    const modelo     = ordem.veiculo?.modelo || '';
+    const placa      = ordem.veiculo?.placa  || ordem.veiculo_caminhao_placa  || '—';
+    const modelo     = ordem.veiculo?.modelo || ordem.veiculo_caminhao_modelo || '';
     const mecanico   = ordem.mecanico?.name  || 'Não atribuído';
     const prioridade = ordem.prioridade || 'Normal';
     const status     = ordem.status || 'Pendente';

@@ -16,8 +16,7 @@ import HistoryModal from "./components/HistoryModal";
 import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate, exportDiariaModelo, printDiaria } from "utils/excelUtils";
 import { useAuth } from "utils/AuthContext";
 import AccessDeniedModal from "components/ui/AccessDeniedModal";
-import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle } from "utils/vehicleService";
-const fetchCaminhoesPlacas = async () => (await fetchVehicles()).filter(v => v.tipo === 'Caminhão');
+import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle, fetchCaminhoesPlacas } from "utils/vehicleService";
 import { fetchRomaneios } from "utils/romaneioService";
 import {
     fetchAbastecimentos,
@@ -301,7 +300,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         const wb = XLSX.utils.book_new();
         if (abast.length) {
             const ws = XLSX.utils.json_to_sheet(abast.map(a => ({
-                'Data': FMT(a.data_abastecimento), 'Placa': a.veiculo?.placa || '',
+                'Data': FMT(a.data_abastecimento), 'Placa': a.veiculo?.placa || a.veiculo_caminhao_placa || '',
                 'Posto': a.posto || '', 'Diesel (L)': Number(a.litros_diesel||0),
                 'R$ Diesel': Number(a.valor_diesel||0), 'Arla (L)': Number(a.litros_arla||0),
                 'R$ Arla': Number(a.valor_arla||0), 'Total': Number(a.valor_total||0),
@@ -311,7 +310,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         }
         if (checklists.length) {
             const ws = XLSX.utils.json_to_sheet(checklists.map(c => ({
-                'Semana': FMT(c.semana_ref), 'Placa': c.veiculo?.placa || '',
+                'Semana': FMT(c.semana_ref), 'Placa': c.veiculo?.placa || c.veiculo_caminhao_placa || '',
                 'Status': c.aprovado ? 'Aprovado' : 'Pendente',
                 'Itens OK': `${Object.values(c.itens||{}).filter(Boolean).length}/${CHECKLIST_ITENS.length}`,
                 'Problemas': c.problemas || '', 'Necessidades': c.necessidades || '',
@@ -463,7 +462,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                     {abast.map((a, i) => (
                                                         <tr key={a.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                             <td className="px-3 py-2.5 whitespace-nowrap">{FMT(a.data_abastecimento)}</td>
-                                                            <td className="px-3 py-2.5 font-data font-medium text-blue-700">{a.veiculo?.placa || '—'}</td>
+                                                            <td className="px-3 py-2.5 font-data font-medium text-blue-700">{a.veiculo?.placa || a.veiculo_caminhao_placa || '—'}</td>
                                                             <td className="px-3 py-2.5 text-xs max-w-[120px] truncate" style={{ color: 'var(--color-muted-foreground)' }}>{a.posto || '—'}</td>
                                                             <td className="px-3 py-2.5 font-data text-right text-blue-700">{Number(a.litros_diesel||0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                                                             <td className="px-3 py-2.5 font-data text-right">{BRL(a.valor_diesel)}</td>
@@ -506,7 +505,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                             <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                 <div className="flex items-start justify-between mb-3 gap-2">
                                                     <div>
-                                                        <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.veiculo?.placa || 'Sem placa'}</p>
+                                                        <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.veiculo?.placa || c.veiculo_caminhao_placa || 'Sem placa'}</p>
                                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Semana de {c.semana_ref ? FMT(c.semana_ref) : '—'}</p>
                                                     </div>
                                                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
@@ -520,7 +519,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                 <button onClick={() => setModalFoto(c.foto_url)} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200">
                                                                     <Icon name="Camera" size={11} />Foto
                                                                 </button>
-                                                                <button onClick={() => downloadImagem(c.foto_url, `checklist_${c.veiculo?.placa || c.id}.jpg`)} title="Baixar foto" className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200">
+                                                                <button onClick={() => downloadImagem(c.foto_url, `checklist_${c.veiculo?.placa || c.veiculo_caminhao_placa || c.id}.jpg`)} title="Baixar foto" className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200">
                                                                     <Icon name="Download" size={11} />
                                                                 </button>
                                                             </>
@@ -1148,7 +1147,7 @@ export default function VehicleFleetManagement() {
             <AccessDeniedModal show={accessDenied} onClose={() => setAccessDenied(false)} />
             <NavigationBar />
             <main className="main-content">
-                <div className="max-w-screen-2xl mx-auto px-4 lg:px-8 py-6">
+                <div className="max-w-[1920px] mx-auto px-4 lg:px-8 py-6">
 
                     {/* Header */}
                     <div className="mb-6">
