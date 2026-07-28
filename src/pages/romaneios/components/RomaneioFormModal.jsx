@@ -8,6 +8,7 @@ import { fetchVehicles } from 'utils/vehicleService';
 import { fetchMaterials } from 'utils/materialService';
 import { FRETE_CATEGORIAS, detectarCategoriaFrete, calcularFretePedido, calcularFretePedidoMulti, getCategoriaConfig, fmtPct } from 'utils/freteConfig';
 import { getTelhaInfo } from 'utils/telhaUtils';
+import PrettySelect from 'components/ui/PrettySelect';
 
 const STATUS_OPTIONS = ['Aguardando', 'Carregando', 'Em Trânsito', 'Finalizado', 'Cancelado'];
 const brl = v => Number(v||0).toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
@@ -667,7 +668,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                 Posto de Combustível
                                             </label>
                                             {postos.length > 0 ? (
-                                                <select
+                                                <PrettySelect
                                                     value={postoSelecionado}
                                                     onChange={e => {
                                                         const posto = postos.find(p => String(p.id) === e.target.value);
@@ -698,7 +699,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                             {p.nome}{p.cidade ? ` — ${p.cidade}` : ''} · R$ {Number(p.preco_diesel||0).toFixed(3)}/L
                                                         </option>
                                                     ))}
-                                                </select>
+                                                </PrettySelect>
                                             ) : (
                                                 <div className="flex items-center gap-2 h-8 px-2 rounded border border-dashed border-gray-200 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
                                                     <Icon name="AlertCircle" size={12} color="#D97706" />
@@ -802,12 +803,12 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Veículo</label>
-                                        <select value={form.vehicle_id} onChange={e => setF('vehicle_id', e.target.value)}
+                                        <PrettySelect value={form.vehicle_id} onChange={e => setF('vehicle_id', e.target.value)}
                                             disabled={loadingRefs}
                                             className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60">
                                             <option value="">{loadingRefs ? '⏳ Carregando veículos...' : vehicles.length === 0 ? 'Nenhum veículo cadastrado' : 'Selecione um veículo'}</option>
                                             {vehicles.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.tipo}</option>)}
-                                        </select>
+                                        </PrettySelect>
                                     </div>
                                 <div>
                                     <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Placa</label>
@@ -831,10 +832,10 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Status</label>
-                                    <select value={form.status} onChange={e => setF('status', e.target.value)}
+                                    <PrettySelect value={form.status} onChange={e => setF('status', e.target.value)}
                                         className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white">
                                         {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
-                                    </select>
+                                    </PrettySelect>
                                 </div>
                             </div>
                             <div>
@@ -966,13 +967,13 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                     </div>
                                                     <div>
                                                         <label className="block text-xs font-caption mb-1" style={{ color:'var(--color-text-secondary)' }}>Categoria de Frete</label>
-                                                        <select value={pedido.categoria_frete}
+                                                        <PrettySelect value={pedido.categoria_frete}
                                                             onChange={e => updatePedidoField(pIdx,'categoria_frete',e.target.value)}
                                                             className="w-full h-9 px-2 rounded-lg border border-gray-200 text-xs bg-white">
                                                             {FRETE_CATEGORIAS.map(f => (
                                                                 <option key={f.categoria} value={f.categoria}>{f.label} – {fmtPct(f.percentual)}</option>
                                                             ))}
-                                                        </select>
+                                                        </PrettySelect>
                                                     </div>
                                                 </div>
 
@@ -1000,13 +1001,13 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                             </p>
                                                             {pedido.categorias_extra.map((extra, eIdx) => (
                                                                 <div key={eIdx} className="flex items-center gap-2">
-                                                                    <select value={extra.categoria}
+                                                                    <PrettySelect value={extra.categoria}
                                                                         onChange={e => updateCategoriaExtra(pIdx, eIdx, 'categoria', e.target.value)}
                                                                         className="flex-1 h-9 px-2 rounded-lg border border-gray-200 text-xs bg-white">
                                                                         {FRETE_CATEGORIAS.map(f => (
                                                                             <option key={f.categoria} value={f.categoria}>{f.label} – {fmtPct(f.percentual)}</option>
                                                                         ))}
-                                                                    </select>
+                                                                    </PrettySelect>
                                                                     <input type="number" min="0" step="0.01" value={extra.valor}
                                                                         onChange={e => updateCategoriaExtra(pIdx, eIdx, 'valor', e.target.value)}
                                                                         placeholder="Valor (R$)"
@@ -1033,7 +1034,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                         Adicionar material a este pedido
                                                     </label>
                                                     <div className="flex gap-2">
-                                                        <select value={novoItem.material_id}
+                                                        <PrettySelect value={novoItem.material_id}
                                                             onChange={e => setNovoItem(p => ({...p, material_id:e.target.value}))}
                                                             disabled={loadingRefs}
                                                             className="flex-1 h-9 px-3 rounded-lg border border-gray-200 text-xs bg-white disabled:opacity-60">
@@ -1041,7 +1042,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                             {materials.map(m => (
                                                                 <option key={m.id} value={m.id}>{m.nome} ({m.unidade})</option>
                                                             ))}
-                                                        </select>
+                                                        </PrettySelect>
                                                         {/* Campo comprimento só aparece se material for telha */}
                                                         {(() => {
                                                             const selMat = materials.find(m => String(m.id) === String(novoItem.material_id));

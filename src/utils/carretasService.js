@@ -1362,6 +1362,20 @@ export async function fetchPontosParada(motoristaId) {
     return data || [];
 }
 
+// Busca de todos os motoristas (visão admin), com nome do motorista e filtro
+// de período — usada no painel de desempenho (KM rodado / horas / consumo).
+export async function fetchPontosParadaAdmin({ dataInicio, dataFim } = {}) {
+    let q = supabase
+        .from('carretas_pontos_parada')
+        .select('*, motorista:motorista_id(id, name), veiculo:veiculo_id(id, placa, modelo)')
+        .order('data_saida', { ascending: false });
+    if (dataInicio) q = q.gte('data_saida', dataInicio);
+    if (dataFim)    q = q.lte('data_saida', dataFim);
+    const { data, error } = await q;
+    if (error) throw error;
+    return data || [];
+}
+
 export async function createPontoParada(ponto) {
     const { data, error } = await supabase
         .from('carretas_pontos_parada')

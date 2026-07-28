@@ -17,6 +17,7 @@ import { fetchVehicles } from 'utils/vehicleService';
 import { useToast } from 'utils/useToast';
 import { getTelhaInfo } from 'utils/telhaUtils';
 import { subscribeTabela } from 'utils/supabaseClient';
+import PrettySelect from 'components/ui/PrettySelect';
 
 const STATUS_COLORS = {
     'Aguardando':  { bg: '#FEF9C3', text: '#B45309' },
@@ -383,13 +384,13 @@ export default function Romaneios() {
                                                         )}
                                                     </td>
                                                     <td className="px-4 py-3 text-center">
-                                                        <select
+                                                        <PrettySelect
                                                             value={r.status}
                                                             onChange={e => handleStatusChange(r.id, e.target.value)}
                                                             className="px-2 py-1 rounded-full text-xs font-medium border cursor-pointer font-caption focus:outline-none"
                                                             style={{ backgroundColor: sc.bg, color: sc.text, borderColor: sc.bg }}>
                                                             {['Aguardando', 'Carregando', 'Em Trânsito', 'Finalizado', 'Cancelado'].map(s => <option key={s}>{s}</option>)}
-                                                        </select>
+                                                        </PrettySelect>
                                                     </td>
                                                     <td className="px-4 py-3">
                                                         <div className="flex items-center justify-center gap-1">
@@ -1190,14 +1191,14 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                             {/* Motorista — select dos cadastrados */}
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Motorista</label>
-                                <select value={form.motorista_id} onChange={e => {
+                                <PrettySelect value={form.motorista_id} onChange={e => {
                                     const m = motoristasComId.find(x => x.id === e.target.value);
                                     setF('motorista_id', e.target.value);
                                     setF('motorista', m?.name || '');
                                 }} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione o motorista...</option>
                                     {motoristasComId.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                </select>
+                                </PrettySelect>
                             </div>
 
                             {/* Destino */}
@@ -1209,14 +1210,14 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                             {/* Veículo */}
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Veículo (opcional)</label>
-                                <select value={form.vehicle_id} onChange={e => {
+                                <PrettySelect value={form.vehicle_id} onChange={e => {
                                     const v = vehicles.find(x => x.id === e.target.value || String(x.id) === e.target.value);
                                     setF('vehicle_id', e.target.value);
                                     setF('placa', v?.placa || '');
                                 }} className={inputCls} style={inputStyle}>
                                     <option value="">A definir...</option>
                                     {vehicles.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo || ''}</option>)}
-                                </select>
+                                </PrettySelect>
                             </div>
 
                             {/* Data saída */}
@@ -1301,9 +1302,9 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Empresa</label>
-                                                    <select value={ped.empresa} onChange={e => updPedido(pIdx, { empresa: e.target.value })} className={inputCls} style={inputStyle}>
+                                                    <PrettySelect value={ped.empresa} onChange={e => updPedido(pIdx, { empresa: e.target.value })} className={inputCls} style={inputStyle}>
                                                         {['Comercial Araguaia', 'Aços Confiance', 'Confiance'].map(e => <option key={e} value={e}>{e}</option>)}
-                                                    </select>
+                                                    </PrettySelect>
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Valor do Pedido (R$)</label>
@@ -1311,9 +1312,9 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Categoria de Frete</label>
-                                                    <select value={ped.categoria_frete} onChange={e => updPedido(pIdx, { categoria_frete: e.target.value })} className={inputCls} style={inputStyle}>
+                                                    <PrettySelect value={ped.categoria_frete} onChange={e => updPedido(pIdx, { categoria_frete: e.target.value })} className={inputCls} style={inputStyle}>
                                                         {(FRETE_CATEGORIAS || []).map(f => <option key={f.categoria} value={f.categoria}>{f.label || f.categoria} ({(f.percentual * 100).toFixed(0)}%)</option>)}
-                                                    </select>
+                                                    </PrettySelect>
                                                 </div>
                                                 <div>
                                                     <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Cidade Destino do Pedido</label>
@@ -1351,11 +1352,11 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                                                         </p>
                                                         {ped.categorias_extra.map((extra, eIdx) => (
                                                             <div key={eIdx} className="flex items-center gap-2">
-                                                                <select value={extra.categoria}
+                                                                <PrettySelect value={extra.categoria}
                                                                     onChange={e => updCategoriaExtra(pIdx, eIdx, { categoria: e.target.value })}
                                                                     className="flex-1 h-9 px-2 rounded-lg border border-gray-200 text-xs bg-white">
                                                                     {(FRETE_CATEGORIAS || []).map(f => <option key={f.categoria} value={f.categoria}>{f.label || f.categoria} ({(f.percentual * 100).toFixed(0)}%)</option>)}
-                                                                </select>
+                                                                </PrettySelect>
                                                                 <input type="number" min="0" step="0.01" value={extra.valor}
                                                                     onChange={e => updCategoriaExtra(pIdx, eIdx, { valor: e.target.value })}
                                                                     placeholder="Valor (R$)"
@@ -1396,10 +1397,10 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                                                                     <div key={iIdx} className="grid grid-cols-4 gap-2 items-end bg-white rounded-lg p-2 border" style={{ borderColor: '#DDD6FE' }}>
                                                                         <div className="col-span-4 sm:col-span-1">
                                                                             <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Material</label>
-                                                                            <select value={item.material_id} onChange={e => updItem(pIdx, iIdx, { material_id: e.target.value })} className={inputCls} style={{ ...inputStyle, fontSize: '11px', padding: '6px 8px' }}>
+                                                                            <PrettySelect value={item.material_id} onChange={e => updItem(pIdx, iIdx, { material_id: e.target.value })} className={inputCls} style={{ ...inputStyle, fontSize: '11px', padding: '6px 8px' }}>
                                                                                 <option value="">Selecione...</option>
                                                                                 {(materials || []).map(m => <option key={m.id} value={m.id}>{m.nome} {m.peso ? `(${m.peso}kg/${m.unidade})` : ''}</option>)}
-                                                                            </select>
+                                                                            </PrettySelect>
                                                                         </div>
                                                                         <div>
                                                                             <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Comp. (m)</label>
@@ -1432,10 +1433,10 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                                                                 <div key={iIdx} className="grid grid-cols-4 gap-2 items-end bg-white rounded-lg p-2 border" style={{ borderColor: '#DDD6FE' }}>
                                                                     <div className="col-span-2">
                                                                         <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Material</label>
-                                                                        <select value={item.material_id} onChange={e => updItem(pIdx, iIdx, { material_id: e.target.value })} className={inputCls} style={{ ...inputStyle, fontSize: '11px', padding: '6px 8px' }}>
+                                                                        <PrettySelect value={item.material_id} onChange={e => updItem(pIdx, iIdx, { material_id: e.target.value })} className={inputCls} style={{ ...inputStyle, fontSize: '11px', padding: '6px 8px' }}>
                                                                             <option value="">Selecione...</option>
                                                                             {(materials || []).map(m => <option key={m.id} value={m.id}>{m.nome} {m.peso ? `(${m.peso}kg/${m.unidade})` : ''}</option>)}
-                                                                        </select>
+                                                                        </PrettySelect>
                                                                     </div>
                                                                     <div>
                                                                         <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Qtd ({mat?.unidade || 'un'})</label>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import Icon from 'components/AppIcon';
 import { fetchBonusConfig, saveBonusConfig, BONUS_CONFIG_DEFAULT } from 'utils/settingsService';
 import { fetchAllUsers, updateUserProfile } from 'utils/userService';
+import PrettySelect from 'components/ui/PrettySelect';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -162,11 +163,11 @@ export default function ConfiguracoesPanel({ showToast, profile }) {
                         <input value={buscaAssinatura} onChange={e => setBuscaAssinatura(e.target.value)}
                             placeholder="Buscar por nome ou e-mail..."
                             className={inputCls} style={{ maxWidth: 260, borderColor: '#CBD5E1' }} />
-                        <select value={filtroPapel} onChange={e => setFiltroPapel(e.target.value)}
+                        <PrettySelect value={filtroPapel} onChange={e => setFiltroPapel(e.target.value)}
                             className="px-3 py-2.5 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }}>
                             <option value="">Todos os papéis</option>
                             {Object.entries(ROLE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                        </select>
+                        </PrettySelect>
                     </div>
 
                     {loadingAssinaturas ? (

@@ -21,6 +21,7 @@ import {
     deleteFornecedor as deleteFornecedorCarretas,
 } from 'utils/fornecedoresService';
 import { useCaptacaoConfig } from 'utils/settingsService';
+import PrettySelect from 'components/ui/PrettySelect';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -781,10 +782,10 @@ export default function TabVolume({ isAdmin }) {
                     </div>
                     <div className="flex flex-col gap-1">
                         <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Empresa</label>
-                        <select value={empresaFiltro} onChange={e => setEmpresaFiltro(e.target.value)} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                        <PrettySelect value={empresaFiltro} onChange={e => setEmpresaFiltro(e.target.value)} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                             <option value="">Todas as empresas</option>
                             {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                        </select>
+                        </PrettySelect>
                     </div>
                 </div>
                 <div className="flex gap-2 flex-wrap">
@@ -889,17 +890,17 @@ export default function TabVolume({ isAdmin }) {
                                         <input type="date" value={form.data_carregamento} onChange={e => setForm(f => ({ ...f, data_carregamento: e.target.value }))} className={inputCls} style={inputStyle} />
                                     </Field>
                                     <Field label="Veículo (placa)" required>
-                                        <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <PrettySelect value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                             <option value="">Selecione...</option>
                                             {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
-                                        </select>
+                                        </PrettySelect>
                                     </Field>
                                 </div>
                                 <Field label="Motorista" required>
-                                    <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <PrettySelect value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                         <option value="">Selecione...</option>
                                         {motoristasProprios.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                    </select>
+                                    </PrettySelect>
                                 </Field>
                                 <Field label="Destino" required>
                                     <DestinoSelect
@@ -910,12 +911,12 @@ export default function TabVolume({ isAdmin }) {
                                     />
                                 </Field>
                                 <Field label="Tipo de cimento" required>
-                                    <select value={form.tipo_cimento} onChange={e => setForm(f => ({ ...f, tipo_cimento: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <PrettySelect value={form.tipo_cimento} onChange={e => setForm(f => ({ ...f, tipo_cimento: e.target.value }))} className={inputCls} style={inputStyle}>
                                         <option value="">Selecione...</option>
                                         <option value="Montes Claros">Montes Claros</option>
                                         <option value="Liz">Liz</option>
                                         <option value="Ambas">Ambas (Montes Claros + Liz)</option>
-                                    </select>
+                                    </PrettySelect>
                                 </Field>
                             </>
                         ) : (
@@ -933,16 +934,16 @@ export default function TabVolume({ isAdmin }) {
                                 </Field>
                                 <div className="grid grid-cols-2 gap-3">
                                     <Field label="Veículo (placa)">
-                                        <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <PrettySelect value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                             <option value="">Selecione...</option>
                                             {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
-                                        </select>
+                                        </PrettySelect>
                                     </Field>
                                     <Field label="Motorista">
-                                        <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <PrettySelect value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                             <option value="">Selecione...</option>
                                             {motoristasProprios.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                        </select>
+                                        </PrettySelect>
                                     </Field>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
@@ -963,19 +964,19 @@ export default function TabVolume({ isAdmin }) {
                                     />
                                 </Field>
                                 <Field label="Empresa (frete)">
-                                    <select value={form.empresa_id} onChange={e => setForm(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <PrettySelect value={form.empresa_id} onChange={e => setForm(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                         <option value="">Selecione...</option>
                                         {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                                    </select>
+                                    </PrettySelect>
                                 </Field>
                                 {/* ── Bloco de Frete ── */}
                                 <div className="col-span-full p-4 rounded-xl border" style={{ borderColor: '#C4B5FD', backgroundColor: '#FAF5FF' }}>
                                     <p className="text-xs font-semibold text-purple-700 mb-3">💰 Cálculo de Frete</p>
                                     <div className="grid grid-cols-2 gap-3">
                                         <Field label="Tipo de cálculo">
-                                            <select value={form.tipo_calculo_frete} onChange={e => setForm(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
+                                            <PrettySelect value={form.tipo_calculo_frete} onChange={e => setForm(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
                                                 {TIPOS_CALCULO_FRETE.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                                            </select>
+                                            </PrettySelect>
                                         </Field>
                                         <Field label={
                                             form.tipo_calculo_frete === 'percentual' ? 'Percentual (%)' :
@@ -1074,41 +1075,41 @@ export default function TabVolume({ isAdmin }) {
                             </Field>
                         </div>
                         <Field label="Motorista Terceirizado">
-                            <select value={formTerceiro.motorista_id} onChange={e => setFormTerceiro(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={formTerceiro.motorista_id} onChange={e => setFormTerceiro(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione o motorista (opcional)...</option>
                                 {motoristasTerceiros.map(m => (
                                     <option key={m.id} value={m.id}>{m.name}</option>
                                 ))}
-                            </select>
+                            </PrettySelect>
                             {motoristasTerceiros.length === 0 && (
                                 <p className="text-xs mt-1 text-amber-600">⚠ Nenhum motorista com flag "terceirizado" cadastrado em Configurações.</p>
                             )}
                         </Field>
                         <Field label="Placa do Veículo Terceirizado">
-                            <select value={formTerceiro.veiculo_id} onChange={e => setFormTerceiro(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={formTerceiro.veiculo_id} onChange={e => setFormTerceiro(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione a placa (opcional)...</option>
                                 {veiculosTerceiros.map(v => (
                                     <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>
                                 ))}
-                            </select>
+                            </PrettySelect>
                             {veiculosTerceiros.length === 0 && (
                                 <p className="text-xs mt-1 text-amber-600">⚠ Nenhum veículo com flag "terceirizado" cadastrado em Veículos.</p>
                             )}
                         </Field>
                         <Field label="Empresa (frete)">
-                            <select value={formTerceiro.empresa_id} onChange={e => setFormTerceiro(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={formTerceiro.empresa_id} onChange={e => setFormTerceiro(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione a empresa (opcional)...</option>
                                 {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Tipo de Cálculo do Frete">
-                                <select value={formTerceiro.tipo_calculo_frete} onChange={e => setFormTerceiro(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={formTerceiro.tipo_calculo_frete} onChange={e => setFormTerceiro(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Sem cálculo de frete</option>
                                     {TIPOS_CALCULO_FRETE.map(t => (
                                         <option key={t.value} value={t.value}>{t.label}</option>
                                     ))}
-                                </select>
+                                </PrettySelect>
                             </Field>
                             <Field label={formTerceiro.tipo_calculo_frete === 'por_saco' ? 'R$ por saco' : formTerceiro.tipo_calculo_frete === 'por_tonelada' ? 'R$ por tonelada' : formTerceiro.tipo_calculo_frete === 'percentual' ? '% do valor' : formTerceiro.tipo_calculo_frete === 'por_carga' ? 'Valor fixo (R$)' : 'Valor base'}>
                                 <input type="number" min="0" step="0.01" value={formTerceiro.valor_base_frete} onChange={e => setFormTerceiro(f => ({ ...f, valor_base_frete: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 9,52" disabled={!formTerceiro.tipo_calculo_frete} />
@@ -1179,10 +1180,10 @@ export default function TabVolume({ isAdmin }) {
                         {/* Veículos e Motoristas — apenas frota própria (não terceiros) */}
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Veículo Terceirizado">
-                                <select value={formRetira.veiculo_id} onChange={e => setFormRetira(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={formRetira.veiculo_id} onChange={e => setFormRetira(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {veiculosTerceiros.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
-                                </select>
+                                </PrettySelect>
                             </Field>
                             <Field label="Nome do Cliente">
                                 <input

@@ -29,6 +29,7 @@ import {
 } from "utils/carretasService";
 import { deleteRomaneio, assinarDiariaRomaneio, desassinarDiariaRomaneio } from "utils/romaneioService";
 import { supabase, subscribeTabela } from "utils/supabaseClient";
+import PrettySelect from 'components/ui/PrettySelect';
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -834,10 +835,10 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                             )}
                             <div className="col-span-2">
                                 <Field label="Placa do veículo">
-                                    <select value={formDiaria.placa} onChange={e => setFormDiaria(f => ({ ...f, placa: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <PrettySelect value={formDiaria.placa} onChange={e => setFormDiaria(f => ({ ...f, placa: e.target.value }))} className={inputCls} style={inputStyle}>
                                         <option value="">Sem placa...</option>
                                         {veiculosCaminhao.map(v => <option key={v.id} value={v.placa}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
-                                    </select>
+                                    </PrettySelect>
                                 </Field>
                             </div>
                             <div className="col-span-2">

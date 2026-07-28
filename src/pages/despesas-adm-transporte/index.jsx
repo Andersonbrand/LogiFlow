@@ -34,6 +34,7 @@ import * as XLSX from 'xlsx';
 
 import { supabase } from 'utils/supabaseClient';
 import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf, garantirFornecedorCadastrado, EMPRESAS_LOGIFLOW } from 'utils/parcelasGenerator';
+import PrettySelect from 'components/ui/PrettySelect';
 
 async function fetchDespesaAdmById(id) {
     const { data } = await supabase.from('transporte_despesas_adm').select('*').eq('id', id).single();
@@ -1009,9 +1010,9 @@ function ModalDespesa({ modal, despesasExistentes = [], categorias, onCategorias
                     <Field label="Categoria" required>
                         <div className="space-y-2">
                             <div className="flex gap-2">
-                                <select value={form.categoria} onChange={e => set('categoria', e.target.value)} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={form.categoria} onChange={e => set('categoria', e.target.value)} className={inputCls} style={inputStyle}>
                                     {todasCategorias.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
+                                </PrettySelect>
                                 <button type="button" onClick={() => setShowNovaCategoria(s => !s)}
                                     className="shrink-0 px-2.5 py-2 rounded-lg border text-xs font-medium hover:bg-green-50"
                                     style={{ borderColor: '#6EE7B7', color: '#059669' }}>
@@ -1063,10 +1064,10 @@ function ModalDespesa({ modal, despesasExistentes = [], categorias, onCategorias
                         <input id="adm-despesa-valor" type="number" step="0.01" min="0" value={form.valor} onChange={e => set('valor', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" />
                     </Field>
                     <Field label="Empresa">
-                        <select value={form.empresa || ''} onChange={e => set('empresa', e.target.value)} className={inputCls} style={inputStyle}>
+                        <PrettySelect value={form.empresa || ''} onChange={e => set('empresa', e.target.value)} className={inputCls} style={inputStyle}>
                             <option value="">Selecione a empresa...</option>
                             {EMPRESAS_LOGIFLOW.map(nome => <option key={nome} value={nome}>{nome}</option>)}
-                        </select>
+                        </PrettySelect>
                     </Field>
                     <Field label="Fornecedor" className="sm:col-span-2">
                         <div className="flex gap-2">
@@ -1476,15 +1477,15 @@ export default function DespesasAdmTransporte() {
 
                     {/* Filtros */}
                     <div className="flex flex-wrap gap-2 items-center mb-5">
-                        <select value={filtro.categoria} onChange={e => setFiltro(f => ({ ...f, categoria: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                        <PrettySelect value={filtro.categoria} onChange={e => setFiltro(f => ({ ...f, categoria: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                             <option value="">Todas categorias</option>
                             {todasCategorias.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                        <select value={filtro.formaPgto} onChange={e => setFiltro(f => ({ ...f, formaPgto: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                        </PrettySelect>
+                        <PrettySelect value={filtro.formaPgto} onChange={e => setFiltro(f => ({ ...f, formaPgto: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                             <option value="">Todas as formas</option>
                             <option value="a_vista">À Vista</option>
                             <option value="a_prazo">A Prazo</option>
-                        </select>
+                        </PrettySelect>
                         <PeriodRangeFilter preset={periodoPreset} onPresetChange={aplicarPreset} periodo={periodo} onPeriodoChange={setPeriodo} />
                         <div className="relative flex-1 min-w-[220px] max-w-[320px]">
                             <Icon name="Search" size={14} color="var(--color-muted-foreground)" className="absolute left-3 top-1/2 -translate-y-1/2" />

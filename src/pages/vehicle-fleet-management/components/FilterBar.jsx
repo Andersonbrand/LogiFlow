@@ -1,6 +1,7 @@
 import React from "react";
 import Icon from "components/AppIcon";
 import Button from "components/ui/Button";
+import PrettySelect from 'components/ui/PrettySelect';
 
 const TIPO_OPTIONS = ["Todos", "Caminhão", "Van", "Carreta"];
 const STATUS_OPTIONS = ["Todos", "Disponível", "Em Trânsito", "Manutenção"];
@@ -42,7 +43,7 @@ export default function FilterBar({ filters, onChange, resultCount, onClear }) {
                 {/* Tipo */}
                 <div className="flex items-center gap-2">
                     <label className="text-xs font-caption text-secondary-color whitespace-nowrap">Tipo:</label>
-                    <select
+                    <PrettySelect
                         value={filters?.tipo}
                         onChange={(e) => onChange({ ...filters, tipo: e?.target?.value })}
                         className="text-sm px-3 py-2 rounded-lg border border-border outline-none cursor-pointer"
@@ -55,13 +56,13 @@ export default function FilterBar({ filters, onChange, resultCount, onClear }) {
                         {TIPO_OPTIONS?.map((t) => (
                             <option key={t} value={t}>{t}</option>
                         ))}
-                    </select>
+                    </PrettySelect>
                 </div>
 
                 {/* Status */}
                 <div className="flex items-center gap-2">
                     <label className="text-xs font-caption text-secondary-color whitespace-nowrap">Status:</label>
-                    <select
+                    <PrettySelect
                         value={filters?.status}
                         onChange={(e) => onChange({ ...filters, status: e?.target?.value })}
                         className="text-sm px-3 py-2 rounded-lg border border-border outline-none cursor-pointer"
@@ -74,7 +75,7 @@ export default function FilterBar({ filters, onChange, resultCount, onClear }) {
                         {STATUS_OPTIONS?.map((s) => (
                             <option key={s} value={s}>{s}</option>
                         ))}
-                    </select>
+                    </PrettySelect>
                 </div>
 
                 {hasActive && (

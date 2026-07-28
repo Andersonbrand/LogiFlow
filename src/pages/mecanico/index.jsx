@@ -7,6 +7,7 @@ import { useAuth } from 'utils/AuthContext';
 import { subscribeTabela } from 'utils/supabaseClient';
 import { fetchOrdensServico, finalizarOrdemServico, reportarProblemaOS, updateOrdemServico, fetchPecasCatalogo } from 'utils/carretasService';
 import { printOrdemServico } from 'utils/excelUtils';
+import PrettySelect from 'components/ui/PrettySelect';
 
 const FMT_DATE = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
 
@@ -522,14 +523,14 @@ export default function MecanicoPage() {
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
                                 Item / peça <span className="text-red-500">*</span>
                             </label>
-                            <select value={pecaItem} onChange={e => setPecaItem(e.target.value)}
+                            <PrettySelect value={pecaItem} onChange={e => setPecaItem(e.target.value)}
                                 className={inputCls} style={inputStyle}>
                                 <option value="">Selecione a peça...</option>
                                 {pecasCatalogo
                                     .filter(p => !modalPeca.veiculo?.tipo || p.categoria === 'Ambos' || p.categoria === modalPeca.veiculo.tipo)
                                     .map(p => <option key={p.id} value={p.nome}>{p.nome}</option>)}
                                 <option value="__outro__">Outro (especificar)...</option>
-                            </select>
+                            </PrettySelect>
                             {pecaItem === '__outro__' && (
                                 <input value={pecaItemOutro} onChange={e => setPecaItemOutro(e.target.value)}
                                     className={`${inputCls} mt-2`} style={inputStyle}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import Icon from "components/AppIcon";
 import Button from "components/ui/Button";
 import Input from "components/ui/Input";
+import PrettySelect from 'components/ui/PrettySelect';
 
 const TIPO_OPTIONS = ["Caminhão", "Carreta"];
 const STATUS_OPTIONS = ["Disponível", "Em Trânsito", "Manutenção"];
@@ -85,11 +86,11 @@ export default function VehicleFormModal({ isOpen, onClose, onSave, editVehicle 
                         <label className="block text-sm font-caption font-medium mb-1.5" style={{ color: "var(--color-text-primary)" }}>
                             Tipo de Veículo <span style={{ color: "var(--color-destructive)" }}>*</span>
                         </label>
-                        <select value={form?.tipo} onChange={(e) => setForm({ ...form, tipo: e?.target?.value })}
+                        <PrettySelect value={form?.tipo} onChange={(e) => setForm({ ...form, tipo: e?.target?.value })}
                             className="w-full px-3 py-2.5 text-sm rounded-lg border border-border outline-none"
                             style={{ backgroundColor: "var(--color-muted)", color: "var(--color-text-primary)" }}>
                             {TIPO_OPTIONS?.map((t) => <option key={t} value={t}>{t}</option>)}
-                        </select>
+                        </PrettySelect>
                     </div>
 
                     <div>
@@ -119,11 +120,11 @@ export default function VehicleFormModal({ isOpen, onClose, onSave, editVehicle 
 
                     <div>
                         <label className="block text-sm font-caption font-medium mb-1.5" style={{ color: "var(--color-text-primary)" }}>Status</label>
-                        <select value={form?.status} onChange={(e) => setForm({ ...form, status: e?.target?.value })}
+                        <PrettySelect value={form?.status} onChange={(e) => setForm({ ...form, status: e?.target?.value })}
                             className="w-full px-3 py-2.5 text-sm rounded-lg border border-border outline-none"
                             style={{ backgroundColor: "var(--color-muted)", color: "var(--color-text-primary)" }}>
                             {STATUS_OPTIONS?.map((s) => <option key={s} value={s}>{s}</option>)}
-                        </select>
+                        </PrettySelect>
                     </div>
 
                     <div className="flex gap-3 pt-2">

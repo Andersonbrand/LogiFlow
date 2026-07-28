@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 import { FRETE_CATEGORIAS, fmtPct, detectarCategoriaFrete } from 'utils/freteConfig';
+import PrettySelect from 'components/ui/PrettySelect';
 
 const UNIDADES = ['kg', 'un', 'cx', 'm', 'm²', 'm³', 'l', 'pc', 'SC', 'BR', 'RL', 'MT', 'KG', 'PC'];
 const CATEGORIAS_PRODUTO = [
@@ -114,17 +115,17 @@ export default function MaterialFormModal({ isOpen, onClose, onSave, editingMate
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Categoria do Produto</label>
-                            <select value={form.categoria} onChange={e => set('categoria', e.target.value)}
+                            <PrettySelect value={form.categoria} onChange={e => set('categoria', e.target.value)}
                                 className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none bg-white">
                                 {CATEGORIAS_PRODUTO.map(c => <option key={c}>{c}</option>)}
-                            </select>
+                            </PrettySelect>
                         </div>
                         <div>
                             <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Unidade</label>
-                            <select value={form.unidade} onChange={e => set('unidade', e.target.value)}
+                            <PrettySelect value={form.unidade} onChange={e => set('unidade', e.target.value)}
                                 className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none bg-white">
                                 {UNIDADES.map(u => <option key={u}>{u}</option>)}
-                            </select>
+                            </PrettySelect>
                         </div>
                     </div>
 
@@ -172,13 +173,13 @@ export default function MaterialFormModal({ isOpen, onClose, onSave, editingMate
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Categoria de Frete</label>
-                                <select value={form.categoria_frete} onChange={e => set('categoria_frete', e.target.value)}
+                                <PrettySelect value={form.categoria_frete} onChange={e => set('categoria_frete', e.target.value)}
                                     className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none bg-white">
                                     <option value="">Detectar pelo nome</option>
                                     {FRETE_CATEGORIAS.map(f => (
                                         <option key={f.categoria} value={f.categoria}>{f.label} — {fmtPct(f.percentual)}</option>
                                     ))}
-                                </select>
+                                </PrettySelect>
                             </div>
                             <div>
                                 <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>% de Frete</label>

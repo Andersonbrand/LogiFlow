@@ -18,6 +18,7 @@ import {
 } from 'utils/carretasService';
 import { fetchCaminhoesPlacas } from 'utils/vehicleService';
 import * as XLSX from 'xlsx';
+import PrettySelect from 'components/ui/PrettySelect';
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -318,10 +319,37 @@ export default function MotoristaDashboard() {
             'Ton. Ferragem': r.bonif?.toneladasFerragem || 0,
             'Bônus (R$)': r.bonif?.valorTotal || 0,
         }));
+
+        // Linha de somatório ao final da própria listagem
+        const totTon    = bonificacoes.reduce((s, r) => s + Number(r.bonif?.toneladasFerragem || 0), 0);
+        const totBonus  = bonificacoes.reduce((s, r) => s + Number(r.bonif?.valorTotal || 0), 0);
+        rows.push({
+            'Romaneio': 'TOTAL', 'Destino': '', 'Status': '', 'Data': '',
+            'Aprovado': `${bonificacoes.length} romaneio(ns)`,
+            'Ton. Ferragem': totTon.toFixed(3),
+            'Bônus (R$)': totBonus.toFixed(2),
+        });
+
         const ws = XLSX.utils.json_to_sheet(rows);
         ws['!cols'] = [12,20,12,12,10,14,14].map(w => ({ wch: w }));
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Romaneios');
+
+        // Aba adicional só com o resumo/soma dos bônus
+        const aprovados   = bonificacoes.filter(r => r.aprovado);
+        const totBonusApr = aprovados.reduce((s, r) => s + Number(r.bonif?.valorTotal || 0), 0);
+        const wsResumo = XLSX.utils.json_to_sheet([
+            { 'Indicador': 'Motorista',                       'Valor': profile?.name || '' },
+            { 'Indicador': 'Data da exportação',               'Valor': new Date().toLocaleDateString('pt-BR') },
+            { 'Indicador': 'Total de romaneios',                'Valor': bonificacoes.length },
+            { 'Indicador': 'Romaneios aprovados',               'Valor': aprovados.length },
+            { 'Indicador': 'Total de toneladas (ferragem)',     'Valor': totTon.toFixed(3) },
+            { 'Indicador': 'SOMA TOTAL DE BÔNUS (R$)',          'Valor': totBonus.toFixed(2) },
+            { 'Indicador': 'Soma de bônus já aprovados (R$)',   'Valor': totBonusApr.toFixed(2) },
+        ]);
+        wsResumo['!cols'] = [{ wch: 34 }, { wch: 20 }];
+        XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo (Soma)');
+
         XLSX.writeFile(wb, `romaneios_${profile?.name||'motorista'}_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
         showToast('Exportado!', 'success');
     };
@@ -520,11 +548,11 @@ export default function MotoristaDashboard() {
                                     {tab === 'abastecimentos' && (
                                         <div className="flex flex-col gap-3">
                                             {veiculos.length > 0 && (
-                                                <select value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
+                                                <PrettySelect value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
                                                     className="px-3 py-2 rounded-lg border text-sm self-start" style={inputStyle}>
                                                     <option value="">Todas as placas</option>
                                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                                </select>
+                                                </PrettySelect>
                                             )}
                                             <div className="grid grid-cols-2 gap-3 mb-2">
                                                 {[
@@ -581,11 +609,11 @@ export default function MotoristaDashboard() {
                                     {tab === 'checklist' && (
                                         <div className="flex flex-col gap-4">
                                             {veiculos.length > 0 && (
-                                                <select value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
+                                                <PrettySelect value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
                                                     className="px-3 py-2 rounded-lg border text-sm self-start" style={inputStyle}>
                                                     <option value="">Todas as placas</option>
                                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                                </select>
+                                                </PrettySelect>
                                             )}
                                             {checklists.filter(c => !filtroPlaca || String(c.veiculo_caminhao_id) === filtroPlaca).length === 0
                                                 ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="ClipboardCheck" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum checklist enviado</span></div>
@@ -767,10 +795,10 @@ export default function MotoristaDashboard() {
                         </div>
                         <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                             <Field label="Veículo" required>
-                                <select value={formAbast.veiculo_caminhao_id} onChange={e => setFormAbast(f => ({ ...f, veiculo_caminhao_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={formAbast.veiculo_caminhao_id} onChange={e => setFormAbast(f => ({ ...f, veiculo_caminhao_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </select>
+                                </PrettySelect>
                             </Field>
                             <Field label="Data" required>
                                 <input type="date" value={formAbast.data_abastecimento} onChange={e => setFormAbast(f => ({ ...f, data_abastecimento: e.target.value }))} className={inputCls} style={inputStyle} />
@@ -790,14 +818,14 @@ export default function MotoristaDashboard() {
                                 />
                             </Field>
                             <Field label="Posto">
-                                <select value={formAbast.posto_id} onChange={e => handlePostoChange(e.target.value)} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={formAbast.posto_id} onChange={e => handlePostoChange(e.target.value)} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione o posto...</option>
                                     {postos.map(p => (
                                         <option key={p.id} value={p.id}>
                                             {p.nome}{p.cidade ? ` — ${p.cidade}` : ''}
                                         </option>
                                     ))}
-                                </select>
+                                </PrettySelect>
                                 {/* Mostra preço efetivo (posto ou config global) */}
                                 <div className="flex gap-3 mt-1 text-xs">
                                     {precoDieselEfetivo > 0 && (
@@ -878,10 +906,10 @@ export default function MotoristaDashboard() {
                         </div>
                         <div className="p-5 space-y-4 overflow-y-auto flex-1">
                             <Field label="Veículo" required>
-                                <select value={formCheck.veiculo_caminhao_id} onChange={e => setFormCheck(f => ({ ...f, veiculo_caminhao_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={formCheck.veiculo_caminhao_id} onChange={e => setFormCheck(f => ({ ...f, veiculo_caminhao_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </select>
+                                </PrettySelect>
                             </Field>
 
                             {/* Foto — logo no topo, destaque visual, antes dos campos de texto */}

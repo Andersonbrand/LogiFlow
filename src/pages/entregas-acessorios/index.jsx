@@ -11,6 +11,7 @@ import { useAuth } from 'utils/AuthContext';
 import PeriodRangeFilter, { usePeriodRangeFilter } from 'components/ui/PeriodRangeFilter';
 import { fetchMotoristasProprios, fetchVeiculosProprios } from 'utils/carretasService';
 import { fetchVehicles } from 'utils/vehicleService';
+import PrettySelect from 'components/ui/PrettySelect';
 import {
     fetchEntregasAcessorios, createEntregaAcessorio, updateEntregaAcessorio, deleteEntregaAcessorio,
     fetchItensAcessorios, createItemAcessorio, updateItemAcessorio, deleteItemAcessorio,
@@ -83,7 +84,7 @@ function SearchInput({ value, onChange, placeholder = 'Buscar...', width = '240p
 
 const FORM_VAZIO = { motorista_id: '', placa: '', item: '', quantidade: '1', data_entrega: new Date().toISOString().split('T')[0], observacoes: '' };
 
-// ─── Dropdown pesquisável (substitui <select>/<datalist> nativos, que exigiam
+// ─── Dropdown pesquisável (substitui <PrettySelect>/<datalist> nativos, que exigiam
 //     rolar a lista inteira pra achar um item) ────────────────────────────────
 function SearchSelect({ value, onChange, options, placeholder = 'Selecione...', freeText = false, emptyLabel = 'Nenhum resultado', allowClear = false, clearLabel = 'Todos' }) {
     const [open, setOpen] = useState(false);

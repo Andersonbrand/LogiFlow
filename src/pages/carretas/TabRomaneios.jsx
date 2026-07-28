@@ -14,6 +14,7 @@ import {
 import { fetchMaterials } from 'utils/materialService';
 import { subscribeTabela } from 'utils/supabaseClient';
 import * as XLSX from 'xlsx';
+import PrettySelect from 'components/ui/PrettySelect';
 
 // ─── SearchInput — campo de busca reutilizável (local a este arquivo) ────────
 function SearchInput({ value, onChange, placeholder = 'Buscar...', width = '260px' }) {
@@ -182,7 +183,7 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
             {/* Material */}
             <div className="col-span-12 sm:col-span-4">
                 <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Material</label>
-                <select
+                <PrettySelect
                     value={item.material_id || ''}
                     onChange={e => {
                         const mid = e.target.value;
@@ -203,7 +204,7 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                     {materiais.map(m => (
                         <option key={m.id} value={m.id}>{m.nome}</option>
                     ))}
-                </select>
+                </PrettySelect>
                 {mat && !pesoUnit && item.material_id && (
                     <p className="text-xs mt-1 font-medium text-amber-600">
                         ⚠ Peso não cadastrado em /materiais — preencha manualmente
@@ -234,10 +235,10 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
             {/* Unidade */}
             <div className="col-span-7 sm:col-span-2">
                 <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Unidade</label>
-                <select value={item.unidade} onChange={e => onUpdate(index, { unidade: e.target.value })}
+                <PrettySelect value={item.unidade} onChange={e => onUpdate(index, { unidade: e.target.value })}
                     className={inputCls} style={inputStyle}>
                     {['sc', 'ton', 'kg', 'un', 'cx', 'm³', 'pallet', 'br', 'mt'].map(u => <option key={u} value={u}>{u}</option>)}
-                </select>
+                </PrettySelect>
             </div>
 
             {/* Peso */}
@@ -453,32 +454,32 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {isEdit && (
                             <Field label="Status">
-                                <select value={form.status} onChange={e => set('status', e.target.value)}
+                                <PrettySelect value={form.status} onChange={e => set('status', e.target.value)}
                                     className={inputCls} style={inputStyle}>
                                     {STATUS_ROMANEIO.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
+                                </PrettySelect>
                             </Field>
                         )}
                         <Field label="Placa do Veículo" required>
-                            <select value={form.veiculo_id} onChange={e => set('veiculo_id', e.target.value)}
+                            <PrettySelect value={form.veiculo_id} onChange={e => set('veiculo_id', e.target.value)}
                                 className={inputCls} style={inputStyle}>
                                 <option value="">Selecione a placa...</option>
                                 {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <Field label="Motorista">
-                            <select value={form.motorista_id} onChange={e => set('motorista_id', e.target.value)}
+                            <PrettySelect value={form.motorista_id} onChange={e => set('motorista_id', e.target.value)}
                                 className={inputCls} style={inputStyle}>
                                 <option value="">Selecione o motorista...</option>
                                 {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <Field label="Empresa">
-                            <select value={form.empresa} onChange={e => set('empresa', e.target.value)}
+                            <PrettySelect value={form.empresa} onChange={e => set('empresa', e.target.value)}
                                 className={inputCls} style={inputStyle}>
                                 <option value="">Selecione a empresa...</option>
                                 {empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <Field label="Destino de Entrega" required>
                             <DestinoSelect
@@ -543,11 +544,11 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                     <p className="text-xs font-semibold text-purple-700 mb-3">💰 Frete</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Field label="Tipo de Frete">
-                            <select value={form.tipo_calculo_frete} onChange={e => set('tipo_calculo_frete', e.target.value)}
+                            <PrettySelect value={form.tipo_calculo_frete} onChange={e => set('tipo_calculo_frete', e.target.value)}
                                 className={inputCls} style={inputStyle}>
                                 <option value="fixo">Valor Fixo (R$)</option>
                                 <option value="percentual">Percentual sobre a carga (%)</option>
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <Field label={form.tipo_calculo_frete === 'fixo' ? 'Valor do Frete (R$)' : 'Percentual (%)'}>
                             <div className="relative">
@@ -1008,14 +1009,14 @@ export default function TabRomaneios({ isAdmin }) {
                                                 <td className="px-3 py-3 text-xs" style={{ color: 'var(--color-text-secondary)' }}>{r.empresa || '—'}</td>
                                                 <td className="px-3 py-3">
                                                     {isAdmin ? (
-                                                        <select
+                                                        <PrettySelect
                                                             value={r.status}
                                                             onChange={e => handleStatusChange(r.id, e.target.value)}
                                                             className="text-xs font-semibold rounded-full px-2.5 py-1 border-0 cursor-pointer outline-none"
                                                             style={{ backgroundColor: sc.bg, color: sc.text }}
                                                             title="Clique para mudar o status">
                                                             {STATUS_ROMANEIO.map(s => <option key={s} value={s}>{s}</option>)}
-                                                        </select>
+                                                        </PrettySelect>
                                                     ) : (
                                                         <span className="text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap" style={{ backgroundColor: sc.bg, color: sc.text }}>{r.status}</span>
                                                     )}
@@ -1038,11 +1039,11 @@ export default function TabRomaneios({ isAdmin }) {
             {/* ── Toolbar ── */}
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                 <div className="flex flex-wrap gap-2 items-center">
-                    <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
+                    <PrettySelect value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todos os status</option>
                         {STATUS_ROMANEIO.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                    </PrettySelect>
                     <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltroDia(''); setUsarPeriodo(false); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}
                         title="Filtrar por mês" />
@@ -1160,14 +1161,14 @@ export default function TabRomaneios({ isAdmin }) {
                                             ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#DCFCE7', color: '#166534' }}>✓ Motorista vinculado</span>
                                             : <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#FEF9C3', color: '#92400E' }}>⏳ Aguard. motorista</span>
                                         }
-                                        <select
+                                        <PrettySelect
                                             value={r.status}
                                             onChange={e => handleStatusChange(r.id, e.target.value)}
                                             className="text-xs font-semibold rounded-full px-2.5 py-1 border-0 cursor-pointer outline-none"
                                             style={{ backgroundColor: statusCfg.bg, color: statusCfg.text }}
                                             title="Clique para mudar o status">
                                             {STATUS_ROMANEIO.map(s => <option key={s} value={s}>{s}</option>)}
-                                        </select>
+                                        </PrettySelect>
                                     </div>
 
                                     {/* Botões sempre visíveis */}

@@ -32,6 +32,7 @@ import { useBonusConfig } from 'utils/settingsService';
 import { supabase, subscribeTabela } from 'utils/supabaseClient';
 import { fetchRomaneiosPorMotorista } from 'utils/romaneioService';
 import * as XLSX from 'xlsx';
+import PrettySelect from 'components/ui/PrettySelect';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT_DATE = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -374,11 +375,11 @@ export default function CarreteiroDashboard() {
     // Seletor de placa — frota própria apenas (exclui veículos de terceiros), só
     // aparece quando o motorista tem mais de um veículo próprio no histórico
     const seletorPlaca = minhasPlacas.length > 1 && (
-        <select value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
+        <PrettySelect value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
             className="px-3 py-2 rounded-lg border text-xs font-medium outline-none" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
             <option value="">Todas as placas</option>
             {minhasPlacas.map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
-        </select>
+        </PrettySelect>
     );
 
     const totais = useMemo(() => ({
@@ -1650,10 +1651,10 @@ export default function CarreteiroDashboard() {
                         </div>
                         <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                             <Field label="Veículo" required>
-                                <select value={formAbast.veiculo_id} onChange={e => setFormAbast(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={formAbast.veiculo_id} onChange={e => setFormAbast(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </select>
+                                </PrettySelect>
                             </Field>
                             <Field label="Data" required><input type="date" value={formAbast.data_abastecimento} onChange={e => setFormAbast(f => ({ ...f, data_abastecimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                             <Field label="Horário"><input type="time" value={formAbast.horario} onChange={e => setFormAbast(f => ({ ...f, horario: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
@@ -1669,12 +1670,12 @@ export default function CarreteiroDashboard() {
                                 />
                             </Field>
                             <Field label="Posto">
-                                <select value={formAbast.posto_id} onChange={e => handlePostoChangeCarreteiro(e.target.value)} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={formAbast.posto_id} onChange={e => handlePostoChangeCarreteiro(e.target.value)} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione o posto...</option>
                                     {postos.map(p => (
                                         <option key={p.id} value={p.id}>{p.nome}{p.cidade ? ` — ${p.cidade}` : ''}</option>
                                     ))}
-                                </select>
+                                </PrettySelect>
                                 {/* Preços efetivos do posto selecionado (ou padrão) */}
                                 {(getPrecoCarreteiro(formAbast.posto_id, 'diesel') > 0 || getPrecoCarreteiro(formAbast.posto_id, 'arla') > 0) && (
                                     <div className="flex gap-3 mt-1 text-xs">
@@ -1753,10 +1754,10 @@ export default function CarreteiroDashboard() {
                         </div>
                         <div className="p-5 space-y-4 overflow-y-auto flex-1">
                             <Field label="Veículo" required>
-                                <select value={formCheck.veiculo_id} onChange={e => setFormCheck(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={formCheck.veiculo_id} onChange={e => setFormCheck(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </select>
+                                </PrettySelect>
                             </Field>
 
                             {/* Foto — topo do form, destaque visual */}
@@ -1866,10 +1867,10 @@ export default function CarreteiroDashboard() {
                             </div>
                             <div>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Placa do veículo <span className="text-red-500">*</span></label>
-                                <select value={formRegistro.veiculo_id} onChange={e => setFormRegistro(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={formRegistro.veiculo_id} onChange={e => setFormRegistro(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </select>
+                                </PrettySelect>
                             </div>
                             <div className={formRegistro.local_carregamento === 'Estoque' ? 'sm:col-span-2' : ''}>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Destino da carga <span className="text-red-500">*</span></label>
@@ -1879,12 +1880,12 @@ export default function CarreteiroDashboard() {
                             {formRegistro.local_carregamento === 'Estoque' ? (
                                 <div className="sm:col-span-2">
                                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Tipo de cimento <span className="text-red-500">*</span></label>
-                                    <select value={formRegistro.tipo_cimento} onChange={e => setFormRegistro(f => ({ ...f, tipo_cimento: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <PrettySelect value={formRegistro.tipo_cimento} onChange={e => setFormRegistro(f => ({ ...f, tipo_cimento: e.target.value }))} className={inputCls} style={inputStyle}>
                                         <option value="">Selecione...</option>
                                         <option value="Montes Claros">Montes Claros</option>
                                         <option value="Liz">Liz</option>
                                         <option value="Ambas">Ambas (Montes Claros + Liz)</option>
-                                    </select>
+                                    </PrettySelect>
                                 </div>
                             ) : (
                                 <>
@@ -1955,7 +1956,7 @@ export default function CarreteiroDashboard() {
                         {/* Vincular a ROM existente do admin */}
                         <Field label="Nº do Romaneio (opcional)">
                             {romsAbertos.length > 0 ? (
-                                <select
+                                <PrettySelect
                                     value={formFerragem.numero_romaneio}
                                     onChange={e => {
                                         const num = e.target.value;
@@ -1974,7 +1975,7 @@ export default function CarreteiroDashboard() {
                                             {r.numero} — {r.destino || 'Sem destino'} — {r.empresa_origem || ''}
                                         </option>
                                     ))}
-                                </select>
+                                </PrettySelect>
                             ) : (
                                 <input
                                     value={formFerragem.numero_romaneio}
@@ -1998,11 +1999,11 @@ export default function CarreteiroDashboard() {
                             </Field>
                         </div>
                         <Field label="Veículo / Placa" required>
-                            <select value={formFerragem.veiculo_id} onChange={e => setFormFerragem(f => ({ ...f, veiculo_id: e.target.value }))}
+                            <PrettySelect value={formFerragem.veiculo_id} onChange={e => setFormFerragem(f => ({ ...f, veiculo_id: e.target.value }))}
                                 className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
                                 {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <div className="grid grid-cols-2 gap-4">
                             <Field label="Destino" required>
@@ -2015,11 +2016,11 @@ export default function CarreteiroDashboard() {
                             </Field>
                         </div>
                         <Field label="Empresa / Fornecedor">
-                            <select value={formFerragem.empresa} onChange={e => setFormFerragem(f => ({ ...f, empresa: e.target.value }))}
+                            <PrettySelect value={formFerragem.empresa} onChange={e => setFormFerragem(f => ({ ...f, empresa: e.target.value }))}
                                 className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
                                 {empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <Field label="Observações">
                             <textarea value={formFerragem.observacoes} onChange={e => setFormFerragem(f => ({ ...f, observacoes: e.target.value }))}
@@ -2110,12 +2111,12 @@ export default function CarreteiroDashboard() {
                             </Field>
 
                             <Field label="Veículo">
-                                <select value={formPonto.veiculo_id}
+                                <PrettySelect value={formPonto.veiculo_id}
                                     onChange={e => setFormPonto(f => ({ ...f, veiculo_id: e.target.value }))}
                                     className={inputCls} style={inputStyle}>
                                     <option value="">Selecione (opcional)...</option>
                                     {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </select>
+                                </PrettySelect>
                             </Field>
 
                             {/* Bloco SAÍDA — de onde o motorista está saindo */}
@@ -2126,16 +2127,16 @@ export default function CarreteiroDashboard() {
                                 </p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <Field label="Tipo de Local">
-                                        <select value={formPonto.tipo_local}
+                                        <PrettySelect value={formPonto.tipo_local}
                                             onChange={e => setFormPonto(f => ({ ...f, tipo_local: e.target.value, local: '' }))}
                                             className={inputCls} style={inputStyle}>
                                             {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
                                                 <option key={t} value={t}>{t}</option>
                                             ))}
-                                        </select>
+                                        </PrettySelect>
                                     </Field>
                                     <Field label="Destino / Local" required>
-                                        <select
+                                        <PrettySelect
                                             value={formPonto.local}
                                             onChange={e => setFormPonto(f => ({ ...f, local: e.target.value }))}
                                             className={inputCls} style={inputStyle}>
@@ -2143,7 +2144,7 @@ export default function CarreteiroDashboard() {
                                             {destinosParaTipo(formPonto.tipo_local).map(nome => (
                                                 <option key={nome} value={nome}>{nome}</option>
                                             ))}
-                                        </select>
+                                        </PrettySelect>
                                     </Field>
                                 </div>
                                 <div className="grid grid-cols-3 gap-3">
@@ -2173,16 +2174,16 @@ export default function CarreteiroDashboard() {
                                 </p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <Field label="Tipo de Local">
-                                        <select value={formPonto.tipo_local_chegada}
+                                        <PrettySelect value={formPonto.tipo_local_chegada}
                                             onChange={e => setFormPonto(f => ({ ...f, tipo_local_chegada: e.target.value, local_chegada: '' }))}
                                             className={inputCls} style={inputStyle}>
                                             {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
                                                 <option key={t} value={t}>{t}</option>
                                             ))}
-                                        </select>
+                                        </PrettySelect>
                                     </Field>
                                     <Field label="Destino / Local">
-                                        <select
+                                        <PrettySelect
                                             value={formPonto.local_chegada}
                                             onChange={e => setFormPonto(f => ({ ...f, local_chegada: e.target.value }))}
                                             className={inputCls} style={inputStyle}>
@@ -2190,7 +2191,7 @@ export default function CarreteiroDashboard() {
                                             {destinosParaTipo(formPonto.tipo_local_chegada).map(nome => (
                                                 <option key={nome} value={nome}>{nome}</option>
                                             ))}
-                                        </select>
+                                        </PrettySelect>
                                     </Field>
                                 </div>
                                 <div className="grid grid-cols-3 gap-3">
@@ -2231,21 +2232,21 @@ export default function CarreteiroDashboard() {
                                             <p className="text-xs font-bold flex items-center gap-1" style={{ color: '#1D4ED8' }}><Icon name="LogOut" size={12} color="#1D4ED8" />SAÍDA</p>
                                             <div className="grid grid-cols-2 gap-2">
                                                 <Field label="Tipo de Local">
-                                                    <select value={extra.tipo_local || 'Fábrica'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local: e.target.value, local: '' }; return { ...f, horarios_extras: h }; })}
+                                                    <PrettySelect value={extra.tipo_local || 'Fábrica'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local: e.target.value, local: '' }; return { ...f, horarios_extras: h }; })}
                                                         className={inputCls} style={inputStyle}>
                                                         {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
                                                             <option key={t} value={t}>{t}</option>
                                                         ))}
-                                                    </select>
+                                                    </PrettySelect>
                                                 </Field>
                                                 <Field label="Destino / Local" required>
-                                                    <select value={extra.local || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], local: e.target.value }; return { ...f, horarios_extras: h }; })}
+                                                    <PrettySelect value={extra.local || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], local: e.target.value }; return { ...f, horarios_extras: h }; })}
                                                         className={inputCls} style={inputStyle}>
                                                         <option value="">Selecione...</option>
                                                         {destinosParaTipo(extra.tipo_local || 'Fábrica').map(nome => (
                                                             <option key={nome} value={nome}>{nome}</option>
                                                         ))}
-                                                    </select>
+                                                    </PrettySelect>
                                                 </Field>
                                             </div>
                                             <div className="grid grid-cols-3 gap-2">
@@ -2264,21 +2265,21 @@ export default function CarreteiroDashboard() {
                                             <p className="text-xs font-bold flex items-center gap-1" style={{ color: '#065F46' }}><Icon name="LogIn" size={12} color="#065F46" />CHEGADA</p>
                                             <div className="grid grid-cols-2 gap-2">
                                                 <Field label="Tipo de Local">
-                                                    <select value={extra.tipo_local_chegada || 'Fábrica'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local_chegada: e.target.value, local_chegada: '' }; return { ...f, horarios_extras: h }; })}
+                                                    <PrettySelect value={extra.tipo_local_chegada || 'Fábrica'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local_chegada: e.target.value, local_chegada: '' }; return { ...f, horarios_extras: h }; })}
                                                         className={inputCls} style={inputStyle}>
                                                         {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
                                                             <option key={t} value={t}>{t}</option>
                                                         ))}
-                                                    </select>
+                                                    </PrettySelect>
                                                 </Field>
                                                 <Field label="Destino / Local">
-                                                    <select value={extra.local_chegada || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], local_chegada: e.target.value }; return { ...f, horarios_extras: h }; })}
+                                                    <PrettySelect value={extra.local_chegada || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], local_chegada: e.target.value }; return { ...f, horarios_extras: h }; })}
                                                         className={inputCls} style={inputStyle}>
                                                         <option value="">Selecione...</option>
                                                         {destinosParaTipo(extra.tipo_local_chegada || 'Fábrica').map(nome => (
                                                             <option key={nome} value={nome}>{nome}</option>
                                                         ))}
-                                                    </select>
+                                                    </PrettySelect>
                                                 </Field>
                                             </div>
                                             <div className="grid grid-cols-3 gap-2">

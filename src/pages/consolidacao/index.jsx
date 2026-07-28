@@ -10,6 +10,7 @@ import { useAuth } from 'utils/AuthContext';
 import { fetchRomaneios, createRomaneio, deleteRomaneio } from 'utils/romaneioService';
 import { fetchVehicles } from 'utils/vehicleService';
 import { calcularGruposConsolidacao, getCorredorDaCidade, getLabelCorredor, getIconeCorredor, carregarCorredores, getAllCorredores } from 'utils/rotaGeo';
+import PrettySelect from 'components/ui/PrettySelect';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -212,13 +213,13 @@ export default function Consolidacao() {
 
                                 <div className="bg-white rounded-xl border shadow-card p-5" style={{ borderColor: 'var(--color-border)' }}>
                                     <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: 'var(--color-text-primary)' }}>Selecionar Veículo</h3>
-                                    <select value={vehicleId} onChange={e => setVehicleId(e.target.value)}
+                                    <PrettySelect value={vehicleId} onChange={e => setVehicleId(e.target.value)}
                                         className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none bg-white">
                                         <option value="">Selecionar veículo disponível...</option>
                                         {vehicles.map(v => (
                                             <option key={v.id} value={v.id}>{v.placa} — {v.tipo} — Cap: {Number(v.capacidadePeso||0).toLocaleString('pt-BR')} kg</option>
                                         ))}
-                                    </select>
+                                    </PrettySelect>
                                     {overCapacity && (
                                         <p className="text-xs mt-2 flex items-center gap-1.5" style={{ color: '#DC2626' }}>
                                             <Icon name="AlertTriangle" size={12} color="#DC2626" />

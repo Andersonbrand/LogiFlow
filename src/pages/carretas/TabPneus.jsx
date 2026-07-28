@@ -8,6 +8,7 @@ import { useConfirm } from 'components/ui/ConfirmDialog';
 import { fetchVeiculosProprios, fetchMotoristasProprios } from 'utils/carretasService';
 import { fetchCaminhoesPlacas } from 'utils/vehicleService';
 import SearchableSelect from 'components/ui/SearchableSelect';
+import PrettySelect from 'components/ui/PrettySelect';
 import {
     fetchCatalogoPneus, addItemCatalogoPneus, updateItemCatalogoPneus, deleteItemCatalogoPneus, fetchCatalogoPneusRaw,
     fetchComprasPneus, createCompraPneus, deleteCompraPneus,
@@ -127,10 +128,10 @@ function SelectComOpcaoNova({ value, onChange, opcoes, onAddNova, placeholder = 
     }
     return (
         <div className="flex gap-1.5">
-            <select value={value} onChange={e => onChange(e.target.value)} className={inputCls} style={inputStyle}>
+            <PrettySelect value={value} onChange={e => onChange(e.target.value)} className={inputCls} style={inputStyle}>
                 <option value="">{placeholder}</option>
                 {opcoes.map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
+            </PrettySelect>
             <button type="button" onClick={() => setAddMode(true)} title="Adicionar novo"
                 className="px-2.5 rounded-lg border flex items-center justify-center" style={{ borderColor: 'var(--color-border)' }}>
                 <Icon name="Plus" size={14} color="var(--color-primary)" />
@@ -539,9 +540,9 @@ function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo
                                     <SelectComOpcaoNova value={form.medida} onChange={v => setForm(f => ({ ...f, medida: v }))} opcoes={catalogo.medida} onAddNova={v => { handleAddCatalogo('medida', v); setForm(f => ({ ...f, medida: v })); }} />
                                 </Field>
                                 <Field label="Categoria (Bandagem)">
-                                    <select value={form.categoria_bandagem} onChange={e => setForm(f => ({ ...f, categoria_bandagem: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <PrettySelect value={form.categoria_bandagem} onChange={e => setForm(f => ({ ...f, categoria_bandagem: e.target.value }))} className={inputCls} style={inputStyle}>
                                         {Object.keys(BANDAGEM_LABEL).map(k => <option key={k} value={k}>{BANDAGEM_LABEL[k]}</option>)}
-                                    </select>
+                                    </PrettySelect>
                                 </Field>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
@@ -562,10 +563,10 @@ function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo
                             </div>
                             <Field label="Eixo Trocado">
                                 <div className="flex gap-1.5">
-                                    <select value={form.eixo_trocado} onChange={e => setForm(f => ({ ...f, eixo_trocado: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <PrettySelect value={form.eixo_trocado} onChange={e => setForm(f => ({ ...f, eixo_trocado: e.target.value }))} className={inputCls} style={inputStyle}>
                                         <option value="">Selecione...</option>
                                         {catalogo.eixo.map(e => <option key={e} value={e}>{e}</option>)}
-                                    </select>
+                                    </PrettySelect>
                                     {isAdmin && (
                                         <button type="button" onClick={() => setModalGerenciarEixos(true)} title="Cadastrar, editar ou excluir eixos"
                                             className="px-2.5 rounded-lg border flex items-center justify-center flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
@@ -591,14 +592,14 @@ function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo
                                 </Field>
                             </div>
                             <Field label="Compra (saldo de qual NF está usando)">
-                                <select value={form.compra_id} onChange={e => setForm(f => ({ ...f, compra_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={form.compra_id} onChange={e => setForm(f => ({ ...f, compra_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Sem vínculo com compra</option>
                                     {comprasComSaldo.filter(c => c.saldo > 0 || c.id === form.compra_id).map(c => (
                                         <option key={c.id} value={c.id}>
                                             {c.marca}{c.modelo ? ` ${c.modelo}` : ''} — NF {c.despesa?.nota_fiscal || '—'} (saldo: {c.saldo})
                                         </option>
                                     ))}
-                                </select>
+                                </PrettySelect>
                             </Field>
                             <Field label="Observações">
                                 <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={{ ...inputStyle, minHeight: 60 }} />

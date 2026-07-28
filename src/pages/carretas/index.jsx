@@ -65,7 +65,9 @@ import { fetchCaminhoesPlacas } from 'utils/vehicleService';
 import PeriodRangeFilter, { usePeriodRangeFilter } from 'components/ui/PeriodRangeFilter';
 import { updateUserProfile } from 'utils/userService';
 import { fetchDadosMargemFrete, calcularAbatimentoCustosFrota } from 'utils/custosFrotaService';
+import { agruparDesempenhoPorMotorista, calcularAlertasJornada, LIMITE_HORAS_DIA, LIMITE_HORAS_SEMANA } from 'utils/desempenhoMotoristaService';
 import { somarDespesasPorVencimento, agruparDespesasPorCategoriaVencimento } from 'utils/despesasParcelasUtils';
+import PrettySelect from 'components/ui/PrettySelect';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT_DATE = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -227,6 +229,10 @@ function TabViagens({ isAdmin }) {
     const [filtroDia, setFiltroDia] = useState(() => {
         try { return sessionStorage.getItem('viagens_filtroDia') || ''; } catch { return ''; }
     });
+    // Filtro por período (data inicial/final personalizadas) — mesmo padrão
+    // já usado na aba Bonificações.
+    const [usarPeriodo, setUsarPeriodo] = useState(false);
+    const [periodoCustom, setPeriodoCustom] = useState({ inicio: '', fim: '' });
 
     // Persiste na sessão quando muda
     const handleSetFiltroMes = (v) => {
@@ -242,7 +248,10 @@ function TabViagens({ isAdmin }) {
         setLoading(true);
         try {
             const f = {};
-            if (filtroDia) {
+            if (usarPeriodo && (periodoCustom.inicio || periodoCustom.fim)) {
+                if (periodoCustom.inicio) f.dataInicio = periodoCustom.inicio;
+                if (periodoCustom.fim)    f.dataFim    = periodoCustom.fim;
+            } else if (filtroDia) {
                 f.dataInicio = filtroDia;
                 f.dataFim    = filtroDia;
             } else if (filtroMes) {
@@ -260,7 +269,7 @@ function TabViagens({ isAdmin }) {
 
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
-    }, [filtroMes, filtroDia, isAdmin]); // eslint-disable-line
+    }, [filtroMes, filtroDia, isAdmin, usarPeriodo, periodoCustom]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
 
@@ -371,21 +380,37 @@ function TabViagens({ isAdmin }) {
                             </button>
                         ))}
                     </div>
-                    <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); handleSetFiltroDia(''); }}
+                    <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); handleSetFiltroDia(''); setUsarPeriodo(false); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
-                    <input type="date" value={filtroDia} onChange={e => { handleSetFiltroDia(e.target.value); handleSetFiltroMes(''); }}
+                    <input type="date" value={filtroDia} onChange={e => { handleSetFiltroDia(e.target.value); handleSetFiltroMes(''); setUsarPeriodo(false); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por dia específico" />
-                    {(filtroMes || filtroDia) && (
-                        <button onClick={() => { handleSetFiltroMes(''); handleSetFiltroDia(''); }}
+                    <button type="button" onClick={() => setUsarPeriodo(v => !v)}
+                        className="px-2.5 py-2 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap"
+                        style={usarPeriodo
+                            ? { backgroundColor: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE' }
+                            : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                        {usarPeriodo ? '✓ Período ativo' : 'Usar período'}
+                    </button>
+                    {usarPeriodo && (
+                        <>
+                            <input type="date" value={periodoCustom.inicio} onChange={e => setPeriodoCustom(p => ({ ...p, inicio: e.target.value }))}
+                                className="px-2.5 py-2 rounded-lg border text-sm" style={inputStyle} title="Data inicial" />
+                            <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>até</span>
+                            <input type="date" value={periodoCustom.fim} onChange={e => setPeriodoCustom(p => ({ ...p, fim: e.target.value }))}
+                                className="px-2.5 py-2 rounded-lg border text-sm" style={inputStyle} title="Data final" />
+                        </>
+                    )}
+                    {(filtroMes || filtroDia || usarPeriodo) && (
+                        <button onClick={() => { handleSetFiltroMes(''); handleSetFiltroDia(''); setUsarPeriodo(false); setPeriodoCustom({ inicio: '', fim: '' }); }}
                             className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar data">✕ Data</button>
                     )}
-                    <select value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
+                    <PrettySelect value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por placa">
                         <option value="">Todas as placas</option>
                         {placasDisponiveis.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
+                    </PrettySelect>
                     {/* ── Barra de pesquisa ── */}
                     <div className="relative">
                         <Icon name="Search" size={13} color="var(--color-muted-foreground)"
@@ -628,9 +653,9 @@ function TabVeiculos({ isAdmin }) {
                         <Field label="Modelo" required><input value={form.modelo} onChange={e => setForm(f => ({ ...f, modelo: e.target.value }))} className={inputCls} style={inputStyle} placeholder="FH 540..." /></Field>
                         <Field label="Ano de fabricação"><input type="number" value={form.ano_fabricacao} onChange={e => setForm(f => ({ ...f, ano_fabricacao: e.target.value }))} className={inputCls} style={inputStyle} placeholder="2020" /></Field>
                         <Field label="Tipo de composição">
-                            <select value={form.tipo_composicao} onChange={e => setForm(f => ({ ...f, tipo_composicao: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={form.tipo_composicao} onChange={e => setForm(f => ({ ...f, tipo_composicao: e.target.value }))} className={inputCls} style={inputStyle}>
                                 {TIPO_COMPOSICAO.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <Field label="Cap. carga (t)"><input type="number" step="0.1" value={form.capacidade_carga} onChange={e => setForm(f => ({ ...f, capacidade_carga: e.target.value }))} className={inputCls} style={inputStyle} placeholder="30" /></Field>
                         <Field label="Média consumo (km/l)"><input type="number" step="0.1" value={form.media_consumo} onChange={e => setForm(f => ({ ...f, media_consumo: e.target.value }))} className={inputCls} style={inputStyle} placeholder="2.5" /></Field>
@@ -862,15 +887,15 @@ function TabAbastecimentos({ isAdmin, profile }) {
             <div className="flex flex-wrap gap-2 items-center justify-between mb-5">
                 <div className="flex flex-wrap gap-2 items-center">
                     {isAdmin && (
-                        <select value={filtro.motoristaId} onChange={e => setFiltro(f => ({ ...f, motoristaId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                        <PrettySelect value={filtro.motoristaId} onChange={e => setFiltro(f => ({ ...f, motoristaId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                             <option value="">Todos motoristas</option>
                             {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
+                        </PrettySelect>
                     )}
-                    <select value={filtro.veiculoId} onChange={e => setFiltro(f => ({ ...f, veiculoId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                    <PrettySelect value={filtro.veiculoId} onChange={e => setFiltro(f => ({ ...f, veiculoId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todos veículos</option>
                         {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
-                    </select>
+                    </PrettySelect>
                     <input type="month" value={filtro.mes} onChange={e => handleSetFiltroMes(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
                     <input type="date" value={filtro.dia || ''} onChange={e => { setFiltro(f => ({ ...f, dia: e.target.value, mes: '' })); if (periodoPreset === 'personalizado') resetPeriodo(); }}
@@ -983,17 +1008,17 @@ function TabAbastecimentos({ isAdmin, profile }) {
                     <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                         {isAdmin && (
                             <Field label="Motorista" required>
-                                <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                </select>
+                                </PrettySelect>
                             </Field>
                         )}
                         <Field label="Veículo" required>
-                            <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
                                 {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <Field label="Data" required><input type="date" value={form.data_abastecimento} onChange={e => setForm(f => ({ ...f, data_abastecimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                         <Field label="Horário"><input type="time" value={form.horario} onChange={e => setForm(f => ({ ...f, horario: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
@@ -1009,7 +1034,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                             />
                         </Field>
                         <Field label="Posto" required>
-                            <select value={form.posto_id} onChange={e => handlePostoChange(e.target.value)} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={form.posto_id} onChange={e => handlePostoChange(e.target.value)} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione o posto...</option>
                                 {postos.map(p => (
                                     <option key={p.id} value={p.id}>
@@ -1018,7 +1043,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                                         {p.preco_arla ? ` · A: R$${Number(p.preco_arla).toFixed(3)}` : ''}
                                     </option>
                                 ))}
-                            </select>
+                            </PrettySelect>
                             {postos.length === 0 && <p className="text-xs text-amber-600 mt-1">Nenhum posto cadastrado. Peça ao admin para cadastrar.</p>}
                             {/* Exibe preços do posto selecionado */}
                             {form.posto_id && postos.find(p => p.id === form.posto_id) && (() => {
@@ -1414,10 +1439,10 @@ function TabChecklist({ isAdmin, profile }) {
                     <ModalHeader title="Checklist Semanal" icon="ClipboardCheck" onClose={() => { setModal(null); setFotoPreview(null); }} />
                     <div className="p-5 space-y-4 overflow-y-auto flex-1">
                         <Field label="Veículo" required>
-                            <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
                                 {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <div>
                             <p className="text-xs font-medium mb-3" style={{ color: 'var(--color-text-secondary)' }}>Itens verificados</p>
@@ -1619,10 +1644,10 @@ function TabCarregamentos({ isAdmin }) {
         <div>
             <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
                 <div className="flex flex-wrap gap-2">
-                    <select value={filtro.empresaId} onChange={e => setFiltro(f => ({ ...f, empresaId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                    <PrettySelect value={filtro.empresaId} onChange={e => setFiltro(f => ({ ...f, empresaId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todas empresas</option>
                         {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                    </select>
+                    </PrettySelect>
                     <input type="month" value={filtro.mes} onChange={e => handleSetFiltroMesCarr(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
                     <input type="date" value={filtro.dia || ''} onChange={e => setFiltro(f => ({ ...f, dia: e.target.value, mes: '' }))}
@@ -1701,25 +1726,25 @@ function TabCarregamentos({ isAdmin }) {
                 <ModalOverlay onClose={() => setModal(null)}>
                     <ModalHeader title="Novo Carregamento" icon="Package" onClose={() => setModal(null)} />
                     <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
-                        <Field label="Motorista"><select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}><option value="">Selecione...</option>{motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>
-                        <Field label="Veículo"><select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}><option value="">Selecione...</option>{veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}</select></Field>
-                        <Field label="Empresa (frete)" required><select value={form.empresa_id} onChange={e => setForm(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}><option value="">Selecione...</option>{empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}</select></Field>
-                        <Field label="Empresa de origem"><select value={form.empresa_origem} onChange={e => setForm(f => ({ ...f, empresa_origem: e.target.value }))} className={inputCls} style={inputStyle}><option value="">Selecione...</option>{empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}</select></Field>
+                        <Field label="Motorista"><PrettySelect value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}><option value="">Selecione...</option>{motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</PrettySelect></Field>
+                        <Field label="Veículo"><PrettySelect value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}><option value="">Selecione...</option>{veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}</PrettySelect></Field>
+                        <Field label="Empresa (frete)" required><PrettySelect value={form.empresa_id} onChange={e => setForm(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}><option value="">Selecione...</option>{empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}</PrettySelect></Field>
+                        <Field label="Empresa de origem"><PrettySelect value={form.empresa_origem} onChange={e => setForm(f => ({ ...f, empresa_origem: e.target.value }))} className={inputCls} style={inputStyle}><option value="">Selecione...</option>{empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}</PrettySelect></Field>
                         <Field label="Data" required><input type="date" value={form.data_carregamento} onChange={e => setForm(f => ({ ...f, data_carregamento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                         <Field label="Nº do pedido"><input value={form.numero_pedido} onChange={e => setForm(f => ({ ...f, numero_pedido: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                         <Field label="Nº da nota fiscal"><input value={form.numero_nota_fiscal || ''} onChange={e => setForm(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
                         <Field label="Destino" required><input value={form.destino} onChange={e => setForm(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Cidade de destino" /></Field>
                         <div className="grid grid-cols-2 gap-2">
                             <Field label="Quantidade"><input type="number" step="0.01" value={form.quantidade} onChange={e => setForm(f => ({ ...f, quantidade: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
-                            <Field label="Unidade"><select value={form.unidade_quantidade} onChange={e => setForm(f => ({ ...f, unidade_quantidade: e.target.value }))} className={inputCls} style={inputStyle}><option value="saco">Saco</option><option value="tonelada">Tonelada</option><option value="carga">Carga</option></select></Field>
+                            <Field label="Unidade"><PrettySelect value={form.unidade_quantidade} onChange={e => setForm(f => ({ ...f, unidade_quantidade: e.target.value }))} className={inputCls} style={inputStyle}><option value="saco">Saco</option><option value="tonelada">Tonelada</option><option value="carga">Carga</option></PrettySelect></Field>
                         </div>
                         <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#C4B5FD', backgroundColor: '#FAF5FF' }}>
                             <p className="text-xs font-semibold text-purple-700 mb-3">💰 Cálculo de Frete</p>
                             <div className="grid grid-cols-2 gap-3">
                                 <Field label="Tipo de cálculo">
-                                    <select value={form.tipo_calculo_frete} onChange={e => setForm(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <PrettySelect value={form.tipo_calculo_frete} onChange={e => setForm(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
                                         {TIPOS_CALCULO_FRETE.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                                    </select>
+                                    </PrettySelect>
                                 </Field>
                                 <Field label={
                                     form.tipo_calculo_frete === 'percentual' ? 'Percentual (%)' :
@@ -2063,6 +2088,27 @@ function TabBonificacoes({ isAdmin }) {
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows2), 'Bônus Extras');
         }
         if (!carregamentosComBonus.length && !extras.length) { showToast('Nenhum dado no período.', 'error'); return; }
+
+        // Aba nova com o total de bônus por motorista — mesmo somatório já
+        // exibido nos cards desta tela (totais.porMotorista).
+        const rowsResumo = totais.porMotorista.map(m => ({
+            'Motorista': m.nome,
+            'Carregamentos': m.carregamentos,
+            'Bônus Viagens (R$)': m.bonusViagens,
+            'Bônus Extras (R$)': m.bonusExtras,
+            'Total (R$)': m.bonusTotal,
+        }));
+        rowsResumo.push({
+            'Motorista': 'TOTAL GERAL',
+            'Carregamentos': totais.totalViagens,
+            'Bônus Viagens (R$)': totais.totalBonusViag,
+            'Bônus Extras (R$)': totais.totalExtras,
+            'Total (R$)': totais.totalBonusViag + totais.totalExtras,
+        });
+        const wsResumo = XLSX.utils.json_to_sheet(rowsResumo);
+        wsResumo['!cols'] = [26, 14, 16, 16, 14].map(w => ({ wch: w }));
+        XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo (Soma por Motorista)');
+
         XLSX.writeFile(wb, `bonificacoes_carretas_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
         showToast('Exportado!', 'success');
     };
@@ -2096,11 +2142,11 @@ function TabBonificacoes({ isAdmin }) {
             {/* ── Toolbar ── */}
             <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
                 <div className="flex flex-wrap gap-2">
-                    <select value={filtroMotorista} onChange={e => setFiltroMotorista(e.target.value)}
+                    <PrettySelect value={filtroMotorista} onChange={e => setFiltroMotorista(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todos motoristas</option>
                         {carreteiros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
+                    </PrettySelect>
                     <input type="month" value={filtroMes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltroDia(''); setUsarPeriodo(false); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
                     <input type="date" value={filtroDia} onChange={e => { setFiltroDia(e.target.value); handleSetFiltroMes(''); setUsarPeriodo(false); }}
@@ -2279,12 +2325,12 @@ function TabBonificacoes({ isAdmin }) {
                     />
                     <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                         <Field label="Motorista" required>
-                            <select value={formExtra.motorista_id}
+                            <PrettySelect value={formExtra.motorista_id}
                                 onChange={e => setFormExtra(f => ({ ...f, motorista_id: e.target.value }))}
                                 className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
                                 {carreteiros.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <Field label="Data" required>
                             <input type="date" value={formExtra.data}
@@ -2462,10 +2508,10 @@ function ModalFornecedoresCarretas({ onClose, onSelect }) {
                             </div>
                             <div>
                                 <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Categoria habitual</label>
-                                <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {CATEGORIAS_DESPESA.map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
+                                </PrettySelect>
                             </div>
                             <div className="col-span-2">
                                 <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Endereço</label>
@@ -3320,14 +3366,14 @@ function TabDespesasExtras({ isAdmin, profile }) {
         <div>
             <div className="flex flex-wrap gap-2 items-center justify-between mb-5">
                 <div className="flex flex-wrap gap-2">
-                    <select value={filtro.veiculoId} onChange={e => setFiltro(f => ({ ...f, veiculoId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                    <PrettySelect value={filtro.veiculoId} onChange={e => setFiltro(f => ({ ...f, veiculoId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todos veículos</option>
                         {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
-                    </select>
-                    <select value={filtro.categoria} onChange={e => setFiltro(f => ({ ...f, categoria: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                    </PrettySelect>
+                    <PrettySelect value={filtro.categoria} onChange={e => setFiltro(f => ({ ...f, categoria: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todas categorias</option>
                         {todasCategorias.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                    </PrettySelect>
                     <input type="month" value={filtro.mes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltro(f => ({ ...f, dia: '' })); setUsarPeriodo(false); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
                     <input type="date" value={filtro.dia || ''} onChange={e => { setFiltro(f => ({ ...f, dia: e.target.value })); handleSetFiltroMes(''); setUsarPeriodo(false); }}
@@ -3846,9 +3892,9 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             <Field label="Categoria" required>
                                 <div className="space-y-2">
                                     <div className="flex gap-2">
-                                        <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <PrettySelect value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))} className={inputCls} style={inputStyle}>
                                             {todasCategorias.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
+                                        </PrettySelect>
                                         {isAdmin && (
                                             <button type="button" onClick={() => setShowNovaCategoria(s => !s)}
                                                 className="flex-shrink-0 px-2.5 py-2 rounded-lg border text-xs font-medium hover:bg-blue-50 transition-colors"
@@ -3917,10 +3963,10 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                 </div>
                             </Field>
                             <Field label="Veículo">
-                                <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Sem veículo específico</option>
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </select>
+                                </PrettySelect>
                             </Field>
                             <Field label="Data" required>
                                 <input type="date" value={form.data_despesa} onChange={e => setForm(f => ({ ...f, data_despesa: e.target.value }))} className={inputCls} style={inputStyle} />
@@ -3929,10 +3975,10 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                 <input id="despesa-valor" type="number" step="0.01" min="0" value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
                             </Field>
                             <Field label="Empresa">
-                                <select value={form.empresa || ''} onChange={e => setForm(f => ({ ...f, empresa: e.target.value }))} className={inputCls} style={inputStyle}>
+                                <PrettySelect value={form.empresa || ''} onChange={e => setForm(f => ({ ...f, empresa: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione a empresa...</option>
                                     {EMPRESAS_LOGIFLOW.map(nome => <option key={nome} value={nome}>{nome}</option>)}
-                                </select>
+                                </PrettySelect>
                             </Field>
                             <Field label="Fornecedor">
                                 <div className="flex gap-2">
@@ -4364,10 +4410,10 @@ function TabDiarias({ isAdmin, profile }) {
         <div>
             <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
                 <div className="flex flex-wrap gap-2">
-                    <select value={filtro.motoristaId} onChange={e => setFiltro(f => ({ ...f, motoristaId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
+                    <PrettySelect value={filtro.motoristaId} onChange={e => setFiltro(f => ({ ...f, motoristaId: e.target.value }))} className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todos motoristas</option>
                         {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
+                    </PrettySelect>
                     <input type="month" value={filtro.mes} onChange={e => { handleSetFiltroMes(e.target.value); setFiltro(f => ({ ...f, dia: '' })); }}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
                     <input type="date" value={filtro.dia || ''} onChange={e => { setFiltro(f => ({ ...f, dia: e.target.value })); handleSetFiltroMes(''); }}
@@ -4470,17 +4516,17 @@ function TabDiarias({ isAdmin, profile }) {
                     <ModalHeader title={modal.mode === 'create' ? 'Nova Diária' : 'Editar Diária'} icon="CalendarDays" onClose={() => setModal(null)} />
                     <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
                         <Field label="Motorista" required>
-                            <select value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
                                 {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         {/* item 2: select de placa — apenas placas das carretas (frota própria), sem vínculo, somente registro */}
                         <Field label="Placa do veículo">
-                            <select value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Sem placa...</option>
                                 {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         {/* item 10: para carretas não é necessário vincular viagem */}
                         <div className="flex items-end">
@@ -5069,12 +5115,12 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                         <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
                             Filtrar por empresa (opcional)
                         </label>
-                        <select value={empresa} onChange={e => setEmpresa(e.target.value)}
+                        <PrettySelect value={empresa} onChange={e => setEmpresa(e.target.value)}
                             className="w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
                             <option value="">Todas as empresas</option>
                             {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
-                        </select>
+                        </PrettySelect>
                     </div>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -5341,10 +5387,10 @@ function TabRelatorioFinanceiro({ isAdmin }) {
                                 <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Relatório por Placa</h3>
                             </div>
                             <div className="flex items-center gap-2">
-                                <select value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)} className="px-3 py-1.5 rounded-lg border text-xs" style={inputStyle}>
+                                <PrettySelect value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)} className="px-3 py-1.5 rounded-lg border text-xs" style={inputStyle}>
                                     <option value="">Selecione a placa...</option>
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo || ''}</option>)}
-                                </select>
+                                </PrettySelect>
                                 {dadosPorPlaca && (
                                     <button onClick={exportarPorPlaca} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
                                         <Icon name="FileDown" size={13} /> Exportar Excel
@@ -5599,11 +5645,11 @@ function TabOrdensServico({ isAdmin, profile }) {
         <div>
             <div className="flex flex-wrap gap-3 items-center justify-between mb-5">
                 <div className="flex flex-wrap gap-2">
-                    <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
+                    <PrettySelect value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todos os status</option>
                         {STATUS_OS.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                    </PrettySelect>
                     <input type="month" value={filtroMes} onChange={e => handleSetFiltroMes(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
                     {filtroMes && (
@@ -5614,7 +5660,7 @@ function TabOrdensServico({ isAdmin, profile }) {
                     )}
                 </div>
                 <div className="flex gap-2 items-center">
-                    <select value={filtroPlacaOS} onChange={e => setFiltroPlacaOS(e.target.value)}
+                    <PrettySelect value={filtroPlacaOS} onChange={e => setFiltroPlacaOS(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por placa">
                         <option value="">Todas as placas</option>
                         {veiculos.length > 0 && (
@@ -5627,7 +5673,7 @@ function TabOrdensServico({ isAdmin, profile }) {
                                 {caminhoes.map(v => <option key={`vh:${v.id}`} value={`vh:${v.id}`}>{v.placa} — {v.modelo}</option>)}
                             </optgroup>
                         )}
-                    </select>
+                    </PrettySelect>
                     <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Placa, tipo, descrição..." width="210px" />
                     <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                         <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
@@ -5818,7 +5864,7 @@ function TabOrdensServico({ isAdmin, profile }) {
                             </div>
                         )}
                         <Field label="Veículo" required>
-                            <select
+                            <PrettySelect
                                 value={form.veiculo_id ? `cv:${form.veiculo_id}` : (form.veiculo_caminhao_id ? `vh:${form.veiculo_caminhao_id}` : '')}
                                 onChange={e => {
                                     const val = e.target.value;
@@ -5840,25 +5886,25 @@ function TabOrdensServico({ isAdmin, profile }) {
                                         {caminhoes.map(v => <option key={`vh:${v.id}`} value={`vh:${v.id}`}>{v.placa} — {v.modelo}</option>)}
                                     </optgroup>
                                 )}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <Field label="Mecânico responsável">
-                            <select value={form.mecanico_id} onChange={e => setForm(f => ({ ...f, mecanico_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={form.mecanico_id} onChange={e => setForm(f => ({ ...f, mecanico_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
                                 {mecanicos.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <Field label="Prioridade">
-                            <select value={form.prioridade} onChange={e => setForm(f => ({ ...f, prioridade: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={form.prioridade} onChange={e => setForm(f => ({ ...f, prioridade: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="Normal">Normal</option>
                                 <option value="Urgente">Urgente</option>
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <Field label="Tipo de manutenção">
-                            <select value={form.tipo_manutencao} onChange={e => setForm(f => ({ ...f, tipo_manutencao: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={form.tipo_manutencao} onChange={e => setForm(f => ({ ...f, tipo_manutencao: e.target.value }))} className={inputCls} style={inputStyle}>
                                 <option value="Corretiva">Corretiva</option>
                                 <option value="Preventiva">Preventiva</option>
-                            </select>
+                            </PrettySelect>
                         </Field>
                         <Field label="KM atual do veículo">
                             <input type="number" value={form.km_atual} onChange={e => setForm(f => ({ ...f, km_atual: e.target.value }))}
@@ -6078,9 +6124,9 @@ function GerenciarPecasModal({ onClose, showToast }) {
                                 <>
                                     <input autoFocus value={editandoNome} onChange={e => setEditandoNome(e.target.value)}
                                         className={`flex-1 ${inputClsLocal}`} style={inputStyleLocal} />
-                                    <select value={editandoCategoria} onChange={e => setEditandoCategoria(e.target.value)} className={inputClsLocal} style={inputStyleLocal}>
+                                    <PrettySelect value={editandoCategoria} onChange={e => setEditandoCategoria(e.target.value)} className={inputClsLocal} style={inputStyleLocal}>
                                         {['Ambos', 'Caminhão', 'Carreta'].map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
+                                    </PrettySelect>
                                 </>
                             ) : (
                                 <>
@@ -6100,9 +6146,9 @@ function GerenciarPecasModal({ onClose, showToast }) {
                         <input value={novoNome} onChange={e => setNovoNome(e.target.value)} placeholder="Nova peça..."
                             onKeyDown={e => e.key === 'Enter' && handleAdd()}
                             className={`flex-1 ${inputClsLocal}`} style={inputStyleLocal} />
-                        <select value={novaCategoria} onChange={e => setNovaCategoria(e.target.value)} className={inputClsLocal} style={inputStyleLocal}>
+                        <PrettySelect value={novaCategoria} onChange={e => setNovaCategoria(e.target.value)} className={inputClsLocal} style={inputStyleLocal}>
                             {['Ambos', 'Caminhão', 'Carreta'].map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
+                        </PrettySelect>
                         <Button onClick={handleAdd} size="sm" iconName="Plus" disabled={salvando || !novoNome.trim()}>Add</Button>
                     </div>
                 </div>
@@ -6355,17 +6401,17 @@ function TabHistoricoViagens({ isAdmin }) {
             <div className="flex flex-wrap gap-2 items-center justify-between mb-5">
                 <div className="flex flex-wrap gap-2">
                     {isAdmin && (
-                        <select value={filtroMotorista} onChange={e => setFiltroMotorista(e.target.value)}
+                        <PrettySelect value={filtroMotorista} onChange={e => setFiltroMotorista(e.target.value)}
                             className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                             <option value="">Todos os motoristas</option>
                             {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
+                        </PrettySelect>
                     )}
-                    <select value={filtroVeiculo} onChange={e => setFiltroVeiculo(e.target.value)}
+                    <PrettySelect value={filtroVeiculo} onChange={e => setFiltroVeiculo(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                         <option value="">Todas as placas</option>
                         {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
-                    </select>
+                    </PrettySelect>
                     <input type="month" value={filtroMes} onChange={e => handleSetFiltroMes(e.target.value)}
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês específico" />
                     {filtroMes && (
@@ -6374,7 +6420,7 @@ function TabHistoricoViagens({ isAdmin }) {
                             style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
                             title="Limpar mês e usar período relativo">✕ Mês</button>
                     )}
-                    <select value={filtroPeriodo} onChange={e => { setFiltroPeriodo(e.target.value); handleSetFiltroMes(''); }}
+                    <PrettySelect value={filtroPeriodo} onChange={e => { setFiltroPeriodo(e.target.value); handleSetFiltroMes(''); }}
                         disabled={!!filtroMes}
                         className="px-3 py-2 rounded-lg border text-sm" style={{ ...inputStyle, opacity: filtroMes ? 0.5 : 1 }}
                         title={filtroMes ? 'Limpe o filtro de mês para usar período relativo' : 'Período relativo'}>
@@ -6383,7 +6429,7 @@ function TabHistoricoViagens({ isAdmin }) {
                         <option value="12">Último ano</option>
                         <option value="24">Últimos 2 anos</option>
                         <option value="60">Tudo</option>
-                    </select>
+                    </PrettySelect>
                 </div>
                 <div className="flex gap-2">
                     <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, destino..." width="210px" />
@@ -7231,6 +7277,11 @@ function TabPontosParada({ isAdmin }) {
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
     const [pontos, setPontos] = useState([]);
+    // Sub-aba: "Registros" (tela original) ou "Desempenho" (novo painel de
+    // KM/horas/consumo médio/alerta de jornada) — reaproveita os mesmos
+    // filtros de motorista e período já existentes nesta tela.
+    const [subTab, setSubTab] = useState('registros');
+    const [abastecimentos, setAbastecimentos] = useState([]);
 
     const [loading, setLoading] = useState(true);
     const mesAtualPontos = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; })();
@@ -7268,7 +7319,7 @@ function TabPontosParada({ isAdmin }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [p, m, emps, cidades, postosData, fabricas, outros] = await Promise.all([
+            const [p, m, emps, cidades, postosData, fabricas, outros, abast] = await Promise.all([
                 fetchPontosParada(null), // null = todos os motoristas
                 isAdmin ? fetchTodosMotoristas() : Promise.resolve([]),
                 fetchEmpresas().catch(() => []),
@@ -7276,9 +7327,11 @@ function TabPontosParada({ isAdmin }) {
                 fetchPostos().catch(() => []),
                 fetchLocaisParada('Fábrica').catch(() => []),
                 fetchLocaisParada('Outro').catch(() => []),
+                fetchAbastecimentos({ apenasCarretas: true }).catch(() => []),
             ]);
             setPontos(p);
             setMotoristas(m);
+            setAbastecimentos(abast || []);
             setEmpresasRef(emps || []);
             setCidadesRef(cidades || []);
             setPostosRef(postosData || []);
@@ -7364,6 +7417,27 @@ function TabPontosParada({ isAdmin }) {
         return { ...p, __novoGrupo: novoGrupo, __grupoIdx };
     });
 
+    // ── Dados para a sub-aba "Desempenho" — reaproveita os mesmos filtros
+    // de motorista/período já aplicados acima em pontosFiltrados. ──────────
+    const abastecimentosFiltrados = abastecimentos.filter(a => {
+        if (filtroMotorista && a.motorista_id !== filtroMotorista) return false;
+        const d = a.data_abastecimento || '';
+        if (periodoPreset === 'personalizado' && (periodo.inicio || periodo.fim)) {
+            if (periodo.inicio && d < periodo.inicio) return false;
+            if (periodo.fim && d > periodo.fim) return false;
+        } else if (filtroMes && !d.startsWith(filtroMes)) return false;
+        return true;
+    });
+    // O serviço de cálculo espera `motorista.name` já vinculado ao ponto
+    // (fetchPontosParada(null) não faz esse join, então resolvemos aqui
+    // usando a lista de motoristas já carregada pela tela).
+    const pontosParaDesempenho = pontosFiltrados.map(p => ({
+        ...p,
+        motorista: { name: motoristas.find(m => m.id === p.motorista_id)?.name },
+    }));
+    const desempenhoPorMotorista = agruparDesempenhoPorMotorista(pontosParaDesempenho, abastecimentosFiltrados);
+    const { alertasDiarios, alertasSemanais } = calcularAlertasJornada(pontosParaDesempenho);
+
     const handleDelete = async (id) => {
         const ok = await confirm({ title: 'Excluir ponto de parada?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
         if (!ok) return;
@@ -7416,15 +7490,46 @@ function TabPontosParada({ isAdmin }) {
 
     return (
         <div>
+            {/* Sub-abas: Registros (tela original) vs Desempenho (novo) */}
+            <div className="flex items-center gap-1 mb-4 p-1 rounded-lg w-fit" style={{ backgroundColor: '#F3F4F6' }}>
+                {[
+                    { id: 'registros', label: 'Registros', icon: 'Navigation2' },
+                    { id: 'desempenho', label: 'Desempenho', icon: 'Gauge' },
+                ].map(st => (
+                    <button key={st.id} onClick={() => setSubTab(st.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
+                        style={subTab === st.id
+                            ? { backgroundColor: 'white', color: 'var(--color-text-primary)', boxShadow: '0 1px 2px rgba(0,0,0,0.06)' }
+                            : { color: 'var(--color-muted-foreground)' }}>
+                        <Icon name={st.icon} size={14} color={subTab === st.id ? 'var(--color-primary)' : 'var(--color-muted-foreground)'} />
+                        {st.label}
+                        {st.id === 'desempenho' && (alertasDiarios.length + alertasSemanais.length) > 0 && (
+                            <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: '#FEE2E2', color: '#B91C1C' }}>
+                                {alertasDiarios.length + alertasSemanais.length}
+                            </span>
+                        )}
+                    </button>
+                ))}
+            </div>
+
+            {subTab === 'desempenho' ? (
+                <PainelDesempenhoMotoristas
+                    dados={desempenhoPorMotorista}
+                    alertasDiarios={alertasDiarios}
+                    alertasSemanais={alertasSemanais}
+                    loading={loading}
+                />
+            ) : (
+            <>
             {/* Toolbar */}
             <div className="flex flex-wrap items-center gap-3 mb-5">
-                <select
+                <PrettySelect
                     value={filtroMotorista}
                     onChange={e => setFiltroMotorista(e.target.value)}
                     className="px-3 py-2 rounded-lg border text-sm" style={inputStyle}>
                     <option value="">Todos os motoristas</option>
                     {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
+                </PrettySelect>
                 <input type="month" value={filtroMes} onChange={e => handleSetFiltroMes(e.target.value)}
                     className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
                 <PeriodRangeFilter presets={['personalizado']} preset={periodoPreset} onPresetChange={handleAplicarPeriodo} periodo={periodo} onPeriodoChange={setPeriodo} label="Período" />
@@ -7573,6 +7678,8 @@ function TabPontosParada({ isAdmin }) {
                     </div>
                 </div>
             )}
+            </>
+            )}
 
             {/* Modal edição */}
             {editModal && (
@@ -7612,19 +7719,19 @@ function TabPontosParada({ isAdmin }) {
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Tipo</label>
-                                        <select value={formEdit.tipo_local} onChange={e => setFormEdit(f => ({ ...f, tipo_local: e.target.value, local: '' }))} className={inputCls} style={inputStyle}>
+                                        <PrettySelect value={formEdit.tipo_local} onChange={e => setFormEdit(f => ({ ...f, tipo_local: e.target.value, local: '' }))} className={inputCls} style={inputStyle}>
                                             {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => <option key={t}>{t}</option>)}
-                                        </select>
+                                        </PrettySelect>
                                     </div>
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Destino / Local</label>
-                                        <select value={formEdit.local} onChange={e => setFormEdit(f => ({ ...f, local: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <PrettySelect value={formEdit.local} onChange={e => setFormEdit(f => ({ ...f, local: e.target.value }))} className={inputCls} style={inputStyle}>
                                             <option value="">Selecione...</option>
                                             {formEdit.local && !destinosParaTipo(formEdit.tipo_local).includes(formEdit.local) && (
                                                 <option value={formEdit.local}>{formEdit.local} (atual)</option>
                                             )}
                                             {destinosParaTipo(formEdit.tipo_local).map(nome => <option key={nome} value={nome}>{nome}</option>)}
-                                        </select>
+                                        </PrettySelect>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-3 gap-3">
@@ -7651,19 +7758,19 @@ function TabPontosParada({ isAdmin }) {
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Tipo</label>
-                                        <select value={formEdit.tipo_local_chegada} onChange={e => setFormEdit(f => ({ ...f, tipo_local_chegada: e.target.value, local_chegada: '' }))} className={inputCls} style={inputStyle}>
+                                        <PrettySelect value={formEdit.tipo_local_chegada} onChange={e => setFormEdit(f => ({ ...f, tipo_local_chegada: e.target.value, local_chegada: '' }))} className={inputCls} style={inputStyle}>
                                             {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => <option key={t}>{t}</option>)}
-                                        </select>
+                                        </PrettySelect>
                                     </div>
                                     <div className="flex flex-col gap-1.5">
                                         <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Destino / Local</label>
-                                        <select value={formEdit.local_chegada} onChange={e => setFormEdit(f => ({ ...f, local_chegada: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <PrettySelect value={formEdit.local_chegada} onChange={e => setFormEdit(f => ({ ...f, local_chegada: e.target.value }))} className={inputCls} style={inputStyle}>
                                             <option value="">Selecione...</option>
                                             {formEdit.local_chegada && !destinosParaTipo(formEdit.tipo_local_chegada).includes(formEdit.local_chegada) && (
                                                 <option value={formEdit.local_chegada}>{formEdit.local_chegada} (atual)</option>
                                             )}
                                             {destinosParaTipo(formEdit.tipo_local_chegada).map(nome => <option key={nome} value={nome}>{nome}</option>)}
-                                        </select>
+                                        </PrettySelect>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-3 gap-3">
@@ -7706,6 +7813,111 @@ function TabPontosParada({ isAdmin }) {
 
             <Toast toast={toast} />
             {ConfirmDialog}
+        </div>
+    );
+}
+
+// ─── Sub-aba: Desempenho de Motoristas (KM, horas, consumo médio, jornada) ───
+// Usa só dados que já existem em Pontos de Parada + Abastecimentos — não
+// cria nenhuma tabela nova nem altera as telas do motorista.
+function PainelDesempenhoMotoristas({ dados, alertasDiarios, alertasSemanais, loading }) {
+    const BRL = v => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const fmtHoras = h => `${(Number(h) || 0).toFixed(1).replace('.', ',')}h`;
+    const fmtKm = km => `${Math.round(Number(km) || 0).toLocaleString('pt-BR')} km`;
+
+    if (loading) {
+        return (
+            <div className="flex justify-center py-16">
+                <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
+            </div>
+        );
+    }
+
+    if (!dados.length) {
+        return (
+            <div className="bg-white rounded-xl border p-12 flex flex-col items-center gap-3" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
+                    <Icon name="Gauge" size={28} color="#1D4ED8" />
+                </div>
+                <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Nenhum dado no período selecionado</p>
+                <p className="text-xs text-center" style={{ color: 'var(--color-muted-foreground)' }}>
+                    Ajuste os filtros de motorista/período acima para ver o desempenho.
+                </p>
+            </div>
+        );
+    }
+
+    const totalAlertas = alertasDiarios.length + alertasSemanais.length;
+
+    return (
+        <div>
+            {/* Alertas de jornada */}
+            {totalAlertas > 0 && (
+                <div className="rounded-xl border p-4 mb-5" style={{ borderColor: '#FECACA', backgroundColor: '#FEF2F2' }}>
+                    <div className="flex items-center gap-2 mb-3">
+                        <Icon name="AlertTriangle" size={16} color="#B91C1C" />
+                        <p className="text-sm font-semibold" style={{ color: '#B91C1C' }}>
+                            Atenção à jornada de trabalho — limite de {LIMITE_HORAS_DIA}h/dia e {LIMITE_HORAS_SEMANA}h/semana
+                        </p>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                        {alertasSemanais.map((a, i) => (
+                            <div key={`sem-${i}`} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-white" style={{ border: '1px solid #FECACA' }}>
+                                <span style={{ color: 'var(--color-text-primary)' }}>
+                                    <strong>{a.nome}</strong> — semana de {new Date(a.semana + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                </span>
+                                <span className="font-semibold" style={{ color: '#B91C1C' }}>{fmtHoras(a.horas)} na semana (limite {a.limite}h)</span>
+                            </div>
+                        ))}
+                        {alertasDiarios.map((a, i) => (
+                            <div key={`dia-${i}`} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-white" style={{ border: '1px solid #FED7AA' }}>
+                                <span style={{ color: 'var(--color-text-primary)' }}>
+                                    <strong>{a.nome}</strong> — {new Date(a.data + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                </span>
+                                <span className="font-semibold" style={{ color: '#C2410C' }}>{fmtHoras(a.horas)} no dia (limite {a.limite}h)</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Ranking por motorista */}
+            <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB', color: 'var(--color-muted-foreground)' }}>
+                                <th className="px-4 py-3 text-left">Motorista</th>
+                                <th className="px-4 py-3 text-right">KM Rodado</th>
+                                <th className="px-4 py-3 text-right">Horas Trabalhadas</th>
+                                <th className="px-4 py-3 text-right">Paradas</th>
+                                <th className="px-4 py-3 text-right">Litros (Diesel)</th>
+                                <th className="px-4 py-3 text-right">Gasto Combustível</th>
+                                <th className="px-4 py-3 text-right">Consumo Médio</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {dados.map((d, idx) => (
+                                <tr key={d.motoristaId} className="border-t hover:bg-blue-50/30 transition-colors"
+                                    style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                    <td className="px-4 py-3 font-semibold" style={{ color: 'var(--color-text-primary)' }}>{d.nome}</td>
+                                    <td className="px-4 py-3 text-right font-data" style={{ color: 'var(--color-text-primary)' }}>{fmtKm(d.kmTotal)}</td>
+                                    <td className="px-4 py-3 text-right font-data" style={{ color: 'var(--color-text-primary)' }}>{fmtHoras(d.horasTotal)}</td>
+                                    <td className="px-4 py-3 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.paradasTotal}</td>
+                                    <td className="px-4 py-3 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.litrosDiesel.toFixed(1)} L</td>
+                                    <td className="px-4 py-3 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(d.gastoTotal)}</td>
+                                    <td className="px-4 py-3 text-right font-data font-semibold" style={{ color: d.consumoMedio ? '#059669' : 'var(--color-muted-foreground)' }}>
+                                        {d.consumoMedio ? `${d.consumoMedio.toFixed(2)} km/L` : '—'}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
+                    {dados.length} motorista{dados.length !== 1 ? 's' : ''} · consumo médio calculado sobre litros de diesel (arla não entra, pois não move o veículo)
+                </div>
+            </div>
         </div>
     );
 }

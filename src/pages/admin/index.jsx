@@ -15,6 +15,7 @@ import { supabase, subscribeTabela } from 'utils/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import BackupPanel from './BackupPanel';
 import ConfiguracoesPanel from './ConfiguracoesPanel';
+import PrettySelect from 'components/ui/PrettySelect';
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -334,7 +335,7 @@ export default function AdminPanel() {
                                                     })()}
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <select
+                                                    <PrettySelect
                                                         value={getRoleKey(u)}
                                                         onChange={e => handleRoleChange(u.id, e.target.value)}
                                                         className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700">
@@ -343,7 +344,7 @@ export default function AdminPanel() {
                                                         <option value="motorista">Motorista (Caminhão)</option>
                                                         <option value="motorista_carreta">Motorista (Carreta)</option>
                                                         <option value="mecanico">Mecânico</option>
-                                                    </select>
+                                                    </PrettySelect>
                                                 </td>
                                                 <td className="px-4 py-3 text-right whitespace-nowrap">
                                                     <button onClick={() => handleAbrirEdicaoUsuario(u)}
@@ -556,12 +557,12 @@ export default function AdminPanel() {
                             {editandoUsuario.role === 'motorista' && (
                                 <div>
                                     <label className="block text-xs font-medium mb-1.5 text-slate-600">Tipo de veículo</label>
-                                    <select value={editUsuarioForm.tipo_veiculo} onChange={e => setEditUsuarioForm(f => ({ ...f, tipo_veiculo: e.target.value }))}
+                                    <PrettySelect value={editUsuarioForm.tipo_veiculo} onChange={e => setEditUsuarioForm(f => ({ ...f, tipo_veiculo: e.target.value }))}
                                         className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }}>
                                         <option value="">—</option>
                                         <option value="caminhao">Caminhão</option>
                                         <option value="carreta">Carreta</option>
-                                    </select>
+                                    </PrettySelect>
                                 </div>
                             )}
                             {(editandoUsuario.role === 'motorista' || editandoUsuario.role === 'mecanico') && (
@@ -574,10 +575,10 @@ export default function AdminPanel() {
                                         </div>
                                         <div>
                                             <label className="block text-xs font-medium mb-1.5 text-slate-600">Categoria</label>
-                                            <select value={editUsuarioForm.cnh_categoria} onChange={e => setEditUsuarioForm(f => ({ ...f, cnh_categoria: e.target.value }))}
+                                            <PrettySelect value={editUsuarioForm.cnh_categoria} onChange={e => setEditUsuarioForm(f => ({ ...f, cnh_categoria: e.target.value }))}
                                                 className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }}>
                                                 {['A', 'B', 'AB', 'C', 'D', 'E', 'ACC'].map(c => <option key={c} value={c}>{c}</option>)}
-                                            </select>
+                                            </PrettySelect>
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
@@ -646,23 +647,23 @@ export default function AdminPanel() {
                             </div>
                             <div>
                                 <label className="block text-xs font-medium mb-1.5 text-slate-600">Papel de acesso *</label>
-                                <select value={novoUsuarioForm.role} onChange={e => setNovoUsuarioForm(f => ({ ...f, role: e.target.value }))}
+                                <PrettySelect value={novoUsuarioForm.role} onChange={e => setNovoUsuarioForm(f => ({ ...f, role: e.target.value }))}
                                     className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }}>
                                     <option value="admin">Admin</option>
                                     <option value="operador">Operador</option>
                                     <option value="mecanico">Mecânico</option>
                                     <option value="motorista">Motorista (Caminhão)</option>
                                     <option value="motorista_carreta">Motorista (Carreta)</option>
-                                </select>
+                                </PrettySelect>
                             </div>
                             {novoUsuarioForm.role === 'motorista' && (
                                 <div>
                                     <label className="block text-xs font-medium mb-1.5 text-slate-600">Tipo de veículo</label>
-                                    <select value={novoUsuarioForm.tipoVeiculo} onChange={e => setNovoUsuarioForm(f => ({ ...f, tipoVeiculo: e.target.value }))}
+                                    <PrettySelect value={novoUsuarioForm.tipoVeiculo} onChange={e => setNovoUsuarioForm(f => ({ ...f, tipoVeiculo: e.target.value }))}
                                         className="w-full px-3 py-2 rounded-lg border text-sm outline-none" style={{ borderColor: '#CBD5E1' }}>
                                         <option value="caminhao">Caminhão</option>
                                         <option value="carreta">Carreta</option>
-                                    </select>
+                                    </PrettySelect>
                                 </div>
                             )}
                             <p className="text-xs text-slate-400">
@@ -1048,9 +1049,9 @@ function MotoristasManager({ showToast }) {
                         {/* Função */}
                         <div>
                             <label className="block text-xs font-medium text-slate-600 mb-1">Função *</label>
-                            <select value={form.role} onChange={e => setField('role', e.target.value)} className={inputCls2}>
+                            <PrettySelect value={form.role} onChange={e => setField('role', e.target.value)} className={inputCls2}>
                                 {DRIVER_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                            </select>
+                            </PrettySelect>
                         </div>
 
                         {/* Data de nascimento */}
@@ -1070,9 +1071,9 @@ function MotoristasManager({ showToast }) {
                         {/* Categoria CNH */}
                         <div>
                             <label className="block text-xs font-medium text-slate-600 mb-1">Categoria CNH</label>
-                            <select value={form.cnhCategoria} onChange={e => setField('cnhCategoria', e.target.value)} className={inputCls2}>
+                            <PrettySelect value={form.cnhCategoria} onChange={e => setField('cnhCategoria', e.target.value)} className={inputCls2}>
                                 {CNH_CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
+                            </PrettySelect>
                         </div>
 
                         {/* Vencimento CNH */}
@@ -1281,11 +1282,11 @@ function MotoristasManager({ showToast }) {
                                 {/* Função */}
                                 <div className="sm:col-span-2">
                                     <label className="block text-xs font-medium text-slate-600 mb-1">Função *</label>
-                                    <select value={editForm.role}
+                                    <PrettySelect value={editForm.role}
                                         onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))}
                                         className={inputCls2}>
                                         {DRIVER_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                                    </select>
+                                    </PrettySelect>
                                 </div>
 
                                 {/* Data de nascimento */}
@@ -1307,11 +1308,11 @@ function MotoristasManager({ showToast }) {
                                 {/* Categoria CNH */}
                                 <div>
                                     <label className="block text-xs font-medium text-slate-600 mb-1">Categoria CNH</label>
-                                    <select value={editForm.cnhCategoria}
+                                    <PrettySelect value={editForm.cnhCategoria}
                                         onChange={e => setEditForm(p => ({ ...p, cnhCategoria: e.target.value }))}
                                         className={inputCls2}>
                                         {CNH_CATEGORIAS.map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
+                                    </PrettySelect>
                                 </div>
 
                                 {/* Vencimento CNH */}
@@ -1681,14 +1682,14 @@ function CorredoresManager({ showToast }) {
                         {/* Ícone */}
                         <div>
                             <label className="block text-xs font-medium text-slate-600 mb-1">Ícone / Direção</label>
-                            <select
+                            <PrettySelect
                                 value={form.icone}
                                 onChange={e => setForm(p => ({ ...p, icone: e.target.value }))}
                                 className="w-full h-9 px-3 rounded-lg border border-slate-200 text-sm bg-white">
                                 {ICONES_DISPONIVEIS.map(ic => (
                                     <option key={ic.value} value={ic.value}>{ic.label}</option>
                                 ))}
-                            </select>
+                            </PrettySelect>
                         </div>
 
                         {/* Rótulo */}
