@@ -13,6 +13,8 @@ import VehicleCards from "./components/VehicleCards";
 import VehicleFormModal from "./components/VehicleFormModal";
 import StatusUpdateModal from "./components/StatusUpdateModal";
 import HistoryModal from "./components/HistoryModal";
+import CostsPanel from "./components/CostsPanel";
+import * as XLSX from "xlsx";
 import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate, exportDiariaModelo, printDiaria } from "utils/excelUtils";
 import { useAuth } from "utils/AuthContext";
 import AccessDeniedModal from "components/ui/AccessDeniedModal";
@@ -1068,7 +1070,7 @@ export default function VehicleFleetManagement() {
     const [romaneios, setRomaneios] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState(EMPTY_FILTERS);
-    const [activeTab, setActiveTab] = useState('frota'); // 'frota' | 'motoristas'
+    const [activeTab, setActiveTab] = useState('frota'); // 'frota' | 'motoristas' | 'custos'
     const [formModal, setFormModal] = useState({ open: false, vehicle: null });
     const [statusModal, setStatusModal] = useState({ open: false, vehicle: null });
     const [historyModal, setHistoryModal] = useState({ open: false, vehicle: null });
@@ -1176,6 +1178,7 @@ export default function VehicleFleetManagement() {
                         {[
                             { id: 'frota',       label: 'Frota de Veículos', icon: 'Truck' },
                             { id: 'motoristas',  label: 'Motoristas',        icon: 'Users' },
+                            { id: 'custos',      label: 'Painel de Custos',  icon: 'Wallet' },
                         ].map(t => (
                             <button key={t.id} onClick={() => setActiveTab(t.id)}
                                 className={`flex items-center gap-2 px-4 sm:px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${activeTab === t.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
@@ -1214,6 +1217,11 @@ export default function VehicleFleetManagement() {
                     {/* Aba Motoristas */}
                     {activeTab === 'motoristas' && (
                         <TabMotoristas adminProfile={profile} />
+                    )}
+
+                    {/* Aba Painel de Custos — abastecimentos e diárias de todos os caminhões/motoristas */}
+                    {activeTab === 'custos' && (
+                        <CostsPanel />
                     )}
 
                     <div className="mt-6 text-center text-xs" style={{ color: "var(--color-muted-foreground)" }}>
