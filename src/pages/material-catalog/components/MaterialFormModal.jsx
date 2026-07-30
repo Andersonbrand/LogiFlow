@@ -3,9 +3,13 @@ import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 import { FRETE_CATEGORIAS, fmtPct, detectarCategoriaFrete } from 'utils/freteConfig';
 import PrettySelect from 'components/ui/PrettySelect';
+import { fetchMaterialCategories } from 'utils/materialService';
+import CategoryManagerModal from './CategoryManagerModal';
 
 const UNIDADES = ['kg', 'un', 'cx', 'm', 'm²', 'm³', 'l', 'pc', 'SC', 'BR', 'RL', 'MT', 'KG', 'PC'];
-const CATEGORIAS_PRODUTO = [
+// Fallback usado apenas se a tabela material_categories ainda não tiver sido
+// criada/populada no banco (ver migração 20260730_materials_rls_e_categorias.sql)
+const CATEGORIAS_PRODUTO_FALLBACK = [
     'Construção', 'Ferragens', 'Tubos e Perfis', 'Chapas', 'Telhas',
     'Treliças e Colunas', 'Cimento', 'Arames e Pregos', 'Elétrico',
     'Hidráulico', 'Químico', 'Outros',
@@ -17,6 +21,17 @@ export default function MaterialFormModal({ isOpen, onClose, onSave, editingMate
     const [form, setForm]       = useState(EMPTY);
     const [errors, setErrors]   = useState({});
     const [loading, setLoading] = useState(false);
+    const [categorias, setCategorias]         = useState([]); // [{id, nome}]
+    const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
+
+    const loadCategorias = () => {
+        fetchMaterialCategories()
+            .then(data => setCategorias(data?.length ? data : CATEGORIAS_PRODUTO_FALLBACK.map(nome => ({ id: nome, nome }))))
+            .catch(() => setCategorias(CATEGORIAS_PRODUTO_FALLBACK.map(nome => ({ id: nome, nome }))));
+    };
+
+    useEffect(() => { if (isOpen) loadCategorias(); }, [isOpen]);
+
 
     useEffect(() => {
         if (!isOpen) return;
@@ -114,10 +129,16 @@ export default function MaterialFormModal({ isOpen, onClose, onSave, editingMate
 
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Categoria do Produto</label>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <label className="block text-xs font-medium font-caption" style={{ color:'var(--color-text-primary)' }}>Categoria do Produto</label>
+                                <button type="button" onClick={() => setCategoryManagerOpen(true)}
+                                    className="flex items-center gap-1 text-xs font-caption hover:underline" style={{ color: 'var(--color-primary)' }}>
+                                    <Icon name="Settings" size={12} color="var(--color-primary)" /> Gerenciar
+                                </button>
+                            </div>
                             <PrettySelect value={form.categoria} onChange={e => set('categoria', e.target.value)}
                                 className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none bg-white">
-                                {CATEGORIAS_PRODUTO.map(c => <option key={c}>{c}</option>)}
+                                {categorias.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
                             </PrettySelect>
                         </div>
                         <div>
@@ -224,6 +245,12 @@ export default function MaterialFormModal({ isOpen, onClose, onSave, editingMate
                     </Button>
                 </div>
             </div>
+            <CategoryManagerModal
+                isOpen={categoryManagerOpen}
+                onClose={() => setCategoryManagerOpen(false)}
+                categorias={categorias}
+                onChange={setCategorias}
+            />
         </div>
     );
 }

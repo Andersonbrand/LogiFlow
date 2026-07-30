@@ -37,3 +37,29 @@ export async function deleteMaterial(id) {
   const { error } = await supabase.from('materials').delete().eq('id', id);
   if (error) throw error;
 }
+
+// ─── Categorias de Produto ───────────────────────────────────────────────────
+
+export async function fetchMaterialCategories() {
+  const { data, error } = await supabase
+    .from('material_categories')
+    .select('*')
+    .order('nome', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+export async function createMaterialCategory(nome) {
+  const { data, error } = await supabase
+    .from('material_categories')
+    .insert({ nome: nome.trim() })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteMaterialCategory(id) {
+  const { error } = await supabase.from('material_categories').delete().eq('id', id);
+  if (error) throw error;
+}

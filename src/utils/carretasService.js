@@ -203,9 +203,6 @@ export async function fetchAbastecimentos(filters = {}) {
     // de caminhão, com veiculo_caminhao_id preenchido) já são contabilizados na DRE
     // de Caminhões — nunca devem entrar nas listagens/relatórios de Carretas.
     if (filters.apenasCarretas) q = q.is('veiculo_caminhao_id', null);
-    // Painel de Custos (Veículos > Caminhões): o inverso — só abastecimentos
-    // lançados para um caminhão da página de Veículos.
-    if (filters.apenasCaminhoes) q = q.not('veiculo_caminhao_id', 'is', null);
 
     const { data, error } = await q;
     if (error) throw error;
@@ -1401,11 +1398,18 @@ export async function updatePontoParada(id, ponto) {
 }
 
 export async function deletePontoParada(id) {
-    const { error } = await supabase
+    // .select() após o delete permite detectar quando o RLS bloqueia
+    // silenciosamente a exclusão (0 linhas afetadas, sem erro) — sem isso,
+    // a UI mostrava "excluído com sucesso" mesmo com o registro intacto no banco.
+    const { data, error } = await supabase
         .from('carretas_pontos_parada')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .select('id');
     if (error) throw error;
+    if (!data || data.length === 0) {
+        throw new Error('Nenhum registro foi excluído — verifique as permissões de acesso.');
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════

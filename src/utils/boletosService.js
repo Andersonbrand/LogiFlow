@@ -36,6 +36,7 @@ export async function fetchTodosBoletos() {
                 pago: !!b.pago,
                 pago_em: b.pago_em || null,
                 entregue_financeiro: !!b.entregue_financeiro,
+                entregue_financeiro_em: b.entregue_financeiro_em || null,
                 categoria: d.categoria || '',
                 fornecedor: d.fornecedor || '',
                 nota_fiscal: d.nota_fiscal || '',

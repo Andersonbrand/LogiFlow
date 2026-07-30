@@ -179,14 +179,29 @@ function ModalBaixa({ despesa, onClose, onBaixado, isAdmin }) {
     const parcelas = despesa.parcelas_cartao || [];
 
     // ── Entrega ao financeiro: seleção local de 1+ boletos, salva tudo de uma vez ──
+    const hojeISO = () => new Date().toISOString().slice(0, 10);
     const [entregas, setEntregas] = useState(() => boletos.map(b => !!b.entregue_financeiro));
-    const entregasAlteradas = entregas.some((v, i) => v !== !!boletos[i]?.entregue_financeiro);
-    const toggleEntrega = (idx) => setEntregas(prev => prev.map((v, i) => i === idx ? !v : v));
-    const marcarTodasEntregas = (valor) => setEntregas(boletos.map(() => valor));
+    const [entregasDatas, setEntregasDatas] = useState(() => boletos.map(b => (b.entregue_financeiro_em ? b.entregue_financeiro_em.slice(0, 10) : hojeISO())));
+    const entregasAlteradas = entregas.some((v, i) => v !== !!boletos[i]?.entregue_financeiro)
+        || entregas.some((v, i) => v && entregasDatas[i] !== (boletos[i]?.entregue_financeiro_em ? boletos[i].entregue_financeiro_em.slice(0, 10) : entregasDatas[i]));
+    const toggleEntrega = (idx) => setEntregas(prev => prev.map((v, i) => {
+        if (i !== idx) return v;
+        if (!v) setEntregasDatas(d => d.map((dt, di) => di === idx && !dt ? hojeISO() : dt));
+        return !v;
+    }));
+    const setEntregaData = (idx, valor) => setEntregasDatas(prev => prev.map((d, i) => i === idx ? valor : d));
+    const marcarTodasEntregas = (valor) => {
+        setEntregas(boletos.map(() => valor));
+        if (valor) setEntregasDatas(prev => prev.map(d => d || hojeISO()));
+    };
     const salvarEntregas = async () => {
         setLoading(true);
         try {
-            const novos = boletos.map((b, i) => ({ ...b, entregue_financeiro: entregas[i] }));
+            const novos = boletos.map((b, i) => ({
+                ...b,
+                entregue_financeiro: entregas[i],
+                entregue_financeiro_em: entregas[i] ? new Date(`${entregasDatas[i] || hojeISO()}T12:00:00`).toISOString() : null,
+            }));
             const { error } = await supabase.from('caminhoes_despesas').update({ boletos: novos, updated_at: new Date().toISOString() }).eq('id', despesa.id);
             if (error) throw error;
             const qtd = entregas.filter((v, i) => v !== !!boletos[i]?.entregue_financeiro).length;
@@ -224,6 +239,17 @@ function ModalBaixa({ despesa, onClose, onBaixado, isAdmin }) {
                                                 {entregas[idx] ? '✓ Entregue ao financeiro' : 'Ainda não entregue ao financeiro'}
                                             </span>
                                         </label>
+                                        {entregas[idx] && (
+                                            <div className="flex items-center gap-1.5 mt-1">
+                                                <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Data da entrega:</span>
+                                                <input type="date" value={entregasDatas[idx] || hojeISO()} disabled={loading}
+                                                    onChange={e => setEntregaData(idx, e.target.value)}
+                                                    className="px-2 py-1 rounded-md border text-xs outline-none" style={{ borderColor: 'var(--color-border)' }} />
+                                            </div>
+                                        )}
+                                        {b.entregue_financeiro && b.entregue_financeiro_em && (
+                                            <p className="text-xs text-blue-500 mt-0.5">Registrado em {new Date(b.entregue_financeiro_em).toLocaleDateString('pt-BR')}</p>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         {!b.pago ? (
@@ -395,12 +421,27 @@ function ModalVisualizacaoDespesa({ despesa, onClose, onAtualizado, admin }) {
                                         <label className="flex items-center gap-1.5 text-xs mt-1 cursor-pointer">
                                             <input type="checkbox" checked={!!b.entregue_financeiro} disabled={loading}
                                                 onChange={() => act(async () => {
-                                                    const novos = boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro } : x);
+                                                    const novaData = !b.entregue_financeiro ? new Date().toISOString() : null;
+                                                    const novos = boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro, entregue_financeiro_em: novaData } : x);
                                                     const { error } = await supabase.from('caminhoes_despesas').update({ boletos: novos, updated_at: new Date().toISOString() }).eq('id', dados.id);
                                                     if (error) throw error;
                                                 }, 'Status de entrega atualizado!')} />
                                             <span className={b.entregue_financeiro ? 'text-blue-600 font-medium' : 'text-gray-400'}>{b.entregue_financeiro ? '✓ Entregue ao financeiro' : 'Ainda não entregue ao financeiro'}</span>
                                         </label>
+                                        {b.entregue_financeiro && (
+                                            <div className="flex items-center gap-1.5 mt-1">
+                                                <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Data da entrega:</span>
+                                                <input type="date" disabled={loading}
+                                                    value={b.entregue_financeiro_em ? b.entregue_financeiro_em.slice(0, 10) : ''}
+                                                    onChange={e => act(async () => {
+                                                        const valor = e.target.value;
+                                                        const novos = boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro_em: valor ? new Date(`${valor}T12:00:00`).toISOString() : null } : x);
+                                                        const { error } = await supabase.from('caminhoes_despesas').update({ boletos: novos, updated_at: new Date().toISOString() }).eq('id', dados.id);
+                                                        if (error) throw error;
+                                                    }, 'Data de entrega atualizada!')}
+                                                    className="px-2 py-1 rounded-md border text-xs outline-none" style={{ borderColor: 'var(--color-border)' }} />
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex gap-1.5 flex-shrink-0">
                                         {!b.pago ? (
@@ -1199,9 +1240,17 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], categorias, on
                                                 </div>
                                                 <label className="flex items-center gap-1 text-xs cursor-pointer mt-1.5" title="Marcar se o boleto já foi entregue ao setor financeiro">
                                                     <input type="checkbox" checked={!!b.entregue_financeiro}
-                                                        onChange={() => setForm(f => ({ ...f, boletos: f.boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro } : x) }))} />
+                                                        onChange={() => setForm(f => ({ ...f, boletos: f.boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro, entregue_financeiro_em: !x.entregue_financeiro ? new Date().toISOString() : null } : x) }))} />
                                                     <span className={b.entregue_financeiro ? 'text-blue-600' : 'text-gray-400'}>Entregue ao financeiro</span>
                                                 </label>
+                                                {b.entregue_financeiro && (
+                                                    <div className="flex items-center gap-1.5 mt-1 text-xs">
+                                                        <span style={{ color: 'var(--color-muted-foreground)' }}>Data da entrega:</span>
+                                                        <input type="date" value={b.entregue_financeiro_em ? b.entregue_financeiro_em.slice(0, 10) : ''}
+                                                            onChange={e => { const valor = e.target.value; setForm(f => ({ ...f, boletos: f.boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro_em: valor ? new Date(`${valor}T12:00:00`).toISOString() : null } : x) })); }}
+                                                            className="border rounded px-1.5 py-1" style={{ borderColor: '#FED7AA' }} />
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
 

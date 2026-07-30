@@ -2580,14 +2580,29 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado, isAdmin }) {
     const parcelas = despesa.parcelas_cartao || [];
 
     // ── Entrega ao financeiro: seleção local de 1+ boletos, salva tudo de uma vez ──
+    const hojeISO = () => new Date().toISOString().slice(0, 10);
     const [entregas, setEntregas] = useState(() => boletos.map(b => !!b.entregue_financeiro));
-    const entregasAlteradas = entregas.some((v, i) => v !== !!boletos[i]?.entregue_financeiro);
-    const toggleEntrega = (idx) => setEntregas(prev => prev.map((v, i) => i === idx ? !v : v));
-    const marcarTodasEntregas = (valor) => setEntregas(boletos.map(() => valor));
+    const [entregasDatas, setEntregasDatas] = useState(() => boletos.map(b => (b.entregue_financeiro_em ? b.entregue_financeiro_em.slice(0, 10) : hojeISO())));
+    const entregasAlteradas = entregas.some((v, i) => v !== !!boletos[i]?.entregue_financeiro)
+        || entregas.some((v, i) => v && entregasDatas[i] !== (boletos[i]?.entregue_financeiro_em ? boletos[i].entregue_financeiro_em.slice(0, 10) : entregasDatas[i]));
+    const toggleEntrega = (idx) => setEntregas(prev => prev.map((v, i) => {
+        if (i !== idx) return v;
+        if (!v) setEntregasDatas(d => d.map((dt, di) => di === idx && !dt ? hojeISO() : dt));
+        return !v;
+    }));
+    const setEntregaData = (idx, valor) => setEntregasDatas(prev => prev.map((d, i) => i === idx ? valor : d));
+    const marcarTodasEntregas = (valor) => {
+        setEntregas(boletos.map(() => valor));
+        if (valor) setEntregasDatas(prev => prev.map(d => d || hojeISO()));
+    };
     const salvarEntregas = async () => {
         setLoading(true);
         try {
-            const novos = boletos.map((b, i) => ({ ...b, entregue_financeiro: entregas[i] }));
+            const novos = boletos.map((b, i) => ({
+                ...b,
+                entregue_financeiro: entregas[i],
+                entregue_financeiro_em: entregas[i] ? new Date(`${entregasDatas[i] || hojeISO()}T12:00:00`).toISOString() : null,
+            }));
             await updateDespesaExtra(despesa.id, { boletos: novos });
             const qtd = entregas.filter((v, i) => v !== !!boletos[i]?.entregue_financeiro).length;
             showToast(`${qtd} boleto(s) atualizado(s)!`, 'success');
@@ -2632,6 +2647,17 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado, isAdmin }) {
                                                 onChange={() => toggleEntrega(idx)} />
                                             <span className={entregas[idx] ? 'text-blue-600 font-medium' : 'text-gray-400'}>{entregas[idx] ? '✓ Entregue ao financeiro' : 'Ainda não entregue ao financeiro'}</span>
                                         </label>
+                                        {entregas[idx] && (
+                                            <div className="flex items-center gap-1.5 mt-1">
+                                                <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Data da entrega:</span>
+                                                <input type="date" value={entregasDatas[idx] || hojeISO()} disabled={loading}
+                                                    onChange={e => setEntregaData(idx, e.target.value)}
+                                                    className="px-2 py-1 rounded-md border text-xs outline-none" style={{ borderColor: 'var(--color-border)' }} />
+                                            </div>
+                                        )}
+                                        {b.entregue_financeiro && b.entregue_financeiro_em && (
+                                            <p className="text-xs text-blue-500 mt-0.5">Registrado em {new Date(b.entregue_financeiro_em).toLocaleDateString('pt-BR')}</p>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                         {!b.pago ? (
@@ -2725,10 +2751,25 @@ function ModalBaixaCarretas({ despesa, onClose, onBaixado, isAdmin }) {
     );
 }
 
-// ─── Modal de Visualização de Despesa (somente leitura) ───────────────────────
-function ModalVisualizacaoDespesaCarreta({ despesa, onClose }) {
-    const boletos  = despesa.boletos         || [];
-    const parcelas = despesa.parcelas_cartao || [];
+// ─── Modal de Visualização de Despesa ─────────────────────────────────────────
+function ModalVisualizacaoDespesaCarreta({ despesa, onClose, onAtualizado, admin }) {
+    const { toast, showToast } = useToast();
+    const [loading, setLoading] = useState(false);
+    const [dados, setDados]     = useState(despesa);
+
+    const act = async (fn, msg) => {
+        setLoading(true);
+        try {
+            const novosBoletos = await fn();
+            if (novosBoletos) setDados(d => ({ ...d, boletos: novosBoletos }));
+            showToast(msg, 'success');
+            if (onAtualizado) onAtualizado();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setLoading(false); }
+    };
+
+    const boletos  = dados.boletos         || [];
+    const parcelas = dados.parcelas_cartao || [];
     const temParcelas = boletos.length > 0 || parcelas.length > 0;
     const statusGeral = () => {
         const todas = [...boletos, ...parcelas];
@@ -2786,7 +2827,32 @@ function ModalVisualizacaoDespesaCarreta({ despesa, onClose }) {
                                         <p className="text-sm font-semibold font-data">{b.numero_boleto ? `Boleto ${b.numero_boleto}` : `Boleto ${idx + 1}`} — {BRL(b.valor)}</p>
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Venc.: {FMT_DATE(b.vencimento)}</p>
                                         {b.pago && <p className="text-xs text-green-600 font-medium">✓ Pago em {b.pago_em ? new Date(b.pago_em).toLocaleDateString('pt-BR') : '—'}</p>}
-                                        <p className={`text-xs mt-1 ${b.entregue_financeiro ? 'text-blue-600 font-medium' : 'text-gray-400'}`}>{b.entregue_financeiro ? '✓ Entregue ao financeiro' : 'Ainda não entregue ao financeiro'}</p>
+                                        <label className="flex items-center gap-1.5 text-xs mt-1 cursor-pointer">
+                                            <input type="checkbox" checked={!!b.entregue_financeiro} disabled={loading}
+                                                onChange={() => act(async () => {
+                                                    const novaData = !b.entregue_financeiro ? new Date().toISOString() : null;
+                                                    const novos = boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro, entregue_financeiro_em: novaData } : x);
+                                                    await updateDespesaExtra(dados.id, { boletos: novos });
+                                                    return novos;
+                                                }, 'Status de entrega atualizado!')} />
+                                            <span className={b.entregue_financeiro ? 'text-blue-600 font-medium' : 'text-gray-400'}>
+                                                {b.entregue_financeiro ? '✓ Entregue ao financeiro' : 'Ainda não entregue ao financeiro'}
+                                            </span>
+                                        </label>
+                                        {b.entregue_financeiro && (
+                                            <div className="flex items-center gap-1.5 mt-1">
+                                                <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Data da entrega:</span>
+                                                <input type="date" disabled={loading}
+                                                    value={b.entregue_financeiro_em ? b.entregue_financeiro_em.slice(0, 10) : ''}
+                                                    onChange={e => act(async () => {
+                                                        const valor = e.target.value;
+                                                        const novos = boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro_em: valor ? new Date(`${valor}T12:00:00`).toISOString() : null } : x);
+                                                        await updateDespesaExtra(dados.id, { boletos: novos });
+                                                        return novos;
+                                                    }, 'Data de entrega atualizada!')}
+                                                    className="px-2 py-1 rounded-md border text-xs outline-none" style={{ borderColor: 'var(--color-border)' }} />
+                                            </div>
+                                        )}
                                     </div>
                                     <span className={`px-2.5 py-1 rounded-lg text-xs font-medium flex-shrink-0 ${b.pago ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{b.pago ? 'Pago' : 'Pendente'}</span>
                                 </div>
@@ -2813,6 +2879,7 @@ function ModalVisualizacaoDespesaCarreta({ despesa, onClose }) {
                 )}
                 {!temParcelas && <p className="text-xs text-center py-4" style={{ color: 'var(--color-muted-foreground)' }}>Pagamento à vista — sem parcelas ou boletos vinculados.</p>}
             </div>
+            <Toast toast={toast} />
         </ModalOverlay>
     );
 }
@@ -4075,9 +4142,17 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                                     </div>
                                                     <label className="flex items-center gap-1 text-xs cursor-pointer mt-1.5" title="Marcar se o boleto já foi entregue ao setor financeiro">
                                                         <input type="checkbox" checked={!!b.entregue_financeiro}
-                                                            onChange={() => setForm(f => ({ ...f, boletos: f.boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro } : x) }))} />
+                                                            onChange={() => setForm(f => ({ ...f, boletos: f.boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro: !x.entregue_financeiro, entregue_financeiro_em: !x.entregue_financeiro ? new Date().toISOString() : null } : x) }))} />
                                                         <span className={b.entregue_financeiro ? 'text-blue-600' : 'text-gray-400'}>Entregue ao financeiro</span>
                                                     </label>
+                                                    {b.entregue_financeiro && (
+                                                        <div className="flex items-center gap-1.5 mt-1 text-xs">
+                                                            <span style={{ color: 'var(--color-muted-foreground)' }}>Data da entrega:</span>
+                                                            <input type="date" value={b.entregue_financeiro_em ? b.entregue_financeiro_em.slice(0, 10) : ''}
+                                                                onChange={e => { const valor = e.target.value; setForm(f => ({ ...f, boletos: f.boletos.map((x, i) => i === idx ? { ...x, entregue_financeiro_em: valor ? new Date(`${valor}T12:00:00`).toISOString() : null } : x) })); }}
+                                                                className="border rounded px-1.5 py-1" style={{ borderColor: '#FED7AA' }} />
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))}
 
@@ -4239,6 +4314,8 @@ function TabDespesasExtras({ isAdmin, profile }) {
                 <ModalVisualizacaoDespesaCarreta
                     despesa={viewDespesa}
                     onClose={() => setViewDespesa(null)}
+                    onAtualizado={load}
+                    admin={isAdmin}
                 />
             )}
         </div>

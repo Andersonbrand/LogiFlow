@@ -126,6 +126,7 @@ function buildPayload(r) {
         saida:                  localDatetimeToUTC(r.saida),
         chegada:                localDatetimeToUTC(r.chegada),
         observacoes:            r.observacoes            || null,
+        paradas:                r.paradas                ?? null,
         distancia_km:           r.distancia_km           || 0,
         custo_combustivel:      r.custo_combustivel      || 0,
         custo_pedagio:          r.custo_pedagio          || 0,

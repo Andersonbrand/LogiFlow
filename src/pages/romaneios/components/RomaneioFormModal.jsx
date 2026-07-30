@@ -206,9 +206,21 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     numero_pedido:'', valor_pedido:'', categoria_frete:'Ferragens', itens: itensHerdados
                 }] : []);
             }
+            // Restaura as paradas intermediárias salvas (campo "paradas" vem como
+            // texto JSON do banco). Sem isso, o formulário sempre abria com a
+            // lista vazia e, ao salvar, sobrescrevia o banco só com as paradas
+            // adicionadas naquela sessão de edição — apagando as demais.
+            let paradasCarregadas = [];
+            try {
+                const raw = editingRomaneio.paradas;
+                paradasCarregadas = Array.isArray(raw) ? raw : JSON.parse(raw || '[]');
+                if (!Array.isArray(paradasCarregadas)) paradasCarregadas = [];
+            } catch { paradasCarregadas = []; }
+            setParadas(paradasCarregadas);
         } else {
             setForm(EMPTY_FORM);
             setPedidos([]);
+            setParadas([]);
         }
         setNovoPedido(EMPTY_PEDIDO);
         setNovoItem({ material_id:'', quantidade:1, comprimento_telha:'' });
@@ -216,7 +228,6 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         setTab('dados');
         setExpanded(null);
         setRotaInfo(null);
-        setParadas([]);
         setCustoStatus(null);
         setPostoSelecionado('');
         setPrecoDiesel('6.50');
@@ -534,7 +545,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 peso_total:             totais.pesoTotal,
                 vehicle_id:             form.vehicle_id || null,
                 distancia_km:           rotaInfo?.distanciaTotal || n(form.distancia_km),
-                paradas:                JSON.stringify(paradas),
+                paradas:                JSON.stringify(paradas.filter(p => p && p.trim())),
                 custo_combustivel:      n(form.custo_combustivel),
                 custo_pedagio:          n(form.custo_pedagio),
                 custo_motorista:        n(form.custo_motorista),
