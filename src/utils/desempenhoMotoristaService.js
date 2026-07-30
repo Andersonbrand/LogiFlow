@@ -129,8 +129,10 @@ export function agruparDesempenhoPorMotorista(pontos, abastecimentos) {
 
     return Object.values(porMotorista)
         .map(m => {
-            const litrosTotal = m.litrosDiesel; // consumo médio é calculado sobre diesel (arla não move o veículo)
-            const consumoMedio = litrosTotal > 0 ? m.kmTotal / litrosTotal : null; // km/L
+            const litrosTotal = m.litrosDiesel; // consumo é calculado sobre diesel (arla não entra, pois não move o veículo)
+            // Litros por Quilômetro (L/km): quantos litros são gastos para rodar 1 km.
+            // Ex.: 2.856,5 L ÷ 2.530 km = 1,1291 L/km
+            const consumoMedio = m.kmTotal > 0 ? litrosTotal / m.kmTotal : null; // L/km
             return { ...m, litrosTotal, consumoMedio };
         })
         .sort((a, b) => b.kmTotal - a.kmTotal);

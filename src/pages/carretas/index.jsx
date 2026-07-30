@@ -7970,7 +7970,7 @@ function PainelDesempenhoMotoristas({ dados, alertasDiarios, alertasSemanais, lo
                                 <th className="px-4 py-3 text-right">Paradas</th>
                                 <th className="px-4 py-3 text-right">Litros (Diesel)</th>
                                 <th className="px-4 py-3 text-right">Gasto Combustível</th>
-                                <th className="px-4 py-3 text-right">Consumo Médio</th>
+                                <th className="px-4 py-3 text-right">Consumo (L/km)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -7984,7 +7984,7 @@ function PainelDesempenhoMotoristas({ dados, alertasDiarios, alertasSemanais, lo
                                     <td className="px-4 py-3 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.litrosDiesel.toFixed(1)} L</td>
                                     <td className="px-4 py-3 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(d.gastoTotal)}</td>
                                     <td className="px-4 py-3 text-right font-data font-semibold" style={{ color: d.consumoMedio ? '#059669' : 'var(--color-muted-foreground)' }}>
-                                        {d.consumoMedio ? `${d.consumoMedio.toFixed(2)} km/L` : '—'}
+                                        {d.consumoMedio ? `${d.consumoMedio.toFixed(4)} L/km` : '—'}
                                     </td>
                                 </tr>
                             ))}
