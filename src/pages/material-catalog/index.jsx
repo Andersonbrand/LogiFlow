@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial } from 'utils/materialService';
+import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, fetchMaterialCategories } from 'utils/materialService';
 import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { exportMaterialsToExcel, parseMaterialsFromFile } from 'utils/excelUtils';
 import { useAuth } from 'utils/AuthContext';
@@ -13,7 +13,7 @@ import Button from 'components/ui/Button';
 import MaterialTable from './components/MaterialTable';
 import MaterialCardMobile from './components/MaterialCardMobile';
 import FilterPanel from './components/FilterPanel';
-import MaterialFormModal from './components/MaterialFormModal';
+import MaterialFormModal, { CATEGORIAS_PRODUTO_FALLBACK } from './components/MaterialFormModal';
 import DeleteConfirmDialog from './components/DeleteConfirmDialog.jsx';
 import BulkActionsBar from './components/BulkActionsBar';
 
@@ -42,6 +42,8 @@ export default function MaterialCatalog() {
         setTimeout(() => setToast(null), 3000);
     };
 
+    const [categoriasRegistradas, setCategoriasRegistradas] = useState([]);
+
     const loadMaterials = React.useCallback(async () => {
         try {
             setDbLoading(true);
@@ -54,20 +56,33 @@ export default function MaterialCatalog() {
             }
     }, [setDbLoading, setMaterials]);
 
-    useEffect(() => { loadMaterials(); }, [loadMaterials]);
+    // Categorias oficiais cadastradas em "Categoria do Produto" (tabela
+    // material_categories) — mesma fonte usada no formulário de cadastro,
+    // para que o filtro lateral sempre reflita exatamente as mesmas opções.
+    const loadCategorias = React.useCallback(async () => {
+        try {
+            const data = await fetchMaterialCategories();
+            const nomes = (data?.length ? data.map(c => c.nome) : CATEGORIAS_PRODUTO_FALLBACK)
+                .slice()
+                .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+            setCategoriasRegistradas(nomes);
+        } catch (err) {
+            setCategoriasRegistradas(CATEGORIAS_PRODUTO_FALLBACK);
+        }
+    }, []);
+
+    useEffect(() => { loadMaterials(); loadCategorias(); }, [loadMaterials, loadCategorias]);
     useRecarregarAoVoltar(loadMaterials);
+
+    // Recarrega as categorias sempre que o modal de cadastro/edição é fechado,
+    // pois categorias podem ter sido criadas/excluídas via "Gerenciar" dentro dele.
+    useEffect(() => { if (!modalOpen) loadCategorias(); }, [modalOpen, loadCategorias]);
 
     const handleSort = (key) => {
         setSortConfig((prev) =>
             prev?.key === key ? { key, dir: prev?.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
         );
     };
-
-    // Categorias dinâmicas extraídas dos materiais cadastrados no banco
-    const categoriasDinamicas = useMemo(() => {
-        const set = new Set(materials.map(m => m.categoria).filter(Boolean));
-        return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    }, [materials]);
 
     // Reset para página 1 ao mudar busca ou filtros
     const prevFiltersRef = React.useRef({ search, filters });
@@ -255,7 +270,7 @@ export default function MaterialCatalog() {
                                 onReset={() => setFilters(DEFAULT_FILTERS)}
                                 totalCount={materials?.length}
                                 filteredCount={filteredMaterials?.length}
-                                categorias={categoriasDinamicas}
+                                categorias={categoriasRegistradas}
                             />
                         </aside>
 
@@ -266,7 +281,7 @@ export default function MaterialCatalog() {
                                 {[
                                     { label: 'Total', value: materials?.length, icon: 'Package', color: 'var(--color-primary)' },
                                     { label: 'Filtrados', value: filteredMaterials?.length, icon: 'Filter', color: 'var(--color-secondary)' },
-                                    { label: 'Categorias', value: [...new Set(materials.map((m) => m.categoria))]?.length, icon: 'Tag', color: 'var(--color-accent)' },
+                                    { label: 'Categorias', value: categoriasRegistradas?.length, icon: 'Tag', color: 'var(--color-accent)' },
                                 ]?.map((s) => (
                                     <div key={s?.label} className="flex items-center gap-2 bg-[var(--color-card)] border border-border rounded-lg px-3 py-2 shadow-card">
                                         <Icon name={s?.icon} size={16} color={s?.color} />
@@ -365,7 +380,7 @@ export default function MaterialCatalog() {
                 filteredCount={filteredMaterials?.length}
                 mobileOpen={mobileFilterOpen}
                 onMobileClose={() => setMobileFilterOpen(false)}
-                categorias={categoriasDinamicas}
+                categorias={categoriasRegistradas}
             />
             {/* Form Modal */}
             <MaterialFormModal

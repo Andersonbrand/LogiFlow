@@ -203,6 +203,10 @@ export async function fetchAbastecimentos(filters = {}) {
     // de caminhão, com veiculo_caminhao_id preenchido) já são contabilizados na DRE
     // de Caminhões — nunca devem entrar nas listagens/relatórios de Carretas.
     if (filters.apenasCarretas) q = q.is('veiculo_caminhao_id', null);
+    // Painel de Custos de Veículos (caminhões): mostra apenas abastecimentos
+    // lançados pelos motoristas de caminhão (veiculo_caminhao_id preenchido),
+    // nunca os de carretas — que usam veiculo_id em vez disso.
+    if (filters.apenasCaminhoes) q = q.not('veiculo_caminhao_id', 'is', null);
 
     const { data, error } = await q;
     if (error) throw error;

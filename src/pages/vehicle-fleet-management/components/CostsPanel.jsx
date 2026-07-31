@@ -115,9 +115,11 @@ export default function CostsPanel() {
         abast.forEach(a => {
             const placa = a.veiculo_caminhao_placa || a.veiculo?.placa || 'Sem placa';
             const cur = map.get(placa) || {
-                placa, modelo: a.veiculo_caminhao_modelo || '',
+                placa, motoristasSet: new Set(),
                 litrosDiesel: 0, valorDiesel: 0, litrosArla: 0, valorArla: 0, total: 0, qtd: 0,
             };
+            const nomeMotorista = a.motorista?.name;
+            if (nomeMotorista) cur.motoristasSet.add(nomeMotorista);
             cur.litrosDiesel += Number(a.litros_diesel || 0);
             cur.valorDiesel  += Number(a.valor_diesel || 0);
             cur.litrosArla   += Number(a.litros_arla || 0);
@@ -126,7 +128,9 @@ export default function CostsPanel() {
             cur.qtd += 1;
             map.set(placa, cur);
         });
-        return Array.from(map.values()).sort((x, y) => y.total - x.total);
+        return Array.from(map.values())
+            .map(v => ({ ...v, motorista: Array.from(v.motoristasSet).join(', ') }))
+            .sort((x, y) => y.total - x.total);
     }, [abast]);
 
     // ── Diárias por motorista (avulsas + romaneios) ─────────────────────────
@@ -168,7 +172,7 @@ export default function CostsPanel() {
         const wb = XLSX.utils.book_new();
         if (porVeiculo.length) {
             const ws = XLSX.utils.json_to_sheet(porVeiculo.map(v => ({
-                'Placa': v.placa, 'Modelo': v.modelo, 'Abastecimentos': v.qtd,
+                'Placa': v.placa, 'Motorista': v.motorista, 'Abastecimentos': v.qtd,
                 'Diesel (L)': Number(v.litrosDiesel.toFixed(1)), 'R$ Diesel': Number(v.valorDiesel.toFixed(2)),
                 'Arla (L)': Number(v.litrosArla.toFixed(1)), 'R$ Arla': Number(v.valorArla.toFixed(2)),
                 'Total': Number(v.total.toFixed(2)),
@@ -292,7 +296,7 @@ export default function CostsPanel() {
                         <table className="w-full text-sm">
                             <thead>
                                 <tr style={{ backgroundColor: '#F8FAFC' }}>
-                                    {['Placa', 'Modelo', 'Abastec.', 'Diesel (L)', 'R$ Diesel', 'Arla (L)', 'R$ Arla', 'Total'].map((h, i) => (
+                                    {['Placa', 'Motorista', 'Abastec.', 'Diesel (L)', 'R$ Diesel', 'Arla (L)', 'R$ Arla', 'Total'].map((h, i) => (
                                         <th key={h} className={`px-4 py-2.5 text-xs font-semibold ${i === 0 ? 'text-left' : 'text-right'}`} style={{ color: 'var(--color-muted-foreground)' }}>{h}</th>
                                     ))}
                                 </tr>
@@ -301,7 +305,7 @@ export default function CostsPanel() {
                                 {porVeiculoFiltrado.map(v => (
                                     <tr key={v.placa} className="border-t" style={{ borderColor: 'var(--color-border)' }}>
                                         <td className="px-4 py-2.5 font-medium" style={{ color: 'var(--color-text-primary)' }}>{v.placa}</td>
-                                        <td className="px-4 py-2.5 text-right" style={{ color: 'var(--color-muted-foreground)' }}>{v.modelo || '—'}</td>
+                                        <td className="px-4 py-2.5 text-right" style={{ color: 'var(--color-muted-foreground)' }}>{v.motorista || '—'}</td>
                                         <td className="px-4 py-2.5 text-right" style={{ color: 'var(--color-muted-foreground)' }}>{v.qtd}</td>
                                         <td className="px-4 py-2.5 text-right" style={{ color: 'var(--color-muted-foreground)' }}>{v.litrosDiesel.toFixed(0)}</td>
                                         <td className="px-4 py-2.5 text-right" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(v.valorDiesel)}</td>

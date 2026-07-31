@@ -199,11 +199,12 @@ export default function MotoristaDashboard() {
         }
         setSavingAbast(true);
         try {
-            const caminhao = veiculos.find(v => String(v.id) === formAbast.veiculo_caminhao_id);
+            const caminhao = veiculos.find(v => String(v.id) === String(formAbast.veiculo_caminhao_id));
+            const abastOriginal = editingAbastId ? abast.find(a => a.id === editingAbastId) : null;
             const payload = {
                 ...formAbast, motorista_id: user.id,
-                veiculo_caminhao_placa: caminhao?.placa || null,
-                veiculo_caminhao_modelo: caminhao?.modelo || null,
+                veiculo_caminhao_placa: caminhao?.placa || abastOriginal?.veiculo_caminhao_placa || null,
+                veiculo_caminhao_modelo: caminhao?.modelo || abastOriginal?.veiculo_caminhao_modelo || null,
             };
             if (!payload.posto_id) delete payload.posto_id;
             const posto = postos.find(p => p.id === formAbast.posto_id);
@@ -223,7 +224,7 @@ export default function MotoristaDashboard() {
     const abrirEdicaoAbast = (a) => {
         setEditingAbastId(a.id);
         setFormAbast({
-            veiculo_caminhao_id: a.veiculo_caminhao_id || '',
+            veiculo_caminhao_id: a.veiculo_caminhao_id != null ? String(a.veiculo_caminhao_id) : '',
             posto_id: a.posto_id || '',
             data_abastecimento: a.data_abastecimento || new Date().toISOString().split('T')[0],
             horario: a.horario || '',
@@ -265,11 +266,12 @@ export default function MotoristaDashboard() {
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
         setSavingCheck(true);
         try {
-            const caminhao = veiculos.find(v => String(v.id) === formCheck.veiculo_caminhao_id);
+            const caminhao = veiculos.find(v => String(v.id) === String(formCheck.veiculo_caminhao_id));
+            const checkOriginal = editingCheckId ? checklists.find(c => c.id === editingCheckId) : null;
             const payload = {
                 ...formCheck, motorista_id: user.id,
-                veiculo_caminhao_placa: caminhao?.placa || null,
-                veiculo_caminhao_modelo: caminhao?.modelo || null,
+                veiculo_caminhao_placa: caminhao?.placa || checkOriginal?.veiculo_caminhao_placa || null,
+                veiculo_caminhao_modelo: caminhao?.modelo || checkOriginal?.veiculo_caminhao_modelo || null,
             };
             if (editingCheckId) {
                 await updateChecklist(editingCheckId, payload);
@@ -287,7 +289,7 @@ export default function MotoristaDashboard() {
     const abrirEdicaoCheck = (c) => {
         setEditingCheckId(c.id);
         setFormCheck({
-            veiculo_caminhao_id: c.veiculo_caminhao_id || '',
+            veiculo_caminhao_id: c.veiculo_caminhao_id != null ? String(c.veiculo_caminhao_id) : '',
             itens: c.itens || {},
             problemas: c.problemas || '', necessidades: c.necessidades || '',
             observacoes_livres: c.observacoes_livres || '', foto_url: c.foto_url || '',

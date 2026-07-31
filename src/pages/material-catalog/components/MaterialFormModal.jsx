@@ -9,7 +9,7 @@ import CategoryManagerModal from './CategoryManagerModal';
 const UNIDADES = ['kg', 'un', 'cx', 'm', 'm²', 'm³', 'l', 'pc', 'SC', 'BR', 'RL', 'MT', 'KG', 'PC'];
 // Fallback usado apenas se a tabela material_categories ainda não tiver sido
 // criada/populada no banco (ver migração 20260730_materials_rls_e_categorias.sql)
-const CATEGORIAS_PRODUTO_FALLBACK = [
+export const CATEGORIAS_PRODUTO_FALLBACK = [
     'Construção', 'Ferragens', 'Tubos e Perfis', 'Chapas', 'Telhas',
     'Treliças e Colunas', 'Cimento', 'Arames e Pregos', 'Elétrico',
     'Hidráulico', 'Químico', 'Outros',

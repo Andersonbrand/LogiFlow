@@ -5645,7 +5645,7 @@ function TabOrdensServico({ isAdmin, profile }) {
     const abrirEdicaoOS = (o) => {
         setForm({
             veiculo_id: o.veiculo_id || '',
-            veiculo_caminhao_id: o.veiculo_caminhao_id || '',
+            veiculo_caminhao_id: o.veiculo_caminhao_id != null ? String(o.veiculo_caminhao_id) : '',
             mecanico_id: o.mecanico_id || '',
             descricao: o.descricao || '',
             prioridade: o.prioridade || 'Normal',
@@ -5668,13 +5668,14 @@ function TabOrdensServico({ isAdmin, profile }) {
         if ((!form.veiculo_id && !form.veiculo_caminhao_id) || !form.descricao) { showToast('Veículo e descrição são obrigatórios', 'error'); return; }
         setUploading(true);
         try {
-            const caminhaoSel = form.veiculo_caminhao_id ? caminhoes.find(c => String(c.id) === form.veiculo_caminhao_id) : null;
+            const caminhaoSel = form.veiculo_caminhao_id ? caminhoes.find(c => String(c.id) === String(form.veiculo_caminhao_id)) : null;
+            const osOriginal = editingId ? ordens.find(o => o.id === editingId) : null;
             const payload = {
                 ...form,
                 veiculo_id: form.veiculo_id || null,
                 veiculo_caminhao_id: form.veiculo_caminhao_id || null,
-                veiculo_caminhao_placa: caminhaoSel?.placa || null,
-                veiculo_caminhao_modelo: caminhaoSel?.modelo || null,
+                veiculo_caminhao_placa: caminhaoSel?.placa || osOriginal?.veiculo_caminhao_placa || null,
+                veiculo_caminhao_modelo: caminhaoSel?.modelo || osOriginal?.veiculo_caminhao_modelo || null,
                 km_atual: form.km_atual === '' ? null : Number(form.km_atual),
                 assinatura_admin: assinarComoAdmin ? (profile?.assinatura_digital || '') : null,
             };
