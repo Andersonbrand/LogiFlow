@@ -21,7 +21,7 @@ import AccessDeniedModal from "components/ui/AccessDeniedModal";
 import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle, fetchCaminhoesPlacas } from "utils/vehicleService";
 import { fetchRomaneios } from "utils/romaneioService";
 import {
-    fetchAbastecimentos,
+    fetchAbastecimentos, updateAbastecimento, deleteAbastecimento,
     fetchChecklists, aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
     criarRascunhoOSDeChecklist,
     deleteChecklist,
@@ -149,6 +149,12 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         data_inicio: new Date().toISOString().split('T')[0],
         quantidade_dias: '1', valor_dia: '', placa: '', descricao: '',
     });
+    const [modalAbastEdit, setModalAbastEdit] = useState(null); // { id } quando editando
+    const [formAbastEdit, setFormAbastEdit] = useState({
+        veiculo_caminhao_id: '', data_abastecimento: '', posto: '',
+        litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '',
+    });
+    const [savingAbastEdit, setSavingAbastEdit] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -235,7 +241,27 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             const payload = { ...formDiaria, motorista_id: motorista.id };
             if (modalDiaria.mode === 'create') await createDiaria(payload);
             else await updateDiaria(modalDiaria.data.id, payload);
-            showToast('Diária salva!', 'success'); setModalDiaria(null); load();
+            setModalDiaria(null);
+
+            // A diária foi gravada com sucesso. Se a data dela cair fora do
+            // período atualmente filtrado (ex: usuário revisando um mês
+            // anterior e a data padrão do formulário é "hoje"), o load()
+            // não vai trazê-la de volta e ela parece ter "sumido" mesmo
+            // tendo sido salva. Nesse caso, ajusta o filtro para o mês da
+            // diária recém-salva antes de recarregar, para ela aparecer.
+            const dataSalva = formDiaria.data_inicio;
+            const dentroDoIntervaloAtual = usarPeriodo
+                ? (!periodoCustom.inicio || dataSalva >= periodoCustom.inicio) && (!periodoCustom.fim || dataSalva <= periodoCustom.fim)
+                : dataSalva.slice(0, 7) === mes;
+
+            if (!dentroDoIntervaloAtual) {
+                setUsarPeriodo(false);
+                setMes(dataSalva.slice(0, 7));
+                showToast(`Diária salva! Exibindo ${dataSalva.slice(0, 7).split('-').reverse().join('/')} para mostrá-la.`, 'success');
+            } else {
+                showToast('Diária salva!', 'success');
+                load();
+            }
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleDeleteDiaria = async (id) => {
@@ -256,8 +282,64 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         try { await deleteRomaneio(id); showToast('Romaneio excluído.', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
+
+    // Abastecimentos: edição e exclusão (admin) — usa a mesma comparação de
+    // id "string-safe" (String(v.id) === String(...)) já corrigida na tela
+    // do motorista, para não reintroduzir o bug de placa/modelo ficando null.
+    const openEditAbastecimento = (a) => {
+        setFormAbastEdit({
+            veiculo_caminhao_id: a.veiculo_caminhao_id != null ? String(a.veiculo_caminhao_id) : '',
+            data_abastecimento: a.data_abastecimento || '',
+            posto: a.posto || '',
+            litros_diesel: a.litros_diesel ?? '', valor_diesel: a.valor_diesel ?? '',
+            litros_arla: a.litros_arla ?? '', valor_arla: a.valor_arla ?? '',
+        });
+        setModalAbastEdit({ id: a.id });
+    };
+    const handleSaveAbastecimento = async () => {
+        if (!formAbastEdit.data_abastecimento) { showToast('Data é obrigatória', 'error'); return; }
+        setSavingAbastEdit(true);
+        try {
+            const caminhao = veiculosCaminhao.find(v => String(v.id) === String(formAbastEdit.veiculo_caminhao_id));
+            const payload = {
+                data_abastecimento: formAbastEdit.data_abastecimento,
+                posto: formAbastEdit.posto || null,
+                litros_diesel: Number(formAbastEdit.litros_diesel || 0),
+                valor_diesel: Number(formAbastEdit.valor_diesel || 0),
+                litros_arla: Number(formAbastEdit.litros_arla || 0),
+                valor_arla: Number(formAbastEdit.valor_arla || 0),
+                ...(formAbastEdit.veiculo_caminhao_id ? {
+                    veiculo_caminhao_id: formAbastEdit.veiculo_caminhao_id,
+                    veiculo_caminhao_placa: caminhao?.placa || null,
+                } : {}),
+            };
+            await updateAbastecimento(modalAbastEdit.id, payload);
+            showToast('Abastecimento atualizado!', 'success');
+            setModalAbastEdit(null); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingAbastEdit(false); }
+    };
+    const handleDeleteAbastecimento = async (a) => {
+        const ok = await confirm({
+            title: 'Excluir abastecimento?',
+            message: `Excluir o abastecimento de ${a.veiculo?.placa || a.veiculo_caminhao_placa || 'veículo'} em ${FMT(a.data_abastecimento)}? Esta ação não pode ser desfeita.`,
+            confirmLabel: 'Excluir', variant: 'danger',
+        });
+        if (!ok) return;
+        try { await deleteAbastecimento(a.id); showToast('Abastecimento excluído.', 'success'); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
     const openCreateDiaria = () => {
-        setFormDiaria({ data_inicio: new Date().toISOString().split('T')[0], quantidade_dias: '1', valor_dia: '', placa: '', descricao: '' });
+        // Usa a data de hoje como padrão apenas se ela cair dentro do
+        // período/mês que está sendo exibido no momento; caso contrário,
+        // parte do início do período filtrado — evita que a diária seja
+        // salva "fora da tela" e pareça não ter sido gravada.
+        const hoje = new Date().toISOString().split('T')[0];
+        const hojeDentroDoIntervalo = usarPeriodo
+            ? (!periodoCustom.inicio || hoje >= periodoCustom.inicio) && (!periodoCustom.fim || hoje <= periodoCustom.fim)
+            : hoje.slice(0, 7) === mes;
+        const dataPadrao = hojeDentroDoIntervalo ? hoje : (usarPeriodo ? (periodoCustom.inicio || hoje) : mes + '-01');
+        setFormDiaria({ data_inicio: dataPadrao, quantidade_dias: '1', valor_dia: '', placa: '', descricao: '' });
         setModalDiaria({ mode: 'create' });
     };
     const openEditDiaria = (d) => {
@@ -457,7 +539,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                         <div className="bg-white rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                                             <table className="w-full text-sm min-w-[600px]">
                                                 <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                                    <tr>{['Data', 'Placa', 'Posto', 'Diesel (L)', 'R$ Diesel', 'Arla (L)', 'R$ Arla', 'Total'].map(h =>
+                                                    <tr>{['Data', 'Placa', 'Posto', 'Diesel (L)', 'R$ Diesel', 'Arla (L)', 'R$ Arla', 'Total', ''].map(h =>
                                                         <th key={h} className="px-3 py-2.5 text-left font-medium whitespace-nowrap">{h}</th>
                                                     )}</tr>
                                                 </thead>
@@ -472,6 +554,12 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                             <td className="px-3 py-2.5 font-data text-right text-emerald-600">{Number(a.litros_arla||0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                                                             <td className="px-3 py-2.5 font-data text-right text-emerald-700">{BRL(a.valor_arla)}</td>
                                                             <td className="px-3 py-2.5 font-data font-semibold text-right text-purple-600">{BRL(a.valor_total)}</td>
+                                                            <td className="px-3 py-2.5">
+                                                                <div className="flex gap-1 justify-end">
+                                                                    <button onClick={() => openEditAbastecimento(a)} title="Editar" className="p-1.5 rounded hover:bg-blue-50"><Icon name="Pencil" size={16} color="#1D4ED8" /></button>
+                                                                    <button onClick={() => handleDeleteAbastecimento(a)} title="Excluir" className="p-1.5 rounded hover:bg-red-50"><Icon name="Trash2" size={16} color="#DC2626" /></button>
+                                                                </div>
+                                                            </td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -483,6 +571,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                         <td className="px-3 py-2 font-data font-bold text-right text-emerald-700">{totaisAbast.litrosArla.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}</td>
                                                         <td className="px-3 py-2 font-data font-bold text-right text-emerald-700">{BRL(totaisAbast.valorArla)}</td>
                                                         <td className="px-3 py-2 font-data font-bold text-right text-purple-700">{BRL(totaisAbast.total)}</td>
+                                                        <td />
                                                     </tr>
                                                 </tfoot>
                                             </table>
@@ -783,6 +872,55 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                             <button onClick={() => setModalManut(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <button onClick={handleManutencao} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-orange-600 hover:bg-orange-700">
                                 <Icon name="Wrench" size={14} color="white" /> Registrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal edição de abastecimento */}
+            {modalAbastEdit && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50"><Icon name="Fuel" size={18} color="#1D4ED8" /></div>
+                                <h3 className="font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Editar Abastecimento</h3>
+                            </div>
+                            <button onClick={() => setModalAbastEdit(null)} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
+                        </div>
+                        <div className="p-5 grid grid-cols-2 gap-4">
+                            <Field label="Data" required>
+                                <input type="date" value={formAbastEdit.data_abastecimento} onChange={e => setFormAbastEdit(f => ({ ...f, data_abastecimento: e.target.value }))} className={inputCls} style={inputStyle} />
+                            </Field>
+                            <Field label="Placa do veículo">
+                                <PrettySelect value={formAbastEdit.veiculo_caminhao_id} onChange={e => setFormAbastEdit(f => ({ ...f, veiculo_caminhao_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                    <option value="">Sem placa...</option>
+                                    {veiculosCaminhao.map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
+                                </PrettySelect>
+                            </Field>
+                            <div className="col-span-2">
+                                <Field label="Posto">
+                                    <input value={formAbastEdit.posto} onChange={e => setFormAbastEdit(f => ({ ...f, posto: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Nome do posto" />
+                                </Field>
+                            </div>
+                            <Field label="Diesel (L)">
+                                <input type="number" step="0.1" min="0" value={formAbastEdit.litros_diesel} onChange={e => setFormAbastEdit(f => ({ ...f, litros_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0" />
+                            </Field>
+                            <Field label="R$ Diesel">
+                                <input type="number" step="0.01" min="0" value={formAbastEdit.valor_diesel} onChange={e => setFormAbastEdit(f => ({ ...f, valor_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                            </Field>
+                            <Field label="Arla 32 (L)">
+                                <input type="number" step="0.1" min="0" value={formAbastEdit.litros_arla} onChange={e => setFormAbastEdit(f => ({ ...f, litros_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0" />
+                            </Field>
+                            <Field label="R$ Arla">
+                                <input type="number" step="0.01" min="0" value={formAbastEdit.valor_arla} onChange={e => setFormAbastEdit(f => ({ ...f, valor_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                            </Field>
+                        </div>
+                        <div className="flex gap-3 p-5 pt-0 justify-end">
+                            <button onClick={() => setModalAbastEdit(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <button onClick={handleSaveAbastecimento} disabled={savingAbastEdit} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ backgroundColor: 'var(--color-primary)' }}>
+                                <Icon name="Check" size={14} color="white" /> {savingAbastEdit ? 'Salvando...' : 'Salvar'}
                             </button>
                         </div>
                     </div>

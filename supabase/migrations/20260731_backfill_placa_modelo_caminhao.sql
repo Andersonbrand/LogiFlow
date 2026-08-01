@@ -12,23 +12,24 @@
 -- buscar de volta em `vehicles`.
 -- ═══════════════════════════════════════════════════════════════════════════
 
+-- A tabela `vehicles` não possui coluna `modelo` (campos: placa, tipo,
+-- capacidade_peso, consumo_km, status) — por isso o backfill abaixo repõe
+-- apenas a placa. `veiculo_caminhao_modelo` continua null nesses registros
+-- porque nunca houve de onde puxar esse dado para caminhões.
 UPDATE carretas_abastecimentos a
-SET veiculo_caminhao_placa = v.placa,
-    veiculo_caminhao_modelo = v.modelo
+SET veiculo_caminhao_placa = v.placa
 FROM vehicles v
 WHERE a.veiculo_caminhao_id = v.id
   AND a.veiculo_caminhao_placa IS NULL;
 
 UPDATE carretas_checklists c
-SET veiculo_caminhao_placa = v.placa,
-    veiculo_caminhao_modelo = v.modelo
+SET veiculo_caminhao_placa = v.placa
 FROM vehicles v
 WHERE c.veiculo_caminhao_id = v.id
   AND c.veiculo_caminhao_placa IS NULL;
 
 UPDATE carretas_ordens_servico o
-SET veiculo_caminhao_placa = v.placa,
-    veiculo_caminhao_modelo = v.modelo
+SET veiculo_caminhao_placa = v.placa
 FROM vehicles v
 WHERE o.veiculo_caminhao_id = v.id
   AND o.veiculo_caminhao_placa IS NULL;
