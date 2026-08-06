@@ -1662,8 +1662,8 @@ export function printChecklist(checklist, todosItensAtivos = []) {
         <table style="margin-top:8px">
             <tr><td class="sec" colspan="4">FOTOS (${fotos.length})</td></tr>
         </table>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
-            ${fotos.map(f => `<img src="${f}" style="width:130px;height:130px;object-fit:cover;border:1px solid #222;border-radius:4px" />`).join('')}
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px">
+            ${fotos.map(f => `<img src="${f}" style="width:100%;height:220px;object-fit:cover;border:1px solid #222;border-radius:4px" />`).join('')}
         </div>` : '';
 
     const html = `<!DOCTYPE html>
