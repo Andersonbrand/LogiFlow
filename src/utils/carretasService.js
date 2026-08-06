@@ -242,6 +242,9 @@ export async function updateAbastecimento(id, abast) {
 // ─────────────────────────────────────────────────────────────────────────────
 // CHECKLISTS
 // ─────────────────────────────────────────────────────────────────────────────
+// Lista padrão (fallback) — usada apenas se a tabela `carretas_checklist_itens`
+// ainda não existir/estiver vazia (ex: antes de rodar a migration). A fonte
+// da verdade passou a ser o banco, editável pelo admin — ver fetchChecklistItens.
 export const CHECKLIST_ITENS = [
     { id: 'pneus',       label: 'Pneus em bom estado' },
     { id: 'iluminacao',  label: 'Iluminação funcionando' },
@@ -254,6 +257,80 @@ export const CHECKLIST_ITENS = [
     { id: 'espelhos',    label: 'Espelhos retrovisores' },
     { id: 'vazamentos',  label: 'Sem vazamentos (óleo/combustível)' },
 ];
+
+// ── Itens configuráveis do checklist (admin) ───────────────────────────────
+export async function fetchChecklistItens(somenteAtivos = true) {
+    let q = supabase.from('carretas_checklist_itens').select('*').order('ordem', { ascending: true });
+    if (somenteAtivos) q = q.eq('ativo', true);
+    const { data, error } = await q;
+    if (error) {
+        // Tabela ainda não existe (migration não rodou) — usa a lista fixa como fallback.
+        console.warn('carretas_checklist_itens indisponível, usando lista padrão:', error.message);
+        return CHECKLIST_ITENS.map((i, idx) => ({ id: i.id, label: i.label, ordem: idx, ativo: true }));
+    }
+    return data && data.length ? data : CHECKLIST_ITENS.map((i, idx) => ({ id: i.id, label: i.label, ordem: idx, ativo: true }));
+}
+
+export async function createChecklistItem(label) {
+    const { data: existentes } = await supabase.from('carretas_checklist_itens').select('ordem').order('ordem', { ascending: false }).limit(1);
+    const proximaOrdem = existentes && existentes.length ? Number(existentes[0].ordem) + 1 : 1;
+    const { data, error } = await supabase
+        .from('carretas_checklist_itens')
+        .insert({ label: label.trim(), ordem: proximaOrdem, ativo: true })
+        .select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updateChecklistItem(id, fields) {
+    const { data, error } = await supabase
+        .from('carretas_checklist_itens')
+        .update(fields)
+        .eq('id', id)
+        .select().single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deleteChecklistItem(id) {
+    const { error } = await supabase.from('carretas_checklist_itens').delete().eq('id', id);
+    if (error) throw error;
+}
+
+export async function reordenarChecklistItem(id, direcao, itensAtuais) {
+    // direcao: 'up' | 'down' — troca a `ordem` com o item vizinho na lista já ordenada.
+    const idx = itensAtuais.findIndex(i => i.id === id);
+    const alvoIdx = direcao === 'up' ? idx - 1 : idx + 1;
+    if (idx < 0 || alvoIdx < 0 || alvoIdx >= itensAtuais.length) return;
+    const atual = itensAtuais[idx];
+    const alvo  = itensAtuais[alvoIdx];
+    await Promise.all([
+        updateChecklistItem(atual.id, { ordem: alvo.ordem }),
+        updateChecklistItem(alvo.id, { ordem: atual.ordem }),
+    ]);
+}
+
+// ── Helpers de leitura de `itens` (jsonb) — compatíveis com dois formatos:
+//    ANTIGO: { [itemId]: true|false }
+//    NOVO:   { [itemId]: { ok: bool, obs: string, label: string } }
+//    O formato novo grava o `label` junto, para o histórico continuar correto
+//    mesmo que o admin depois renomeie ou exclua o item.
+export function itemIsOk(valor) {
+    if (valor && typeof valor === 'object') return !!valor.ok;
+    return !!valor;
+}
+export function itemObsOf(valor) {
+    return (valor && typeof valor === 'object') ? (valor.obs || '') : '';
+}
+export function itemLabelOf(valor, id) {
+    if (valor && typeof valor === 'object' && valor.label) return valor.label;
+    const found = CHECKLIST_ITENS.find(i => i.id === id);
+    return found ? found.label : id;
+}
+// Conta quantos itens estão OK dentro de um objeto `itens` (qualquer formato).
+export function contarItensOk(itens) {
+    return Object.values(itens || {}).filter(itemIsOk).length;
+}
 
 export async function fetchChecklists(filters = {}) {
     let q = supabase
@@ -715,8 +792,12 @@ export async function criarRascunhoOSDeChecklist(checklist, adminId) {
     if (checklist.necessidades)       partes.push(`Necessidades: ${checklist.necessidades}`);
     if (checklist.observacoes_livres) partes.push(`Observações do motorista: ${checklist.observacoes_livres}`);
     const itensReprovados = Object.entries(checklist.itens || {})
-        .filter(([, ok]) => !ok)
-        .map(([id]) => CHECKLIST_ITENS.find(i => i.id === id)?.label || id);
+        .filter(([, v]) => !itemIsOk(v))
+        .map(([id, v]) => {
+            const label = itemLabelOf(v, id);
+            const obs = itemObsOf(v);
+            return obs ? `${label} (${obs})` : label;
+        });
     if (itensReprovados.length) partes.push(`Itens reprovados no checklist: ${itensReprovados.join(', ')}`);
 
     const descricao = partes.length

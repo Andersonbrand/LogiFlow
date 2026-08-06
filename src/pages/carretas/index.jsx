@@ -15,6 +15,9 @@ import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import { useConfirm } from 'components/ui/ConfirmDialog';
 import BoletosPainel from 'components/ui/BoletosPainel';
+import ChecklistItemsField from 'components/ui/ChecklistItemsField';
+import MultiFotoField from 'components/ui/MultiFotoField';
+import ChecklistItensManagerModal from 'components/ui/ChecklistItensManagerModal';
 import { supabase } from 'utils/supabaseClient';
 import { fetchCorredores, CORREDORES_PADRAO } from 'utils/corredoresService';
 import {
@@ -29,6 +32,7 @@ import {
     fetchAllRegistrosViagem, deleteRegistroViagem,
     fetchPontosParada, updatePontoParada, deletePontoParada,
         CHECKLIST_ITENS, TIPOS_CALCULO_FRETE, calcularFrete, calcularBonusCarreteiro,
+        fetchChecklistItens, itemIsOk, itemObsOf, itemLabelOf, contarItensOk,
     aprovarChecklistComNotificacao, reprovarChecklistComNotificacao, aprovarChecklistComNotificacaoRetorno,
     fetchOrdensServico, createOrdemServico, updateOrdemServico, deleteOrdemServico,
     criarRascunhoOSDeChecklist,
@@ -60,7 +64,7 @@ import {
 } from 'utils/fornecedoresService';
 import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf, garantirFornecedorCadastrado, EMPRESAS_LOGIFLOW } from 'utils/parcelasGenerator';
 import * as XLSX from 'xlsx';
-import { exportDiariaModelo, exportDiariasRomaneiosModelo, printDiaria, printOrdemServico } from 'utils/excelUtils';
+import { exportDiariaModelo, exportDiariasRomaneiosModelo, printDiaria, printOrdemServico, printChecklist } from 'utils/excelUtils';
 import { fetchCaminhoesPlacas } from 'utils/vehicleService';
 import PeriodRangeFilter, { usePeriodRangeFilter } from 'components/ui/PeriodRangeFilter';
 import { updateUserProfile } from 'utils/userService';
@@ -1236,10 +1240,10 @@ function TabChecklist({ isAdmin, profile }) {
         setFiltroMes(v);
         try { sessionStorage.setItem('carretas_checklist_filtroMes', v); } catch {}
     };
-    const [form, setForm] = useState({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' });
-    const [fotoPreview, setFotoPreview] = useState(null);
+    const [form, setForm] = useState({ veiculo_id: '', odometro: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] });
     const [modalFoto, setModalFoto] = useState(null); // url para visualizar
-    const fotoRef = useRef(null);
+    const [checklistItens, setChecklistItens] = useState([]); // itens ativos vindos do banco
+    const [modalItens, setModalItens] = useState(false); // gerenciador de itens (admin)
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -1251,32 +1255,25 @@ function TabChecklist({ isAdmin, profile }) {
                 f.dataInicio = `${filtroMes}-01`;
                 f.dataFim    = `${filtroMes}-${String(lastDay).padStart(2, '0')}`;
             }
-            const [c, v, m] = await Promise.all([fetchChecklists(f), fetchVeiculosProprios(), fetchCarreteirosPropriosOnly()]);
-            setChecklists(c); setVeiculos(v); setMotoristas(m);
+            const [c, v, m, it] = await Promise.all([fetchChecklists(f), fetchVeiculosProprios(), fetchCarreteirosPropriosOnly(), fetchChecklistItens(true)]);
+            setChecklists(c); setVeiculos(v); setMotoristas(m); setChecklistItens(it);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtro, filtroMes]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
 
-    // Converte foto para base64 para armazenar (ou pode ser URL do Storage)
-    const handleFotoChange = (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        if (file.size > 5 * 1024 * 1024) { showToast('Foto muito grande (máx 5MB)', 'error'); return; }
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            setFotoPreview(ev.target.result);
-            setForm(f => ({ ...f, foto_url: ev.target.result }));
-        };
-        reader.readAsDataURL(file);
-    };
+    const recarregarItens = async () => { setChecklistItens(await fetchChecklistItens(false)); };
 
     const handleSubmit = async () => {
         if (!form.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
         try {
-            await createChecklist({ ...form, motorista_id: profile.id, semana_ref: semana.toISOString().split('T')[0] });
-            showToast('Checklist enviado!', 'success'); setModal(null); setFotoPreview(null); load();
+            await createChecklist({
+                ...form, foto_url: form.fotos_urls[0] || '', motorista_id: profile.id,
+                odometro: form.odometro !== '' && form.odometro != null ? Number(form.odometro) : null,
+                semana_ref: semana.toISOString().split('T')[0],
+            });
+            showToast('Checklist enviado!', 'success'); setModal(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleAprovarClick = (c) => {
@@ -1341,7 +1338,14 @@ function TabChecklist({ isAdmin, profile }) {
                         className="px-3 py-2 rounded-lg border text-sm" style={inputStyle} title="Filtrar por mês" />
                     <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Motorista, placa, tipo..." width="220px" />
                 </div>
-                <Button onClick={() => { setForm({ veiculo_id: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '' }); setFotoPreview(null); setModal(true); }} iconName="ClipboardCheck" size="sm">Novo Checklist</Button>
+                <div className="flex items-center gap-2">
+                    {isAdmin && (
+                        <button onClick={() => setModalItens(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                            <Icon name="ListChecks" size={14} color="var(--color-muted-foreground)" />Gerenciar itens
+                        </button>
+                    )}
+                    <Button onClick={() => { setForm({ veiculo_id: '', odometro: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] }); setModal(true); }} iconName="ClipboardCheck" size="sm">Novo Checklist</Button>
+                </div>
             </div>
 
             {loading ? <div className="flex justify-center py-12"><div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} /></div> : (
@@ -1354,55 +1358,82 @@ function TabChecklist({ isAdmin, profile }) {
                     )}
                     {checklistsFiltrados.map(c => {
                         const itens = c.itens || {};
-                        const ok = Object.values(itens).filter(Boolean).length;
-                        const total = CHECKLIST_ITENS.length;
+                        const entradas = Object.entries(itens);
+                        const ok = contarItensOk(itens);
+                        const total = entradas.length || checklistItens.length || CHECKLIST_ITENS.length;
+                        const fotos = (c.fotos_urls && c.fotos_urls.length ? c.fotos_urls : (c.foto_url ? [c.foto_url] : []));
                         return (
-                            <div key={c.id} className="bg-white rounded-xl border p-4 sm:p-5 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                <div className="flex items-start justify-between mb-3 gap-2">
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                            <p className="font-bold" style={{ color: 'var(--color-text-primary)' }}>{c.motorista?.name || '—'}</p>
-                                            <span className="text-xs font-data text-gray-400">— {c.veiculo?.placa || '—'}</span>
+                            <div key={c.id} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                                <div className="flex items-start justify-between gap-2 p-4 sm:p-5 pb-3 border-b" style={{ borderColor: '#F1F5F9' }}>
+                                    <div className="flex items-center gap-3 min-w-0">
+                                        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm text-white" style={{ backgroundColor: ok === total ? '#059669' : ok >= total * 0.7 ? '#D97706' : '#DC2626' }}>
+                                            {(c.motorista?.name || '?').trim().charAt(0).toUpperCase()}
                                         </div>
-                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                            Semana de {c.semana_ref ? new Date(c.semana_ref + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
-                                        </p>
+                                        <div className="min-w-0">
+                                            <p className="font-bold leading-tight truncate" style={{ color: 'var(--color-text-primary)' }}>{c.motorista?.name || '—'}</p>
+                                            <p className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                {c.veiculo?.placa || '—'} · Semana de {c.semana_ref ? new Date(c.semana_ref + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
+                                                {c.odometro != null && <> · <Icon name="Gauge" size={11} className="inline -mt-0.5" />{' '}{Number(c.odometro).toLocaleString('pt-BR')} km</>}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                    <div className="flex items-center gap-1.5 flex-wrap justify-end flex-shrink-0">
                                         {c.aprovado
                                             ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 whitespace-nowrap"><Icon name="CheckCircle2" size={11} />Aprovado</span>
                                             : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 whitespace-nowrap"><Icon name="Clock" size={11} />Pendente</span>
                                         }
                                         {c.manutencao_registrada && <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 whitespace-nowrap"><Icon name="Wrench" size={11} />Manutenção</span>}
-                                        {c.foto_url && (
-                                            <>
-                                                <button onClick={() => setModalFoto(c.foto_url)} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors whitespace-nowrap">
-                                                    <Icon name="Camera" size={11} />Foto
-                                                </button>
-                                                <button onClick={() => downloadImagem(c.foto_url, `checklist_${c.veiculo?.placa || c.id}.jpg`)} title="Baixar foto" className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors whitespace-nowrap">
-                                                    <Icon name="Download" size={11} />
-                                                </button>
-                                            </>
+                                        {fotos.length > 0 && (
+                                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 whitespace-nowrap">
+                                                <Icon name="Camera" size={11} />{fotos.length} foto{fotos.length > 1 ? 's' : ''}
+                                            </span>
                                         )}
                                     </div>
                                 </div>
+                                <div className="p-4 sm:p-5 pt-3">
                                 <div className="mb-3">
                                     <div className="flex items-center justify-between text-xs mb-1">
                                         <span style={{ color: 'var(--color-muted-foreground)' }}>Itens verificados</span>
-                                        <span className="font-medium">{ok}/{total}</span>
+                                        <span className="font-semibold" style={{ color: ok === total ? '#059669' : ok >= total * 0.7 ? '#D97706' : '#DC2626' }}>{ok}/{total}</span>
                                     </div>
-                                    <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                                        <div className="h-full rounded-full transition-all" style={{ width: `${(ok / total) * 100}%`, backgroundColor: ok === total ? '#059669' : ok >= total * 0.7 ? '#D97706' : '#DC2626' }} />
+                                    <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                        <div className="h-full rounded-full transition-all" style={{ width: `${total ? (ok / total) * 100 : 0}%`, backgroundColor: ok === total ? '#059669' : ok >= total * 0.7 ? '#D97706' : '#DC2626' }} />
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1 mb-3">
-                                    {CHECKLIST_ITENS.map(item => (
-                                        <div key={item.id} className="flex items-center gap-1 text-xs px-2 py-1 rounded" style={{ backgroundColor: itens[item.id] ? '#D1FAE5' : '#FEE2E2' }}>
-                                            <Icon name={itens[item.id] ? 'Check' : 'X'} size={10} color={itens[item.id] ? '#059669' : '#DC2626'} />
-                                            <span style={{ color: itens[item.id] ? '#065F46' : '#991B1B' }}>{item.label}</span>
-                                        </div>
-                                    ))}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-3 items-start">
+                                    {entradas.map(([id, v]) => {
+                                        const itemOk = itemIsOk(v);
+                                        const label = itemLabelOf(v, id);
+                                        const obs = itemObsOf(v);
+                                        return (
+                                            <div key={id} className="flex items-start justify-between gap-2 text-xs px-2.5 py-1.5 rounded-lg border" style={{ backgroundColor: itemOk ? '#F0FDF4' : '#FFF5F5', borderColor: itemOk ? '#D1FAE5' : '#FECACA' }}>
+                                                <div className="min-w-0">
+                                                    <span style={{ color: itemOk ? '#065F46' : '#991B1B' }}>{label}</span>
+                                                    {obs && <p className="text-[11px] italic mt-0.5" style={{ color: '#991B1B' }}>"{obs}"</p>}
+                                                </div>
+                                                <span className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5" style={{ backgroundColor: itemOk ? '#059669' : '#DC2626' }}>
+                                                    <Icon name={itemOk ? 'Check' : 'X'} size={10} color="white" />
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                    {entradas.length === 0 && <p className="text-xs col-span-full" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum item registrado.</p>}
                                 </div>
+                                {fotos.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mb-3">
+                                        {fotos.map((f, idx) => (
+                                            <div key={idx} className="relative group">
+                                                <button onClick={() => setModalFoto(f)}>
+                                                    <img src={f} alt={`Foto ${idx + 1}`} className="w-16 h-16 rounded-lg border object-cover hover:opacity-80 transition-opacity" style={{ borderColor: 'var(--color-border)' }} />
+                                                </button>
+                                                <button onClick={() => downloadImagem(f, `checklist_${c.veiculo?.placa || c.id}_${idx + 1}.jpg`)} title="Baixar foto"
+                                                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-700 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Icon name="Download" size={11} color="white" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                                 {(c.problemas || c.necessidades || c.observacoes_livres) && (
                                     <div className="text-xs space-y-1 mb-3 p-3 rounded-lg bg-gray-50">
                                         {c.problemas && <p><span className="font-medium text-red-600">⚠ Problemas:</span> {c.problemas}</p>}
@@ -1419,14 +1450,17 @@ function TabChecklist({ isAdmin, profile }) {
                                     <div className="flex flex-wrap gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                         <button onClick={() => handleAprovarClick(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"><Icon name="CheckCircle2" size={13} />Aprovar</button>
                                         <button onClick={() => { setModalManut(c.id); setObsManut(''); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-orange-300 text-orange-700 hover:bg-orange-50 transition-colors"><Icon name="Wrench" size={13} />Registrar Manutenção</button>
+                                        <button onClick={() => printChecklist(c, checklistItens)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}><Icon name="Printer" size={13} color="var(--color-muted-foreground)" />Imprimir</button>
                                         <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors ml-auto"><Icon name="Trash2" size={16} />Excluir</button>
                                     </div>
                                 )}
                                 {isAdmin && c.aprovado && (
-                                    <div className="flex justify-end pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                    <div className="flex flex-wrap gap-2 justify-end pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                        <button onClick={() => printChecklist(c, checklistItens)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}><Icon name="Printer" size={13} color="var(--color-muted-foreground)" />Imprimir</button>
                                         <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors"><Icon name="Trash2" size={16} />Excluir</button>
                                     </div>
                                 )}
+                                </div>
                             </div>
                         );
                     })}
@@ -1435,8 +1469,8 @@ function TabChecklist({ isAdmin, profile }) {
 
             {/* Modal novo checklist */}
             {modal && (
-                <ModalOverlay onClose={() => { setModal(null); setFotoPreview(null); }}>
-                    <ModalHeader title="Checklist Semanal" icon="ClipboardCheck" onClose={() => { setModal(null); setFotoPreview(null); }} />
+                <ModalOverlay onClose={() => setModal(null)}>
+                    <ModalHeader title="Checklist Semanal" icon="ClipboardCheck" onClose={() => setModal(null)} />
                     <div className="p-5 space-y-4 overflow-y-auto flex-1">
                         <Field label="Veículo" required>
                             <PrettySelect value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
@@ -1444,49 +1478,38 @@ function TabChecklist({ isAdmin, profile }) {
                                 {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                             </PrettySelect>
                         </Field>
+                        <Field label="Odômetro (km)">
+                            <input type="number" inputMode="decimal" min="0" value={form.odometro}
+                                onChange={e => setForm(f => ({ ...f, odometro: e.target.value }))}
+                                placeholder="Ex: 152340" className={inputCls} style={inputStyle} />
+                        </Field>
                         <div>
                             <p className="text-xs font-medium mb-3" style={{ color: 'var(--color-text-secondary)' }}>Itens verificados</p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {CHECKLIST_ITENS.map(item => (
-                                    <label key={item.id} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
-                                        <input type="checkbox" checked={!!form.itens[item.id]} onChange={e => setForm(f => ({ ...f, itens: { ...f.itens, [item.id]: e.target.checked } }))} className="accent-blue-600" />
-                                        <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{item.label}</span>
-                                    </label>
-                                ))}
-                            </div>
+                            <ChecklistItemsField itens={checklistItens} value={form.itens} onChange={itens => setForm(f => ({ ...f, itens }))} />
                         </div>
                         <Field label="Problemas identificados"><textarea value={form.problemas} onChange={e => setForm(f => ({ ...f, problemas: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Descreva problemas encontrados..." /></Field>
-                        {/* item 3: foto de necessidades/problemas */}
                         <Field label="Necessidades / peças">
                             <textarea value={form.necessidades} onChange={e => setForm(f => ({ ...f, necessidades: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Pneus, cintas, etc..." />
                         </Field>
-                        <div className="space-y-2">
-                            <label className="block text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                                📷 Foto do problema/necessidade <span className="text-gray-400 font-normal">(opcional)</span>
-                            </label>
-                            <div className="flex items-center gap-3">
-                                <button type="button" onClick={() => fotoRef.current?.click()} className="flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
-                                    <Icon name="Camera" size={15} color="var(--color-muted-foreground)" />
-                                    {fotoPreview ? 'Trocar foto' : 'Tirar/Anexar foto'}
-                                </button>
-                                {fotoPreview && (
-                                    <button type="button" onClick={() => { setFotoPreview(null); setForm(f => ({ ...f, foto_url: '' })); }} className="text-xs text-red-500 hover:text-red-700">Remover</button>
-                                )}
-                                <input ref={fotoRef} type="file" accept="image/*" capture="environment" onChange={handleFotoChange} className="hidden" />
-                            </div>
-                            {fotoPreview && (
-                                <div className="relative inline-block mt-2">
-                                    <img src={fotoPreview} alt="Preview" className="rounded-lg border object-cover" style={{ maxHeight: 180, maxWidth: '100%', borderColor: 'var(--color-border)' }} />
-                                </div>
-                            )}
-                        </div>
+                        <MultiFotoField fotos={form.fotos_urls} onChange={fotos_urls => setForm(f => ({ ...f, fotos_urls }))} showToast={showToast} />
                         <Field label="Observações livres"><textarea value={form.observacoes_livres} onChange={e => setForm(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
                     </div>
                     <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
-                        <button onClick={() => { setModal(null); setFotoPreview(null); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                        <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                         <Button onClick={handleSubmit} size="sm" iconName="Send">Enviar Checklist</Button>
                     </div>
                 </ModalOverlay>
+            )}
+
+            {/* Modal gerenciar itens do checklist (admin) */}
+            {modalItens && (
+                <ChecklistItensManagerModal
+                    itens={checklistItens}
+                    onReload={recarregarItens}
+                    onClose={() => setModalItens(false)}
+                    showToast={showToast}
+                    confirm={confirm}
+                />
             )}
 
             {/* Modal manutenção */}
@@ -7208,6 +7231,7 @@ function TabDistribuicaoAco() {
     const [envios, setEnvios] = useState([]);
     const [loading, setLoading] = useState(true);
     const [registrando, setRegistrando] = useState(null); // motoristaId em processamento
+    const [modalRegistrar, setModalRegistrar] = useState(null); // motorista aguardando confirmação { id, nome }
     const [novoDestino, setNovoDestino] = useState('');
 
     const load = useCallback(async () => {
@@ -7249,9 +7273,10 @@ function TabDistribuicaoAco() {
     const registrarEnvio = async (motoristaId) => {
         setRegistrando(motoristaId);
         try {
-            await registrarEnvioAco({ motoristaId, destino: novoDestino || null });
+            await registrarEnvioAco({ motoristaId, destino: novoDestino.trim() || null });
             showToast('Envio de aço registrado!', 'success');
             setNovoDestino('');
+            setModalRegistrar(null);
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setRegistrando(null); }
@@ -7289,14 +7314,6 @@ function TabDistribuicaoAco() {
                 </div>
             </div>
 
-            <div className="flex items-end gap-2">
-                <div>
-                    <label className="text-xs font-semibold block mb-1" style={{ color: 'var(--color-text-secondary)' }}>Destino/cliente do envio (opcional)</label>
-                    <input value={novoDestino} onChange={e => setNovoDestino(e.target.value)} placeholder="Ex: Cliente X — Vitória da Conquista"
-                        className={inputCls} style={{ ...inputStyle, width: 280 }} />
-                </div>
-            </div>
-
             <div className="rounded-2xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
                 <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-3 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide" style={{ backgroundColor: '#F9FAFB', color: 'var(--color-muted-foreground)' }}>
                     <span>#</span>
@@ -7317,7 +7334,7 @@ function TabDistribuicaoAco() {
                         <span className={!f.ultimoEnvio ? 'text-green-700 font-semibold' : ''} style={f.ultimoEnvio ? { color: 'var(--color-text-primary)' } : {}}>{FMT(f.ultimoEnvio)}</span>
                         <span style={{ color: 'var(--color-muted-foreground)' }}>{f.totalEnvios}</span>
                         <span className="flex justify-end">
-                            <button onClick={() => registrarEnvio(f.id)} disabled={registrando === f.id}
+                            <button onClick={() => { setModalRegistrar({ id: f.id, nome: f.nome }); setNovoDestino(''); }} disabled={registrando === f.id}
                                 className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-700 transition-colors disabled:opacity-60 whitespace-nowrap">
                                 <Icon name={registrando === f.id ? 'Loader' : 'Truck'} size={12} /> Registrar envio hoje
                             </button>
@@ -7346,6 +7363,25 @@ function TabDistribuicaoAco() {
             )}
             <Toast toast={toast} />
             {ConfirmDialog}
+
+            {modalRegistrar && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-5">
+                        <h3 className="font-heading font-bold text-base mb-1" style={{ color: 'var(--color-text-primary)' }}>Registrar envio de aço</h3>
+                        <p className="text-sm mb-4" style={{ color: 'var(--color-muted-foreground)' }}>Motorista: <strong>{modalRegistrar.nome}</strong></p>
+                        <label className="text-xs font-semibold block mb-1" style={{ color: 'var(--color-text-secondary)' }}>Destino/cliente do envio (opcional)</label>
+                        <input value={novoDestino} onChange={e => setNovoDestino(e.target.value)} placeholder="Ex: Cliente X — Vitória da Conquista"
+                            autoFocus className={inputCls} style={{ ...inputStyle, width: '100%' }} />
+                        <div className="flex gap-2 justify-end mt-5">
+                            <button onClick={() => setModalRegistrar(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <button onClick={() => registrarEnvio(modalRegistrar.id)} disabled={registrando === modalRegistrar.id}
+                                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700 disabled:opacity-60">
+                                <Icon name={registrando === modalRegistrar.id ? 'Loader' : 'Truck'} size={14} /> Confirmar envio
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

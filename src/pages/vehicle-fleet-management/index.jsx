@@ -15,7 +15,7 @@ import StatusUpdateModal from "./components/StatusUpdateModal";
 import HistoryModal from "./components/HistoryModal";
 import CostsPanel from "./components/CostsPanel";
 import * as XLSX from "xlsx";
-import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate, exportDiariaModelo, printDiaria } from "utils/excelUtils";
+import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate, exportDiariaModelo, printDiaria, printChecklist } from "utils/excelUtils";
 import { useAuth } from "utils/AuthContext";
 import AccessDeniedModal from "components/ui/AccessDeniedModal";
 import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle, fetchCaminhoesPlacas } from "utils/vehicleService";
@@ -27,7 +27,7 @@ import {
     deleteChecklist,
     fetchDiarias, createDiaria, updateDiaria, deleteDiaria, assinarDiaria, desassinarDiaria,
     fetchMotoristasCaminhao,
-    CHECKLIST_ITENS,
+    CHECKLIST_ITENS, fetchChecklistItens, itemIsOk, itemObsOf, itemLabelOf, contarItensOk,
 } from "utils/carretasService";
 import { deleteRomaneio, assinarDiariaRomaneio, desassinarDiariaRomaneio } from "utils/romaneioService";
 import { supabase, subscribeTabela } from "utils/supabaseClient";
@@ -166,14 +166,17 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                 dataFim: (usarPeriodo && periodoCustom.fim) ? periodoCustom.fim : mes + '-' + String(new Date(ano, m, 0).getDate()).padStart(2, '0'),
             };
             // Busca romaneios do período com diária (custo_motorista > 0)
-            // cruzando por motorista_id OU nome do motorista (campo texto livre)
+            // cruzando por motorista_id OU nome do motorista (campo texto livre).
+            // "Período" aqui é o mês/intervalo da DATA DE SAÍDA do romaneio (quando
+            // preenchida pelo usuário) — só cai para created_at como fallback nos
+            // romaneios antigos em que a saída nunca foi preenchida.
+            const dataFimTs = f.dataFim + 'T23:59:59';
             const romaneioRes = await supabase
                 .from('romaneios')
                 .select('id, numero, motorista, motorista_id, placa, destino, status, saida, created_at, custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao, assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at')
                 .or(`motorista_id.eq.${motorista.id},motorista.ilike.${motorista.name}`)
                 .gt('custo_motorista', 0)
-                .gte('created_at', f.dataInicio)
-                .lte('created_at', f.dataFim + 'T23:59:59')
+                .or(`and(saida.gte.${f.dataInicio},saida.lte.${dataFimTs}),and(saida.is.null,created_at.gte.${f.dataInicio},created_at.lte.${dataFimTs})`)
                 .order('created_at', { ascending: false });
 
             const [a, ch, d, vc] = await Promise.all([
@@ -365,7 +368,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                 exportDiariaModelo({
                     motorista:       { name: motorista.name },
                     veiculo:         { placa: r.placa || motorista.veiculo?.placa || '' },
-                    data_inicio:     r.saida ? r.saida.slice(0,10) : r.created_at?.slice(0,10) || '',
+                    data_inicio:     r.saida ? r.saida.slice(0,10) : '',
                     data_fim:        null,
                     quantidade_dias: r.dias_diaria || 1,
                     valor_dia:       r.valor_diaria_dia || (r.custo_motorista / (r.dias_diaria || 1)),
@@ -396,11 +399,12 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         if (checklists.length) {
             const ws = XLSX.utils.json_to_sheet(checklists.map(c => ({
                 'Semana': FMT(c.semana_ref), 'Placa': c.veiculo?.placa || c.veiculo_caminhao_placa || '',
+                'Odômetro (km)': c.odometro != null ? Number(c.odometro) : '',
                 'Status': c.aprovado ? 'Aprovado' : 'Pendente',
-                'Itens OK': `${Object.values(c.itens||{}).filter(Boolean).length}/${CHECKLIST_ITENS.length}`,
+                'Itens OK': `${contarItensOk(c.itens)}/${Object.keys(c.itens || {}).length || CHECKLIST_ITENS.length}`,
                 'Problemas': c.problemas || '', 'Necessidades': c.necessidades || '',
             })));
-            ws['!cols'] = [12,12,12,10,30,30].map(w => ({ wch: w }));
+            ws['!cols'] = [12,12,14,12,10,30,30].map(w => ({ wch: w }));
             XLSX.utils.book_append_sheet(wb, ws, 'Checklists');
         }
         if (!wb.SheetNames.length) { showToast('Nenhum dado para exportar', 'error'); return; }
@@ -416,7 +420,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         exportDiariaModelo({
             motorista:       { name: motorista.name },
             veiculo:         { placa: r.placa || motorista.veiculo?.placa || '' },
-            data_inicio:     r.saida ? r.saida.slice(0,10) : r.created_at?.slice(0,10) || '',
+            data_inicio:     r.saida ? r.saida.slice(0,10) : '',
             data_fim:        null,
             quantidade_dias: r.dias_diaria || 1,
             valor_dia:       r.valor_diaria_dia || (r.custo_motorista / (r.dias_diaria || 1)),
@@ -591,14 +595,19 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                         </div>
                                     ) : checklists.map(c => {
                                         const itens = c.itens || {};
-                                        const ok = Object.values(itens).filter(Boolean).length;
-                                        const total = CHECKLIST_ITENS.length;
+                                        const entradas = Object.entries(itens);
+                                        const ok = contarItensOk(itens);
+                                        const total = entradas.length || CHECKLIST_ITENS.length;
+                                        const fotos = (c.fotos_urls && c.fotos_urls.length) ? c.fotos_urls : (c.foto_url ? [c.foto_url] : []);
                                         return (
                                             <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                 <div className="flex items-start justify-between mb-3 gap-2">
                                                     <div>
                                                         <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.veiculo?.placa || c.veiculo_caminhao_placa || 'Sem placa'}</p>
-                                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Semana de {c.semana_ref ? FMT(c.semana_ref) : '—'}</p>
+                                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                            Semana de {c.semana_ref ? FMT(c.semana_ref) : '—'}
+                                                            {c.odometro != null && <> · <Icon name="Gauge" size={11} className="inline -mt-0.5" />{' '}{Number(c.odometro).toLocaleString('pt-BR')} km</>}
+                                                        </p>
                                                     </div>
                                                     <div className="flex items-center gap-1.5 flex-wrap justify-end">
                                                         {c.aprovado
@@ -606,15 +615,10 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                             : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Icon name="Clock" size={11} />Pendente</span>
                                                         }
                                                         {c.manutencao_registrada && <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700"><Icon name="Wrench" size={11} />Manutenção</span>}
-                                                        {c.foto_url && (
-                                                            <>
-                                                                <button onClick={() => setModalFoto(c.foto_url)} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 hover:bg-blue-200">
-                                                                    <Icon name="Camera" size={11} />Foto
-                                                                </button>
-                                                                <button onClick={() => downloadImagem(c.foto_url, `checklist_${c.veiculo?.placa || c.veiculo_caminhao_placa || c.id}.jpg`)} title="Baixar foto" className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200">
-                                                                    <Icon name="Download" size={11} />
-                                                                </button>
-                                                            </>
+                                                        {fotos.length > 0 && (
+                                                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                                                <Icon name="Camera" size={11} />{fotos.length} foto{fotos.length > 1 ? 's' : ''}
+                                                            </span>
                                                         )}
                                                     </div>
                                                 </div>
@@ -624,18 +628,43 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                         <span className="font-medium">{ok}/{total}</span>
                                                     </div>
                                                     <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                                                        <div className="h-full rounded-full" style={{ width: `${(ok/total)*100}%`, backgroundColor: ok===total ? '#059669' : ok>=total*0.7 ? '#D97706' : '#DC2626' }} />
+                                                        <div className="h-full rounded-full" style={{ width: `${total ? (ok/total)*100 : 0}%`, backgroundColor: ok===total ? '#059669' : ok>=total*0.7 ? '#D97706' : '#DC2626' }} />
                                                     </div>
                                                 </div>
-                                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1 mb-3">
-                                                    {CHECKLIST_ITENS.map(item => (
-                                                        <div key={item.id} className="flex items-center gap-1 text-xs px-2 py-1 rounded"
-                                                            style={{ backgroundColor: itens[item.id] ? '#D1FAE5' : '#FEE2E2' }}>
-                                                            <Icon name={itens[item.id] ? 'Check' : 'X'} size={10} color={itens[item.id] ? '#059669' : '#DC2626'} />
-                                                            <span style={{ color: itens[item.id] ? '#065F46' : '#991B1B', fontSize: 10 }}>{item.label}</span>
-                                                        </div>
-                                                    ))}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-3 items-start">
+                                                    {entradas.map(([id, v]) => {
+                                                        const itemOk = itemIsOk(v);
+                                                        const label = itemLabelOf(v, id);
+                                                        const obs = itemObsOf(v);
+                                                        return (
+                                                            <div key={id} className="flex items-start justify-between gap-2 text-xs px-2.5 py-1.5 rounded-lg border" style={{ backgroundColor: itemOk ? '#F0FDF4' : '#FFF5F5', borderColor: itemOk ? '#D1FAE5' : '#FECACA' }}>
+                                                                <div className="min-w-0">
+                                                                    <span style={{ color: itemOk ? '#065F46' : '#991B1B' }}>{label}</span>
+                                                                    {obs && <p className="text-[11px] italic mt-0.5" style={{ color: '#991B1B' }}>"{obs}"</p>}
+                                                                </div>
+                                                                <span className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5" style={{ backgroundColor: itemOk ? '#059669' : '#DC2626' }}>
+                                                                    <Icon name={itemOk ? 'Check' : 'X'} size={10} color="white" />
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {entradas.length === 0 && <p className="text-xs col-span-full" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum item registrado.</p>}
                                                 </div>
+                                                {fotos.length > 0 && (
+                                                    <div className="flex flex-wrap gap-2 mb-3">
+                                                        {fotos.map((f, idx) => (
+                                                            <div key={idx} className="relative group">
+                                                                <button onClick={() => setModalFoto(f)}>
+                                                                    <img src={f} alt={`Foto ${idx + 1}`} className="w-16 h-16 rounded-lg border object-cover hover:opacity-80 transition-opacity" style={{ borderColor: 'var(--color-border)' }} />
+                                                                </button>
+                                                                <button onClick={() => downloadImagem(f, `checklist_${c.veiculo?.placa || c.veiculo_caminhao_placa || c.id}_${idx + 1}.jpg`)} title="Baixar foto"
+                                                                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-700 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <Icon name="Download" size={11} color="white" />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                                 {(c.problemas || c.necessidades || c.obs_manutencao) && (
                                                     <div className="text-xs space-y-1 mb-3 p-3 rounded-lg bg-gray-50">
                                                         {c.problemas && <p><span className="font-medium text-red-600">⚠ Problemas:</span> {c.problemas}</p>}
@@ -652,6 +681,9 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                             <Icon name="Wrench" size={13} />Registrar Manutenção
                                                         </button>
                                                     </>)}
+                                                    <button onClick={() => printChecklist(c, CHECKLIST_ITENS)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                                                        <Icon name="Printer" size={13} color="var(--color-muted-foreground)" />Imprimir
+                                                    </button>
                                                     <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 ml-auto">
                                                         <Icon name="Trash2" size={16} />Excluir
                                                     </button>
@@ -705,7 +737,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                             <div className="flex flex-col items-center justify-center py-8 rounded-xl border border-dashed" style={{ borderColor: '#BBF7D0', backgroundColor: '#F0FDF4' }}>
                                                 <Icon name="FileText" size={24} color="#6EE7B7" />
                                                 <p className="text-sm mt-2" style={{ color: '#059669' }}>Nenhum romaneio com diária no período</p>
-                                                <p className="text-xs mt-1" style={{ color: '#6EE7B7' }}>As diárias são preenchidas na criação do romaneio</p>
+                                                <p className="text-xs mt-1" style={{ color: '#6EE7B7' }}>As diárias vêm do valor de "custo motorista" lançado em cada romaneio</p>
                                             </div>
                                         ) : (
                                             <div className="bg-white rounded-xl border overflow-x-auto" style={{ borderColor: '#BBF7D0' }}>
@@ -733,7 +765,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                         <span className="font-data font-bold text-blue-700">{r.numero}</span>
                                                                     </td>
                                                                     <td className="px-3 py-2.5 max-w-[150px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{r.destino || '—'}</td>
-                                                                    <td className="px-3 py-2.5 whitespace-nowrap text-xs">{r.saida ? FMT(r.saida.slice(0,10)) : r.created_at ? FMT(r.created_at.slice(0,10)) : '—'}</td>
+                                                                    <td className="px-3 py-2.5 whitespace-nowrap text-xs">{r.saida ? FMT(r.saida.slice(0,10)) : '—'}</td>
                                                                     <td className="px-3 py-2.5">
                                                                         <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{r.status}</span>
                                                                     </td>
@@ -743,7 +775,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                             <button onClick={() => setViewDiaria({
                                                                                 motorista: { name: motorista.name },
                                                                                 veiculo: { placa: r.placa || motorista.veiculo?.placa || '' },
-                                                                                data_inicio: r.saida ? r.saida.slice(0,10) : r.created_at?.slice(0,10) || '',
+                                                                                data_inicio: r.saida ? r.saida.slice(0,10) : '',
                                                                                 quantidade_dias: r.dias_diaria || 1,
                                                                                 valor_dia: r.valor_diaria_dia || (r.custo_motorista / (r.dias_diaria || 1)),
                                                                                 valor_total: Number(r.custo_motorista || 0),

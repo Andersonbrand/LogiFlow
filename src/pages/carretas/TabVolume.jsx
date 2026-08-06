@@ -723,8 +723,8 @@ export default function TabVolume({ isAdmin }) {
     return (
         <div>
             {/* ── Filtros e ações ── */}
-            <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
-                <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
+                <div className="flex flex-wrap items-start gap-3">
                     <div className="flex flex-col gap-1">
                         <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Mês</label>
                         <input

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -14,11 +14,13 @@ import {
     fetchChecklists, createChecklist, updateChecklist, deleteChecklist,
     fetchPostos,
     fetchConfigAbastecimento,
-    CHECKLIST_ITENS,
+    CHECKLIST_ITENS, fetchChecklistItens, itemIsOk, itemObsOf, itemLabelOf, contarItensOk,
 } from 'utils/carretasService';
 import { fetchCaminhoesPlacas } from 'utils/vehicleService';
 import * as XLSX from 'xlsx';
 import PrettySelect from 'components/ui/PrettySelect';
+import ChecklistItemsField from 'components/ui/ChecklistItemsField';
+import MultiFotoField from 'components/ui/MultiFotoField';
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -53,7 +55,6 @@ export default function MotoristaDashboard() {
     const { user, profile } = useAuth();
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
-    const fotoRef = useRef(null);
 
     const [tab, setTab]               = useState('viagens');
     const [period, setPeriod]         = useState(30);
@@ -73,7 +74,7 @@ export default function MotoristaDashboard() {
 
     const [modalAbast, setModalAbast] = useState(false);
     const [modalCheck, setModalCheck] = useState(false);
-    const [fotoPreview, setFotoPreview] = useState(null);
+    const [checklistItens, setChecklistItens] = useState([]);
     const [editingAbastId, setEditingAbastId] = useState(null);
     const [editingCheckId, setEditingCheckId] = useState(null);
 
@@ -84,8 +85,8 @@ export default function MotoristaDashboard() {
         litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '',
     });
     const emptyCheck = () => ({
-        veiculo_caminhao_id: '', itens: {}, problemas: '', necessidades: '',
-        observacoes_livres: '', foto_url: '',
+        veiculo_caminhao_id: '', odometro: '', itens: {}, problemas: '', necessidades: '',
+        observacoes_livres: '', foto_url: '', fotos_urls: [],
     });
     const [formAbast, setFormAbast] = useState(emptyAbast());
     const [formCheck, setFormCheck] = useState(emptyCheck());
@@ -116,19 +117,21 @@ export default function MotoristaDashboard() {
             if (dateFimStr) romQuery = romQuery.lte('created_at', dateFimStr + 'T23:59:59');
             romQuery = romQuery.order('created_at', { ascending: false });
 
-            const [roms, a, c, ve, p, cfg] = await Promise.all([
+            const [roms, a, c, ve, p, cfg, itensCheck] = await Promise.all([
                 romQuery.then(r => r.data || []),
                 fetchAbastecimentos({ motoristaId: user.id, dataInicio: dateStr, ...(dateFimStr ? { dataFim: dateFimStr } : {}) }),
                 fetchChecklists({ motoristaId: user.id }),
                 fetchCaminhoesPlacas(),
                 fetchPostos().catch(() => []),
                 fetchConfigAbastecimento().catch(() => ({ preco_diesel: 0, preco_arla: 0 })),
+                fetchChecklistItens(true).catch(() => []),
             ]);
 
             setRomaneios(roms);
             setAbast(a); setChecklists(c);
             setVeiculos(ve); setPostos(p);
             setConfigAbast(cfg || { preco_diesel: 0, preco_arla: 0 });
+            setChecklistItens(itensCheck);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [user?.id, profile?.name, period, periodoCustom]); // eslint-disable-line
@@ -249,18 +252,6 @@ export default function MotoristaDashboard() {
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
-    const handleFoto = (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        if (file.size > 5 * 1024 * 1024) { showToast('Foto muito grande (máx 5MB)', 'error'); return; }
-        const reader = new FileReader();
-        reader.onload = ev => {
-            setFotoPreview(ev.target.result);
-            setFormCheck(f => ({ ...f, foto_url: ev.target.result }));
-        };
-        reader.readAsDataURL(file);
-    };
-
     const handleCheck = async () => {
         if (!formCheck.veiculo_caminhao_id) { showToast('Selecione o veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
@@ -269,7 +260,8 @@ export default function MotoristaDashboard() {
             const caminhao = veiculos.find(v => String(v.id) === String(formCheck.veiculo_caminhao_id));
             const checkOriginal = editingCheckId ? checklists.find(c => c.id === editingCheckId) : null;
             const payload = {
-                ...formCheck, motorista_id: user.id,
+                ...formCheck, foto_url: formCheck.fotos_urls[0] || '', motorista_id: user.id,
+                odometro: formCheck.odometro !== '' && formCheck.odometro != null ? Number(formCheck.odometro) : null,
                 veiculo_caminhao_placa: caminhao?.placa || checkOriginal?.veiculo_caminhao_placa || null,
                 veiculo_caminhao_modelo: caminhao?.modelo || checkOriginal?.veiculo_caminhao_modelo || null,
             };
@@ -281,7 +273,7 @@ export default function MotoristaDashboard() {
                 await createChecklist(payload);
                 showToast('Checklist enviado!', 'success');
             }
-            setModalCheck(false); setFotoPreview(null); setFormCheck(emptyCheck()); setEditingCheckId(null); load();
+            setModalCheck(false); setFormCheck(emptyCheck()); setEditingCheckId(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setSavingCheck(false); }
     };
@@ -290,11 +282,12 @@ export default function MotoristaDashboard() {
         setEditingCheckId(c.id);
         setFormCheck({
             veiculo_caminhao_id: c.veiculo_caminhao_id != null ? String(c.veiculo_caminhao_id) : '',
+            odometro: c.odometro != null ? String(c.odometro) : '',
             itens: c.itens || {},
             problemas: c.problemas || '', necessidades: c.necessidades || '',
             observacoes_livres: c.observacoes_livres || '', foto_url: c.foto_url || '',
+            fotos_urls: (c.fotos_urls && c.fotos_urls.length) ? c.fotos_urls : (c.foto_url ? [c.foto_url] : []),
         });
-        setFotoPreview(c.foto_url || null);
         setModalCheck(true);
     };
 
@@ -495,7 +488,7 @@ export default function MotoristaDashboard() {
                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Diesel + Arla</p>
                                     </div>
                                 </button>
-                                <button onClick={() => { setEditingCheckId(null); setFormCheck(emptyCheck()); setFotoPreview(null); setModalCheck(true); }}
+                                <button onClick={() => { setEditingCheckId(null); setFormCheck(emptyCheck()); setModalCheck(true); }}
                                     className="flex items-center gap-3 p-4 rounded-xl border bg-white shadow-sm hover:shadow-md transition-all"
                                     style={{ borderColor: 'var(--color-border)' }}>
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#EFF6FF' }}>
@@ -621,7 +614,11 @@ export default function MotoristaDashboard() {
                                                 ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="ClipboardCheck" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum checklist enviado</span></div>
                                                 : checklists.filter(c => !filtroPlaca || String(c.veiculo_caminhao_id) === filtroPlaca).map(c => {
                                                     const itens = c.itens || {};
-                                                    const ok = Object.values(itens).filter(Boolean).length;
+                                                    const entradas = Object.entries(itens);
+                                                    const ok = contarItensOk(itens);
+                                                    const total = entradas.length || checklistItens.length || CHECKLIST_ITENS.length;
+                                                    const reprovados = entradas.filter(([, v]) => !itemIsOk(v));
+                                                    const fotos = (c.fotos_urls && c.fotos_urls.length) ? c.fotos_urls : (c.foto_url ? [c.foto_url] : []);
                                                     return (
                                                         <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                             <div className="flex items-center justify-between mb-2">
@@ -644,11 +641,25 @@ export default function MotoristaDashboard() {
                                                             </div>
                                                             <div className="flex items-center justify-between text-xs mb-1">
                                                                 <span style={{ color: 'var(--color-muted-foreground)' }}>Itens OK</span>
-                                                                <span className="font-medium">{ok}/{CHECKLIST_ITENS.length}</span>
+                                                                <span className="font-medium">{ok}/{total}</span>
                                                             </div>
                                                             <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                                                                <div className="h-full rounded-full" style={{ width: `${(ok/CHECKLIST_ITENS.length)*100}%`, backgroundColor: ok===CHECKLIST_ITENS.length ? '#059669' : '#D97706' }} />
+                                                                <div className="h-full rounded-full" style={{ width: `${total ? (ok / total) * 100 : 0}%`, backgroundColor: ok === total ? '#059669' : '#D97706' }} />
                                                             </div>
+                                                            {reprovados.length > 0 && (
+                                                                <div className="mt-2 space-y-1">
+                                                                    {reprovados.map(([id, v]) => (
+                                                                        <p key={id} className="text-xs px-2 py-1 rounded bg-red-50 text-red-700">
+                                                                            <Icon name="X" size={10} className="inline mr-1" />{itemLabelOf(v, id)}{itemObsOf(v) && ` — ${itemObsOf(v)}`}
+                                                                        </p>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                            {fotos.length > 0 && (
+                                                                <div className="flex flex-wrap gap-1.5 mt-2">
+                                                                    {fotos.map((f, i) => <img key={i} src={f} alt="" className="w-12 h-12 rounded-md border object-cover" style={{ borderColor: 'var(--color-border)' }} />)}
+                                                                </div>
+                                                            )}
                                                             {c.obs_manutencao && (
                                                                 <p className="text-xs mt-2 p-2 rounded-lg bg-orange-50 text-orange-700 border border-orange-100">🔧 {c.obs_manutencao}</p>
                                                             )}
@@ -913,52 +924,26 @@ export default function MotoristaDashboard() {
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </PrettySelect>
                             </Field>
+                            <Field label="Odômetro (km)">
+                                <input type="number" inputMode="decimal" min="0" value={formCheck.odometro}
+                                    onChange={e => setFormCheck(f => ({ ...f, odometro: e.target.value }))}
+                                    placeholder="Ex: 152340" className={inputCls} style={inputStyle} />
+                            </Field>
 
-                            {/* Foto — logo no topo, destaque visual, antes dos campos de texto */}
+                            {/* Fotos — logo no topo, destaque visual, antes dos campos de texto */}
                             <div className="rounded-xl border-2 border-dashed p-4"
-                                style={{ borderColor: fotoPreview ? '#059669' : '#93C5FD', backgroundColor: fotoPreview ? '#F0FDF4' : '#EFF6FF' }}>
+                                style={{ borderColor: formCheck.fotos_urls.length ? '#059669' : '#93C5FD', backgroundColor: formCheck.fotos_urls.length ? '#F0FDF4' : '#EFF6FF' }}>
                                 <p className="text-xs font-semibold mb-3 flex items-center gap-1.5"
-                                    style={{ color: fotoPreview ? '#065F46' : '#1D4ED8' }}>
-                                    <Icon name="Camera" size={14} color={fotoPreview ? '#059669' : '#1D4ED8'} />
-                                    {fotoPreview ? '✅ Foto anexada' : '📷 Foto do problema (opcional)'}
+                                    style={{ color: formCheck.fotos_urls.length ? '#065F46' : '#1D4ED8' }}>
+                                    <Icon name="Camera" size={14} color={formCheck.fotos_urls.length ? '#059669' : '#1D4ED8'} />
+                                    {formCheck.fotos_urls.length ? `✅ ${formCheck.fotos_urls.length} foto(s) anexada(s)` : '📷 Fotos do problema (opcional)'}
                                 </p>
-                                {fotoPreview ? (
-                                    <div className="flex flex-col gap-2">
-                                        <img src={fotoPreview} alt="Preview" className="rounded-xl border w-full max-h-48 object-cover" style={{ borderColor: '#BBF7D0' }} />
-                                        <div className="flex gap-2">
-                                            <button type="button" onClick={() => fotoRef.current?.click()}
-                                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-white border flex-1 justify-center"
-                                                style={{ borderColor: '#BBF7D0', color: '#065F46' }}>
-                                                <Icon name="RefreshCw" size={13} /> Trocar foto
-                                            </button>
-                                            <button type="button" onClick={() => { setFotoPreview(null); setFormCheck(f => ({ ...f, foto_url: '' })); }}
-                                                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium text-red-600 bg-white border border-red-200">
-                                                <Icon name="Trash2" size={16} /> Remover
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <button type="button" onClick={() => fotoRef.current?.click()}
-                                        className="w-full flex flex-col items-center gap-2 py-5 rounded-xl text-sm font-medium transition-colors"
-                                        style={{ backgroundColor: 'white', border: '1px solid #BFDBFE', color: '#1D4ED8' }}>
-                                        <Icon name="Camera" size={28} color="#1D4ED8" />
-                                        <span>Tirar foto ou escolher da galeria</span>
-                                        <span className="text-xs font-normal" style={{ color: '#93C5FD' }}>Toque para abrir a câmera</span>
-                                    </button>
-                                )}
-                                <input ref={fotoRef} type="file" accept="image/*" capture="environment" onChange={handleFoto} className="hidden" />
+                                <MultiFotoField fotos={formCheck.fotos_urls} onChange={fotos_urls => setFormCheck(f => ({ ...f, fotos_urls }))} showToast={showToast} max={8} />
                             </div>
 
                             <div>
                                 <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>Itens verificados</p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {CHECKLIST_ITENS.map(item => (
-                                        <label key={item.id} className="flex items-center gap-2 cursor-pointer p-2 rounded-lg border hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>
-                                            <input type="checkbox" checked={!!formCheck.itens[item.id]} onChange={e => setFormCheck(f => ({ ...f, itens: { ...f.itens, [item.id]: e.target.checked } }))} className="accent-blue-600" />
-                                            <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{item.label}</span>
-                                        </label>
-                                    ))}
-                                </div>
+                                <ChecklistItemsField itens={checklistItens} value={formCheck.itens} onChange={itens => setFormCheck(f => ({ ...f, itens }))} />
                             </div>
                             <Field label="Problemas identificados">
                                 <textarea value={formCheck.problemas} onChange={e => setFormCheck(f => ({ ...f, problemas: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Descreva problemas..." />

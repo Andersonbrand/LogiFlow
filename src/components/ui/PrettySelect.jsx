@@ -129,15 +129,17 @@ export default function PrettySelect({
         return Array.from(map.entries());
     }, [filtradas]);
 
+    const boxStyle = {
+        ...style,
+        borderColor: error ? '#FCA5A5' : (style.borderColor || 'var(--color-border)'),
+        backgroundColor: disabled ? '#F9FAFB' : (style.backgroundColor || 'white'),
+    };
+
     return (
-        <div ref={wrapRef} className={`relative ${className}`} style={style} {...rest}>
+        <div ref={wrapRef} className={`relative ${className} focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all`} style={boxStyle} {...rest}>
             <button type="button" id={id} disabled={disabled}
                 onClick={() => !disabled && setOpen(o => !o)}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-sm text-left outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
-                style={{
-                    borderColor: error ? '#FCA5A5' : 'var(--color-border)',
-                    backgroundColor: disabled ? '#F9FAFB' : 'transparent',
-                }}>
+                className="w-full h-full flex items-center justify-between gap-2 text-left outline-none bg-transparent disabled:opacity-60 disabled:cursor-not-allowed">
                 <span className="truncate" style={{ color: selecionado ? 'var(--color-text-primary)' : 'var(--color-muted-foreground)' }}>
                     {selecionado ? selecionado.label : (placeholder || 'Selecione...')}
                 </span>
