@@ -36,7 +36,7 @@ export async function fetchRomaneios() {
             assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at,
             valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,
-            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, categorias_extra, percentual_frete, frete_calculado, empresa),
+            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, categorias_extra, percentual_frete, frete_calculado, empresa, nome_cliente, nome_vendedor),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
                 is_telha_zinco, comprimento_telha, metros_totais, peso_unit,
                 materials(id, nome, unidade, peso, categoria_frete, percentual_frete, is_telha_zinco, peso_base_metro))
@@ -60,7 +60,7 @@ export async function fetchRomaneioById(id) {
             assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at,
             valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,
-            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, categorias_extra, percentual_frete, frete_calculado, empresa),
+            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, categorias_extra, percentual_frete, frete_calculado, empresa, nome_cliente, nome_vendedor),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
                 is_telha_zinco, comprimento_telha, metros_totais, peso_unit,
                 materials(id, nome, unidade, peso, categoria_frete, percentual_frete, is_telha_zinco, peso_base_metro))
@@ -264,6 +264,8 @@ export async function duplicateRomaneio(romaneio) {
         categoria_frete:  p.categoria_frete,
         percentual_frete: p.percentual_frete,
         empresa:          p.empresa          || 'Comercial Araguaia',
+        nome_cliente:     p.nome_cliente     || '',
+        nome_vendedor:    p.nome_vendedor    || '',
     }));
     return createRomaneio({
         ...buildPayload(romaneio), status:'Aguardando', saida:null,
@@ -529,7 +531,7 @@ export async function fetchRascunhos() {
             peso_total, saida, chegada, observacoes, vehicle_id,
             valor_frete, valor_frete_calculado, valor_total_carga,
             is_rascunho, sugestao_veiculo, created_at,
-            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, categorias_extra, percentual_frete, frete_calculado, empresa),
+            romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, categorias_extra, percentual_frete, frete_calculado, empresa, nome_cliente, nome_vendedor),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
                 is_telha_zinco, comprimento_telha, metros_totais, peso_unit,
                 materials(id, nome, unidade, peso, categoria_frete, percentual_frete, is_telha_zinco, peso_base_metro))

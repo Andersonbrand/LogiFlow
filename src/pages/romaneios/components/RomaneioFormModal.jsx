@@ -25,7 +25,7 @@ const EMPTY_FORM = {
     vehicle_id:'', distancia_km:'', custo_combustivel:'', custo_pedagio:'', custo_motorista:'',
     dias_diaria:'1', valor_diaria_dia:'', diaria_descricao:'',
 };
-const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', categorias_extra:[], empresa:'Comercial Araguaia', itens:[] };
+const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', categorias_extra:[], empresa:'Comercial Araguaia', nome_cliente:'', nome_vendedor:'', itens:[] };
 
 export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRomaneio, vehicles: vehiclesProp=[], materials: materialsProp=[] }) {
     const [form, setForm]           = useState(EMPTY_FORM);
@@ -171,6 +171,8 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                         categoria_frete: p.categoria_frete || 'Ferragens',
                         categorias_extra: Array.isArray(p.categorias_extra) ? p.categorias_extra : [],
                         empresa:         p.empresa || 'Comercial Araguaia',
+                        nome_cliente:    p.nome_cliente || '',
+                        nome_vendedor:   p.nome_vendedor || '',
                         itens: itensDoPedido,
                     };
                 });
@@ -203,7 +205,8 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     };
                 });
                 setPedidos(itensHerdados.length > 0 ? [{
-                    numero_pedido:'', valor_pedido:'', categoria_frete:'Ferragens', itens: itensHerdados
+                    numero_pedido:'', valor_pedido:'', categoria_frete:'Ferragens',
+                    nome_cliente:'', nome_vendedor:'', itens: itensHerdados
                 }] : []);
             }
             // Restaura as paradas intermediárias salvas (campo "paradas" vem como
@@ -562,6 +565,8 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     categoria_frete: p.categoria_frete || 'Outros',
                     categorias_extra: (p.categorias_extra || []).filter(e => n(e.valor) > 0).map(e => ({ categoria: e.categoria, valor: n(e.valor) })),
                     empresa:         p.empresa || 'Comercial Araguaia',
+                    nome_cliente:    (p.nome_cliente || '').trim(),
+                    nome_vendedor:   (p.nome_vendedor || '').trim(),
                     percentual_frete: FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05,
                     frete_calculado: calcularFretePedidoMulti(p).total,
                 })),
@@ -912,6 +917,11 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                     <span className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
                                                         {pedido.itens.length} item(s) · {pesoPedido.toLocaleString('pt-BR', { maximumFractionDigits:0 })} kg
                                                     </span>
+                                                    {pedido.nome_cliente && (
+                                                        <span className="text-xs font-caption truncate" style={{ color:'var(--color-text-secondary)' }}>
+                                                            Cliente: {pedido.nome_cliente}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-0.5">
                                                     <span className="text-xs font-data" style={{ color:'var(--color-muted-foreground)' }}>
@@ -948,6 +958,20 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                         <input value={pedido.cidade_destino}
                                                             onChange={e => updatePedidoField(pIdx,'cidade_destino',e.target.value)}
                                                             placeholder="Ex: Paratinga"
+                                                            className="w-full h-9 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-caption mb-1" style={{ color:'var(--color-text-secondary)' }}>Cliente</label>
+                                                        <input value={pedido.nome_cliente}
+                                                            onChange={e => updatePedidoField(pIdx,'nome_cliente',e.target.value)}
+                                                            placeholder="Nome do cliente"
+                                                            className="w-full h-9 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-xs font-caption mb-1" style={{ color:'var(--color-text-secondary)' }}>Vendedor</label>
+                                                        <input value={pedido.nome_vendedor}
+                                                            onChange={e => updatePedidoField(pIdx,'nome_vendedor',e.target.value)}
+                                                            placeholder="Nome do vendedor"
                                                             className="w-full h-9 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data" />
                                                     </div>
                                                     {/* Empresa — seleção visual por botões */}

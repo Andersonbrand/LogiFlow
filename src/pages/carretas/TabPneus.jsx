@@ -14,7 +14,7 @@ import {
     fetchComprasPneus, createCompraPneus, deleteCompraPneus,
     fetchDespesasAdmPneus,
     fetchPneus, createPneu, updatePneu, deletePneu, substituirPneu,
-    saldoCompra, kmRodado,
+    saldoCompra, kmRodado, agruparPneusPorLote,
 } from 'utils/pneusService';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -316,6 +316,65 @@ export default function TabPneus({ isAdmin }) {
 }
 
 // ─── Painel: Lista/cadastro de pneus ───────────────────────────────────────
+// Uma linha da tabela de pneus. Reutilizada tanto para pneus avulsos quanto
+// para os que aparecem dentro de um grupo expandido (troca em lote).
+function LinhaPneu({ p, isAdmin, indent = false, stripe = false, onSubstituir, onEditar, onExcluir }) {
+    const km = kmRodado(p);
+    return (
+        <tr className="border-t hover:bg-blue-50/30 transition-colors"
+            style={{ borderColor: 'var(--color-border)', backgroundColor: indent ? '#F8FAFC' : (stripe ? 'white' : '#F9FAFB') }}>
+            <td className="px-3 py-2.5 whitespace-nowrap" style={indent ? { paddingLeft: '2.25rem' } : undefined}>
+                {p.numero_sequencial ? (
+                    <div className="flex flex-col gap-0.5">
+                        <span className="font-data font-semibold">{p.numero_sequencial}</span>
+                        <span className="w-fit px-1.5 py-0.5 rounded text-[10px] font-medium"
+                            style={{ backgroundColor: p.tipo_pneu === 'recapado' ? '#FEF3C7' : '#D1FAE5', color: p.tipo_pneu === 'recapado' ? '#B45309' : '#059669' }}>
+                            {p.tipo_pneu === 'recapado' ? 'Recapado' : 'Novo'}
+                        </span>
+                    </div>
+                ) : '—'}
+            </td>
+            <td className="px-3 py-2.5 font-semibold whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{p.veiculo?.placa || p.veiculo_caminhao_placa || '—'}</td>
+            <td className="px-3 py-2.5 whitespace-nowrap">{p.motorista?.name || '—'}</td>
+            <td className="px-3 py-2.5 whitespace-nowrap">{p.marca}{p.modelo ? ` — ${p.modelo}` : ''}</td>
+            <td className="px-3 py-2.5 font-data">{p.medida || '—'}</td>
+            <td className="px-3 py-2.5">
+                <span className="px-1.5 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: `${BANDAGEM_COR[p.categoria_bandagem]}1A`, color: BANDAGEM_COR[p.categoria_bandagem] }}>
+                    {BANDAGEM_LABEL[p.categoria_bandagem] || '—'}
+                </span>
+            </td>
+            <td className="px-3 py-2.5 max-w-[140px] truncate" title={p.eixo_trocado}>{p.eixo_trocado || '—'}</td>
+            <td className="px-3 py-2.5 font-data text-right">{p.km_atual != null ? Number(p.km_atual).toLocaleString('pt-BR') : '—'}</td>
+            <td className="px-3 py-2.5 font-data text-right">{p.km_final != null ? Number(p.km_final).toLocaleString('pt-BR') : '—'}</td>
+            <td className="px-3 py-2.5 font-data text-right font-bold" style={{ color: '#059669' }}>{km != null ? km.toLocaleString('pt-BR') : '—'}</td>
+            <td className="px-3 py-2.5 max-w-[130px] truncate" title={p.compra?.despesa?.nota_fiscal}>
+                {p.compra?.despesa?.nota_fiscal ? `NF ${p.compra.despesa.nota_fiscal}` : '—'}
+            </td>
+            <td className="px-3 py-2.5">
+                {p.status === 'em_uso' ? (
+                    <span className="px-2 py-1 rounded-lg text-xs font-medium bg-green-100 text-green-700 whitespace-nowrap">Em uso</span>
+                ) : (
+                    <span className="px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 whitespace-nowrap">Substituído</span>
+                )}
+            </td>
+            <td className="px-2 py-2.5">
+                {isAdmin && (
+                    <ActionButtonsGroup>
+                        {p.status === 'em_uso' && (
+                            <button onClick={onSubstituir} title="Registrar substituição"
+                                className="p-1.5 rounded-lg hover:bg-amber-50" style={{ color: '#D97706' }}>
+                                <Icon name="RefreshCw" size={14} color="#D97706" />
+                            </button>
+                        )}
+                        <EditButton title="Editar" onClick={onEditar} />
+                        <DeleteButton title="Excluir" onClick={onExcluir} />
+                    </ActionButtonsGroup>
+                )}
+            </td>
+        </tr>
+    );
+}
+
 function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo, isAdmin, showToast, confirm, load, handleAddCatalogo }) {
     const [busca, setBusca] = useState('');
     const [filtroStatus, setFiltroStatus] = useState('todos'); // todos | em_uso | substituido
@@ -347,6 +406,7 @@ function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo
             return (
                 (p.marca || '').toLowerCase().includes(q) ||
                 (p.modelo || '').toLowerCase().includes(q) ||
+                (p.numero_sequencial || '').toLowerCase().includes(q) ||
                 (p.veiculo?.placa || '').toLowerCase().includes(q) ||
                 (p.veiculo_caminhao_placa || '').toLowerCase().includes(q) ||
                 (p.motorista?.name || '').toLowerCase().includes(q)
@@ -354,6 +414,12 @@ function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo
         }
         return true;
     });
+
+    // Trocas registradas em lote (várias posições marcadas de uma vez pelo
+    // mecânico) aparecem agrupadas num único item expansível na tabela.
+    const linhasAgrupadas = useMemo(() => agruparPneusPorLote(filtrados), [filtrados]);
+    const [gruposExpandidos, setGruposExpandidos] = useState({});
+    const toggleGrupo = (loteId) => setGruposExpandidos(s => ({ ...s, [loteId]: !s[loteId] }));
 
     const openCreate = () => { setForm(emptyForm()); setModal({ mode: 'create' }); };
     const openEdit = (p) => {
@@ -454,58 +520,49 @@ function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo
                         <table className="w-full text-xs" style={{ minWidth: 1000 }}>
                             <thead>
                                 <tr style={{ backgroundColor: '#1D4ED8' }}>
-                                    {['Veículo', 'Motorista', 'Marca / Modelo', 'Medida', 'Bandagem', 'Eixo', 'KM Instalação', 'KM Final', 'KM Rodado', 'Compra (NF)', 'Status', ''].map(h => (
+                                    {['Nº / Tipo', 'Veículo', 'Motorista', 'Marca / Modelo', 'Medida', 'Bandagem', 'Eixo', 'KM Instalação', 'KM Final', 'KM Rodado', 'Compra (NF)', 'Status', ''].map(h => (
                                         <th key={h} className="px-3 py-2.5 text-left font-semibold text-white whitespace-nowrap">{h}</th>
                                     ))}
                                 </tr>
                             </thead>
                             <tbody>
-                                {filtrados.map((p, idx) => {
-                                    const km = kmRodado(p);
-                                    return (
-                                        <tr key={p.id} className="border-t hover:bg-blue-50/30 transition-colors"
-                                            style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                                            <td className="px-3 py-2.5 font-semibold whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{p.veiculo?.placa || p.veiculo_caminhao_placa || '—'}</td>
-                                            <td className="px-3 py-2.5 whitespace-nowrap">{p.motorista?.name || '—'}</td>
-                                            <td className="px-3 py-2.5 whitespace-nowrap">{p.marca}{p.modelo ? ` — ${p.modelo}` : ''}</td>
-                                            <td className="px-3 py-2.5 font-data">{p.medida || '—'}</td>
-                                            <td className="px-3 py-2.5">
-                                                <span className="px-1.5 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: `${BANDAGEM_COR[p.categoria_bandagem]}1A`, color: BANDAGEM_COR[p.categoria_bandagem] }}>
-                                                    {BANDAGEM_LABEL[p.categoria_bandagem] || '—'}
-                                                </span>
+                                {linhasAgrupadas.map((item, idx) => item.grupo ? (
+                                    <React.Fragment key={item.lote_id}>
+                                        <tr className="border-t hover:bg-blue-50/30 transition-colors cursor-pointer"
+                                            style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}
+                                            onClick={() => toggleGrupo(item.lote_id)}>
+                                            <td className="px-3 py-2.5" colSpan={12}>
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <Icon name={gruposExpandidos[item.lote_id] ? 'ChevronUp' : 'ChevronDown'} size={14} color="var(--color-muted-foreground)" />
+                                                    <div className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#DBEAFE' }}>
+                                                        <Icon name="Layers" size={12} color="#1D4ED8" />
+                                                    </div>
+                                                    <span className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                                        {item.itens.length} pneus trocados
+                                                    </span>
+                                                    <span style={{ color: 'var(--color-muted-foreground)' }}>·</span>
+                                                    <span className="font-semibold whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
+                                                        {item.itens[0].veiculo?.placa || item.itens[0].veiculo_caminhao_placa || '—'}
+                                                    </span>
+                                                    <span style={{ color: 'var(--color-muted-foreground)' }}>·</span>
+                                                    <span style={{ color: 'var(--color-muted-foreground)' }}>{item.itens[0].motorista?.name || '—'}</span>
+                                                    <span style={{ color: 'var(--color-muted-foreground)' }}>·</span>
+                                                    <span className="font-data" style={{ color: 'var(--color-muted-foreground)' }}>{FMT(item.itens[0].data_instalacao)}</span>
+                                                </div>
                                             </td>
-                                            <td className="px-3 py-2.5 max-w-[140px] truncate" title={p.eixo_trocado}>{p.eixo_trocado || '—'}</td>
-                                            <td className="px-3 py-2.5 font-data text-right">{p.km_atual != null ? Number(p.km_atual).toLocaleString('pt-BR') : '—'}</td>
-                                            <td className="px-3 py-2.5 font-data text-right">{p.km_final != null ? Number(p.km_final).toLocaleString('pt-BR') : '—'}</td>
-                                            <td className="px-3 py-2.5 font-data text-right font-bold" style={{ color: '#059669' }}>{km != null ? km.toLocaleString('pt-BR') : '—'}</td>
-                                            <td className="px-3 py-2.5 max-w-[130px] truncate" title={p.compra?.despesa?.nota_fiscal}>
-                                                {p.compra?.despesa?.nota_fiscal ? `NF ${p.compra.despesa.nota_fiscal}` : '—'}
-                                            </td>
-                                            <td className="px-3 py-2.5">
-                                                {p.status === 'em_uso' ? (
-                                                    <span className="px-2 py-1 rounded-lg text-xs font-medium bg-green-100 text-green-700 whitespace-nowrap">Em uso</span>
-                                                ) : (
-                                                    <span className="px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 whitespace-nowrap">Substituído</span>
-                                                )}
-                                            </td>
-                                            <td className="px-2 py-2.5">
-                                                {isAdmin && (
-                                                    <ActionButtonsGroup>
-                                                        {p.status === 'em_uso' && (
-                                                            <button onClick={() => setModalSubstituir({ id: p.id, _km_final: '', _data: new Date().toISOString().slice(0, 10) })}
-                                                                title="Registrar substituição"
-                                                                className="p-1.5 rounded-lg hover:bg-amber-50" style={{ color: '#D97706' }}>
-                                                                <Icon name="RefreshCw" size={14} color="#D97706" />
-                                                            </button>
-                                                        )}
-                                                        <EditButton title="Editar" onClick={() => openEdit(p)} />
-                                                        <DeleteButton title="Excluir" onClick={() => handleDelete(p)} />
-                                                    </ActionButtonsGroup>
-                                                )}
-                                            </td>
+                                            <td className="px-2 py-2.5" />
                                         </tr>
-                                    );
-                                })}
+                                        {gruposExpandidos[item.lote_id] && item.itens.map(p => (
+                                            <LinhaPneu key={p.id} p={p} isAdmin={isAdmin} indent
+                                                onSubstituir={() => setModalSubstituir({ id: p.id, _km_final: '', _data: new Date().toISOString().slice(0, 10) })}
+                                                onEditar={() => openEdit(p)} onExcluir={() => handleDelete(p)} />
+                                        ))}
+                                    </React.Fragment>
+                                ) : (
+                                    <LinhaPneu key={item.pneu.id} p={item.pneu} isAdmin={isAdmin} stripe={idx % 2 === 0}
+                                        onSubstituir={() => setModalSubstituir({ id: item.pneu.id, _km_final: '', _data: new Date().toISOString().slice(0, 10) })}
+                                        onEditar={() => openEdit(item.pneu)} onExcluir={() => handleDelete(item.pneu)} />
+                                ))}
                             </tbody>
                         </table>
                     </div>

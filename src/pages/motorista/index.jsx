@@ -254,6 +254,7 @@ export default function MotoristaDashboard() {
 
     const handleCheck = async () => {
         if (!formCheck.veiculo_caminhao_id) { showToast('Selecione o veículo', 'error'); return; }
+        if (formCheck.odometro === '' || formCheck.odometro == null) { showToast('Informe o odômetro do veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
         setSavingCheck(true);
         try {
@@ -924,7 +925,7 @@ export default function MotoristaDashboard() {
                                     {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </PrettySelect>
                             </Field>
-                            <Field label="Odômetro (km)">
+                            <Field label="Odômetro (km)" required>
                                 <input type="number" inputMode="decimal" min="0" value={formCheck.odometro}
                                     onChange={e => setFormCheck(f => ({ ...f, odometro: e.target.value }))}
                                     placeholder="Ex: 152340" className={inputCls} style={inputStyle} />

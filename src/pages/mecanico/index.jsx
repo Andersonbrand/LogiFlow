@@ -5,9 +5,21 @@ import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import { subscribeTabela } from 'utils/supabaseClient';
-import { fetchOrdensServico, finalizarOrdemServico, reportarProblemaOS, updateOrdemServico, fetchPecasCatalogo } from 'utils/carretasService';
+import { fetchOrdensServico, finalizarOrdemServico, reportarProblemaOS, updateOrdemServico, fetchPecasCatalogo, fetchVeiculosProprios, fetchMotoristasProprios } from 'utils/carretasService';
+import { fetchCaminhoesPlacas } from 'utils/vehicleService';
+import { fetchCatalogoPneus, createPneu, updatePneu, deletePneu, gerarNumeroSequencialPneu, fetchPneus, agruparPneusPorLote } from 'utils/pneusService';
+import { CONFIGURACOES_OPTIONS, getConfiguracao } from 'utils/pneuDiagramaConfig';
+import DiagramaPneuVeiculo from 'components/ui/DiagramaPneuVeiculo';
+import { useConfirm } from 'components/ui/ConfirmDialog';
 import { printOrdemServico } from 'utils/excelUtils';
 import PrettySelect from 'components/ui/PrettySelect';
+import SearchableSelect from 'components/ui/SearchableSelect';
+
+const BANDAGEM_OPTIONS = [
+    { value: 'mista', label: 'Mista' },
+    { value: 'borrachudo', label: 'Borrachudo' },
+    { value: 'liso', label: 'Liso' },
+];
 
 const FMT_DATE = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
 
@@ -42,6 +54,43 @@ const STATUS_CFG = {
 const inputCls = "w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500";
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
 
+// Uma linha de registro de pneu na lista "Meus Últimos Registros". `indent`
+// é usado quando ela aparece dentro de um lote expandido (troca em várias
+// posições registrada de uma vez).
+function RegistroPneuRow({ p, editando, onEditar, onExcluir, indent = false }) {
+    return (
+        <div className={`px-4 py-3 flex items-start gap-3 ${indent ? 'pl-9' : ''}`}
+            style={editando ? { backgroundColor: '#EFF6FF' } : undefined}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: p.tipo_pneu === 'recapado' ? '#FEF3C7' : '#D1FAE5' }}>
+                <Icon name="CircleDot" size={14} color={p.tipo_pneu === 'recapado' ? '#B45309' : '#059669'} />
+            </div>
+            <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold font-data" style={{ color: 'var(--color-text-primary)' }}>
+                    {p.numero_sequencial || '—'} · {p.veiculo?.placa || p.veiculo_caminhao_placa || 'Sem placa'}
+                </p>
+                <p className="text-xs truncate" style={{ color: 'var(--color-muted-foreground)' }}>
+                    {p.marca} {p.medida} — {p.eixo_trocado || '—'}
+                </p>
+            </div>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
+                style={{ backgroundColor: p.tipo_pneu === 'recapado' ? '#FEF3C7' : '#D1FAE5', color: p.tipo_pneu === 'recapado' ? '#B45309' : '#059669' }}>
+                {p.tipo_pneu === 'recapado' ? 'Recapado' : 'Novo'}
+            </span>
+            <div className="flex items-center gap-1 flex-shrink-0">
+                <button onClick={() => onEditar(p)} title="Editar"
+                    className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-blue-50">
+                    <Icon name="Pencil" size={13} color="#1D4ED8" />
+                </button>
+                <button onClick={() => onExcluir(p)} title="Excluir"
+                    className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-red-50">
+                    <Icon name="Trash2" size={13} color="#DC2626" />
+                </button>
+            </div>
+        </div>
+    );
+}
+
 function ModalOverlay({ children, onClose }) {
     return (
         <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4 sm:pt-16"
@@ -56,6 +105,7 @@ function ModalOverlay({ children, onClose }) {
 export default function MecanicoPage() {
     const { user, profile } = useAuth();
     const { toast, showToast } = useToast();
+    const [pageTab, setPageTab]               = useState('os'); // 'os' | 'pneus'
     const [ordens, setOrdens]                 = useState([]);
     const [pecasCatalogo, setPecasCatalogo]   = useState([]);
     const [loading, setLoading]               = useState(true);
@@ -70,6 +120,161 @@ export default function MecanicoPage() {
     const [descProblema, setDescProblema]     = useState('');
     const [pdfUrl, setPdfUrl]                 = useState(null);
     const [assinarFinalizacao, setAssinarFinalizacao] = useState(true);
+
+    // ── Aba Pneus (troca de pneu registrada pelo mecânico) ─────────────────
+    const [veiculosCarretas, setVeiculosCarretas] = useState([]);
+    const [caminhoes, setCaminhoes]               = useState([]);
+    const [motoristasPneu, setMotoristasPneu]     = useState([]);
+    const [catalogoPneus, setCatalogoPneus]       = useState({ marca: [], modelo: [], medida: [] });
+    const [pneusRegistrados, setPneusRegistrados] = useState([]);
+    const [loadingPneus, setLoadingPneus]         = useState(false);
+    const [savingPneu, setSavingPneu]             = useState(false);
+    const emptyFormPneu = () => ({
+        veiculo_id: '', configuracao_veiculo: '', posicoes_diagrama: [],
+        tipo_pneu: 'novo', marca: '', modelo: '', medida: '', categoria_bandagem: 'mista',
+        motorista_id: '', km_atual: '', observacoes: '',
+    });
+    const [formPneu, setFormPneu] = useState(emptyFormPneu());
+    const [editandoPneuId, setEditandoPneuId] = useState(null);
+    const { confirm: confirmPneu, ConfirmDialog: ConfirmDialogPneu } = useConfirm();
+
+    const veiculoOptionsPneu = React.useMemo(() => ([
+        ...veiculosCarretas.map(v => ({ value: `cv:${v.id}`, label: v.placa, sublabel: v.modelo ? `${v.modelo} · Carreta` : 'Carreta' })),
+        ...caminhoes.map(v => ({ value: `vh:${v.id}`, label: v.placa, sublabel: v.modelo ? `${v.modelo} · Caminhão` : 'Caminhão' })),
+    ]), [veiculosCarretas, caminhoes]);
+
+    // Posições já em uso no veículo selecionado (pra sinalizar no diagrama)
+    const posicoesOcupadas = React.useMemo(() => {
+        if (!formPneu.veiculo_id) return [];
+        const [tipo, id] = formPneu.veiculo_id.split(':');
+        return pneusRegistrados
+            .filter(p => p.status === 'em_uso' && (tipo === 'cv' ? String(p.veiculo_id) === id : String(p.veiculo_caminhao_id) === id))
+            .map(p => p.posicao_diagrama)
+            .filter(Boolean);
+    }, [pneusRegistrados, formPneu.veiculo_id]);
+
+    const loadDadosPneus = useCallback(async () => {
+        setLoadingPneus(true);
+        try {
+            const [vc, cam, mot, cat, pneus] = await Promise.all([
+                fetchVeiculosProprios().catch(() => []),
+                fetchCaminhoesPlacas().catch(() => []),
+                fetchMotoristasProprios().catch(() => []),
+                fetchCatalogoPneus().catch(() => ({ marca: [], modelo: [], medida: [] })),
+                fetchPneus().catch(() => []),
+            ]);
+            setVeiculosCarretas(vc || []);
+            setCaminhoes(cam || []);
+            setMotoristasPneu(mot || []);
+            setCatalogoPneus(cat || { marca: [], modelo: [], medida: [] });
+            setPneusRegistrados(pneus || []);
+        } catch (e) { showToast('Erro ao carregar dados de pneus: ' + e.message, 'error'); }
+        finally { setLoadingPneus(false); }
+    }, []); // eslint-disable-line
+
+    useEffect(() => { if (pageTab === 'pneus') loadDadosPneus(); }, [pageTab, loadDadosPneus]);
+
+    // Mesma lista, mas agrupando trocas registradas em lote (várias posições
+    // marcadas de uma vez) num único item expansível.
+    const meusPneusAgrupados = React.useMemo(() =>
+        agruparPneusPorLote(pneusRegistrados.filter(p => p.registrado_por === user?.id)).slice(0, 15),
+    [pneusRegistrados, user?.id]);
+    const [lotesExpandidos, setLotesExpandidos] = useState({});
+    const toggleLote = (loteId) => setLotesExpandidos(s => ({ ...s, [loteId]: !s[loteId] }));
+
+    const handleEditarPneu = (p) => {
+        const veiculoId = p.veiculo_id ? `cv:${p.veiculo_id}` : (p.veiculo_caminhao_id ? `vh:${p.veiculo_caminhao_id}` : '');
+        setFormPneu({
+            veiculo_id: veiculoId, configuracao_veiculo: p.configuracao_veiculo || '',
+            posicoes_diagrama: p.posicao_diagrama ? [p.posicao_diagrama] : [],
+            tipo_pneu: p.tipo_pneu || 'novo', marca: p.marca || '', modelo: p.modelo || '', medida: p.medida || '',
+            categoria_bandagem: p.categoria_bandagem || 'mista', motorista_id: p.motorista_id || '',
+            km_atual: p.km_atual ?? '', observacoes: p.observacoes || '',
+        });
+        setEditandoPneuId(p.id);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleCancelarEdicaoPneu = () => { setFormPneu(emptyFormPneu()); setEditandoPneuId(null); };
+
+    const handleExcluirPneu = async (p) => {
+        const ok = await confirmPneu({ title: 'Excluir registro de pneu?', message: `Remove o registro ${p.numero_sequencial || ''} — esta ação não pode ser desfeita.`, confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try {
+            await deletePneu(p.id);
+            showToast('Registro de pneu excluído.', 'success');
+            if (editandoPneuId === p.id) handleCancelarEdicaoPneu();
+            loadDadosPneus();
+        } catch (e) { showToast('Erro ao excluir: ' + e.message, 'error'); }
+    };
+
+    const handleSalvarPneu = async () => {
+        if (!formPneu.veiculo_id) { showToast('Selecione a placa do veículo', 'error'); return; }
+        if (!formPneu.configuracao_veiculo) { showToast('Selecione a configuração do veículo', 'error'); return; }
+        if (formPneu.posicoes_diagrama.length === 0) { showToast('Marque no diagrama ao menos uma posição do pneu trocado', 'error'); return; }
+        if (!formPneu.marca) { showToast('Selecione a marca do pneu', 'error'); return; }
+        if (!formPneu.medida) { showToast('Selecione a medida do pneu', 'error'); return; }
+        if (formPneu.km_atual === '' || formPneu.km_atual == null) { showToast('Informe o km atual do veículo', 'error'); return; }
+        setSavingPneu(true);
+        try {
+            const [tipo, id] = formPneu.veiculo_id.split(':');
+            const caminhaoSel = tipo === 'vh' ? caminhoes.find(c => String(c.id) === id) : null;
+            const cfgDiagrama = getConfiguracao(formPneu.configuracao_veiculo);
+            const dadosComuns = {
+                marca: formPneu.marca, modelo: formPneu.modelo || null, medida: formPneu.medida,
+                categoria_bandagem: formPneu.categoria_bandagem || null,
+                veiculo_id: tipo === 'cv' ? id : null,
+                veiculo_caminhao_id: tipo === 'vh' ? id : null,
+                veiculo_caminhao_placa: caminhaoSel?.placa || null,
+                veiculo_caminhao_modelo: caminhaoSel?.modelo || null,
+                motorista_id: formPneu.motorista_id || null,
+                configuracao_veiculo: formPneu.configuracao_veiculo,
+                tipo_pneu: formPneu.tipo_pneu,
+                km_atual: Number(formPneu.km_atual),
+                observacoes: formPneu.observacoes || null,
+            };
+            if (editandoPneuId) {
+                // Edição: sempre um único registro — a posição é a primeira (e única) marcada.
+                const posId = formPneu.posicoes_diagrama[0];
+                await updatePneu(editandoPneuId, {
+                    ...dadosComuns,
+                    posicao_diagrama: posId,
+                    eixo_trocado: cfgDiagrama?.posicoes.find(p => p.id === posId)?.label || null,
+                });
+                showToast('Registro de pneu atualizado!', 'success');
+            } else {
+                // Cadastro novo: uma posição = um registro de pneu; pode marcar várias
+                // posições no diagrama (ex.: todos os pneus do veículo) e registrar
+                // todas de uma vez, cada uma com seu próprio número sequencial. Quando
+                // é mais de uma posição, todas ganham o mesmo lote_id, pra aparecerem
+                // agrupadas (um único item expansível) na lista de registros.
+                const loteId = formPneu.posicoes_diagrama.length > 1
+                    ? (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+                    : null;
+                const numerosGerados = [];
+                for (const posId of formPneu.posicoes_diagrama) {
+                    const numeroSequencial = await gerarNumeroSequencialPneu(formPneu.tipo_pneu);
+                    await createPneu({
+                        ...dadosComuns,
+                        posicao_diagrama: posId,
+                        eixo_trocado: cfgDiagrama?.posicoes.find(p => p.id === posId)?.label || null,
+                        numero_sequencial: numeroSequencial,
+                        registrado_por: user.id,
+                        data_instalacao: new Date().toISOString().slice(0, 10),
+                        status: 'em_uso',
+                        lote_id: loteId,
+                    });
+                    numerosGerados.push(numeroSequencial);
+                }
+                showToast(numerosGerados.length > 1
+                    ? `${numerosGerados.length} pneus registrados! (${numerosGerados.join(', ')})`
+                    : `Pneu ${numerosGerados[0]} registrado!`, 'success');
+            }
+            handleCancelarEdicaoPneu();
+            loadDadosPneus();
+        } catch (e) { showToast('Erro ao salvar: ' + e.message, 'error'); }
+        finally { setSavingPneu(false); }
+    };
 
     const load = useCallback(async () => {
         if (!user?.id) return;
@@ -198,6 +403,25 @@ export default function MecanicoPage() {
                         </button>
                     </div>
 
+                    {/* Abas */}
+                    <div className="flex gap-1.5 mb-4 p-1 rounded-xl bg-gray-100 w-fit">
+                        {[
+                            { id: 'os', label: 'Ordens de Serviço', icon: 'Wrench' },
+                            { id: 'pneus', label: 'Pneus', icon: 'CircleDot' },
+                        ].map(t => (
+                            <button key={t.id} onClick={() => setPageTab(t.id)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                                style={pageTab === t.id
+                                    ? { backgroundColor: '#fff', color: 'var(--color-primary)', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }
+                                    : { color: 'var(--color-muted-foreground)' }}>
+                                <Icon name={t.icon} size={14} color={pageTab === t.id ? 'var(--color-primary)' : 'var(--color-muted-foreground)'} />
+                                {t.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {pageTab === 'os' && (
+                    <>
                     {/* KPIs */}
                     <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4 sm:mb-5">
                         {[
@@ -387,6 +611,191 @@ export default function MecanicoPage() {
                                 );
                             })}
                         </div>
+                    )}
+                    </>
+                    )}
+
+                    {pageTab === 'pneus' && (
+                        <>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {/* Formulário de registro */}
+                            <div className="bg-white rounded-xl border p-4 sm:p-5 space-y-4" style={{ borderColor: 'var(--color-border)' }}>
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <Icon name={editandoPneuId ? 'Pencil' : 'CircleDot'} size={16} color="var(--color-primary)" />
+                                        <h2 className="font-heading font-bold text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                                            {editandoPneuId ? 'Editar Registro de Pneu' : 'Registrar Troca de Pneu'}
+                                        </h2>
+                                    </div>
+                                    {editandoPneuId && (
+                                        <button onClick={handleCancelarEdicaoPneu} className="text-xs font-medium px-2 py-1 rounded-lg border hover:bg-gray-50"
+                                            style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                            Cancelar edição
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Placa do veículo <span className="text-red-500">*</span></label>
+                                    <SearchableSelect
+                                        value={formPneu.veiculo_id}
+                                        onChange={v => setFormPneu(f => ({ ...f, veiculo_id: v }))}
+                                        options={veiculoOptionsPneu}
+                                        placeholder="Selecione a placa..." emptyLabel="Nenhum veículo encontrado" />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Motorista que realizou/solicitou a troca</label>
+                                    <SearchableSelect
+                                        value={formPneu.motorista_id}
+                                        onChange={v => setFormPneu(f => ({ ...f, motorista_id: v }))}
+                                        options={motoristasPneu.map(m => ({ value: m.id, label: m.name }))}
+                                        placeholder="Selecione (opcional)..." emptyLabel="Nenhum motorista encontrado" />
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Km atual do veículo <span className="text-red-500">*</span></label>
+                                        <input type="number" inputMode="decimal" min="0" value={formPneu.km_atual}
+                                            onChange={e => setFormPneu(f => ({ ...f, km_atual: e.target.value }))}
+                                            className={inputCls} style={inputStyle} placeholder="Ex: 245000" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Tipo do pneu usado <span className="text-red-500">*</span></label>
+                                        <div className="flex gap-1.5">
+                                            {[{ v: 'novo', l: 'Novo', c: '#059669' }, { v: 'recapado', l: 'Recapado', c: '#B45309' }].map(op => (
+                                                <button key={op.v} type="button" onClick={() => setFormPneu(f => ({ ...f, tipo_pneu: op.v }))}
+                                                    className="flex-1 px-2 py-2 rounded-lg border text-xs font-semibold transition-colors"
+                                                    style={formPneu.tipo_pneu === op.v
+                                                        ? { backgroundColor: `${op.c}1A`, borderColor: op.c, color: op.c }
+                                                        : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                                    {op.l}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Marca <span className="text-red-500">*</span></label>
+                                        <PrettySelect value={formPneu.marca} onChange={e => setFormPneu(f => ({ ...f, marca: e.target.value }))} className={inputCls} style={inputStyle}>
+                                            <option value="">Selecione...</option>
+                                            {catalogoPneus.marca.map(m => <option key={m} value={m}>{m}</option>)}
+                                        </PrettySelect>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Medida <span className="text-red-500">*</span></label>
+                                        <PrettySelect value={formPneu.medida} onChange={e => setFormPneu(f => ({ ...f, medida: e.target.value }))} className={inputCls} style={inputStyle}>
+                                            <option value="">Selecione...</option>
+                                            {catalogoPneus.medida.map(m => <option key={m} value={m}>{m}</option>)}
+                                        </PrettySelect>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Bandagem</label>
+                                        <PrettySelect value={formPneu.categoria_bandagem} onChange={e => setFormPneu(f => ({ ...f, categoria_bandagem: e.target.value }))} className={inputCls} style={inputStyle}>
+                                            {BANDAGEM_OPTIONS.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+                                        </PrettySelect>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Configuração do veículo (nº de eixos) <span className="text-red-500">*</span></label>
+                                    <PrettySelect value={formPneu.configuracao_veiculo}
+                                        onChange={e => setFormPneu(f => ({ ...f, configuracao_veiculo: e.target.value, posicoes_diagrama: [] }))}
+                                        className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione...</option>
+                                        {CONFIGURACOES_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                                    </PrettySelect>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+                                        Posição(ões) do pneu trocado <span className="text-red-500">*</span>
+                                        {!editandoPneuId && (
+                                            <span className="ml-1 font-normal" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                — marque quantas trocou de uma vez
+                                            </span>
+                                        )}
+                                    </label>
+                                    <DiagramaPneuVeiculo
+                                        configuracao={formPneu.configuracao_veiculo}
+                                        value={formPneu.posicoes_diagrama}
+                                        onChange={ids => setFormPneu(f => ({ ...f, posicoes_diagrama: ids }))}
+                                        ocupadas={posicoesOcupadas}
+                                        multi={!editandoPneuId}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Observações</label>
+                                    <textarea value={formPneu.observacoes} onChange={e => setFormPneu(f => ({ ...f, observacoes: e.target.value }))}
+                                        className={inputCls} style={inputStyle} rows={2} placeholder="Detalhes adicionais (opcional)" />
+                                </div>
+
+                                <button onClick={handleSalvarPneu} disabled={savingPneu}
+                                    className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
+                                    style={{ backgroundColor: editandoPneuId ? '#1D4ED8' : '#059669' }}>
+                                    <Icon name="Check" size={15} color="#fff" />
+                                    {savingPneu
+                                        ? 'Salvando...'
+                                        : editandoPneuId
+                                            ? 'Salvar Alterações'
+                                            : formPneu.posicoes_diagrama.length > 1
+                                                ? `Registrar ${formPneu.posicoes_diagrama.length} Trocas de Pneu`
+                                                : 'Registrar Troca de Pneu'}
+                                </button>
+                            </div>
+
+                            {/* Últimos registros feitos por este mecânico */}
+                            <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                                <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--color-border)' }}>
+                                    <h2 className="font-heading font-bold text-sm" style={{ color: 'var(--color-text-primary)' }}>Meus Últimos Registros</h2>
+                                    {loadingPneus && <Icon name="RefreshCw" size={13} color="var(--color-muted-foreground)" className="animate-spin" />}
+                                </div>
+                                {meusPneusAgrupados.length === 0 ? (
+                                    <div className="py-10 flex flex-col items-center justify-center gap-2 text-slate-400">
+                                        <Icon name="CircleDot" size={28} color="#CBD5E1" />
+                                        <p className="text-xs">Nenhum pneu registrado ainda</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
+                                        {meusPneusAgrupados.map(item => item.grupo ? (
+                                            <div key={item.lote_id}>
+                                                <button type="button" onClick={() => toggleLote(item.lote_id)}
+                                                    className="w-full px-4 py-3 flex items-start gap-3 hover:bg-slate-50 text-left">
+                                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#DBEAFE' }}>
+                                                        <Icon name="Layers" size={14} color="#1D4ED8" />
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                                            {item.itens.length} pneus trocados · {item.itens[0].veiculo?.placa || item.itens[0].veiculo_caminhao_placa || 'Sem placa'}
+                                                        </p>
+                                                        <p className="text-xs truncate" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                            {item.itens[0].marca} {item.itens[0].medida} · {new Date(item.itens[0].data_instalacao + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                                        </p>
+                                                    </div>
+                                                    <Icon name={lotesExpandidos[item.lote_id] ? 'ChevronUp' : 'ChevronDown'} size={16} color="var(--color-muted-foreground)" className="flex-shrink-0 mt-1" />
+                                                </button>
+                                                {lotesExpandidos[item.lote_id] && (
+                                                    <div className="divide-y bg-slate-50/60" style={{ borderColor: 'var(--color-border)' }}>
+                                                        {item.itens.map(p => (
+                                                            <RegistroPneuRow key={p.id} p={p} editando={editandoPneuId === p.id}
+                                                                onEditar={handleEditarPneu} onExcluir={handleExcluirPneu} indent />
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <RegistroPneuRow key={item.pneu.id} p={item.pneu} editando={editandoPneuId === item.pneu.id}
+                                                onEditar={handleEditarPneu} onExcluir={handleExcluirPneu} />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        {ConfirmDialogPneu}
+                        </>
                     )}
                 </div>
             </main>

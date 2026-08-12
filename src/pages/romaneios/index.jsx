@@ -41,6 +41,9 @@ export default function Romaneios() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState('Todos');
+    const [filtroMes, setFiltroMes] = useState('');
+    const [usarPeriodo, setUsarPeriodo] = useState(false);
+    const [periodoCustom, setPeriodoCustom] = useState({ inicio: '', fim: '' });
     const [formModal, setFormModal] = useState({ open: false, romaneio: null });
     const [detailModal, setDetailModal] = useState({ open: false, romaneio: null });
     const { toast, showToast } = useToast();
@@ -97,9 +100,20 @@ export default function Romaneios() {
             const matchSearch = !q || r.numero?.toLowerCase().includes(q) || r.motorista?.toLowerCase().includes(q) || r.destino?.toLowerCase().includes(q) || r.placa?.toLowerCase().includes(q);
             // Comparação case-insensitive para garantir que "Cancelado" == "cancelado"
             const matchStatus = filterStatus === 'Todos' || (r.status || '').toLowerCase() === filterStatus.toLowerCase();
-            return matchSearch && matchStatus;
+            let matchData = true;
+            const dataRef = r.saida ? String(r.saida).slice(0, 10) : null;
+            if (usarPeriodo && (periodoCustom.inicio || periodoCustom.fim)) {
+                if (!dataRef) matchData = false;
+                else {
+                    if (periodoCustom.inicio && dataRef < periodoCustom.inicio) matchData = false;
+                    if (periodoCustom.fim && dataRef > periodoCustom.fim) matchData = false;
+                }
+            } else if (filtroMes) {
+                matchData = !!dataRef && dataRef.slice(0, 7) === filtroMes;
+            }
+            return matchSearch && matchStatus && matchData;
         });
-    }, [romaneios, search, filterStatus]);
+    }, [romaneios, search, filterStatus, filtroMes, usarPeriodo, periodoCustom]);
 
     const handleSave = async (payload, itens) => {
         try {
@@ -288,6 +302,38 @@ export default function Romaneios() {
                                     }
                                 >{s}</button>
                             ))}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <input type="month" value={filtroMes}
+                                onChange={e => { setFiltroMes(e.target.value); setUsarPeriodo(false); }}
+                                className="px-3 py-2 rounded-lg border text-sm bg-white" style={{ borderColor: 'var(--color-border)' }}
+                                title="Filtrar por mês" />
+                            <button type="button" onClick={() => setUsarPeriodo(v => !v)}
+                                className="px-2.5 py-2 rounded-lg text-xs font-medium border transition-colors whitespace-nowrap"
+                                style={usarPeriodo
+                                    ? { backgroundColor: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE' }
+                                    : { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                {usarPeriodo ? '✓ Período ativo' : 'Usar período'}
+                            </button>
+                            {usarPeriodo && (
+                                <>
+                                    <input type="date" value={periodoCustom.inicio}
+                                        onChange={e => setPeriodoCustom(p => ({ ...p, inicio: e.target.value }))}
+                                        className="px-2.5 py-2 rounded-lg border text-sm bg-white" style={{ borderColor: 'var(--color-border)' }}
+                                        title="Data inicial" />
+                                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>até</span>
+                                    <input type="date" value={periodoCustom.fim}
+                                        onChange={e => setPeriodoCustom(p => ({ ...p, fim: e.target.value }))}
+                                        className="px-2.5 py-2 rounded-lg border text-sm bg-white" style={{ borderColor: 'var(--color-border)' }}
+                                        title="Data final" />
+                                </>
+                            )}
+                            {(filtroMes || usarPeriodo) && (
+                                <button onClick={() => { setFiltroMes(''); setUsarPeriodo(false); setPeriodoCustom({ inicio: '', fim: '' }); }}
+                                    className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
+                                    title="Limpar data">✕ Data</button>
+                            )}
                         </div>
                     </div>
 
@@ -869,7 +915,7 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
     const isEdit = !!rascunho;
 
     const EMPTY_FORM    = { motorista: '', motorista_id: '', placa: '', vehicle_id: '', destino: '', saida: '', observacoes: '' };
-    const EMPTY_PEDIDO  = () => ({ numero_pedido: '', empresa: 'Comercial Araguaia', valor_pedido: '', categoria_frete: 'Ferragens', categorias_extra: [], cidade_destino: '', itens: [] });
+    const EMPTY_PEDIDO  = () => ({ numero_pedido: '', empresa: 'Comercial Araguaia', valor_pedido: '', categoria_frete: 'Ferragens', categorias_extra: [], cidade_destino: '', nome_cliente: '', nome_vendedor: '', itens: [] });
     const EMPTY_ITEM    = () => ({ material_id: '', quantidade: '1', peso_unit: '', peso_total: '', is_telha_zinco: false, comprimento_telha: '', metros_totais: '' });
 
     const [form, setForm]       = useState(EMPTY_FORM);
@@ -895,6 +941,7 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                 valor_pedido: String(p.valor_pedido || ''), categoria_frete: p.categoria_frete || 'Ferragens',
                 categorias_extra: Array.isArray(p.categorias_extra) ? p.categorias_extra : [],
                 cidade_destino: p.cidade_destino || '',
+                nome_cliente: p.nome_cliente || '', nome_vendedor: p.nome_vendedor || '',
                 itens: (rascunho.romaneio_itens || []).filter(i => i.pedido_id === p.id).map(i => ({
                     material_id: i.material_id || '', quantidade: String(i.quantidade || 1),
                     peso_unit: i.materials?.peso ? String(i.materials.peso) : '',
@@ -1136,6 +1183,8 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                     categoria_frete: p.categoria_frete || 'Outros',
                     categorias_extra: (p.categorias_extra || []).filter(e => Number(e.valor) > 0).map(e => ({ categoria: e.categoria, valor: Number(e.valor) })),
                     empresa:         p.empresa || '',
+                    nome_cliente:    (p.nome_cliente || '').trim(),
+                    nome_vendedor:   (p.nome_vendedor || '').trim(),
                     percentual_frete: (FRETE_CATEGORIAS || []).find(f => f.categoria === p.categoria_frete)?.percentual || 0,
                     frete_calculado:  calcularFretePedidoMulti(p).total,
                 })),
@@ -1281,6 +1330,7 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                                                     Pedido #{pIdx + 1}
                                                 </span>
                                                 {ped.numero_pedido && <span className="text-xs font-mono font-semibold" style={{ color: 'var(--color-primary)' }}>#{ped.numero_pedido}</span>}
+                                                {!aberto && ped.nome_cliente && <span className="text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>{ped.nome_cliente}</span>}
                                                 {!aberto && ped.empresa && <span className="text-xs truncate" style={{ color: 'var(--color-muted-foreground)' }}>{ped.empresa}</span>}
                                                 {!aberto && ped.itens?.length > 0 && <span className="text-xs flex-shrink-0" style={{ color: 'var(--color-muted-foreground)' }}>· {ped.itens.length} item(s)</span>}
                                                 {frete > 0 && <span className="text-xs font-semibold flex-shrink-0" style={{ color: '#059669' }}>Frete: {brl(frete)} ({temExtras ? `${(freteMulti.percentualEfetivo*100).toFixed(1)}% médio` : `${(pct * 100).toFixed(0)}%`})</span>}
@@ -1319,6 +1369,14 @@ function RascunhoFormModal({ rascunho, vehicles, materials, motoristasComId, onC
                                                 <div>
                                                     <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Cidade Destino do Pedido</label>
                                                     <input value={ped.cidade_destino} onChange={e => updPedido(pIdx, { cidade_destino: e.target.value })} className={inputCls} style={inputStyle} placeholder={form.destino || 'Cidade'} />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Cliente</label>
+                                                    <input value={ped.nome_cliente} onChange={e => updPedido(pIdx, { nome_cliente: e.target.value })} className={inputCls} style={inputStyle} placeholder="Nome do cliente" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>Vendedor</label>
+                                                    <input value={ped.nome_vendedor} onChange={e => updPedido(pIdx, { nome_vendedor: e.target.value })} className={inputCls} style={inputStyle} placeholder="Nome do vendedor" />
                                                 </div>
                                                 <div className="flex items-end">
                                                     <div className="w-full p-2.5 rounded-lg border" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>

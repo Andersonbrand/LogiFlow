@@ -483,6 +483,7 @@ export default function CarreteiroDashboard() {
     const handleCheck = async () => {
         if (salvandoCheck) return;
         if (!formCheck.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
+        if (formCheck.odometro === '' || formCheck.odometro == null) { showToast('Informe o odômetro do veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
         setSalvandoCheck(true);
         try {
@@ -1584,9 +1585,12 @@ export default function CarreteiroDashboard() {
                                                                 {fotos.map((f, i) => <img key={i} src={f} alt="" className="w-12 h-12 rounded-md border object-cover" style={{ borderColor: 'var(--color-border)' }} />)}
                                                             </div>
                                                         )}
-                                                        <div className="flex justify-end mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                                        <div className="flex justify-end gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                                             <button onClick={() => handleEditCheck(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
                                                                 <Icon name="Pencil" size={16} />Editar
+                                                            </button>
+                                                            <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
+                                                                <Icon name="Trash2" size={16} />Excluir
                                                             </button>
                                                         </div>
                                                     </div>
@@ -1769,7 +1773,7 @@ export default function CarreteiroDashboard() {
                                     {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </PrettySelect>
                             </Field>
-                            <Field label="Odômetro (km)">
+                            <Field label="Odômetro (km)" required>
                                 <input type="number" inputMode="decimal" min="0" value={formCheck.odometro}
                                     onChange={e => setFormCheck(f => ({ ...f, odometro: e.target.value }))}
                                     placeholder="Ex: 152340" className={inputCls} style={inputStyle} />
@@ -2336,6 +2340,12 @@ export default function CarreteiroDashboard() {
                                     })),
                                 };
                                 try {
+                                    const okTacografo = await confirm({
+                                        title: 'Confira o disco do tacógrafo',
+                                        message: 'Os horários e KMs registrados aqui devem ser coerentes com as informações do disco do tacógrafo do veículo. Confirma que os dados batem com o tacógrafo?',
+                                        confirmLabel: 'Sim, está coerente', variant: 'info',
+                                    });
+                                    if (!okTacografo) return;
                                     if (editandoPontoId) {
                                         await updatePontoParada(editandoPontoId, payload);
                                         showToast('Registro atualizado!', 'success');

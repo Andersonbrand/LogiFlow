@@ -10,6 +10,9 @@ export const CAPTACAO_CONFIG_DEFAULT = { valorPorSaco: 0 };
 export const CUSTO_CONFIG_KEY = 'custo_produto_operacional_frota';
 export const CUSTO_CONFIG_DEFAULT = { custoMedioProduto: 0, custoOperacional: 0 };
 
+export const HORA_EXTRA_CONFIG_KEY = 'valor_hora_extra_carreteiro';
+export const HORA_EXTRA_CONFIG_DEFAULT = { valorHora: 0 };
+
 export async function fetchSetting(key, fallback = null) {
     const { data, error } = await supabase
         .from('app_settings')
@@ -137,4 +140,35 @@ export function useCustoConfig() {
     }, [load]);
 
     return { custoConfig: config, loadingCustoConfig: loading, reloadCustoConfig: load };
+}
+
+// ── Valor da Hora Extra (motoristas carreteiros) ──────────────────────────────
+// Valor global em R$/hora, editável pelo admin, usado na aba "Horas Extras"
+// (Pontos de Parada) para calcular o valor devido a cada motorista.
+export async function fetchHoraExtraConfig() {
+    const value = await fetchSetting(HORA_EXTRA_CONFIG_KEY, HORA_EXTRA_CONFIG_DEFAULT);
+    return { valorHora: Number(value?.valorHora ?? HORA_EXTRA_CONFIG_DEFAULT.valorHora) };
+}
+
+export async function saveHoraExtraConfig({ valorHora }, userId = null) {
+    return saveSetting(HORA_EXTRA_CONFIG_KEY, { valorHora: Number(valorHora) }, userId);
+}
+
+export function useHoraExtraConfig() {
+    const [config, setConfig] = useState(HORA_EXTRA_CONFIG_DEFAULT);
+    const [loading, setLoading] = useState(true);
+
+    const load = useCallback(async () => {
+        try { setConfig(await fetchHoraExtraConfig()); }
+        catch { setConfig(HORA_EXTRA_CONFIG_DEFAULT); }
+        finally { setLoading(false); }
+    }, []);
+
+    useEffect(() => {
+        load();
+        const unsub = subscribeTabela('app_settings', load);
+        return () => unsub && unsub();
+    }, [load]);
+
+    return { horaExtraConfig: config, loadingHoraExtraConfig: loading, reloadHoraExtraConfig: load };
 }

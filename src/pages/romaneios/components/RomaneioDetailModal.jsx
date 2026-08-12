@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
-import { exportRomaneioModelo1 } from 'utils/excelUtils';
+import { exportRomaneioModelo1, exportListaVendedoresExcel } from 'utils/excelUtils';
 import { getCategoriaConfig, fmtPct } from 'utils/freteConfig';
 import { getTelhaInfo } from 'utils/telhaUtils';
 import { useAuth } from 'utils/AuthContext';
@@ -108,7 +108,7 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
-                        {podeExportar ? (
+                        {podeExportar ? (<>
                             <button
                                 onClick={() => exportRomaneioModelo1(romaneio)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-caption font-medium border hover:bg-green-50 transition-colors"
@@ -117,7 +117,17 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                                 <Icon name="FileSpreadsheet" size={14} color="#059669" />
                                 Exportar Excel
                             </button>
-                        ) : (
+                            {pedidos.length > 0 && (
+                                <button
+                                    onClick={() => exportListaVendedoresExcel(romaneio, pedidos)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-caption font-medium border hover:bg-blue-50 transition-colors"
+                                    style={{ borderColor:'var(--color-border)', color:'#1D4ED8' }}
+                                    title="Exportar lista de pedidos por vendedor (nº do pedido, cliente, vendedor)">
+                                    <Icon name="Users" size={14} color="#1D4ED8" />
+                                    Lista p/ Vendedores
+                                </button>
+                            )}
+                        </>) : (
                             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-caption font-medium border cursor-not-allowed"
                                 style={{ borderColor:'#FDE68A', color:'#B45309', backgroundColor:'#FEF9C3' }}
                                 title="Aguardando aprovação do administrador">
@@ -248,6 +258,9 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                                                                 ` + ${p.categorias_extra.map(e => `${e.categoria} (${brl(e.valor)})`).join(', ')}`}
                                                         </p>
                                                     )}
+                                                    {!aberto && p.nome_cliente && (
+                                                        <p className="text-xs font-caption truncate" style={{ color: cfg.cor, opacity:.7 }}>{p.nome_cliente}</p>
+                                                    )}
                                                 </div>
                                             </div>
                                             <div className="text-right flex-shrink-0">
@@ -256,6 +269,20 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                                             </div>
                                         </div>
                                         {aberto && (<>
+                                        {(p.nome_cliente || p.nome_vendedor) && (
+                                            <div className="px-4 pt-3 flex flex-wrap gap-x-5 gap-y-1 border-t" style={{ borderColor: cfg.cor + '40' }}>
+                                                {p.nome_cliente && (
+                                                    <span className="text-xs font-caption" style={{ color:'var(--color-text-secondary)' }}>
+                                                        <span style={{ color:'var(--color-muted-foreground)' }}>Cliente: </span>{p.nome_cliente}
+                                                    </span>
+                                                )}
+                                                {p.nome_vendedor && (
+                                                    <span className="text-xs font-caption" style={{ color:'var(--color-text-secondary)' }}>
+                                                        <span style={{ color:'var(--color-muted-foreground)' }}>Vendedor: </span>{p.nome_vendedor}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
                                         <div className="px-4 py-3 flex items-center justify-between border-t" style={{ borderColor: cfg.cor + '40' }}>
                                             <span className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
                                                 Frete calculado: {fmtPct(p.percentual_frete)} × {brl(p.valor_pedido)}

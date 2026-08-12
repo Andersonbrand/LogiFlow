@@ -113,6 +113,19 @@ export async function fetchDespesasAdmPneus() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Numeração sequencial (novo/recapado) — usada no diagrama do mecânico
+// ─────────────────────────────────────────────────────────────────────────────
+// Pede ao banco o próximo número daquele tipo (contador atômico, seguro
+// mesmo se dois mecânicos cadastrarem ao mesmo tempo) e formata como
+// N-0001 (novo) ou R-0001 (recapado).
+export async function gerarNumeroSequencialPneu(tipoPneu) {
+    const { data, error } = await supabase.rpc('proximo_numero_pneu', { p_tipo: tipoPneu });
+    if (error) throw error;
+    const prefixo = tipoPneu === 'recapado' ? 'R' : 'N';
+    return `${prefixo}-${String(data).padStart(4, '0')}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PNEUS — cada unidade instalada/em uso/substituída
 // ─────────────────────────────────────────────────────────────────────────────
 export async function fetchPneus(filters = {}) {
@@ -185,4 +198,26 @@ export function kmRodado(pneu) {
     if (pneu.km_final == null || pneu.km_atual == null) return null;
     const km = Number(pneu.km_final) - Number(pneu.km_atual);
     return km >= 0 ? km : null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agrupamento por lote (troca de vários pneus registrada de uma vez) — cada
+// posição continua sendo seu próprio registro em `pneus` (numeração e KM
+// individuais), mas os que compartilham o mesmo `lote_id` são apresentados
+// juntos, como um único item expansível, nas telas do mecânico e do admin.
+// Mantém a ordem original da lista (já vem ordenada por data no fetchPneus).
+export function agruparPneusPorLote(pneus) {
+    const grupos = new Map();
+    const ordem = [];
+    (pneus || []).forEach(p => {
+        const chave = p.lote_id || `__individual_${p.id}`;
+        if (!grupos.has(chave)) { grupos.set(chave, []); ordem.push(chave); }
+        grupos.get(chave).push(p);
+    });
+    return ordem.map(chave => {
+        const itens = grupos.get(chave);
+        return itens.length > 1
+            ? { grupo: true, lote_id: itens[0].lote_id, itens }
+            : { grupo: false, pneu: itens[0] };
+    });
 }

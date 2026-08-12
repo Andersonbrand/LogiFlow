@@ -10,7 +10,7 @@ import Button from 'components/ui/Button';
 import Icon from 'components/AppIcon';
 import { EditButton, DeleteButton, ActionButtonsGroup } from 'components/ActionButtons';
 import Toast from 'components/ui/Toast';
-import { useBonusConfig, useCaptacaoConfig } from 'utils/settingsService';
+import { useBonusConfig, useCaptacaoConfig, useHoraExtraConfig, saveHoraExtraConfig } from 'utils/settingsService';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import { useConfirm } from 'components/ui/ConfirmDialog';
@@ -64,12 +64,12 @@ import {
 } from 'utils/fornecedoresService';
 import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf, garantirFornecedorCadastrado, EMPRESAS_LOGIFLOW } from 'utils/parcelasGenerator';
 import * as XLSX from 'xlsx';
-import { exportDiariaModelo, exportDiariasRomaneiosModelo, printDiaria, printOrdemServico, printChecklist } from 'utils/excelUtils';
+import { exportDiariaModelo, exportDiariasRomaneiosModelo, printDiaria, printOrdemServico, printChecklist, exportPontosParadaExcel, exportDesempenhoMotoristasExcel, exportHorasExtrasExcel } from 'utils/excelUtils';
 import { fetchCaminhoesPlacas } from 'utils/vehicleService';
 import PeriodRangeFilter, { usePeriodRangeFilter } from 'components/ui/PeriodRangeFilter';
 import { updateUserProfile } from 'utils/userService';
 import { fetchDadosMargemFrete, calcularAbatimentoCustosFrota } from 'utils/custosFrotaService';
-import { agruparDesempenhoPorMotorista, calcularAlertasJornada, LIMITE_HORAS_DIA, LIMITE_HORAS_SEMANA } from 'utils/desempenhoMotoristaService';
+import { agruparDesempenhoPorMotorista, calcularAlertasJornada, calcularHorasExtras, LIMITE_HORAS_DIA, LIMITE_HORAS_SEMANA, ALMOCO_HORAS } from 'utils/desempenhoMotoristaService';
 import { somarDespesasPorVencimento, agruparDespesasPorCategoriaVencimento } from 'utils/despesasParcelasUtils';
 import PrettySelect from 'components/ui/PrettySelect';
 
@@ -1266,6 +1266,7 @@ function TabChecklist({ isAdmin, profile }) {
 
     const handleSubmit = async () => {
         if (!form.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
+        if (form.odometro === '' || form.odometro == null) { showToast('Informe o odômetro do veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
         try {
             await createChecklist({
@@ -1478,7 +1479,7 @@ function TabChecklist({ isAdmin, profile }) {
                                 {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                             </PrettySelect>
                         </Field>
-                        <Field label="Odômetro (km)">
+                        <Field label="Odômetro (km)" required>
                             <input type="number" inputMode="decimal" min="0" value={form.odometro}
                                 onChange={e => setForm(f => ({ ...f, odometro: e.target.value }))}
                                 placeholder="Ex: 152340" className={inputCls} style={inputStyle} />
@@ -7551,6 +7552,7 @@ function TabPontosParada({ isAdmin }) {
     }));
     const desempenhoPorMotorista = agruparDesempenhoPorMotorista(pontosParaDesempenho, abastecimentosFiltrados);
     const { alertasDiarios, alertasSemanais } = calcularAlertasJornada(pontosParaDesempenho);
+    const horasExtrasData = calcularHorasExtras(pontosParaDesempenho);
 
     const handleDelete = async (id) => {
         const ok = await confirm({ title: 'Excluir ponto de parada?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
@@ -7609,6 +7611,7 @@ function TabPontosParada({ isAdmin }) {
                 {[
                     { id: 'registros', label: 'Registros', icon: 'Navigation2' },
                     { id: 'desempenho', label: 'Desempenho', icon: 'Gauge' },
+                    { id: 'horas_extras', label: 'Horas Extras', icon: 'Clock' },
                 ].map(st => (
                     <button key={st.id} onClick={() => setSubTab(st.id)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors"
@@ -7617,21 +7620,24 @@ function TabPontosParada({ isAdmin }) {
                             : { color: 'var(--color-muted-foreground)' }}>
                         <Icon name={st.icon} size={14} color={subTab === st.id ? 'var(--color-primary)' : 'var(--color-muted-foreground)'} />
                         {st.label}
-                        {st.id === 'desempenho' && (alertasDiarios.length + alertasSemanais.length) > 0 && (
-                            <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: '#FEE2E2', color: '#B91C1C' }}>
-                                {alertasDiarios.length + alertasSemanais.length}
+                        {st.id === 'horas_extras' && horasExtrasData.porMotorista.length > 0 && (
+                            <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: '#FEF3C7', color: '#B45309' }}>
+                                {horasExtrasData.porMotorista.length}
                             </span>
                         )}
                     </button>
                 ))}
             </div>
 
-            {subTab === 'desempenho' ? (
+            {subTab === 'horas_extras' ? (
+                <PainelHorasExtras dados={horasExtrasData} loading={loading} />
+            ) : subTab === 'desempenho' ? (
                 <PainelDesempenhoMotoristas
                     dados={desempenhoPorMotorista}
                     alertasDiarios={alertasDiarios}
                     alertasSemanais={alertasSemanais}
                     loading={loading}
+                    onExport={() => exportDesempenhoMotoristasExcel(desempenhoPorMotorista)}
                 />
             ) : (
             <>
@@ -7655,7 +7661,13 @@ function TabPontosParada({ isAdmin }) {
                     </button>
                 )}
                 <SearchInput value={pesquisa} onChange={setPesquisa} placeholder="Local, tipo, placa, motorista..." width="220px" />
-                <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors ml-auto" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
+                <button onClick={() => exportPontosParadaExcel(pontosFiltrados, motoristas)}
+                    disabled={!pontosFiltrados.length}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 ml-auto"
+                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                    <Icon name="Download" size={13} /> Exportar
+                </button>
+                <button onClick={load} className="p-2 rounded-lg border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }} title="Atualizar">
                     <Icon name="RefreshCw" size={14} color="var(--color-muted-foreground)" />
                 </button>
             </div>
@@ -7934,7 +7946,7 @@ function TabPontosParada({ isAdmin }) {
 // ─── Sub-aba: Desempenho de Motoristas (KM, horas, consumo médio, jornada) ───
 // Usa só dados que já existem em Pontos de Parada + Abastecimentos — não
 // cria nenhuma tabela nova nem altera as telas do motorista.
-function PainelDesempenhoMotoristas({ dados, alertasDiarios, alertasSemanais, loading }) {
+function PainelDesempenhoMotoristas({ dados, alertasDiarios, alertasSemanais, loading, onExport }) {
     const BRL = v => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
     const fmtHoras = h => `${(Number(h) || 0).toFixed(1).replace('.', ',')}h`;
     const fmtKm = km => `${Math.round(Number(km) || 0).toLocaleString('pt-BR')} km`;
@@ -7961,40 +7973,15 @@ function PainelDesempenhoMotoristas({ dados, alertasDiarios, alertasSemanais, lo
         );
     }
 
-    const totalAlertas = alertasDiarios.length + alertasSemanais.length;
-
     return (
         <div>
-            {/* Alertas de jornada */}
-            {totalAlertas > 0 && (
-                <div className="rounded-xl border p-4 mb-5" style={{ borderColor: '#FECACA', backgroundColor: '#FEF2F2' }}>
-                    <div className="flex items-center gap-2 mb-3">
-                        <Icon name="AlertTriangle" size={16} color="#B91C1C" />
-                        <p className="text-sm font-semibold" style={{ color: '#B91C1C' }}>
-                            Atenção à jornada de trabalho — limite de {LIMITE_HORAS_DIA}h/dia e {LIMITE_HORAS_SEMANA}h/semana
-                        </p>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                        {alertasSemanais.map((a, i) => (
-                            <div key={`sem-${i}`} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-white" style={{ border: '1px solid #FECACA' }}>
-                                <span style={{ color: 'var(--color-text-primary)' }}>
-                                    <strong>{a.nome}</strong> — semana de {new Date(a.semana + 'T00:00:00').toLocaleDateString('pt-BR')}
-                                </span>
-                                <span className="font-semibold" style={{ color: '#B91C1C' }}>{fmtHoras(a.horas)} na semana (limite {a.limite}h)</span>
-                            </div>
-                        ))}
-                        {alertasDiarios.map((a, i) => (
-                            <div key={`dia-${i}`} className="flex items-center justify-between text-xs px-3 py-2 rounded-lg bg-white" style={{ border: '1px solid #FED7AA' }}>
-                                <span style={{ color: 'var(--color-text-primary)' }}>
-                                    <strong>{a.nome}</strong> — {new Date(a.data + 'T00:00:00').toLocaleDateString('pt-BR')}
-                                </span>
-                                <span className="font-semibold" style={{ color: '#C2410C' }}>{fmtHoras(a.horas)} no dia (limite {a.limite}h)</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
+            <div className="flex justify-end mb-3">
+                <button onClick={onExport} disabled={!dados.length}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                    <Icon name="Download" size={13} /> Exportar
+                </button>
+            </div>
             {/* Ranking por motorista */}
             <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                 <div className="overflow-x-auto">
@@ -8007,7 +7994,7 @@ function PainelDesempenhoMotoristas({ dados, alertasDiarios, alertasSemanais, lo
                                 <th className="px-4 py-3 text-right">Paradas</th>
                                 <th className="px-4 py-3 text-right">Litros (Diesel)</th>
                                 <th className="px-4 py-3 text-right">Gasto Combustível</th>
-                                <th className="px-4 py-3 text-right">Consumo (L/km)</th>
+                                <th className="px-4 py-3 text-right">Consumo (km/L)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -8021,7 +8008,7 @@ function PainelDesempenhoMotoristas({ dados, alertasDiarios, alertasSemanais, lo
                                     <td className="px-4 py-3 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{d.litrosDiesel.toFixed(1)} L</td>
                                     <td className="px-4 py-3 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{BRL(d.gastoTotal)}</td>
                                     <td className="px-4 py-3 text-right font-data font-semibold" style={{ color: d.consumoMedio ? '#059669' : 'var(--color-muted-foreground)' }}>
-                                        {d.consumoMedio ? `${d.consumoMedio.toFixed(4)} L/km` : '—'}
+                                        {d.consumoMedio ? `${d.consumoMedio.toFixed(2)} km/L` : '—'}
                                     </td>
                                 </tr>
                             ))}
@@ -8032,6 +8019,184 @@ function PainelDesempenhoMotoristas({ dados, alertasDiarios, alertasSemanais, lo
                     {dados.length} motorista{dados.length !== 1 ? 's' : ''} · consumo médio calculado sobre litros de diesel (arla não entra, pois não move o veículo)
                 </div>
             </div>
+        </div>
+    );
+}
+
+// ─── Sub-aba: Horas Extras (Pontos de Parada) ────────────────────────────────
+// Usa os mesmos registros de Pontos de Parada já filtrados por motorista e
+// período. Desconta 1h30 de almoço do total de horas do dia e considera
+// hora extra tudo que passar do limite diário (8h) depois desse desconto.
+// O valor da hora extra é global e editável (fica salvo em app_settings).
+function PainelHorasExtras({ dados, loading }) {
+    const { toast: toastHE, showToast: showToastHE } = useToast();
+    const { horaExtraConfig, loadingHoraExtraConfig, reloadHoraExtraConfig } = useHoraExtraConfig();
+    const [editandoValor, setEditandoValor] = useState(false);
+    const [valorHoraInput, setValorHoraInput] = useState('');
+    const [salvandoValor, setSalvandoValor] = useState(false);
+
+    const BRL = v => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const fmtHoras = h => `${(Number(h) || 0).toFixed(2).replace('.', ',')}h`;
+
+    const abrirEdicaoValor = () => { setValorHoraInput(String(horaExtraConfig.valorHora || '')); setEditandoValor(true); };
+    const salvarValorHora = async () => {
+        setSalvandoValor(true);
+        try {
+            await saveHoraExtraConfig({ valorHora: Number(valorHoraInput) || 0 });
+            showToastHE('Valor da hora extra atualizado!', 'success');
+            setEditandoValor(false);
+            reloadHoraExtraConfig();
+        } catch (e) { showToastHE('Erro ao salvar: ' + e.message, 'error'); }
+        finally { setSalvandoValor(false); }
+    };
+
+    if (loading || loadingHoraExtraConfig) {
+        return (
+            <div className="flex justify-center py-16">
+                <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
+            </div>
+        );
+    }
+
+    const valorHora = Number(horaExtraConfig.valorHora) || 0;
+    const totalHorasExtras = dados.porMotorista.reduce((s, m) => s + m.horasExtrasTotal, 0);
+    const totalValor = totalHorasExtras * valorHora;
+
+    return (
+        <div>
+            {toastHE?.show && <Toast message={toastHE.message} type={toastHE.type} />}
+
+            <div className="flex justify-end mb-3">
+                <button onClick={() => exportHorasExtrasExcel(dados, valorHora)}
+                    disabled={!dados.porMotorista.length}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                    <Icon name="Download" size={13} /> Exportar
+                </button>
+            </div>
+
+            {/* Valor da hora extra (editável) */}
+            <div className="rounded-xl border p-4 mb-5 flex flex-wrap items-center justify-between gap-3" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB' }}>
+                <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#FEF3C7' }}>
+                        <Icon name="Clock" size={16} color="#B45309" />
+                    </div>
+                    <div>
+                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                            Valor da hora extra · desconta {ALMOCO_HORAS.toString().replace('.', ',')}h de almoço · limite {LIMITE_HORAS_DIA}h/dia
+                        </p>
+                        {editandoValor ? (
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>R$</span>
+                                <input type="number" step="0.01" min="0" autoFocus value={valorHoraInput}
+                                    onChange={e => setValorHoraInput(e.target.value)}
+                                    className="px-2 py-1 rounded-lg border text-sm w-28" style={{ borderColor: 'var(--color-border)' }} />
+                                <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>/hora</span>
+                            </div>
+                        ) : (
+                            <p className="text-lg font-bold font-data" style={{ color: 'var(--color-text-primary)' }}>{BRL(valorHora)} <span className="text-xs font-normal" style={{ color: 'var(--color-muted-foreground)' }}>/hora</span></p>
+                        )}
+                    </div>
+                </div>
+                {editandoValor ? (
+                    <div className="flex gap-2">
+                        <button onClick={salvarValorHora} disabled={salvandoValor}
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-60" style={{ backgroundColor: '#059669' }}>
+                            {salvandoValor ? 'Salvando...' : 'Salvar'}
+                        </button>
+                        <button onClick={() => setEditandoValor(false)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                            Cancelar
+                        </button>
+                    </div>
+                ) : (
+                    <button onClick={abrirEdicaoValor}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-white transition-colors"
+                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                        <Icon name="Pencil" size={12} /> Editar valor
+                    </button>
+                )}
+            </div>
+
+            {dados.porMotorista.length === 0 ? (
+                <div className="bg-white rounded-xl border p-12 flex flex-col items-center gap-3" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#F0FDF4' }}>
+                        <Icon name="Check" size={28} color="#059669" />
+                    </div>
+                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Nenhuma hora extra no período selecionado</p>
+                    <p className="text-xs text-center" style={{ color: 'var(--color-muted-foreground)' }}>
+                        Considera apenas dias em que, após descontar {ALMOCO_HORAS.toString().replace('.', ',')}h de almoço, o motorista ultrapassou {LIMITE_HORAS_DIA}h trabalhadas.
+                    </p>
+                </div>
+            ) : (
+                <>
+                    {/* Ranking por motorista */}
+                    <div className="rounded-xl border overflow-hidden shadow-sm mb-5" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB', color: 'var(--color-muted-foreground)' }}>
+                                        <th className="px-4 py-3 text-left">Motorista</th>
+                                        <th className="px-4 py-3 text-right">Dias com Hora Extra</th>
+                                        <th className="px-4 py-3 text-right">Total Horas Extras</th>
+                                        <th className="px-4 py-3 text-right">Valor a Pagar</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {dados.porMotorista.map((m, idx) => (
+                                        <tr key={m.motoristaId} className="border-t hover:bg-amber-50/30 transition-colors"
+                                            style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                            <td className="px-4 py-3 font-semibold" style={{ color: 'var(--color-text-primary)' }}>{m.nome}</td>
+                                            <td className="px-4 py-3 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{m.diasComExtra}</td>
+                                            <td className="px-4 py-3 text-right font-data font-semibold" style={{ color: '#B45309' }}>{fmtHoras(m.horasExtrasTotal)}</td>
+                                            <td className="px-4 py-3 text-right font-data font-semibold" style={{ color: '#059669' }}>{BRL(m.horasExtrasTotal * valorHora)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr className="border-t-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB' }}>
+                                        <td className="px-4 py-3 font-bold" style={{ color: 'var(--color-text-primary)' }}>Total</td>
+                                        <td className="px-4 py-3 text-right font-data font-bold">{dados.dias.length}</td>
+                                        <td className="px-4 py-3 text-right font-data font-bold" style={{ color: '#B45309' }}>{fmtHoras(totalHorasExtras)}</td>
+                                        <td className="px-4 py-3 text-right font-data font-bold" style={{ color: '#059669' }}>{BRL(totalValor)}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* Detalhe por dia */}
+                    <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                            <h3 className="font-heading font-bold text-sm" style={{ color: 'var(--color-text-primary)' }}>Detalhe por dia</h3>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB', color: 'var(--color-muted-foreground)' }}>
+                                        <th className="px-4 py-2.5 text-left">Motorista</th>
+                                        <th className="px-4 py-2.5 text-left">Data</th>
+                                        <th className="px-4 py-2.5 text-right">Horas Brutas</th>
+                                        <th className="px-4 py-2.5 text-right">Após Almoço</th>
+                                        <th className="px-4 py-2.5 text-right">Hora Extra</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {dados.dias.map((d, idx) => (
+                                        <tr key={`${d.motoristaId}-${d.data}`} className="border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                            <td className="px-4 py-2.5" style={{ color: 'var(--color-text-primary)' }}>{d.nome}</td>
+                                            <td className="px-4 py-2.5 font-data" style={{ color: 'var(--color-muted-foreground)' }}>{new Date(d.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                                            <td className="px-4 py-2.5 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{fmtHoras(d.horasBrutas)}</td>
+                                            <td className="px-4 py-2.5 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{fmtHoras(d.horasLiquidas)}</td>
+                                            <td className="px-4 py-2.5 text-right font-data font-semibold" style={{ color: '#B45309' }}>{fmtHoras(d.horasExtras)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </>
+            )}
         </div>
     );
 }

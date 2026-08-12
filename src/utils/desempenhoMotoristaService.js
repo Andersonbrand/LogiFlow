@@ -130,9 +130,10 @@ export function agruparDesempenhoPorMotorista(pontos, abastecimentos) {
     return Object.values(porMotorista)
         .map(m => {
             const litrosTotal = m.litrosDiesel; // consumo é calculado sobre diesel (arla não entra, pois não move o veículo)
-            // Litros por Quilômetro (L/km): quantos litros são gastos para rodar 1 km.
-            // Ex.: 2.856,5 L ÷ 2.530 km = 1,1291 L/km
-            const consumoMedio = m.kmTotal > 0 ? litrosTotal / m.kmTotal : null; // L/km
+            // Quilômetros por Litro (km/L): km totais rodados ÷ litros totais abastecidos.
+            // Ex.: 2.530 km ÷ 2.856,5 L = 0,8857 km/L — mesmo padrão usado no resto do
+            // app (media_consumo do veículo, cadastro de frota etc.)
+            const consumoMedio = litrosTotal > 0 ? m.kmTotal / litrosTotal : null; // km/L
             return { ...m, litrosTotal, consumoMedio };
         })
         .sort((a, b) => b.kmTotal - a.kmTotal);
@@ -177,6 +178,65 @@ export function calcularAlertasJornada(pontos, { limiteDiario = LIMITE_HORAS_DIA
         .map(s => ({ ...s, horas: Number(s.horas.toFixed(1)), tipo: 'semanal', limite: limiteSemanal }));
 
     return { alertasDiarios, alertasSemanais };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Horas Extras: aba separada (Pontos de Parada > Horas Extras). Desconta o
+// intervalo de almoço (1h30 por padrão) do total de horas registradas no
+// dia, e considera hora extra tudo que ultrapassar o limite diário (8h)
+// depois desse desconto. Agrupado por motorista + dia, com o total por
+// motorista pronto para multiplicar pelo valor da hora extra configurado.
+// ─────────────────────────────────────────────────────────────────────────
+export const ALMOCO_HORAS = 1.5;
+
+export function calcularHorasExtras(pontos, { limiteDiario = LIMITE_HORAS_DIA, almocoHoras = ALMOCO_HORAS } = {}) {
+    const porDia = {}; // `${motoristaId}|${data}` -> { motoristaId, nome, data, horasBrutas }
+
+    pontos.forEach(p => {
+        const id = p.motorista_id;
+        if (!id || !p.data_saida) return;
+        const nome = p.motorista?.name || 'Sem nome';
+        const { horas } = calcularKmHorasDoPonto(p);
+        if (horas <= 0) return;
+
+        const chave = `${id}|${p.data_saida}`;
+        if (!porDia[chave]) porDia[chave] = { motoristaId: id, nome, data: p.data_saida, horasBrutas: 0 };
+        porDia[chave].horasBrutas += horas;
+    });
+
+    const dias = Object.values(porDia)
+        .map(d => {
+            // Desconta 1h30 de almoço do total bruto do dia antes de comparar com o limite
+            const horasLiquidas = Math.max(0, d.horasBrutas - almocoHoras);
+            const horasExtras = Math.max(0, horasLiquidas - limiteDiario);
+            return {
+                ...d,
+                horasBrutas: Number(d.horasBrutas.toFixed(2)),
+                horasLiquidas: Number(horasLiquidas.toFixed(2)),
+                horasExtras: Number(horasExtras.toFixed(2)),
+            };
+        })
+        .sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : 0));
+
+    const porMotorista = {};
+    dias.forEach(d => {
+        if (!porMotorista[d.motoristaId]) {
+            porMotorista[d.motoristaId] = { motoristaId: d.motoristaId, nome: d.nome, diasComExtra: 0, horasExtrasTotal: 0 };
+        }
+        if (d.horasExtras > 0) {
+            porMotorista[d.motoristaId].diasComExtra += 1;
+            porMotorista[d.motoristaId].horasExtrasTotal += d.horasExtras;
+        }
+    });
+
+    return {
+        dias: dias.filter(d => d.horasExtras > 0),
+        porMotorista: Object.values(porMotorista)
+            .map(m => ({ ...m, horasExtrasTotal: Number(m.horasExtrasTotal.toFixed(2)) }))
+            .filter(m => m.horasExtrasTotal > 0)
+            .sort((a, b) => b.horasExtrasTotal - a.horasExtrasTotal),
+        limiteDiario, almocoHoras,
+    };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
