@@ -46,6 +46,8 @@ export default function Romaneios() {
     const [periodoCustom, setPeriodoCustom] = useState({ inicio: '', fim: '' });
     const [formModal, setFormModal] = useState({ open: false, romaneio: null });
     const [detailModal, setDetailModal] = useState({ open: false, romaneio: null });
+    const [page, setPage] = useState(1);
+    const PAGE_SIZE = 10;
     const { toast, showToast } = useToast();
     const [importModal, setImportModal] = useState(false);
     const { confirm, ConfirmDialog } = useConfirm();
@@ -114,6 +116,19 @@ export default function Romaneios() {
             return matchSearch && matchStatus && matchData;
         });
     }, [romaneios, search, filterStatus, filtroMes, usarPeriodo, periodoCustom]);
+
+    // Volta pra página 1 sempre que busca/filtro muda — evita cair numa
+    // página que não existe mais pro novo resultado filtrado.
+    useEffect(() => { setPage(1); }, [search, filterStatus, filtroMes, usarPeriodo, periodoCustom]);
+
+    // Só exibe (renderiza) 10 romaneios por vez — os demais já estão
+    // carregados em memória, mas ficam fora da tela até o usuário navegar,
+    // reduzindo a quantidade de linhas montadas de uma vez.
+    const totalPaginas = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const paginaSegura = Math.min(page, totalPaginas);
+    const paginado = useMemo(() =>
+        filtered.slice((paginaSegura - 1) * PAGE_SIZE, paginaSegura * PAGE_SIZE),
+    [filtered, paginaSegura]);
 
     const handleSave = async (payload, itens) => {
         try {
@@ -363,7 +378,7 @@ export default function Romaneios() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {filtered.map(r => {
+                                        {paginado.map(r => {
                                             const sc = STATUS_COLORS[r.status] || STATUS_COLORS['Aguardando'];
                                             const isReprovado = r.status_aprovacao === 'reprovado';
                                             const isCancelado = r.status === 'Cancelado';
@@ -501,8 +516,41 @@ export default function Romaneios() {
                                     </tbody>
                                 </table>
                             </div>
-                            <div className="px-4 py-3 border-t text-xs font-caption text-right" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
-                                Exibindo {filtered.length} de {romaneios.length} romaneios
+                            <div className="px-4 py-3 border-t text-xs font-caption" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                {filtered.length > PAGE_SIZE ? (
+                                    <div className="flex items-center justify-between flex-wrap gap-2">
+                                        <p>Página {paginaSegura} de {totalPaginas} · {filtered.length} romaneio{filtered.length !== 1 ? 's' : ''}</p>
+                                        <div className="flex items-center gap-1">
+                                            <button onClick={() => setPage(1)} disabled={paginaSegura === 1}
+                                                className="px-2 py-1 rounded text-xs border disabled:opacity-40 hover:bg-gray-50"
+                                                style={{ borderColor: 'var(--color-border)' }}>«</button>
+                                            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={paginaSegura === 1}
+                                                className="px-3 py-1 rounded text-xs border disabled:opacity-40 hover:bg-gray-50"
+                                                style={{ borderColor: 'var(--color-border)' }}>Anterior</button>
+                                            {Array.from({ length: Math.min(5, totalPaginas) }, (_, i) => {
+                                                const start = Math.max(1, Math.min(paginaSegura - 2, totalPaginas - 4));
+                                                const p = start + i;
+                                                if (p > totalPaginas) return null;
+                                                return (
+                                                    <button key={p} onClick={() => setPage(p)}
+                                                        className="px-3 py-1 rounded text-xs border font-medium"
+                                                        style={p === paginaSegura
+                                                            ? { backgroundColor: 'var(--color-primary)', color: '#fff', borderColor: 'var(--color-primary)' }
+                                                            : { borderColor: 'var(--color-border)' }
+                                                        }>{p}</button>
+                                                );
+                                            })}
+                                            <button onClick={() => setPage(p => Math.min(totalPaginas, p + 1))} disabled={paginaSegura === totalPaginas}
+                                                className="px-3 py-1 rounded text-xs border disabled:opacity-40 hover:bg-gray-50"
+                                                style={{ borderColor: 'var(--color-border)' }}>Próxima</button>
+                                            <button onClick={() => setPage(totalPaginas)} disabled={paginaSegura === totalPaginas}
+                                                className="px-2 py-1 rounded text-xs border disabled:opacity-40 hover:bg-gray-50"
+                                                style={{ borderColor: 'var(--color-border)' }}>»</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="text-right">Exibindo {filtered.length} de {romaneios.length} romaneios</p>
+                                )}
                             </div>
                         </div>
                     )}
