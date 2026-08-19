@@ -7,6 +7,7 @@ import { EditButton, DeleteButton, ActionButtonsGroup } from 'components/ActionB
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
+import { usePagination, PaginationBar } from 'components/ui/Pagination';
 import {
     fetchViagens, fetchCarretasVeiculos, fetchVeiculosProprios,
     fetchAbastecimentos, createAbastecimento, updateAbastecimento, deleteAbastecimento,
@@ -104,10 +105,15 @@ export default function CarreteiroDashboard() {
     const [period, setPeriod]     = useState(30);
     // Período personalizado (usado na aba Bonificações) — quando preenchido,
     // sobrepõe o filtro de "últimos N dias" acima.
-    const [periodoCustom, setPeriodoCustom] = useState(null); // { inicio: 'YYYY-MM-DD', fim: 'YYYY-MM-DD' } | null
+    const [periodoCustom, setPeriodoCustom] = useState(null); // { inicio: 'YYYY-MM-DD', fim: 'YYYY-MM-DD' } | null — filtro CONFIRMADO (aplicado na busca)
+    // Valores digitados/selecionados nos campos de data, ainda não confirmados pelo botão "Buscar viagens".
+    // Fica separado de `periodoCustom` de propósito: só deve disparar busca no banco quando o usuário
+    // escolher as duas datas E clicar em "Buscar viagens" — nunca ao selecionar só a data inicial.
+    const [periodoCustomInput, setPeriodoCustomInput] = useState(null); // { inicio, fim } | null
     const [viagens, setViagens]   = useState([]);
     const [carregamentos, setCarregamentos] = useState([]);
     const [romaneiosPrincipais, setRomaneiosPrincipais] = useState([]);
+    const romaneiosPrincipaisPag = usePagination(romaneiosPrincipais, 10, [romaneiosPrincipais.length, period, periodoCustom]);
     const [bonusExtras, setBonusExtras]     = useState([]);
     const [abast, setAbast]       = useState([]);
     const [checklists, setChecklists] = useState([]);
@@ -769,7 +775,7 @@ export default function CarreteiroDashboard() {
                                                         </span>
                                                     </div>
                                                     <div className="flex flex-col gap-2">
-                                                        {romaneiosPrincipais.map(r => {
+                                                        {romaneiosPrincipaisPag.pageItems.map(r => {
                                                             const nf = r.romaneio_pedidos?.[0]?.numero_pedido || '—';
                                                             const statusColors = {
                                                                 'Aprovado': { bg: '#D1FAE5', text: '#065F46' },
@@ -830,6 +836,8 @@ export default function CarreteiroDashboard() {
                                                             );
                                                         })}
                                                     </div>
+                                                    <PaginationBar page={romaneiosPrincipaisPag.page} setPage={romaneiosPrincipaisPag.setPage} totalPages={romaneiosPrincipaisPag.totalPages}
+                                                        totalItems={romaneiosPrincipaisPag.totalItems} pageSize={romaneiosPrincipaisPag.pageSize} itemLabel="romaneio" itemLabelPlural="romaneios" className="rounded-xl border bg-white mt-2" />
                                                 </div>
                                             )}
 
@@ -1235,8 +1243,8 @@ export default function CarreteiroDashboard() {
                                             <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                 <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                                                     <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Filtrar por período específico</h3>
-                                                    {periodoCustom && (
-                                                        <button onClick={() => setPeriodoCustom(null)}
+                                                    {(periodoCustom || periodoCustomInput) && (
+                                                        <button onClick={() => { setPeriodoCustom(null); setPeriodoCustomInput(null); }}
                                                             className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--color-primary)' }}>
                                                             <Icon name="X" size={12} /> Limpar filtro
                                                         </button>
@@ -1245,17 +1253,18 @@ export default function CarreteiroDashboard() {
                                                 <div className="flex items-end gap-2 flex-wrap">
                                                     <div>
                                                         <label className="block text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>De</label>
-                                                        <input type="date" value={periodoCustom?.inicio || ''}
-                                                            onChange={e => setPeriodoCustom(pc => ({ inicio: e.target.value, fim: pc?.fim || e.target.value }))}
+                                                        <input type="date" value={periodoCustomInput?.inicio || ''}
+                                                            onChange={e => setPeriodoCustomInput(pc => ({ inicio: e.target.value, fim: pc?.fim || '' }))}
                                                             className="h-10 px-3 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }} />
                                                     </div>
                                                     <div>
                                                         <label className="block text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Até</label>
-                                                        <input type="date" value={periodoCustom?.fim || ''}
-                                                            onChange={e => setPeriodoCustom(pc => ({ inicio: pc?.inicio || e.target.value, fim: e.target.value }))}
+                                                        <input type="date" value={periodoCustomInput?.fim || ''}
+                                                            onChange={e => setPeriodoCustomInput(pc => ({ inicio: pc?.inicio || '', fim: e.target.value }))}
                                                             className="h-10 px-3 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }} />
                                                     </div>
-                                                    <Button size="sm" iconName="Search" disabled={!periodoCustom?.inicio || !periodoCustom?.fim} onClick={load}>
+                                                    <Button size="sm" iconName="Search" disabled={!periodoCustomInput?.inicio || !periodoCustomInput?.fim}
+                                                        onClick={() => setPeriodoCustom(periodoCustomInput)}>
                                                         Buscar viagens
                                                     </Button>
                                                 </div>

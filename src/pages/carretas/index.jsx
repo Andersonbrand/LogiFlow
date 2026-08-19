@@ -4,6 +4,7 @@ import TabVolume from './TabVolume';
 import TabFretes from './TabFretes';
 import TabCustos from './TabCustos';
 import TabPneus from './TabPneus';
+import { usePagination, PaginationBar } from 'components/ui/Pagination';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -770,6 +771,10 @@ function TabAbastecimentos({ isAdmin, profile }) {
         );
     }, [abast, pesquisa]);
 
+    // Paginação — mostra 10 por vez, mas totais/exportação continuam
+    // considerando TODOS os registros filtrados (abastFiltrados), não só a página atual.
+    const abastPag = usePagination(abastFiltrados, 10, [pesquisa, filtro.motoristaId, filtro.veiculoId, filtro.mes, filtro.dia]);
+
     // Totais consideram os registros efetivamente filtrados (período, placa,
     // motorista e busca por texto), não apenas o total geral sem filtro.
     const totais = useMemo(() => ({
@@ -967,7 +972,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
                                     <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum abastecimento registrado'}</span>
                                 </div>
                             </td></tr>
-                            : abastFiltrados.map((a, i) => (
+                            : abastPag.pageItems.map((a, i) => (
                                 <tr key={a.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(a.data_abastecimento)}</td>
                                     <td className="px-3 py-3 whitespace-nowrap">{a.motorista?.name || '—'}</td>
@@ -1002,6 +1007,8 @@ function TabAbastecimentos({ isAdmin, profile }) {
                             </tfoot>
                         )}
                     </table>
+                    <PaginationBar page={abastPag.page} setPage={abastPag.setPage} totalPages={abastPag.totalPages}
+                        totalItems={abastPag.totalItems} pageSize={abastPag.pageSize} itemLabel="abastecimento" />
                 </div>
             )}
 
@@ -1236,6 +1243,7 @@ function TabChecklist({ isAdmin, profile }) {
     const [filtroMes, setFiltroMes] = useState(() => {
         try { return sessionStorage.getItem('carretas_checklist_filtroMes') ?? mesAtualChecklist; } catch { return mesAtualChecklist; }
     });
+    const checklistPag = usePagination(checklistsFiltrados, 10, [pesquisa, filtro, filtroMes]);
     const handleSetFiltroMes = (v) => {
         setFiltroMes(v);
         try { sessionStorage.setItem('carretas_checklist_filtroMes', v); } catch {}
@@ -1244,6 +1252,14 @@ function TabChecklist({ isAdmin, profile }) {
     const [modalFoto, setModalFoto] = useState(null); // url para visualizar
     const [checklistItens, setChecklistItens] = useState([]); // itens ativos vindos do banco
     const [modalItens, setModalItens] = useState(false); // gerenciador de itens (admin)
+    const [expandidos, setExpandidos] = useState(() => new Set()); // ids dos checklists com detalhes expandidos
+    const toggleExpandido = (id) => {
+        setExpandidos(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -1357,15 +1373,18 @@ function TabChecklist({ isAdmin, profile }) {
                             <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum checklist encontrado'}</span>
                         </div>
                     )}
-                    {checklistsFiltrados.map(c => {
+                    {checklistPag.pageItems.map(c => {
                         const itens = c.itens || {};
                         const entradas = Object.entries(itens);
                         const ok = contarItensOk(itens);
                         const total = entradas.length || checklistItens.length || CHECKLIST_ITENS.length;
                         const fotos = (c.fotos_urls && c.fotos_urls.length ? c.fotos_urls : (c.foto_url ? [c.foto_url] : []));
+                        const isExpandido = expandidos.has(c.id);
                         return (
                             <div key={c.id} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                                <div className="flex items-start justify-between gap-2 p-4 sm:p-5 pb-3 border-b" style={{ borderColor: '#F1F5F9' }}>
+                                <div className="flex items-start justify-between gap-2 p-4 sm:p-5 pb-3 cursor-pointer select-none"
+                                    style={isExpandido ? { borderBottom: '1px solid #F1F5F9' } : undefined}
+                                    onClick={() => toggleExpandido(c.id)}>
                                     <div className="flex items-center gap-3 min-w-0">
                                         <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm text-white" style={{ backgroundColor: ok === total ? '#059669' : ok >= total * 0.7 ? '#D97706' : '#DC2626' }}>
                                             {(c.motorista?.name || '?').trim().charAt(0).toUpperCase()}
@@ -1379,6 +1398,7 @@ function TabChecklist({ isAdmin, profile }) {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1.5 flex-wrap justify-end flex-shrink-0">
+                                        <span className="text-xs font-semibold mr-0.5" style={{ color: ok === total ? '#059669' : ok >= total * 0.7 ? '#D97706' : '#DC2626' }}>{ok}/{total}</span>
                                         {c.aprovado
                                             ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 whitespace-nowrap"><Icon name="CheckCircle2" size={11} />Aprovado</span>
                                             : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700 whitespace-nowrap"><Icon name="Clock" size={11} />Pendente</span>
@@ -1389,8 +1409,13 @@ function TabChecklist({ isAdmin, profile }) {
                                                 <Icon name="Camera" size={11} />{fotos.length} foto{fotos.length > 1 ? 's' : ''}
                                             </span>
                                         )}
+                                        <button onClick={(e) => { e.stopPropagation(); toggleExpandido(c.id); }} title={isExpandido ? 'Recolher' : 'Expandir'}
+                                            className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-gray-100 transition-colors flex-shrink-0">
+                                            <Icon name={isExpandido ? 'ChevronUp' : 'ChevronDown'} size={16} color="var(--color-muted-foreground)" />
+                                        </button>
                                     </div>
                                 </div>
+                                {isExpandido && (
                                 <div className="p-4 sm:p-5 pt-3">
                                 <div className="mb-3">
                                     <div className="flex items-center justify-between text-xs mb-1">
@@ -1462,9 +1487,12 @@ function TabChecklist({ isAdmin, profile }) {
                                     </div>
                                 )}
                                 </div>
+                                )}
                             </div>
                         );
                     })}
+                    <PaginationBar page={checklistPag.page} setPage={checklistPag.setPage} totalPages={checklistPag.totalPages}
+                        totalItems={checklistPag.totalItems} pageSize={checklistPag.pageSize} itemLabel="checklist" itemLabelPlural="checklists" className="rounded-xl border bg-white" />
                 </div>
             )}
 
@@ -5646,6 +5674,8 @@ function TabOrdensServico({ isAdmin, profile }) {
         );
     }, [ordens, pesquisa, filtroPlacaOS]);
 
+    const ordensPag = usePagination(ordensFiltradas, 10, [pesquisa, filtroPlacaOS]);
+
     const TIPOS_ANEXO_OS = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
     const EXT_ANEXO_OS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.webp', '.heic'];
     const handlePdfChange = async (e) => {
@@ -5798,7 +5828,7 @@ function TabOrdensServico({ isAdmin, profile }) {
                             <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma ordem de serviço'}</span>
                         </div>
                     )}
-                    {ordensFiltradas.map(o => {
+                    {ordensPag.pageItems.map(o => {
                         const sc = STATUS_COLORS_OS[o.status] || STATUS_COLORS_OS['Pendente'];
                         const isRascunho = o.status === 'Rascunho';
                         return (
@@ -5952,6 +5982,8 @@ function TabOrdensServico({ isAdmin, profile }) {
                             </div>
                         );
                     })}
+                    <PaginationBar page={ordensPag.page} setPage={ordensPag.setPage} totalPages={ordensPag.totalPages}
+                        totalItems={ordensPag.totalItems} pageSize={ordensPag.pageSize} itemLabel="ordem de serviço" itemLabelPlural="ordens de serviço" className="rounded-xl border bg-white" />
                 </div>
             )}
 
@@ -7519,12 +7551,17 @@ function TabPontosParada({ isAdmin }) {
             return chaveDataHora(a.data_saida, a.horario_saida).localeCompare(chaveDataHora(b.data_saida, b.horario_saida));
         });
 
+    // Paginação — mesmo padrão já usado em Materiais/Romaneios: só renderiza
+    // 10 registros por vez (os demais continuam carregados em memória, só
+    // fora da tela), evitando que a página fique enorme com muitos registros.
+    const pontosPag = usePagination(pontosFiltrados, 10, [filtroMotorista, filtroMes, pesquisa, periodoPreset, periodo.inicio, periodo.fim]);
+
     // Marca o início de cada bloco de motorista e alterna a cor de fundo por
     // bloco (em vez de por linha), para deixar claro onde termina um motorista
     // e começa o próximo — evita que os registros fiquem "grudados".
     let __grupoAnterior;
     let __grupoIdx = -1;
-    const pontosComGrupo = pontosFiltrados.map(p => {
+    const pontosComGrupo = pontosPag.pageItems.map(p => {
         const chave = p.motorista_id || '—';
         const novoGrupo = chave !== __grupoAnterior;
         if (novoGrupo) __grupoIdx++;
@@ -7799,9 +7836,8 @@ function TabPontosParada({ isAdmin }) {
                             </tbody>
                         </table>
                     </div>
-                    <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
-                        {pontosFiltrados.length} registro{pontosFiltrados.length !== 1 ? 's' : ''}
-                    </div>
+                    <PaginationBar page={pontosPag.page} setPage={pontosPag.setPage} totalPages={pontosPag.totalPages}
+                        totalItems={pontosPag.totalItems} pageSize={pontosPag.pageSize} itemLabel="registro" />
                 </div>
             )}
             </>
@@ -8627,9 +8663,24 @@ const GRUPOS = ['Operação', 'Financeiro', 'Gestão'];
 
 export default function CarretasPage() {
     const { profile, isAdmin } = useAuth();
-    const [tab, setTab]           = useState('viagens');
-    const [drawerOpen, setDrawerOpen] = useState(false);
     const admin = isAdmin();
+    const TAB_STORAGE_KEY = 'carretas_aba_ativa';
+    const [tab, setTabState] = useState(() => {
+        try {
+            const salva = sessionStorage.getItem(TAB_STORAGE_KEY);
+            // só usa a aba salva se ela ainda existir na lista atual de abas
+            // (e, no caso de "duplicatas", só se o usuário for admin)
+            return (salva && TABS.some(t => t.id === salva) && (salva !== 'duplicatas' || admin)) ? salva : 'viagens';
+        } catch { return 'viagens'; }
+    });
+    // Mantém a aba ativa depois de um refresh da página (ex.: pra atualizar
+    // dados) — sem isso, todo F5 dentro do módulo Carretas voltava pra
+    // primeira aba (Viagens), obrigando a navegar de novo até onde estava.
+    const setTab = (id) => {
+        setTabState(id);
+        try { sessionStorage.setItem(TAB_STORAGE_KEY, id); } catch {}
+    };
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const tabAtual = TABS.find(t => t.id === tab);
 
     const SidebarItem = ({ t }) => {

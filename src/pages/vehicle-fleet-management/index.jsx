@@ -167,17 +167,26 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             };
             // Busca romaneios do período com diária (custo_motorista > 0)
             // cruzando por motorista_id OU nome do motorista (campo texto livre).
-            // "Período" aqui é o mês/intervalo da DATA DE SAÍDA do romaneio (quando
-            // preenchida pelo usuário) — só cai para created_at como fallback nos
-            // romaneios antigos em que a saída nunca foi preenchida.
+            // "Período" aqui é o mês/intervalo em que a DIÁRIA FOI LANÇADA
+            // (diaria_criada_em — gravada automaticamente quando custo_motorista
+            // passa de vazio/zero para >0), NÃO a data de saída do romaneio, que
+            // pode nem estar preenchida ainda (ex.: romaneio "Carregando"). Isso
+            // evita que uma diária lançada em agosto caia em julho só porque o
+            // romaneio foi criado no fim de julho e a saída ainda não foi
+            // confirmada. Fallback para saida/created_at cobre apenas romaneios
+            // antigos, de antes dessa coluna existir.
             const dataFimTs = f.dataFim + 'T23:59:59';
             const romaneioRes = await supabase
                 .from('romaneios')
-                .select('id, numero, motorista, motorista_id, placa, destino, status, saida, created_at, custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao, assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at')
+                .select('id, numero, motorista, motorista_id, placa, destino, status, saida, created_at, diaria_criada_em, custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao, assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at')
                 .or(`motorista_id.eq.${motorista.id},motorista.ilike.${motorista.name}`)
                 .gt('custo_motorista', 0)
-                .or(`and(saida.gte.${f.dataInicio},saida.lte.${dataFimTs}),and(saida.is.null,created_at.gte.${f.dataInicio},created_at.lte.${dataFimTs})`)
                 .order('created_at', { ascending: false });
+            const romaneiosDiariasFiltrados = (romaneioRes.data || []).filter(r => {
+                const dataRef = r.diaria_criada_em || r.saida || r.created_at;
+                if (!dataRef) return false;
+                return dataRef >= f.dataInicio && dataRef <= dataFimTs;
+            });
 
             const [a, ch, d, vc] = await Promise.all([
                 fetchAbastecimentos(f),
@@ -186,7 +195,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                 fetchCaminhoesPlacas(),
             ]);
             setAbast(a); setChecklists(ch); setDiarias(d);
-            setRomaneiosDiarias(romaneioRes.data || []);
+            setRomaneiosDiarias(romaneiosDiariasFiltrados);
             setVeiculosCaminhao(vc || []);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
@@ -744,7 +753,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                 <table className="w-full text-sm min-w-[500px]">
                                                     <thead className="text-xs border-b" style={{ backgroundColor: '#F0FDF4', borderColor: '#BBF7D0', color: '#065F46' }}>
                                                         <tr>
-                                                            {['Romaneio', 'Destino', 'Data', 'Status', 'Diária', ''].map(h =>
+                                                            {['Romaneio', 'Destino', 'Saída', 'Diária lançada em', 'Status', 'Diária', ''].map(h =>
                                                                 <th key={h} className="px-3 py-2.5 text-left font-medium whitespace-nowrap">{h}</th>
                                                             )}
                                                         </tr>
@@ -766,6 +775,9 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                     </td>
                                                                     <td className="px-3 py-2.5 max-w-[150px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{r.destino || '—'}</td>
                                                                     <td className="px-3 py-2.5 whitespace-nowrap text-xs">{r.saida ? FMT(r.saida.slice(0,10)) : '—'}</td>
+                                                                    <td className="px-3 py-2.5 whitespace-nowrap text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                        {r.diaria_criada_em ? FMT(r.diaria_criada_em.slice(0,10)) : (r.saida ? FMT(r.saida.slice(0,10)) : FMT(r.created_at.slice(0,10)))}
+                                                                    </td>
                                                                     <td className="px-3 py-2.5">
                                                                         <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{r.status}</span>
                                                                     </td>
@@ -802,7 +814,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                     <tfoot>
                                                         <tr style={{ backgroundColor: '#D1FAE5', borderTop: '2px solid #6EE7B7' }}>
                                                             <td colSpan={4} className="px-3 py-2 text-xs font-bold text-emerald-800">SUBTOTAL ROMANEIOS</td>
-                                                            <td colSpan={2} className="px-3 py-2 font-data font-bold text-emerald-700">{BRL(totalDiariasRomaneios)}</td>
+                                                            <td colSpan={3} className="px-3 py-2 font-data font-bold text-emerald-700">{BRL(totalDiariasRomaneios)}</td>
                                                         </tr>
                                                     </tfoot>
                                                 </table>

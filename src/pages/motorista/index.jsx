@@ -60,7 +60,11 @@ export default function MotoristaDashboard() {
     const [period, setPeriod]         = useState(30);
     // Período personalizado (usado na aba Bonificações) — quando preenchido,
     // sobrepõe o filtro de "últimos N dias" acima.
-    const [periodoCustom, setPeriodoCustom] = useState(null); // { inicio: 'YYYY-MM-DD', fim: 'YYYY-MM-DD' } | null
+    const [periodoCustom, setPeriodoCustom] = useState(null); // { inicio: 'YYYY-MM-DD', fim: 'YYYY-MM-DD' } | null — filtro CONFIRMADO (aplicado na busca)
+    // Valores digitados/selecionados nos campos de data, ainda não confirmados pelo botão "Buscar viagens".
+    // Fica separado de `periodoCustom` de propósito: só deve disparar busca no banco quando o usuário
+    // escolher as duas datas E clicar em "Buscar viagens" — nunca ao selecionar só a data inicial.
+    const [periodoCustomInput, setPeriodoCustomInput] = useState(null); // { inicio, fim } | null
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [loading, setLoading]       = useState(true);
 
@@ -677,8 +681,8 @@ export default function MotoristaDashboard() {
                                             <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                 <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                                                     <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Filtrar por período específico</h3>
-                                                    {periodoCustom && (
-                                                        <button onClick={() => setPeriodoCustom(null)}
+                                                    {(periodoCustom || periodoCustomInput) && (
+                                                        <button onClick={() => { setPeriodoCustom(null); setPeriodoCustomInput(null); }}
                                                             className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--color-primary)' }}>
                                                             <Icon name="X" size={12} /> Limpar filtro
                                                         </button>
@@ -687,17 +691,18 @@ export default function MotoristaDashboard() {
                                                 <div className="flex items-end gap-2 flex-wrap">
                                                     <div>
                                                         <label className="block text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>De</label>
-                                                        <input type="date" value={periodoCustom?.inicio || ''}
-                                                            onChange={e => setPeriodoCustom(pc => ({ inicio: e.target.value, fim: pc?.fim || e.target.value }))}
+                                                        <input type="date" value={periodoCustomInput?.inicio || ''}
+                                                            onChange={e => setPeriodoCustomInput(pc => ({ inicio: e.target.value, fim: pc?.fim || '' }))}
                                                             className="h-10 px-3 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }} />
                                                     </div>
                                                     <div>
                                                         <label className="block text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Até</label>
-                                                        <input type="date" value={periodoCustom?.fim || ''}
-                                                            onChange={e => setPeriodoCustom(pc => ({ inicio: pc?.inicio || e.target.value, fim: e.target.value }))}
+                                                        <input type="date" value={periodoCustomInput?.fim || ''}
+                                                            onChange={e => setPeriodoCustomInput(pc => ({ inicio: pc?.inicio || '', fim: e.target.value }))}
                                                             className="h-10 px-3 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }} />
                                                     </div>
-                                                    <Button size="sm" iconName="Search" disabled={!periodoCustom?.inicio || !periodoCustom?.fim} onClick={load}>
+                                                    <Button size="sm" iconName="Search" disabled={!periodoCustomInput?.inicio || !periodoCustomInput?.fim}
+                                                        onClick={() => setPeriodoCustom(periodoCustomInput)}>
                                                         Buscar viagens
                                                     </Button>
                                                 </div>

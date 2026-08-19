@@ -13,8 +13,10 @@ import {
 } from 'utils/carretasService';
 import { fetchMaterials } from 'utils/materialService';
 import { subscribeTabela } from 'utils/supabaseClient';
+import { printRomaneioCarretas, exportRomaneioModelo1, toModelo1Romaneio } from 'utils/excelUtils';
 import * as XLSX from 'xlsx';
 import PrettySelect from 'components/ui/PrettySelect';
+import { FRETE_CATEGORIAS, calcularFretePedidoMulti, fmtPct } from 'utils/freteConfig';
 
 // ─── SearchInput — campo de busca reutilizável (local a este arquivo) ────────
 function SearchInput({ value, onChange, placeholder = 'Buscar...', width = '260px' }) {
@@ -281,6 +283,165 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
     );
 }
 
+// ─── Card de Pedido — cabeçalho (cliente/vendedor/frete) + materiais do pedido ─
+const EMPTY_PEDIDO_CARRETAS = () => ({
+    numero_pedido: '', cidade_destino: '', valor_pedido: '', categoria_frete: 'Cimento',
+    categorias_extra: [], empresa: '', nome_cliente: '', nome_vendedor: '', itens: [],
+});
+
+function PedidoCardCarretas({ pedido, index, materiais, empresas, onUpdate, onRemove, defaultAberto = false }) {
+    const [aberto, setAberto] = useState(defaultAberto);
+    const freteMulti = calcularFretePedidoMulti(pedido);
+    const nVal = v => Number(v) || 0;
+
+    const patch = p => onUpdate(index, p);
+    const addItem = () => patch({ itens: [...pedido.itens, {
+        material_id: '', descricao: '', quantidade: '1', unidade: 'sc', peso_unit: '', peso_total: '', _pesoManual: false,
+    }] });
+    const updateItem = (idx, p) => patch({ itens: pedido.itens.map((it, i) => i === idx ? { ...it, ...p } : it) });
+    const removeItem = (idx) => patch({ itens: pedido.itens.filter((_, i) => i !== idx) });
+
+    const addCategoriaExtra = () => patch({ categorias_extra: [...(pedido.categorias_extra || []), { categoria: 'Outros', valor: '' }] });
+    const updateCategoriaExtra = (eIdx, k, v) => patch({ categorias_extra: (pedido.categorias_extra || []).map((e, j) => j !== eIdx ? e : { ...e, [k]: v }) });
+    const removeCategoriaExtra = (eIdx) => patch({ categorias_extra: (pedido.categorias_extra || []).filter((_, j) => j !== eIdx) });
+
+    return (
+        <div className="rounded-xl border overflow-hidden" style={{ borderColor: '#C4B5FD' }}>
+            <button type="button" onClick={() => setAberto(v => !v)}
+                className="w-full px-4 py-3 flex items-center justify-between gap-2 text-left hover:brightness-95 transition-all"
+                style={{ backgroundColor: '#FAF5FF' }}>
+                <div className="flex items-center gap-2 min-w-0">
+                    <Icon name={aberto ? 'ChevronUp' : 'ChevronDown'} size={14} color="#7C3AED" className="flex-shrink-0" />
+                    <p className="text-xs font-semibold text-purple-700 truncate">
+                        📦 Pedido {index + 1}{pedido.numero_pedido ? ` — Nº ${pedido.numero_pedido}` : ''}
+                        {!aberto && pedido.nome_cliente ? ` — ${pedido.nome_cliente}` : ''}
+                    </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                    {!aberto && nVal(pedido.valor_pedido) > 0 && (
+                        <span className="text-xs font-data font-semibold text-purple-700">{BRL(freteMulti.total)}</span>
+                    )}
+                    <span onClick={e => { e.stopPropagation(); onRemove(index); }} role="button"
+                        className="p-1 rounded hover:bg-red-50">
+                        <Icon name="Trash2" size={14} color="#DC2626" />
+                    </span>
+                </div>
+            </button>
+            {aberto && (
+            <div className="p-4 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <Field label="Nº do Pedido">
+                        <input value={pedido.numero_pedido} onChange={e => patch({ numero_pedido: e.target.value })}
+                            className={inputCls} style={inputStyle} placeholder="Ex: 43601" />
+                    </Field>
+                    <Field label="Cliente">
+                        <input value={pedido.nome_cliente} onChange={e => patch({ nome_cliente: e.target.value })}
+                            className={inputCls} style={inputStyle} placeholder="Nome do cliente" />
+                    </Field>
+                    <Field label="Vendedor">
+                        <input value={pedido.nome_vendedor} onChange={e => patch({ nome_vendedor: e.target.value })}
+                            className={inputCls} style={inputStyle} placeholder="Nome do vendedor" />
+                    </Field>
+                    <Field label="Cidade de Destino">
+                        <input value={pedido.cidade_destino} onChange={e => patch({ cidade_destino: e.target.value })}
+                            className={inputCls} style={inputStyle} placeholder="Ex: Ibotirama" />
+                    </Field>
+                    <Field label="Empresa">
+                        <PrettySelect value={pedido.empresa} onChange={e => patch({ empresa: e.target.value })}
+                            className={inputCls} style={inputStyle}>
+                            <option value="">Selecione...</option>
+                            {empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}
+                        </PrettySelect>
+                    </Field>
+                    <Field label="Valor do Pedido (R$)">
+                        <input type="number" min="0" step="0.01" value={pedido.valor_pedido}
+                            onChange={e => patch({ valor_pedido: e.target.value })}
+                            className={inputCls} style={inputStyle} placeholder="0,00" />
+                    </Field>
+                    <Field label="Categoria de Frete">
+                        <PrettySelect value={pedido.categoria_frete} onChange={e => patch({ categoria_frete: e.target.value })}
+                            className={inputCls} style={inputStyle}>
+                            {FRETE_CATEGORIAS.map(f => <option key={f.categoria} value={f.categoria}>{f.label} – {fmtPct(f.percentual)}</option>)}
+                        </PrettySelect>
+                    </Field>
+                </div>
+
+                {/* Categorias extras — frete com percentual variável dentro do mesmo pedido (ex.: telhas de zinco) */}
+                <div className="rounded-lg border p-3" style={{ borderColor: '#E5E7EB', backgroundColor: '#F9FAFB' }}>
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>Outras categorias neste pedido</label>
+                        <button type="button" onClick={addCategoriaExtra}
+                            className="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg hover:bg-purple-50" style={{ color: '#7C3AED' }}>
+                            <Icon name="Plus" size={12} /> Adicionar categoria
+                        </button>
+                    </div>
+                    {(pedido.categorias_extra || []).length === 0 ? (
+                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                            Use isso quando o pedido tiver materiais de mais de uma categoria de frete (ex.: Telhas de Zinco 2% + Ferragens 6% no mesmo pedido).
+                        </p>
+                    ) : (
+                        <div className="flex flex-col gap-2">
+                            <p className="text-[11px]" style={{ color: 'var(--color-muted-foreground)' }}>
+                                A categoria principal acima ({pedido.categoria_frete}) passa a valer sobre o restante: {BRL(freteMulti.valorPrincipal)}.
+                            </p>
+                            {pedido.categorias_extra.map((extra, eIdx) => (
+                                <div key={eIdx} className="flex items-center gap-2">
+                                    <PrettySelect value={extra.categoria} onChange={e => updateCategoriaExtra(eIdx, 'categoria', e.target.value)}
+                                        className="flex-1 h-9 px-2 rounded-lg border border-gray-200 text-xs bg-white">
+                                        {FRETE_CATEGORIAS.map(f => <option key={f.categoria} value={f.categoria}>{f.label} – {fmtPct(f.percentual)}</option>)}
+                                    </PrettySelect>
+                                    <input type="number" min="0" step="0.01" value={extra.valor} onChange={e => updateCategoriaExtra(eIdx, 'valor', e.target.value)}
+                                        placeholder="Valor (R$)" className="w-32 h-9 px-3 rounded-lg border border-gray-200 text-xs bg-white font-data" />
+                                    <button type="button" onClick={() => removeCategoriaExtra(eIdx)} className="p-1.5 rounded-lg hover:bg-red-50 flex-shrink-0">
+                                        <Icon name="X" size={14} color="#DC2626" />
+                                    </button>
+                                </div>
+                            ))}
+                            {freteMulti.valorExtras > nVal(pedido.valor_pedido) && (
+                                <p className="text-xs text-red-600 flex items-center gap-1">
+                                    <Icon name="AlertTriangle" size={12} /> A soma das categorias extras ultrapassa o valor do pedido.
+                                </p>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {freteMulti.total > 0 && (
+                    <div className="p-2.5 rounded-lg flex items-center justify-between" style={{ backgroundColor: '#7C3AED' }}>
+                        <span className="text-xs font-medium text-white">💰 Frete deste pedido:</span>
+                        <span className="text-sm font-bold font-data text-white">{BRL(freteMulti.total)}</span>
+                    </div>
+                )}
+
+                {/* Materiais deste pedido */}
+                <div>
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                            Materiais deste pedido {pedido.itens.length > 0 && `(${pedido.itens.length})`}
+                        </label>
+                        <button type="button" onClick={addItem}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border border-purple-300 hover:bg-purple-50" style={{ color: '#7C3AED' }}>
+                            <Icon name="Plus" size={12} /> Adicionar Material
+                        </button>
+                    </div>
+                    {pedido.itens.length === 0 ? (
+                        <div className="text-center py-5 rounded-lg border-2 border-dashed cursor-pointer hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }} onClick={addItem}>
+                            <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Clique para adicionar materiais a este pedido</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {pedido.itens.map((item, idx) => (
+                                <ItemRow key={idx} item={item} index={idx} materiais={materiais} onUpdate={updateItem} onRemove={removeItem} />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+            )}
+        </div>
+    );
+}
+
 // ─── Modal Formulário Romaneio ─────────────────────────────────────────────────
 function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empresas, materiais, fretesFretas = [] }) {
     const { toast, showToast } = useToast();
@@ -304,7 +465,7 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
     });
 
     const [form, setForm] = useState(emptyForm());
-    const [itens, setItens] = useState([]);
+    const [pedidos, setPedidos] = useState([]);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -324,68 +485,64 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 valor_frete:          rom.valor_frete != null ? String(rom.valor_frete) : '',
                 observacoes:          rom.observacoes || '',
             });
-            setItens((rom.itens || []).map(it => {
-                // Recupera peso unitário: do join com material ou inferido pelo histórico
-                const matPeso = it.material?.peso && Number(it.material.peso) > 0
-                    ? Number(it.material.peso)
-                    : null;
+            const itemToForm = it => {
+                const matPeso = it.material?.peso && Number(it.material.peso) > 0 ? Number(it.material.peso) : null;
                 const pesoTotalSalvo = it.peso_total != null ? Number(it.peso_total) : null;
                 const qtd = Number(it.quantidade || 1);
-                // Se o peso salvo coincide com material × qtd → manter auto
-                // Caso contrário (usuário editou manualmente) → manter manual
-                const foiManual = matPeso && pesoTotalSalvo !== null
-                    ? Math.abs(pesoTotalSalvo - matPeso * qtd) > 0.01
-                    : true; // sem material com peso → tratar como manual
+                const foiManual = matPeso && pesoTotalSalvo !== null ? Math.abs(pesoTotalSalvo - matPeso * qtd) > 0.01 : true;
                 return {
-                    material_id: it.material_id || '',
-                    descricao:   it.descricao || '',
-                    quantidade:  String(qtd),
-                    unidade:     it.unidade || 'sc',
-                    peso_unit:   matPeso ? String(matPeso) : '',  // armazena para auto-calc
-                    peso_total:  pesoTotalSalvo != null ? String(pesoTotalSalvo) : '',
-                    _pesoManual: foiManual,
+                    material_id: it.material_id || '', descricao: it.descricao || '', quantidade: String(qtd),
+                    unidade: it.unidade || 'sc', peso_unit: matPeso ? String(matPeso) : '',
+                    peso_total: pesoTotalSalvo != null ? String(pesoTotalSalvo) : '', _pesoManual: foiManual,
                 };
+            };
+            let pedidosCarregados = (rom.pedidos || []).map(p => ({
+                id: p.id,
+                numero_pedido: p.numero_pedido || '', cidade_destino: p.cidade_destino || '',
+                valor_pedido: p.valor_pedido != null ? String(p.valor_pedido) : '',
+                categoria_frete: p.categoria_frete || 'Cimento',
+                categorias_extra: Array.isArray(p.categorias_extra) ? p.categorias_extra : [],
+                empresa: p.empresa || '', nome_cliente: p.nome_cliente || '', nome_vendedor: p.nome_vendedor || '',
+                itens: (rom.itens || []).filter(it => it.pedido_id === p.id).map(itemToForm),
             }));
+            // Romaneio antigo (de antes de "Pedidos múltiplos" existir) — tinha
+            // materiais soltos, sem pedido. Envolve tudo num pedido único pra não
+            // perder nada, já convertendo pro novo formato ao salvar de novo.
+            if (pedidosCarregados.length === 0 && (rom.itens || []).length > 0) {
+                pedidosCarregados = [{
+                    numero_pedido: rom.numero_pedido || '', cidade_destino: rom.destino || '',
+                    valor_pedido: rom.valor_carga != null ? String(rom.valor_carga) : '',
+                    categoria_frete: 'Cimento', categorias_extra: [],
+                    empresa: rom.empresa || '', nome_cliente: '', nome_vendedor: '',
+                    itens: (rom.itens || []).map(itemToForm),
+                }];
+            }
+            setPedidos(pedidosCarregados);
         } else {
             setForm(emptyForm());
-            setItens([]);
+            setPedidos([]);
         }
     }, [modal]); // eslint-disable-line
 
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-    const addItem = () => setItens(p => [...p, {
-        material_id: '', descricao: '', quantidade: '1', unidade: 'sc',
-        peso_unit: '', peso_total: '', _pesoManual: false,
-    }]);
-    const updateItem = (idx, patch) => setItens(p => p.map((it, i) => i === idx ? { ...it, ...patch } : it));
-    const removeItem = (idx) => setItens(p => p.filter((_, i) => i !== idx));
+    const addPedido = () => setPedidos(p => [...p, { ...EMPTY_PEDIDO_CARRETAS(), _novo: true }]);
+    const updatePedido = (idx, patch) => setPedidos(p => p.map((pd, i) => i === idx ? { ...pd, ...patch } : pd));
+    const removePedido = (idx) => setPedidos(p => p.filter((_, i) => i !== idx));
 
-    // Preview do frete
-    const fretePreview = useMemo(() => {
-        if (form.tipo_calculo_frete === 'fixo') return Number(form.valor_frete) || 0;
-        if (form.tipo_calculo_frete === 'percentual' && form.valor_carga && form.valor_frete)
-            return (Number(form.valor_carga) * Number(form.valor_frete)) / 100;
-        return 0;
-    }, [form.tipo_calculo_frete, form.valor_frete, form.valor_carga]);
-
-    // Peso total dos itens
-    const pesoTotal = useMemo(() =>
-        itens.reduce((s, it) => s + (Number(it.peso_total) || 0), 0),
-    [itens]);
+    // Totais calculados a partir dos pedidos
+    const totaisPedidos = useMemo(() => {
+        const valorCarga = pedidos.reduce((s, p) => s + (Number(p.valor_pedido) || 0), 0);
+        const frete = pedidos.reduce((s, p) => s + calcularFretePedidoMulti(p).total, 0);
+        const pesoItens = pedidos.reduce((s, p) => s + p.itens.reduce((s2, it) => s2 + (Number(it.peso_total) || 0), 0), 0);
+        return { valorCarga, frete, pesoItens };
+    }, [pedidos]);
 
     const handleSave = async () => {
         if (!form.destino) { showToast('Destino é obrigatório', 'error'); return; }
         setSaving(true);
         try {
-            const freteValor = (() => {
-                if (form.tipo_calculo_frete === 'fixo') return form.valor_frete ? Number(form.valor_frete) : null;
-                if (form.tipo_calculo_frete === 'percentual' && form.valor_carga && form.valor_frete)
-                    return (Number(form.valor_carga) * Number(form.valor_frete)) / 100;
-                return null;
-            })();
-
-            const itensPayload = itens.filter(it => it.material_id || it.descricao).map(it => {
+            const itensPayloadFrom = (lista) => lista.filter(it => it.material_id || it.descricao).map(it => {
                 const matIt = materiais.find(m => m.id === it.material_id);
                 // Prioridade: peso_unit do item > peso do material > null
                 const pu = it.peso_unit
@@ -398,6 +555,31 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 const { _pesoManual, peso_unit, ...itemClean } = it;
                 return { ...itemClean, peso_total: pesoSalvo };
             });
+
+            if (pedidos.length === 0) { showToast('Adicione pelo menos um pedido', 'error'); setSaving(false); return; }
+            const pedidosPayload = pedidos.map(p => {
+                const freteMulti = calcularFretePedidoMulti(p);
+                return {
+                    numero_pedido: p.numero_pedido || null,
+                    cidade_destino: p.cidade_destino || null,
+                    valor_pedido: Number(p.valor_pedido) || 0,
+                    categoria_frete: p.categoria_frete || null,
+                    categorias_extra: (p.categorias_extra || []).filter(e => Number(e.valor) > 0).map(e => ({ categoria: e.categoria, valor: Number(e.valor) })),
+                    percentual_frete: FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || null,
+                    frete_calculado: freteMulti.total,
+                    empresa: p.empresa || null,
+                    nome_cliente: (p.nome_cliente || '').trim() || null,
+                    nome_vendedor: (p.nome_vendedor || '').trim() || null,
+                };
+            });
+            // Itens ganham pedido_index (posição no array de pedidos) para o
+            // service vincular ao pedido_id correto depois de inserir os pedidos.
+            const itensPayload = pedidos.flatMap((p, pIdx) =>
+                itensPayloadFrom(p.itens).map(it => ({ ...it, pedido_index: pIdx }))
+            );
+            const valorCargaFinal = totaisPedidos.valorCarga;
+            const freteFinal = totaisPedidos.frete;
+
             // Soma o peso (kg) de todos os itens e converte para toneladas — é o campo
             // 'toneladas' que listas, exportações e relatórios financeiros usam para
             // exibir o peso do romaneio. Sem isso, a soma calculada nos itens ficava só
@@ -415,12 +597,13 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 empresa:             form.empresa       || undefined,
                 numero_nf:           form.numero_nf     || undefined,
                 numero_pedido:       form.numero_pedido || undefined,
-                valor_carga:         form.valor_carga   ? Number(form.valor_carga) : null,
+                valor_carga:         valorCargaFinal,
                 tipo_calculo_frete:  form.tipo_calculo_frete,
-                valor_frete:         freteValor,
+                valor_frete:         freteFinal,
                 observacoes:         form.observacoes   || undefined,
                 toneladas:           toneladasCalculadas,
                 itens: itensPayload,
+                _pedidos: pedidosPayload,
             };
             // Remove undefined
             Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
@@ -474,29 +657,12 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                                 {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                             </PrettySelect>
                         </Field>
-                        <Field label="Empresa">
-                            <PrettySelect value={form.empresa} onChange={e => set('empresa', e.target.value)}
-                                className={inputCls} style={inputStyle}>
-                                <option value="">Selecione a empresa...</option>
-                                {empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}
-                            </PrettySelect>
-                        </Field>
                         <Field label="Destino de Entrega" required>
                             <DestinoSelect
                                 value={form.destino}
                                 onChange={v => set('destino', v)}
-                                onFreteAutoFill={fretePorSaco => {
-                                    // Calcula o frete total estimado e preenche como valor fixo
-                                    const qtd = Number(form.toneladas) || 0;
-                                    // Para romaneios usa o frete por saco como valor fixo sugerido
-                                    set('tipo_calculo_frete', 'fixo');
-                                    set('valor_frete', String(fretePorSaco));
-                                }}
                                 fretes={fretesFretas}
                             />
-                            <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>
-                                Selecione uma cidade para preencher o frete automaticamente
-                            </p>
                         </Field>
                         <Field label="Data de Saída">
                             <input type="date" value={form.data_saida} onChange={e => set('data_saida', e.target.value)}
@@ -509,102 +675,53 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                     </div>
                 </div>
 
-                {/* ── Bloco 2: NF / Pedido + Valor Carga ── */}
-                <div className="p-4 rounded-xl border" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
-                    <p className="text-xs font-semibold text-emerald-700 mb-3">📄 Nota Fiscal / Pedido</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <Field label="Nº da Nota Fiscal">
-                            <input value={form.numero_nf} onChange={e => set('numero_nf', e.target.value)}
-                                className={inputCls} style={inputStyle} placeholder="Ex: 00012345" />
-                        </Field>
-                        <Field label="Nº do Pedido">
-                            <input value={form.numero_pedido} onChange={e => set('numero_pedido', e.target.value)}
-                                className={inputCls} style={inputStyle} placeholder="Ex: 37443" />
-                        </Field>
-                        <Field label="Valor da Carga (R$)">
-                            <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-emerald-600">R$</span>
-                                <input type="number" step="0.01" min="0" value={form.valor_carga}
-                                    onChange={e => set('valor_carga', e.target.value)}
-                                    className={inputCls + ' pl-9'} style={inputStyle} placeholder="0,00" />
-                            </div>
-                        </Field>
+                {/* ── Bloco 2: Frete total (somado automaticamente dos pedidos abaixo) ── */}
+                <div className="p-4 rounded-xl border" style={{ borderColor: '#C4B5FD', backgroundColor: '#FAF5FF' }}>
+                    <p className="text-xs font-semibold text-purple-700 mb-3">💰 Resumo do Frete</p>
+                    <div className="p-3 rounded-xl bg-purple-600 text-white flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                            <span className="text-sm font-medium block">Valor da carga: {BRL(totaisPedidos.valorCarga)}</span>
+                            <span className="text-xs opacity-80">{pedidos.length} pedido{pedidos.length !== 1 ? 's' : ''} — cada um com seu percentual de frete</span>
+                        </div>
+                        <span className="text-lg font-bold font-data">{BRL(totaisPedidos.frete)} de frete</span>
                     </div>
-                    {pesoTotal > 0 && (
+                    {totaisPedidos.pesoItens > 0 && (
                         <div className="mt-3 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
                             <p className="text-xs text-emerald-700 font-medium">
-                                ⚖️ Peso total dos itens: <strong>{pesoTotal.toLocaleString('pt-BR')} kg</strong>
+                                ⚖️ Peso total dos itens: <strong>{totaisPedidos.pesoItens.toLocaleString('pt-BR')} kg</strong>
                             </p>
                         </div>
                     )}
                 </div>
 
-                {/* ── Bloco 3: Frete ── */}
-                <div className="p-4 rounded-xl border" style={{ borderColor: '#C4B5FD', backgroundColor: '#FAF5FF' }}>
-                    <p className="text-xs font-semibold text-purple-700 mb-3">💰 Frete</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Field label="Tipo de Frete">
-                            <PrettySelect value={form.tipo_calculo_frete} onChange={e => set('tipo_calculo_frete', e.target.value)}
-                                className={inputCls} style={inputStyle}>
-                                <option value="fixo">Valor Fixo (R$)</option>
-                                <option value="percentual">Percentual sobre a carga (%)</option>
-                            </PrettySelect>
-                        </Field>
-                        <Field label={form.tipo_calculo_frete === 'fixo' ? 'Valor do Frete (R$)' : 'Percentual (%)'}>
-                            <div className="relative">
-                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-purple-600">
-                                    {form.tipo_calculo_frete === 'fixo' ? 'R$' : '%'}
-                                </span>
-                                <input type="number" step="0.01" min="0" value={form.valor_frete}
-                                    onChange={e => set('valor_frete', e.target.value)}
-                                    className={inputCls + ' pl-9'} style={inputStyle} placeholder="0,00" />
-                            </div>
-                        </Field>
-                    </div>
-                    {fretePreview > 0 && (
-                        <div className="mt-3 p-3 rounded-xl bg-purple-600 text-white flex items-center justify-between">
-                            <span className="text-sm font-medium">✅ Frete calculado:</span>
-                            <span className="text-lg font-bold font-data">{BRL(fretePreview)}</span>
-                        </div>
-                    )}
-                </div>
-
-                {/* ── Bloco 4: Materiais ── */}
+                {/* ── Bloco 3: Pedidos do Romaneio (cliente, vendedor, frete e materiais de cada um) ── */}
                 <div>
                     <div className="flex items-center justify-between mb-3">
                         <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                            📋 Materiais do Romaneio
-                            {itens.length > 0 && (
-                                <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-                                    {itens.length} item{itens.length > 1 ? 's' : ''}
+                            📦 Pedidos do Romaneio
+                            {pedidos.length > 0 && (
+                                <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                                    {pedidos.length} pedido{pedidos.length !== 1 ? 's' : ''}
                                 </span>
                             )}
                         </p>
-                        <button onClick={addItem}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors">
-                            <Icon name="Plus" size={13} /> Adicionar Material
+                        <button onClick={addPedido}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-purple-300 text-purple-700 hover:bg-purple-50 transition-colors">
+                            <Icon name="Plus" size={13} /> Adicionar Pedido
                         </button>
                     </div>
-
-                    {itens.length === 0 ? (
+                    {pedidos.length === 0 ? (
                         <div className="text-center py-8 rounded-xl border-2 border-dashed cursor-pointer hover:bg-gray-50 transition-colors"
-                            style={{ borderColor: 'var(--color-border)' }} onClick={addItem}>
+                            style={{ borderColor: 'var(--color-border)' }} onClick={addPedido}>
                             <Icon name="Package" size={28} color="var(--color-muted-foreground)" />
-                            <p className="text-sm mt-2" style={{ color: 'var(--color-muted-foreground)' }}>
-                                Clique para adicionar materiais
-                            </p>
+                            <p className="text-sm mt-2" style={{ color: 'var(--color-muted-foreground)' }}>Clique para adicionar o primeiro pedido</p>
                         </div>
                     ) : (
-                        <div className="space-y-2">
-                            {itens.map((item, idx) => (
-                                <ItemRow
-                                    key={idx}
-                                    item={item}
-                                    index={idx}
-                                    materiais={materiais}
-                                    onUpdate={updateItem}
-                                    onRemove={removeItem}
-                                />
+                        <div className="space-y-3">
+                            {pedidos.map((pedido, idx) => (
+                                <PedidoCardCarretas key={idx} pedido={pedido} index={idx} materiais={materiais} empresas={empresas}
+                                    onUpdate={updatePedido} onRemove={removePedido}
+                                    defaultAberto={pedido._novo} />
                             ))}
                         </div>
                     )}
@@ -647,11 +764,8 @@ function RomaneioDetailModal({ romaneio, onClose }) {
                         { l: 'Status',      v: <StatusBadge status={romaneio.status} /> },
                         { l: 'Motorista',   v: romaneio.motorista?.name || '—' },
                         { l: 'Placa',       v: romaneio.veiculo?.placa  || '—' },
-                        { l: 'Empresa',     v: romaneio.empresa          || '—' },
                         { l: 'Destino',     v: romaneio.destino          || '—' },
                         { l: 'Data Saída',  v: FMT_DATE(romaneio.data_saida) },
-                        { l: 'Nº NF',       v: romaneio.numero_nf        || '—' },
-                        { l: 'Nº Pedido',   v: romaneio.numero_pedido    || '—' },
                         { l: 'Data Chegada',v: FMT_DATE(romaneio.data_chegada) },
                     ].map(({ l, v }) => (
                         <div key={l} className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)' }}>
@@ -660,10 +774,13 @@ function RomaneioDetailModal({ romaneio, onClose }) {
                         </div>
                     ))}
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
                         { l: 'Valor da Carga', v: romaneio.valor_carga ? BRL(romaneio.valor_carga) : '—', color: '#065F46' },
                         { l: 'Frete',          v: romaneio.valor_frete  ? BRL(romaneio.valor_frete)  : '—', color: '#7C3AED' },
+                        { l: 'Frete sobre a carga', v: (Number(romaneio.valor_carga) > 0)
+                            ? `${((Number(romaneio.valor_frete || 0) / Number(romaneio.valor_carga)) * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+                            : '—', color: '#DB2777' },
                         { l: 'Peso Total',     v: (() => {
                             const p = (romaneio.itens || []).reduce((s, it) => s + Number(it.peso_total || 0), 0);
                             return p > 0 ? `${p.toLocaleString('pt-BR')} kg` : (romaneio.toneladas ? `${Number(romaneio.toneladas).toLocaleString('pt-BR')} t` : '—');
@@ -675,6 +792,36 @@ function RomaneioDetailModal({ romaneio, onClose }) {
                         </div>
                     ))}
                 </div>
+                {(romaneio.pedidos?.length || 0) > 0 && (
+                    <div>
+                        <p className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                            Pedidos ({romaneio.pedidos.length})
+                        </p>
+                        <div className="space-y-2">
+                            {romaneio.pedidos.map(p => {
+                                const freteMulti = calcularFretePedidoMulti(p);
+                                return (
+                                    <div key={p.id} className="p-3 rounded-xl border" style={{ borderColor: '#E9D5FF', backgroundColor: '#FAF5FF' }}>
+                                        <div className="flex items-center justify-between flex-wrap gap-1">
+                                            <span className="text-xs font-data font-semibold" style={{ color: '#7C3AED' }}>
+                                                {p.numero_pedido ? `#${p.numero_pedido}` : 'Sem número'}
+                                            </span>
+                                            <span className="text-xs font-data font-semibold" style={{ color: '#7C3AED' }}>{BRL(freteMulti.total)} de frete</span>
+                                        </div>
+                                        <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                                            {p.nome_cliente && <span><span style={{ color: 'var(--color-muted-foreground)' }}>Cliente: </span>{p.nome_cliente}</span>}
+                                            {p.nome_vendedor && <span><span style={{ color: 'var(--color-muted-foreground)' }}>Vendedor: </span>{p.nome_vendedor}</span>}
+                                            {p.cidade_destino && <span><span style={{ color: 'var(--color-muted-foreground)' }}>Cidade: </span>{p.cidade_destino}</span>}
+                                            {p.empresa && <span><span style={{ color: 'var(--color-muted-foreground)' }}>Empresa: </span>{p.empresa}</span>}
+                                            <span><span style={{ color: 'var(--color-muted-foreground)' }}>Valor: </span>{BRL(p.valor_pedido)}</span>
+                                            <span><span style={{ color: 'var(--color-muted-foreground)' }}>Categoria: </span>{p.categoria_frete}{Array.isArray(p.categorias_extra) && p.categorias_extra.length > 0 ? ` +${p.categorias_extra.length}` : ''}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
                 {(romaneio.itens?.length || 0) > 0 && (
                     <div>
                         <p className="text-sm font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
@@ -713,7 +860,15 @@ function RomaneioDetailModal({ romaneio, onClose }) {
                 )}
             </div>
             <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
-                <button onClick={() => window.print()}
+                {(romaneio.pedidos || []).length > 0 && (
+                    <button onClick={() => exportRomaneioModelo1(toModelo1Romaneio(romaneio))}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium hover:bg-green-50"
+                        style={{ borderColor: '#A7F3D0', color: '#059669' }}
+                        title="Exportar no modelo Excel Araguaia (mesmo modelo dos caminhões)">
+                        <Icon name="FileSpreadsheet" size={14} color="#059669" /> Exportar Excel
+                    </button>
+                )}
+                <button onClick={() => printRomaneioCarretas(romaneio)}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50"
                     style={{ borderColor: 'var(--color-border)' }}>
                     <Icon name="Printer" size={14} /> Imprimir
@@ -891,12 +1046,15 @@ export default function TabRomaneios({ isAdmin }) {
         showToast('Exportado!', 'success');
     };
 
-    const kpis = useMemo(() => ({
-        total:       romaneios.length,
-        transito:    romaneios.filter(r => r.status === 'Em Trânsito').length,
-        finalizados: romaneios.filter(r => r.status === 'Entrega finalizada').length,
-        freteTotal:  romaneios.reduce((s, r) => s + Number(r.valor_frete || 0), 0),
-    }), [romaneios]);
+    const kpis = useMemo(() => {
+        const freteTotal = romaneios.reduce((s, r) => s + Number(r.valor_frete || 0), 0);
+        return {
+            total:       romaneios.length,
+            transito:    romaneios.filter(r => r.status === 'Em Trânsito').length,
+            finalizados: romaneios.filter(r => r.status === 'Entrega finalizada').length,
+            freteTotal,
+        };
+    }, [romaneios]);
 
     return (
         <div>
@@ -1138,92 +1296,97 @@ export default function TabRomaneios({ isAdmin }) {
                     )}
                 </div>
             ) : (
-                <div className="flex flex-col gap-3">
-                    {romaneiosFiltrados.map(r => {
-                        const statusCfg = STATUS_ROMANEIO_COLORS[r.status] || STATUS_ROMANEIO_COLORS['Aguardando'];
-                        const materiais_nomes = (r.itens || [])
-                            .map(it => it.material?.nome || it.descricao || '')
-                            .filter(Boolean).join(', ');
-                        const pesoItens = (r.itens || []).reduce((s, it) => s + Number(it.peso_total || 0), 0);
-
-                        return (
-                            <div key={r.id} className="bg-white rounded-xl border shadow-sm hover:shadow-md transition-shadow"
-                                style={{ borderColor: 'var(--color-border)' }}>
-
-                                {/* ── Topo: número + status + ações ── */}
-                                <div className="flex items-center justify-between px-4 py-3 gap-3 flex-wrap">
-                                    <div className="flex items-center gap-3 flex-wrap">
-                                        <button onClick={() => setDetailModal(r)}
-                                            className="font-bold font-data text-blue-700 hover:underline text-sm whitespace-nowrap">
-                                            {r.numero}
-                                        </button>
-                                        {r.lancado_por_motorista
-                                            ? <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#DCFCE7', color: '#166534' }}>✓ Motorista vinculado</span>
-                                            : <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: '#FEF9C3', color: '#92400E' }}>⏳ Aguard. motorista</span>
-                                        }
-                                        <PrettySelect
-                                            value={r.status}
-                                            onChange={e => handleStatusChange(r.id, e.target.value)}
-                                            className="text-xs font-semibold rounded-full px-2.5 py-1 border-0 cursor-pointer outline-none"
-                                            style={{ backgroundColor: statusCfg.bg, color: statusCfg.text }}
-                                            title="Clique para mudar o status">
-                                            {STATUS_ROMANEIO.map(s => <option key={s} value={s}>{s}</option>)}
-                                        </PrettySelect>
-                                    </div>
-
-                                    {/* Botões sempre visíveis */}
-                                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                                        <button onClick={() => setDetailModal(r)}
-                                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border hover:bg-blue-50 transition-colors"
-                                            style={{ borderColor: '#BFDBFE', color: '#1D4ED8' }}>
-                                            <Icon name="Eye" size={13} color="#1D4ED8" /> Ver
-                                        </button>
-                                        {isAdmin && (
-                                            <>
-                                                <button onClick={() => setModal({ mode: 'edit', data: r })}
-                                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border hover:bg-blue-50 transition-colors"
-                                                    style={{ borderColor: '#BFDBFE', color: '#1D4ED8' }}>
-                                                    <Icon name="Pencil" size={16} color="#1D4ED8" /> Editar
+                <div className="bg-white rounded-xl border shadow-card overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="text-xs font-caption border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                <tr>
+                                    <th className="px-3 py-3 text-left font-medium">Número</th>
+                                    <th className="px-3 py-3 text-left font-medium hidden sm:table-cell">Motorista</th>
+                                    <th className="px-3 py-3 text-left font-medium hidden md:table-cell">Destino</th>
+                                    <th className="px-3 py-3 text-left font-medium hidden tab:table-cell">Placa</th>
+                                    <th className="px-3 py-3 text-right font-medium hidden tab:table-cell whitespace-nowrap">Peso</th>
+                                    <th className="px-3 py-3 text-left font-medium hidden tab:table-cell">Saída</th>
+                                    <th className="px-3 py-3 text-left font-medium hidden tab:table-cell">Chegada</th>
+                                    <th className="px-3 py-3 text-right font-medium hidden lg:table-cell">Valor Carga</th>
+                                    <th className="px-3 py-3 text-right font-medium hidden lg:table-cell">Frete</th>
+                                    <th className="px-3 py-3 text-center font-medium">Vínculo</th>
+                                    <th className="px-3 py-3 text-center font-medium">Status</th>
+                                    <th className="px-3 py-3 text-center font-medium">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {romaneiosFiltrados.map((r, idx) => {
+                                    const statusCfg = STATUS_ROMANEIO_COLORS[r.status] || STATUS_ROMANEIO_COLORS['Aguardando'];
+                                    const isCancelado = r.status === 'Cancelado';
+                                    const pesoItens = (r.itens || []).reduce((s, it) => s + Number(it.peso_total || 0), 0);
+                                    return (
+                                        <tr key={r.id} className="border-t transition-colors"
+                                            style={{
+                                                borderColor: 'var(--color-border)',
+                                                borderLeft: isCancelado ? '3px solid #9CA3AF' : '3px solid transparent',
+                                                backgroundColor: isCancelado ? '#F9FAFB' : (idx % 2 === 0 ? 'white' : '#F9FAFB'),
+                                            }}>
+                                            <td className="px-3 py-3">
+                                                <button onClick={() => setDetailModal(r)}
+                                                    className="font-data text-xs font-semibold hover:underline whitespace-nowrap"
+                                                    style={{ color: isCancelado ? '#6B7280' : 'var(--color-primary)', textDecoration: isCancelado ? 'line-through' : 'none' }}>
+                                                    {r.numero}
                                                 </button>
-                                                <button onClick={() => handleDelete(r.id)}
-                                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border hover:bg-red-50 transition-colors"
-                                                    style={{ borderColor: '#FECACA', color: '#DC2626' }}>
-                                                    <Icon name="Trash2" size={16} color="#DC2626" /> Excluir
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* ── Rodapé: dados em grid responsivo ── */}
-                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 border-t text-xs"
-                                    style={{ borderColor: 'var(--color-border)' }}>
-                                    {[
-                                        { l: 'Motorista',   v: r.motorista?.name || '—' },
-                                        { l: 'Placa',       v: r.veiculo?.placa  || '—', mono: true },
-                                        { l: 'Empresa',     v: r.empresa          || '—' },
-                                        { l: 'Destino',     v: r.destino          || '—' },
-                                        { l: 'NF / Pedido', v: [r.numero_nf, r.numero_pedido].filter(Boolean).join(' / ') || '—' },
-                                        { l: 'Data Saída',  v: FMT_DATE(r.data_saida) },
-                                        { l: 'Peso Total',  v: pesoItens > 0 ? `${pesoItens.toLocaleString('pt-BR')} kg` : '—', mono: true },
-                                        { l: 'Valor Carga', v: r.valor_carga ? BRL(r.valor_carga) : '—', color: '#065F46', mono: true },
-                                        { l: 'Frete',       v: r.valor_frete  ? BRL(r.valor_frete)  : '—', color: '#7C3AED', mono: true },
-                                        { l: 'Materiais',   v: materiais_nomes || '—', span: true },
-                                    ].map(({ l, v, mono, color, span }) => (
-                                        <div key={l}
-                                            className={`px-4 py-2.5 border-r border-b last:border-r-0 ${span ? 'col-span-2 sm:col-span-3 lg:col-span-3' : ''}`}
-                                            style={{ borderColor: 'var(--color-border)' }}>
-                                            <p className="mb-0.5 font-medium" style={{ color: 'var(--color-muted-foreground)' }}>{l}</p>
-                                            <p className={`truncate ${mono ? 'font-data' : 'font-medium'}`}
-                                                style={{ color: color || 'var(--color-text-primary)' }}>
-                                                {v}
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })}
+                                                <p className="text-xs mt-0.5 sm:hidden" style={{ color: isCancelado ? '#9CA3AF' : '#64748b' }}>{r.motorista?.name || ''}</p>
+                                            </td>
+                                            <td className="px-3 py-3 hidden sm:table-cell" style={{ color: isCancelado ? '#9CA3AF' : 'var(--color-text-primary)' }}>{r.motorista?.name || '—'}</td>
+                                            <td className="px-3 py-3 hidden md:table-cell" style={{ color: isCancelado ? '#9CA3AF' : 'var(--color-text-secondary)' }}>{r.destino || '—'}</td>
+                                            <td className="px-3 py-3 hidden tab:table-cell font-data text-xs" style={{ color: 'var(--color-text-secondary)' }}>{r.veiculo?.placa || '—'}</td>
+                                            <td className="px-3 py-3 text-right hidden tab:table-cell font-data text-xs whitespace-nowrap" style={{ color: 'var(--color-text-secondary)' }}>
+                                                {pesoItens > 0 ? `${pesoItens.toLocaleString('pt-BR')} kg` : '—'}
+                                            </td>
+                                            <td className="px-3 py-3 hidden tab:table-cell text-xs font-caption" style={{ color: 'var(--color-text-secondary)' }}>{FMT_DATE(r.data_saida)}</td>
+                                            <td className="px-3 py-3 hidden tab:table-cell text-xs font-caption" style={{ color: 'var(--color-text-secondary)' }}>{FMT_DATE(r.data_chegada)}</td>
+                                            <td className="px-3 py-3 text-right hidden lg:table-cell font-data text-xs font-semibold whitespace-nowrap" style={{ color: '#065F46' }}>{r.valor_carga ? BRL(r.valor_carga) : '—'}</td>
+                                            <td className="px-3 py-3 text-right hidden lg:table-cell font-data text-xs font-semibold whitespace-nowrap" style={{ color: '#7C3AED' }}>{r.valor_frete ? BRL(r.valor_frete) : '—'}</td>
+                                            <td className="px-3 py-3 text-center">
+                                                {r.lancado_por_motorista
+                                                    ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: '#DCFCE7', color: '#166534' }}>✓ Vinculado</span>
+                                                    : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: '#FEF9C3', color: '#92400E' }}>⏳ Pendente</span>
+                                                }
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <PrettySelect
+                                                    value={r.status}
+                                                    onChange={e => handleStatusChange(r.id, e.target.value)}
+                                                    className="px-2 py-1 rounded-full text-xs font-medium border cursor-pointer font-caption focus:outline-none"
+                                                    style={{ backgroundColor: statusCfg.bg, color: statusCfg.text, borderColor: statusCfg.bg }}>
+                                                    {STATUS_ROMANEIO.map(s => <option key={s}>{s}</option>)}
+                                                </PrettySelect>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    <button onClick={() => setDetailModal(r)}
+                                                        className="p-1.5 rounded hover:bg-blue-50 transition-colors flex-shrink-0" title="Ver detalhes">
+                                                        <Icon name="Eye" size={16} color="var(--color-primary)" className="flex-shrink-0" />
+                                                    </button>
+                                                    {isAdmin && (<>
+                                                        <button onClick={() => setModal({ mode: 'edit', data: r })}
+                                                            className="p-1.5 rounded hover:bg-gray-100 transition-colors" title="Editar">
+                                                            <Icon name="Pencil" size={16} color="var(--color-muted-foreground)" />
+                                                        </button>
+                                                        <button onClick={() => handleDelete(r.id)}
+                                                            className="p-1.5 rounded hover:bg-red-50 transition-colors" title="Excluir">
+                                                            <Icon name="Trash2" size={16} color="var(--color-destructive)" />
+                                                        </button>
+                                                    </>)}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div className="px-4 py-3 border-t text-xs font-caption text-right" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                        Exibindo {romaneiosFiltrados.length} de {romaneios.length} romaneios
+                    </div>
                 </div>
             )}
 

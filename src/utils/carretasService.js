@@ -1190,9 +1190,15 @@ export async function fetchRomaneios(filters = {}) {
             *,
             motorista:motorista_id(id, name),
             veiculo:veiculo_id(id, placa, modelo),
+            pedidos:carretas_romaneio_pedidos(
+                id, numero_pedido, cidade_destino, valor_pedido, categoria_frete,
+                categorias_extra, percentual_frete, frete_calculado, empresa,
+                nome_cliente, nome_vendedor
+            ),
             itens:carretas_romaneio_itens(
-                id, quantidade, unidade, peso_total, descricao, observacoes,
-                material:material_id(id, nome, peso, unidade, percentual_frete, categoria_frete)
+                id, quantidade, unidade, peso_total, peso_unit, descricao, observacoes,
+                pedido_id, is_telha_zinco, comprimento_telha, metros_totais,
+                material:material_id(id, nome, peso, unidade, percentual_frete, categoria_frete, is_telha_zinco, peso_base_metro)
             )
         `)
         .order('created_at', { ascending: false });
@@ -1206,8 +1212,25 @@ export async function fetchRomaneios(filters = {}) {
     return data || [];
 }
 
+function itensPayloadCarretas(itens, romaneioId, pedidoIdMap) {
+    return (itens || []).map(it => ({
+        romaneio_id: romaneioId,
+        material_id: it.material_id || null,
+        descricao:   it.descricao   || null,
+        quantidade:  Number(it.quantidade) || 1,
+        unidade:     it.unidade     || 'ton',
+        peso_total:  it.peso_total  ? Number(it.peso_total) : null,
+        peso_unit:   it.peso_unit   != null ? Number(it.peso_unit) : null,
+        observacoes: it.observacoes || null,
+        pedido_id:   it.pedido_index != null ? (pedidoIdMap[it.pedido_index] || null) : (it.pedido_id || null),
+        is_telha_zinco:    it.is_telha_zinco || false,
+        comprimento_telha: it.comprimento_telha != null ? Number(it.comprimento_telha) : null,
+        metros_totais:     it.metros_totais     != null ? Number(it.metros_totais)     : null,
+    }));
+}
+
 export async function createRomaneio(romaneio) {
-    const { itens = [], ...payload } = romaneio;
+    const { itens = [], _pedidos = [], ...payload } = romaneio;
     // Sanitize optional UUIDs
     if (!payload.motorista_id) delete payload.motorista_id;
     if (!payload.veiculo_id)   delete payload.veiculo_id;
@@ -1219,24 +1242,28 @@ export async function createRomaneio(romaneio) {
         .select()
         .single();
     if (error) throw error;
+
+    // Pedidos — salva antes dos itens para poder vincular pedido_id
+    const pedidoIdMap = {};
+    if (_pedidos.length > 0) {
+        const { data: pedidosData, error: pe } = await supabase
+            .from('carretas_romaneio_pedidos')
+            .insert(_pedidos.map(p => ({ ...p, romaneio_id: data.id })))
+            .select('id');
+        if (pe) throw pe;
+        (pedidosData || []).forEach((p, i) => { pedidoIdMap[i] = p.id; });
+    }
+
     if (itens.length > 0) {
-        const itensPay = itens.map(it => ({
-            romaneio_id: data.id,
-            material_id: it.material_id || null,
-            descricao:   it.descricao   || null,
-            quantidade:  Number(it.quantidade) || 1,
-            unidade:     it.unidade     || 'ton',
-            peso_total:  it.peso_total  ? Number(it.peso_total) : null,
-            observacoes: it.observacoes || null,
-        }));
-        const { error: eItens } = await supabase.from('carretas_romaneio_itens').insert(itensPay);
+        const { error: eItens } = await supabase.from('carretas_romaneio_itens')
+            .insert(itensPayloadCarretas(itens, data.id, pedidoIdMap));
         if (eItens) throw eItens;
     }
     return data;
 }
 
 export async function updateRomaneio(id, romaneio) {
-    const { itens, ...payload } = romaneio;
+    const { itens, _pedidos, ...payload } = romaneio;
     // Não deletar veiculo_id quando é undefined — só quando explicitamente vazio
     if (payload.motorista_id === '') delete payload.motorista_id;
     if (payload.veiculo_id === '')   delete payload.veiculo_id;
@@ -1248,22 +1275,30 @@ export async function updateRomaneio(id, romaneio) {
         .select()
         .maybeSingle(); // evita erro "Cannot coerce to single JSON object" quando RLS filtra
     if (error) throw error;
-    if (itens !== undefined) {
-        // Replace all itens
-        await supabase.from('carretas_romaneio_itens').delete().eq('romaneio_id', id);
-        if (itens.length > 0) {
-            const itensPay = itens.map(it => ({
-                romaneio_id: id,
-                material_id: it.material_id || null,
-                descricao:   it.descricao   || null,
-                quantidade:  Number(it.quantidade) || 1,
-                unidade:     it.unidade     || 'ton',
-                peso_total:  it.peso_total  ? Number(it.peso_total) : null,
-                observacoes: it.observacoes || null,
-            }));
-            const { error: eItens } = await supabase.from('carretas_romaneio_itens').insert(itensPay);
-            if (eItens) throw eItens;
+
+    // Itens ANTES dos pedidos — romaneio_itens.pedido_id tem FK para
+    // carretas_romaneio_pedidos.id, mesma ordem usada no módulo de caminhões.
+    if (itens !== undefined || _pedidos !== undefined) {
+        const { error: delItensErr } = await supabase.from('carretas_romaneio_itens').delete().eq('romaneio_id', id);
+        if (delItensErr) throw delItensErr;
+    }
+    let pedidoIdMap = {};
+    if (_pedidos !== undefined) {
+        const { error: delPedidosErr } = await supabase.from('carretas_romaneio_pedidos').delete().eq('romaneio_id', id);
+        if (delPedidosErr) throw delPedidosErr;
+        if (_pedidos.length > 0) {
+            const { data: pd, error: pe } = await supabase
+                .from('carretas_romaneio_pedidos')
+                .insert(_pedidos.map(({ id: _omit, ...p }) => ({ ...p, romaneio_id: id })))
+                .select('id');
+            if (pe) throw pe;
+            (pd || []).forEach((p, i) => { pedidoIdMap[i] = p.id; });
         }
+    }
+    if (itens !== undefined && itens.length > 0) {
+        const { error: eItens } = await supabase.from('carretas_romaneio_itens')
+            .insert(itensPayloadCarretas(itens, id, pedidoIdMap));
+        if (eItens) throw eItens;
     }
     return data;
 }

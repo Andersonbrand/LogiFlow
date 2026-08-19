@@ -17,3 +17,15 @@ body {
         -webkit-tap-highlight-color: transparent;
     }
 }
+
+/* ── Mobile: evita o zoom automático do navegador ao focar num campo ───────
+   iOS Safari (e alguns Android) dão zoom sozinhos quando o campo focado tem
+   font-size menor que 16px — é o que causava a tela "pulando" no teclado ao
+   tocar num campo dos cards de lançamento (telas de motorista de caminhão e
+   carreteiro, entre outras). Forçar 16px nos campos resolve isso sem tirar
+   a capacidade do usuário de dar zoom manual (pinça) quando quiser. */
+@media (max-width: 768px) {
+    input, select, textarea {
+        font-size: 16px !important;
+    }
+}

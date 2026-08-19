@@ -115,7 +115,7 @@ function localDatetimeToUTC(str) {
     return local.toISOString();
 }
 
-function buildPayload(r) {
+function buildPayload(r, diariaCriadaEmOverride) {
     return {
         motorista:              r.motorista              || null,
         motorista_id:           r.motorista_id           || null,
@@ -138,6 +138,7 @@ function buildPayload(r) {
         valor_frete_calculado:  r.valor_frete_calculado  || 0,
         valor_total_carga:      r.valor_total_carga      || 0,
         ...(r.vehicle_id ? { vehicle_id: r.vehicle_id } : {}),
+        ...(diariaCriadaEmOverride !== undefined ? { diaria_criada_em: diariaCriadaEmOverride } : {}),
     };
 }
 
@@ -210,8 +211,14 @@ export async function createRomaneio(romaneio, itens = []) {
     });
     const numero = numeroExistente || await nextNumeroGlobal();
 
+    // A diária (custo_motorista) é classificada pelo mês em que foi
+    // efetivamente lançada, não pela data de saída da viagem (que pode nem
+    // estar preenchida ainda) nem pela criação do romaneio em si — se o
+    // romaneio já nasce com diária preenchida, esse é o momento do "lançamento".
+    const diariaCriadaEm = Number(romaneio.custo_motorista) > 0 ? new Date().toISOString() : null;
+
     const { data: romData, error } = await supabase.from('romaneios')
-        .insert({ ...buildPayload(romaneio), numero }).select('id').single();
+        .insert({ ...buildPayload(romaneio, diariaCriadaEm), numero }).select('id').single();
     if (error) throw error;
     const romId = romData.id;
 
@@ -277,8 +284,10 @@ export async function duplicateRomaneio(romaneio) {
 export async function updateRomaneio(id, romaneio, itens) {
     // Guarda o veículo/placa anterior para, se a placa for trocada na edição,
     // liberar o veículo antigo (volta para "Disponível") automaticamente.
+    // Também guarda a diária anterior — usada logo abaixo para decidir se
+    // `diaria_criada_em` precisa ser (re)gravada nesta edição.
     const { data: romAntes } = await supabase.from('romaneios')
-        .select('vehicle_id, placa').eq('id', id).single();
+        .select('vehicle_id, placa, custo_motorista, diaria_criada_em').eq('id', id).single();
 
     // ── 1. Pedidos e itens ANTES de atualizar o romaneio ─────────────────────
     // Assim quando o Realtime disparar (após o UPDATE abaixo), o fetch
@@ -336,7 +345,25 @@ export async function updateRomaneio(id, romaneio, itens) {
     }
 
     // ── 2. Atualiza o romaneio por último — Realtime só dispara aqui ──────────
-    const { error } = await supabase.from('romaneios').update(buildPayload(romaneio)).eq('id', id);
+    // `diaria_criada_em` só é gravada na transição de vazio/zero → >0 (ou seja,
+    // no exato momento em que a diária é lançada) e nunca mais tocada depois
+    // disso — a não ser que a diária seja zerada, aí sim é recalculada da
+    // próxima vez que for preenchida novamente.
+    const custoAntes = Number(romAntes?.custo_motorista || 0);
+    const custoDepois = Number(romaneio.custo_motorista || 0);
+    let diariaCriadaEm;
+    if (custoDepois <= 0) {
+        diariaCriadaEm = null; // diária zerada — limpa para recalcular no próximo lançamento
+    } else if (custoAntes <= 0) {
+        // Diária estava zerada e agora foi preenchida — isso É o lançamento,
+        // mesmo que reste uma diaria_criada_em antiga (de uma diária anterior
+        // já zerada) no registro; sempre sobrescreve nesse caso.
+        diariaCriadaEm = new Date().toISOString(); // acabou de ser lançada agora
+    } else {
+        diariaCriadaEm = romAntes?.diaria_criada_em || new Date().toISOString(); // mantém a data já gravada
+    }
+
+    const { error } = await supabase.from('romaneios').update(buildPayload(romaneio, diariaCriadaEm)).eq('id', id);
     if (error) throw error;
 
     // Placa/veículo confirmado (ou trocado) neste romaneio → sincroniza status automaticamente
