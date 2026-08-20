@@ -28,6 +28,7 @@ import { supabase } from 'utils/supabaseClient';
 import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf, garantirFornecedorCadastrado, EMPRESAS_LOGIFLOW } from 'utils/parcelasGenerator';
 import * as XLSX from 'xlsx';
 import PrettySelect from 'components/ui/PrettySelect';
+import { usePagination, PaginationBar } from 'components/ui/Pagination';
 
 // fetchDespesaById: busca despesa individual por id para recarregar após baixa/revogar
 async function fetchDespesaById(id) {
@@ -1410,6 +1411,7 @@ export default function DespesasCaminhoes() {
             (d.parcelas_cartao || []).some(p => (p.cartao || '').toLowerCase().includes(q))
         );
     }, [despesas, busca]);
+    const despesasPag = usePagination(despesasFiltradas, 15, [despesasFiltradas.length, busca]);
     const [todasCategorias, setTodasCategorias] = useState(() => [...CATEGORIAS_DESPESA_CAMINHOES]);
     const recarregarCategorias = useCallback(async () => {
         try { setTodasCategorias(await fetchCategoriasDespesaCaminhoes()); }
@@ -1681,7 +1683,7 @@ export default function DespesasCaminhoes() {
                                     ))}</tr>
                                 </thead>
                                 <tbody>
-                                    {despesasFiltradas.map((d, i) => (
+                                    {despesasPag.pageItems.map((d, i) => (
                                         <tr key={d.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                             <td className="px-3 py-3 whitespace-nowrap text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{FMT(d.data_despesa)}</td>
                                             <td className="px-3 py-3 font-data font-medium text-xs" style={{ color: 'var(--color-primary)' }}>{d.veiculo?.placa || '—'}</td>
@@ -1735,6 +1737,8 @@ export default function DespesasCaminhoes() {
                                     </tr>
                                 </tfoot>
                             </table>
+                            <PaginationBar page={despesasPag.page} setPage={despesasPag.setPage} totalPages={despesasPag.totalPages}
+                                totalItems={despesasPag.totalItems} pageSize={despesasPag.pageSize} itemLabel="despesa" itemLabelPlural="despesas" />
                         </div>
                     ))}
 

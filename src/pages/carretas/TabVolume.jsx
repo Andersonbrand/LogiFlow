@@ -23,6 +23,7 @@ import {
 } from 'utils/fornecedoresService';
 import { useCaptacaoConfig } from 'utils/settingsService';
 import PrettySelect from 'components/ui/PrettySelect';
+import { usePagination, PaginationBar } from 'components/ui/Pagination';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -1519,6 +1520,7 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo,
             (r.veiculo?.placa || '').toLowerCase().includes(q)
         );
     });
+    const pag = usePagination(carregamentosFiltrados, 15, [carregamentosFiltrados.length, pesquisa]);
 
     return (
         <div className="flex flex-col gap-4">
@@ -1543,7 +1545,7 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo,
                     </tr>
                 </thead>
                 <tbody>
-                    {carregamentosFiltrados.map((r, i) => {
+                    {pag.pageItems.map((r, i) => {
                         const { tipo, nome } = parseTipo(r);
                         return (
                             <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', background: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
@@ -1591,6 +1593,8 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo,
                     })}
                 </tbody>
             </table>
+            <PaginationBar page={pag.page} setPage={pag.setPage} totalPages={pag.totalPages}
+                totalItems={pag.totalItems} pageSize={pag.pageSize} itemLabel="carregamento" itemLabelPlural="carregamentos" />
         </div>
             )}
         </div>
@@ -1688,6 +1692,8 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
             );
         })
         : carrBase;
+
+    const pag = usePagination(carr, 15, [carr.length, filtroMotoristaTer, filtroPago, buscaTer]);
 
     return (
         <div className="flex flex-col gap-4">
@@ -1828,7 +1834,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                             </tr>
                         </thead>
                         <tbody>
-                            {carr.map((r, i) => {
+                            {pag.pageItems.map((r, i) => {
                                 const { tipo, nome } = parseTipo(r);
                                 const frete = calcFrete(r);
                                 return (
@@ -1869,6 +1875,8 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                             })}
                         </tbody>
                     </table>
+                    <PaginationBar page={pag.page} setPage={pag.setPage} totalPages={pag.totalPages}
+                        totalItems={pag.totalItems} pageSize={pag.pageSize} itemLabel="carregamento" itemLabelPlural="carregamentos" />
                 </div>
             )}
         </div>
@@ -1893,6 +1901,8 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
             );
         })
         : carregamentos;
+
+    const pagRetira = usePagination(itensRetira, 15, [itensRetira.length, buscaRetira]);
 
     const totalSacos = itensRetira.reduce((s, r) => s + (Number(r.quantidade) || 0), 0);
 
@@ -1944,7 +1954,7 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                             </tr>
                         </thead>
                         <tbody>
-                            {itensRetira.map((r, i) => {
+                            {pagRetira.pageItems.map((r, i) => {
                                 const { nome } = parseTipo(r);
                                 return (
                                     <tr key={r.id} className="border-t hover:bg-green-50 transition-colors"
@@ -1970,6 +1980,8 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                             })}
                         </tbody>
                     </table>
+                    <PaginationBar page={pagRetira.page} setPage={pagRetira.setPage} totalPages={pagRetira.totalPages}
+                        totalItems={pagRetira.totalItems} pageSize={pagRetira.pageSize} itemLabel="retira" itemLabelPlural="retiradas" />
                 </div>
             )}
         </div>

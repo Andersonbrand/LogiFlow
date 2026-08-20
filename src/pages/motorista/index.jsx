@@ -21,6 +21,7 @@ import * as XLSX from 'xlsx';
 import PrettySelect from 'components/ui/PrettySelect';
 import ChecklistItemsField from 'components/ui/ChecklistItemsField';
 import MultiFotoField from 'components/ui/MultiFotoField';
+import { usePagination, PaginationBar } from 'components/ui/Pagination';
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -28,6 +29,7 @@ const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none transi
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
 
 const PERIOD_OPTIONS = [
+    { label: 'Mês atual', days: 'mes' },
     { label: '30 dias', days: 30 },
     { label: '90 dias', days: 90 },
     { label: '6 meses', days: 180 },
@@ -57,7 +59,7 @@ export default function MotoristaDashboard() {
     const { confirm, ConfirmDialog } = useConfirm();
 
     const [tab, setTab]               = useState('viagens');
-    const [period, setPeriod]         = useState(30);
+    const [period, setPeriod]         = useState('mes'); // padrão: mostra tudo do mês vigente
     // Período personalizado (usado na aba Bonificações) — quando preenchido,
     // sobrepõe o filtro de "últimos N dias" acima.
     const [periodoCustom, setPeriodoCustom] = useState(null); // { inicio: 'YYYY-MM-DD', fim: 'YYYY-MM-DD' } | null — filtro CONFIRMADO (aplicado na busca)
@@ -106,6 +108,9 @@ export default function MotoristaDashboard() {
             if (periodoCustom?.inicio && periodoCustom?.fim) {
                 dateStr = periodoCustom.inicio;
                 dateFimStr = periodoCustom.fim;
+            } else if (period === 'mes') {
+                const hoje = new Date();
+                dateStr = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
             } else {
                 const cut = new Date(); cut.setDate(cut.getDate() - period);
                 dateStr = cut.toISOString().split('T')[0];
@@ -153,6 +158,11 @@ export default function MotoristaDashboard() {
     const bonificacoes = useMemo(() =>
         romaneios.map(r => ({ ...r, bonif: calcularBonificacao(r) }))
     , [romaneios]);
+
+    const bonificacoesComValor = useMemo(() =>
+        bonificacoes.filter(r => r.bonif?.valorTotal > 0)
+    , [bonificacoes]);
+    const bonificacoesPag = usePagination(bonificacoesComValor, 10, [bonificacoesComValor.length, period, periodoCustom]);
 
     const totais = useMemo(() => ({
         viagens:      romaneios.length,
@@ -709,7 +719,7 @@ export default function MotoristaDashboard() {
                                                 {periodoCustom?.inicio && periodoCustom?.fim && (
                                                     <p className="text-xs mt-2" style={{ color: 'var(--color-muted-foreground)' }}>
                                                         <Icon name="Info" size={11} className="inline mr-1" />
-                                                        Os cards abaixo mostram os valores de {new Date(periodoCustom.inicio + 'T00:00:00').toLocaleDateString('pt-BR')} até {new Date(periodoCustom.fim + 'T00:00:00').toLocaleDateString('pt-BR')}, em vez do filtro de "{PERIOD_OPTIONS.find(p=>p.days===period)?.label || period + ' dias'}" da barra lateral.
+                                                        Os cards abaixo mostram os valores de {new Date(periodoCustom.inicio + 'T00:00:00').toLocaleDateString('pt-BR')} até {new Date(periodoCustom.fim + 'T00:00:00').toLocaleDateString('pt-BR')}, em vez do filtro de "{PERIOD_OPTIONS.find(p=>p.days===period)?.label || (typeof period === 'number' ? period + ' dias' : period)}" da barra lateral.
                                                     </p>
                                                 )}
                                             </div>
@@ -727,9 +737,9 @@ export default function MotoristaDashboard() {
                                                 </div>
                                             </div>
                                             <div className="flex flex-col gap-2">
-                                                {bonificacoes.filter(r => r.bonif?.valorTotal > 0).length === 0
+                                                {bonificacoesComValor.length === 0
                                                     ? <div className="bg-white rounded-xl border p-6 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="DollarSign" size={24} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma bonificação no período</span></div>
-                                                    : bonificacoes.filter(r => r.bonif?.valorTotal > 0).map(r => (
+                                                    : bonificacoesPag.pageItems.map(r => (
                                                         <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                             <div className="flex items-start justify-between mb-2">
                                                                 <div>
@@ -746,6 +756,8 @@ export default function MotoristaDashboard() {
                                                     ))
                                                 }
                                             </div>
+                                            <PaginationBar page={bonificacoesPag.page} setPage={bonificacoesPag.setPage} totalPages={bonificacoesPag.totalPages}
+                                                totalItems={bonificacoesPag.totalItems} pageSize={bonificacoesPag.pageSize} itemLabel="bonificação" itemLabelPlural="bonificações" className="rounded-xl border bg-white" />
                                         </div>
                                     )}
                                 </>

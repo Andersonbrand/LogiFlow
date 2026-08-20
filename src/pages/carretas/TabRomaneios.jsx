@@ -713,7 +713,7 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                     {pedidos.length === 0 ? (
                         <div className="text-center py-8 rounded-xl border-2 border-dashed cursor-pointer hover:bg-gray-50 transition-colors"
                             style={{ borderColor: 'var(--color-border)' }} onClick={addPedido}>
-                            <Icon name="Package" size={28} color="var(--color-muted-foreground)" />
+                            <Icon name="Package" size={28} color="var(--color-muted-foreground)" className="mx-auto" />
                             <p className="text-sm mt-2" style={{ color: 'var(--color-muted-foreground)' }}>Clique para adicionar o primeiro pedido</p>
                         </div>
                     ) : (

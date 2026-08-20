@@ -91,6 +91,7 @@ function ModalHeader({ title, icon, onClose }) {
 }
 
 const PERIOD_OPTIONS = [
+    { label: 'Mês atual', days: 'mes' },
     { label: '30 dias', days: 30 },
     { label: '90 dias', days: 90 },
     { label: '6 meses', days: 180 },
@@ -102,7 +103,7 @@ export default function CarreteiroDashboard() {
     const { confirm, ConfirmDialog } = useConfirm();
     const { bonusConfig } = useBonusConfig();
     const [tab, setTab]           = useState('viagens');
-    const [period, setPeriod]     = useState(30);
+    const [period, setPeriod]     = useState('mes'); // padrão: mostra tudo do mês vigente
     // Período personalizado (usado na aba Bonificações) — quando preenchido,
     // sobrepõe o filtro de "últimos N dias" acima.
     const [periodoCustom, setPeriodoCustom] = useState(null); // { inicio: 'YYYY-MM-DD', fim: 'YYYY-MM-DD' } | null — filtro CONFIRMADO (aplicado na busca)
@@ -193,6 +194,9 @@ export default function CarreteiroDashboard() {
             if (periodoCustom?.inicio && periodoCustom?.fim) {
                 dateStr = periodoCustom.inicio;
                 dateFimStr = periodoCustom.fim;
+            } else if (period === 'mes') {
+                const hoje = new Date();
+                dateStr = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
             } else {
                 const cut = new Date();
                 cut.setDate(cut.getDate() - period);
@@ -329,6 +333,8 @@ export default function CarreteiroDashboard() {
             return { ...c, bonus: isCIF ? 0 : calcularBonusCarreteiro(c.destino, bonusConfig) };
         })
     , [carregamentos]);
+    const carregamentosComBonusPag = usePagination(carregamentosComBonus, 10, [carregamentosComBonus.length, period, periodoCustom]);
+    const bonusExtrasPag = usePagination(bonusExtras, 10, [bonusExtras.length, period, periodoCustom]);
 
     // Manter compatibilidade com viagens para checklist e registros
     const viagensComBonus = useMemo(() =>
@@ -1271,7 +1277,7 @@ export default function CarreteiroDashboard() {
                                                 {periodoCustom?.inicio && periodoCustom?.fim && (
                                                     <p className="text-xs mt-2" style={{ color: 'var(--color-muted-foreground)' }}>
                                                         <Icon name="Info" size={11} className="inline mr-1" />
-                                                        Os cards abaixo mostram os valores de {new Date(periodoCustom.inicio + 'T00:00:00').toLocaleDateString('pt-BR')} até {new Date(periodoCustom.fim + 'T00:00:00').toLocaleDateString('pt-BR')}, em vez do filtro de "{PERIOD_OPTIONS.find(p=>p.days===period)?.label || period + ' dias'}" da barra lateral.
+                                                        Os cards abaixo mostram os valores de {new Date(periodoCustom.inicio + 'T00:00:00').toLocaleDateString('pt-BR')} até {new Date(periodoCustom.fim + 'T00:00:00').toLocaleDateString('pt-BR')}, em vez do filtro de "{PERIOD_OPTIONS.find(p=>p.days===period)?.label || (typeof period === 'number' ? period + ' dias' : period)}" da barra lateral.
                                                     </p>
                                                 )}
                                             </div>
@@ -1300,7 +1306,7 @@ export default function CarreteiroDashboard() {
                                                 <div className="flex flex-col gap-2">
                                                     {carregamentosComBonus.length === 0
                                                         ? <div className="bg-white rounded-xl border p-6 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Package" size={24} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento no período</span></div>
-                                                        : carregamentosComBonus.map(c => (
+                                                        : carregamentosComBonusPag.pageItems.map(c => (
                                                             <div key={c.id} className="bg-white rounded-xl border p-3 flex items-center justify-between shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                                 <div>
                                                                     <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{c.destino || '—'}</p>
@@ -1314,6 +1320,8 @@ export default function CarreteiroDashboard() {
                                                         ))
                                                     }
                                                 </div>
+                                                <PaginationBar page={carregamentosComBonusPag.page} setPage={carregamentosComBonusPag.setPage} totalPages={carregamentosComBonusPag.totalPages}
+                                                    totalItems={carregamentosComBonusPag.totalItems} pageSize={carregamentosComBonusPag.pageSize} itemLabel="carregamento" itemLabelPlural="carregamentos" className="rounded-xl border bg-white mt-2" />
                                             </div>
 
                                             {/* Bonificações extras */}
@@ -1322,7 +1330,7 @@ export default function CarreteiroDashboard() {
                                                 <div className="flex flex-col gap-2">
                                                     {bonusExtras.length === 0
                                                         ? <div className="bg-white rounded-xl border p-6 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Award" size={24} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma bonificação extra no período</span></div>
-                                                        : bonusExtras.map(e => (
+                                                        : bonusExtrasPag.pageItems.map(e => (
                                                             <div key={e.id} className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}>
                                                                 <div className="flex items-center justify-between mb-1">
                                                                     <span className="text-xs font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
@@ -1335,6 +1343,8 @@ export default function CarreteiroDashboard() {
                                                         ))
                                                     }
                                                 </div>
+                                                <PaginationBar page={bonusExtrasPag.page} setPage={bonusExtrasPag.setPage} totalPages={bonusExtrasPag.totalPages}
+                                                    totalItems={bonusExtrasPag.totalItems} pageSize={bonusExtrasPag.pageSize} itemLabel="bonificação" itemLabelPlural="bonificações" className="rounded-xl border bg-white mt-2" />
                                             </div>
                                         </div>
                                     )}

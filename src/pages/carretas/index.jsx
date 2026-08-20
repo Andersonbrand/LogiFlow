@@ -331,6 +331,12 @@ function TabViagens({ isAdmin }) {
         );
     }, [registrosMotoristas, pesquisa, filtroPlaca]);
 
+    const carregamentosCarreta = useMemo(() =>
+        carregamentosComBonus.filter(c => !c.is_terceiro && !c.motorista?.is_terceiro),
+    [carregamentosComBonus]);
+    const carregamentosPag = usePagination(carregamentosCarreta, 15, [carregamentosCarreta.length, pesquisa, filtroPlaca]);
+    const registrosMotoristasPag = usePagination(registrosMotoristasFiltrados, 15, [registrosMotoristasFiltrados.length, pesquisa, filtroPlaca]);
+
     const exportar = () => {
         const wb = XLSX.utils.book_new();
         if (carregamentosComBonus.length) {
@@ -369,7 +375,7 @@ function TabViagens({ isAdmin }) {
                     {/* Sub-abas */}
                     <div className="flex gap-1 p-1 rounded-xl" style={{ backgroundColor: 'var(--color-muted)' }}>
                         {[
-                        { id: 'carregamentos', label: 'Carregamentos', count: carregamentosComBonus.length },
+                        { id: 'carregamentos', label: 'Carregamentos', count: carregamentosCarreta.length },
                             { id: 'motoristas',    label: 'Viagens lançadas pelos motoristas', count: registrosMotoristasFiltrados.length },
                         ].map(s => (
                             <button key={s.id} onClick={() => setAbaViagens(s.id)}
@@ -473,7 +479,7 @@ function TabViagens({ isAdmin }) {
                                                 <span className="text-sm">Nenhum carregamento no período. Lance pela aba <strong>Volume de Carregamento</strong>.</span>
                                             </div>
                                         </td></tr>
-                                    ) : carregamentosComBonus.filter(c => !c.is_terceiro && !c.motorista?.is_terceiro).map((c, i) => (
+                                    ) : carregamentosPag.pageItems.map((c, i) => (
                                         <tr key={c.id} className="border-t hover:bg-gray-50 transition-colors"
                                             style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                             <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(c.data_carregamento)}</td>
@@ -492,6 +498,8 @@ function TabViagens({ isAdmin }) {
                                     ))}
                                 </tbody>
                             </table>
+                            <PaginationBar page={carregamentosPag.page} setPage={carregamentosPag.setPage} totalPages={carregamentosPag.totalPages}
+                                totalItems={carregamentosPag.totalItems} pageSize={carregamentosPag.pageSize} itemLabel="carregamento" itemLabelPlural="carregamentos" />
                         </div>
                     )}
 
@@ -519,7 +527,7 @@ function TabViagens({ isAdmin }) {
                                                     <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum registro lançado pelos motoristas ainda'}</span>
                                                 </div>
                                             </td></tr>
-                                        ) : registrosMotoristasFiltrados.map((r, i) => (
+                                        ) : registrosMotoristasPag.pageItems.map((r, i) => (
                                             <tr key={r.id} className="border-t hover:bg-gray-50 transition-colors"
                                                 style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                 <td className="px-3 py-3 font-medium whitespace-nowrap">{r.motorista?.name || '—'}</td>
@@ -538,6 +546,8 @@ function TabViagens({ isAdmin }) {
                                         ))}
                                     </tbody>
                                 </table>
+                                <PaginationBar page={registrosMotoristasPag.page} setPage={registrosMotoristasPag.setPage} totalPages={registrosMotoristasPag.totalPages}
+                                    totalItems={registrosMotoristasPag.totalItems} pageSize={registrosMotoristasPag.pageSize} itemLabel="registro" itemLabelPlural="registros" />
                             </div>
                         </div>
                     )}
@@ -2188,6 +2198,8 @@ function TabBonificacoes({ isAdmin }) {
     }, [extras, pesquisa]);
 
     const carreteiros = motoristas.filter(m => m && (m.tipo_veiculo === 'carreta' || m.role === 'carreteiro'));
+    const carregamentosBonosPag = usePagination(carregamentosBonosFiltrados, 15, [carregamentosBonosFiltrados.length, pesquisa]);
+    const extrasPag = usePagination(extrasFiltrados, 15, [extrasFiltrados.length, pesquisa]);
 
     return (
         <div>
@@ -2298,7 +2310,7 @@ function TabBonificacoes({ isAdmin }) {
                                                 <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhum carregamento no período'}</span>
                                             </div>
                                           </td></tr>
-                                        : carregamentosBonosFiltrados.map((c, i) => (
+                                        : carregamentosBonosPag.pageItems.map((c, i) => (
                                             <tr key={c.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                 <td className="px-4 py-3 font-medium">{c.motorista?.name || '—'}</td>
                                                 <td className="px-4 py-3 font-data text-xs">{c.veiculo?.placa || '—'}</td>
@@ -2312,6 +2324,8 @@ function TabBonificacoes({ isAdmin }) {
                                     }
                                 </tbody>
                             </table>
+                            <PaginationBar page={carregamentosBonosPag.page} setPage={carregamentosBonosPag.setPage} totalPages={carregamentosBonosPag.totalPages}
+                                totalItems={carregamentosBonosPag.totalItems} pageSize={carregamentosBonosPag.pageSize} itemLabel="carregamento" itemLabelPlural="carregamentos" />
                         </div>
                     )}
 
@@ -2339,7 +2353,7 @@ function TabBonificacoes({ isAdmin }) {
                                                     <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma bonificação extra no período'}</span>
                                                 </div>
                                               </td></tr>
-                                            : extrasFiltrados.map((e, i) => (
+                                            : extrasPag.pageItems.map((e, i) => (
                                                 <tr key={e.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                                     <td className="px-4 py-3 font-medium">{e.motorista?.name || '—'}</td>
                                                     <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(e.data)}</td>
@@ -2361,6 +2375,8 @@ function TabBonificacoes({ isAdmin }) {
                                         }
                                     </tbody>
                                 </table>
+                                <PaginationBar page={extrasPag.page} setPage={extrasPag.setPage} totalPages={extrasPag.totalPages}
+                                    totalItems={extrasPag.totalItems} pageSize={extrasPag.pageSize} itemLabel="bonificação" itemLabelPlural="bonificações" />
                             </div>
                         </div>
                     )}
@@ -3002,6 +3018,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
             (d.cheques || []).some(c => (c.numero || '').toLowerCase().includes(q))
         );
     }, [despesas, pesquisa]);
+    const despesasPag = usePagination(despesasFiltradas, 15, [despesasFiltradas.length, pesquisa]);
 
     const parcelasFuturas = useMemo(() => {
         const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
@@ -3603,7 +3620,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                                     <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma despesa registrada'}</span>
                                 </div>
                             </td></tr>
-                            : despesasFiltradas.map((d, i) => (
+                            : despesasPag.pageItems.map((d, i) => (
                                 <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(d.data_despesa)}</td>
                                     <td className="px-3 py-3 font-data">{d.veiculo?.placa || '—'}</td>
@@ -3650,6 +3667,8 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             ))}
                         </tbody>
                     </table>
+                    <PaginationBar page={despesasPag.page} setPage={despesasPag.setPage} totalPages={despesasPag.totalPages}
+                        totalItems={despesasPag.totalItems} pageSize={despesasPag.pageSize} itemLabel="despesa" itemLabelPlural="despesas" />
                 </div>
             )}
             </>)}
@@ -4447,6 +4466,7 @@ function TabDiarias({ isAdmin, profile }) {
             (d.descricao || '').toLowerCase().includes(q)
         );
     }, [diarias, pesquisa]);
+    const diariasPag = usePagination(diariasFiltradas, 15, [diariasFiltradas.length, pesquisa]);
 
     const totais = useMemo(() => ({
         total: diariasFiltradas.reduce((s, d) => s + Number(d.valor_total || 0), 0),
@@ -4603,7 +4623,7 @@ function TabDiarias({ isAdmin, profile }) {
                                     <span className="text-sm">{pesquisa ? `Nenhum resultado para "${pesquisa}"` : 'Nenhuma diária registrada'}</span>
                                 </div>
                             </td></tr>
-                            : diariasFiltradas.map((d, i) => (
+                            : diariasPag.pageItems.map((d, i) => (
                                 <tr key={d.id} className="border-t hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                     <td className="px-4 py-3 whitespace-nowrap">{FMT_DATE(d.data_inicio)}</td>
                                     <td className="px-4 py-3 font-medium">{d.motorista?.name || '—'}</td>
@@ -4637,6 +4657,8 @@ function TabDiarias({ isAdmin, profile }) {
                             </tfoot>
                         )}
                     </table>
+                    <PaginationBar page={diariasPag.page} setPage={diariasPag.setPage} totalPages={diariasPag.totalPages}
+                        totalItems={diariasPag.totalItems} pageSize={diariasPag.pageSize} itemLabel="diária" itemLabelPlural="diárias" />
                 </div>
             )}
 
@@ -6312,6 +6334,14 @@ function TabHistoricoViagens({ isAdmin }) {
         try { sessionStorage.setItem('historico_filtroMes', v); } catch {}
     };
     const [pesquisa, setPesquisa] = useState('');
+    const [expandidos, setExpandidos] = useState(() => new Set());
+    const toggleExpandido = (nome) => {
+        setExpandidos(prev => {
+            const next = new Set(prev);
+            if (next.has(nome)) next.delete(nome); else next.add(nome);
+            return next;
+        });
+    };
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -6452,6 +6482,8 @@ function TabHistoricoViagens({ isAdmin }) {
         }
         return base;
     }, [porMotorista, filtroMotorista, motoristas, pesquisa]);
+
+    const dadosFiltradosPag = usePagination(dadosFiltrados, 10, [dadosFiltrados.length, filtroMotorista, pesquisa, filtroMes, filtroPeriodo]);
 
     // ── Exportar Excel ────────────────────────────────────────────────────────
     const exportar = () => {
@@ -6668,12 +6700,14 @@ function TabHistoricoViagens({ isAdmin }) {
                         </div>
                     ) : (
                         <div className="flex flex-col gap-4">
-                            {dadosFiltrados.map(m => {
+                            {dadosFiltradosPag.pageItems.map(m => {
                                 const maxCount = m.destinos[0]?.count || 1;
+                                const isExpandido = expandidos.has(m.nome);
                                 return (
                                     <div key={m.nome} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
                                         {/* Header do motorista */}
-                                        <div className="flex items-center justify-between px-5 py-3 border-b" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
+                                        <div className="flex items-center justify-between px-5 py-3 border-b cursor-pointer select-none" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}
+                                            onClick={() => toggleExpandido(m.nome)}>
                                             <div className="flex items-center gap-3">
                                                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0"
                                                     style={{ backgroundColor: 'var(--color-primary)' }}>
@@ -6686,18 +6720,25 @@ function TabHistoricoViagens({ isAdmin }) {
                                                     </p>
                                                 </div>
                                             </div>
-                                            {/* Badge do destino mais frequente */}
-                                            {m.destinos[0] && (
-                                                <div className="text-right hidden sm:block">
-                                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Destino mais frequente</p>
-                                                    <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                                        {m.destinos[0].cidade}
-                                                        <span className="ml-1.5 text-xs font-data text-orange-600">({m.destinos[0].count}×)</span>
-                                                    </p>
-                                                </div>
-                                            )}
+                                            <div className="flex items-center gap-3">
+                                                {/* Badge do destino mais frequente */}
+                                                {m.destinos[0] && (
+                                                    <div className="text-right hidden sm:block">
+                                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Destino mais frequente</p>
+                                                        <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                                            {m.destinos[0].cidade}
+                                                            <span className="ml-1.5 text-xs font-data text-orange-600">({m.destinos[0].count}×)</span>
+                                                        </p>
+                                                    </div>
+                                                )}
+                                                <button onClick={(e) => { e.stopPropagation(); toggleExpandido(m.nome); }} title={isExpandido ? 'Recolher' : 'Expandir'}
+                                                    className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-gray-200 transition-colors flex-shrink-0">
+                                                    <Icon name={isExpandido ? 'ChevronUp' : 'ChevronDown'} size={16} color="var(--color-muted-foreground)" />
+                                                </button>
+                                            </div>
                                         </div>
 
+                                        {isExpandido && (<>
                                         {/* Heatmap de destinos */}
                                         <div className="p-5">
                                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
@@ -6754,9 +6795,12 @@ function TabHistoricoViagens({ isAdmin }) {
                                                 </div>
                                             ))}
                                         </div>
+                                        </>)}
                                     </div>
                                 );
                             })}
+                            <PaginationBar page={dadosFiltradosPag.page} setPage={dadosFiltradosPag.setPage} totalPages={dadosFiltradosPag.totalPages}
+                                totalItems={dadosFiltradosPag.totalItems} pageSize={dadosFiltradosPag.pageSize} itemLabel="motorista" itemLabelPlural="motoristas" className="rounded-xl border bg-white" />
                         </div>
                     )}
                 </div>
@@ -8202,37 +8246,56 @@ function PainelHorasExtras({ dados, loading }) {
                     </div>
 
                     {/* Detalhe por dia */}
-                    <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                        <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                            <h3 className="font-heading font-bold text-sm" style={{ color: 'var(--color-text-primary)' }}>Detalhe por dia</h3>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB', color: 'var(--color-muted-foreground)' }}>
-                                        <th className="px-4 py-2.5 text-left">Motorista</th>
-                                        <th className="px-4 py-2.5 text-left">Data</th>
-                                        <th className="px-4 py-2.5 text-right">Horas Brutas</th>
-                                        <th className="px-4 py-2.5 text-right">Após Almoço</th>
-                                        <th className="px-4 py-2.5 text-right">Hora Extra</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {dados.dias.map((d, idx) => (
-                                        <tr key={`${d.motoristaId}-${d.data}`} className="border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                                            <td className="px-4 py-2.5" style={{ color: 'var(--color-text-primary)' }}>{d.nome}</td>
-                                            <td className="px-4 py-2.5 font-data" style={{ color: 'var(--color-muted-foreground)' }}>{new Date(d.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-                                            <td className="px-4 py-2.5 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{fmtHoras(d.horasBrutas)}</td>
-                                            <td className="px-4 py-2.5 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{fmtHoras(d.horasLiquidas)}</td>
-                                            <td className="px-4 py-2.5 text-right font-data font-semibold" style={{ color: '#B45309' }}>{fmtHoras(d.horasExtras)}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                    <DetalhePorDiaCard dias={dados.dias} fmtHoras={fmtHoras} />
                 </>
             )}
+        </div>
+    );
+}
+
+// Card recolhível com o detalhe diário de horas extras — vem colapsado por padrão
+// para não ocupar tela quando há muitos registros; paginado quando expandido.
+function DetalhePorDiaCard({ dias, fmtHoras }) {
+    const [expandido, setExpandido] = useState(false);
+    const pag = usePagination(dias, 15, [dias.length]);
+    return (
+        <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="px-4 py-3 border-b flex items-center justify-between cursor-pointer select-none" style={{ borderColor: 'var(--color-border)' }}
+                onClick={() => setExpandido(v => !v)}>
+                <h3 className="font-heading font-bold text-sm" style={{ color: 'var(--color-text-primary)' }}>Detalhe por dia</h3>
+                <button title={expandido ? 'Recolher' : 'Expandir'}
+                    className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-gray-100 transition-colors flex-shrink-0">
+                    <Icon name={expandido ? 'ChevronUp' : 'ChevronDown'} size={16} color="var(--color-muted-foreground)" />
+                </button>
+            </div>
+            {expandido && (<>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-b text-xs uppercase tracking-wide" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB', color: 'var(--color-muted-foreground)' }}>
+                                <th className="px-4 py-2.5 text-left">Motorista</th>
+                                <th className="px-4 py-2.5 text-left">Data</th>
+                                <th className="px-4 py-2.5 text-right">Horas Brutas</th>
+                                <th className="px-4 py-2.5 text-right">Após Almoço</th>
+                                <th className="px-4 py-2.5 text-right">Hora Extra</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {pag.pageItems.map((d, idx) => (
+                                <tr key={`${d.motoristaId}-${d.data}`} className="border-t" style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
+                                    <td className="px-4 py-2.5" style={{ color: 'var(--color-text-primary)' }}>{d.nome}</td>
+                                    <td className="px-4 py-2.5 font-data" style={{ color: 'var(--color-muted-foreground)' }}>{new Date(d.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                                    <td className="px-4 py-2.5 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{fmtHoras(d.horasBrutas)}</td>
+                                    <td className="px-4 py-2.5 text-right font-data" style={{ color: 'var(--color-muted-foreground)' }}>{fmtHoras(d.horasLiquidas)}</td>
+                                    <td className="px-4 py-2.5 text-right font-data font-semibold" style={{ color: '#B45309' }}>{fmtHoras(d.horasExtras)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                <PaginationBar page={pag.page} setPage={pag.setPage} totalPages={pag.totalPages}
+                    totalItems={pag.totalItems} pageSize={pag.pageSize} itemLabel="registro" itemLabelPlural="registros" className="border-t" />
+            </>)}
         </div>
     );
 }
