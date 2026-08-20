@@ -130,14 +130,25 @@ export default function DiagramaPneuVeiculo({ configuracao, value, onChange, ocu
                     const selecionada = selecionadas.includes(p.id);
                     const ocupada = ocupadas.includes(p.id);
                     const corTipo = COR_TIPO_EIXO[p.tipoEixo] || '#64748B';
-                    const cor = selecionada ? '#059669' : ocupada ? '#F59E0B' : corTipo;
+                    const corAnel = selecionada ? '#059669' : ocupada ? '#F59E0B' : corTipo;
+                    const corMiolo = selecionada ? '#D1FAE5' : ocupada ? '#FEF3C7' : '#F1F5F9';
+                    const r = selecionada ? 5.3 : 4.4;
                     return (
                         <g key={p.id} style={{ cursor: 'pointer' }} onClick={() => toggle(p.id)}>
-                            <circle cx={p.x} cy={p.y} r={selecionada ? 5.5 : 4.5}
-                                fill={selecionada ? '#D1FAE5' : ocupada ? '#FEF3C7' : '#fff'}
-                                stroke={cor} strokeWidth={selecionada ? 1.4 : 1.1} />
+                            {/* Banda de rodagem do pneu (borracha escura) */}
+                            <circle cx={p.x} cy={p.y} r={r} fill="#1F2937" stroke={corAnel} strokeWidth={selecionada ? 1.5 : 1.1} />
+                            {/* Sulcos da banda de rodagem — linhas radiais simulando o desenho do pneu */}
+                            {Array.from({ length: 10 }).map((_, i) => {
+                                const ang = (i / 10) * Math.PI * 2;
+                                const rIn = r * 0.6, rOut = r * 0.9;
+                                const x1 = p.x + Math.cos(ang) * rIn, y1 = p.y + Math.sin(ang) * rIn;
+                                const x2 = p.x + Math.cos(ang) * rOut, y2 = p.y + Math.sin(ang) * rOut;
+                                return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#4B5563" strokeWidth="0.55" strokeLinecap="round" />;
+                            })}
+                            {/* Aro / miolo — muda de cor conforme o status da posição */}
+                            <circle cx={p.x} cy={p.y} r={r * 0.48} fill={corMiolo} stroke={corAnel} strokeWidth="0.7" />
                             {selecionada && (
-                                <circle cx={p.x} cy={p.y} r={1.6} fill="#059669" />
+                                <circle cx={p.x} cy={p.y} r={1.3} fill="#059669" />
                             )}
                         </g>
                     );

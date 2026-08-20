@@ -1694,6 +1694,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
         : carrBase;
 
     const pag = usePagination(carr, 15, [carr.length, filtroMotoristaTer, filtroPago, buscaTer]);
+    const [resumoAberto, setResumoAberto] = useState(true);
 
     return (
         <div className="flex flex-col gap-4">
@@ -1754,10 +1755,19 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
 
             {/* Card de resumo por motorista */}
             {porMotorista.length > 0 && (
-                <div className="bg-white rounded-xl border shadow-sm" style={{ borderColor: '#FDE68A' }}>
-                    <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}>
+                <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: '#FDE68A' }}>
+                    <div className="px-4 py-3 border-b flex items-center justify-between cursor-pointer select-none" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}
+                        onClick={() => setResumoAberto(v => !v)}>
                         <p className="text-sm font-semibold" style={{ color: '#92400E' }}>💰 Resumo por Motorista — {mes ? new Date(mes + '-01T00:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : 'mês atual'}</p>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-xs font-semibold" style={{ color: '#92400E' }}>{BRL(totalFrete)}</span>
+                            <button title={resumoAberto ? 'Recolher' : 'Expandir'}
+                                className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-amber-100 transition-colors flex-shrink-0">
+                                <Icon name={resumoAberto ? 'ChevronUp' : 'ChevronDown'} size={16} color="#92400E" />
+                            </button>
+                        </div>
                     </div>
+                    {resumoAberto && (
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm min-w-[500px]">
                             <thead className="text-xs border-b" style={{ background: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}>
@@ -1789,6 +1799,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                             </tfoot>
                         </table>
                     </div>
+                    )}
                 </div>
             )}
 
