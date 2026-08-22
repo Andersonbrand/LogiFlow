@@ -353,9 +353,10 @@ export async function fetchChecklists(filters = {}) {
 }
 
 export async function createChecklist(checklist) {
+    const fotos = await uploadFotosChecklistSeNecessario(checklist.fotos_urls);
     const { data, error } = await supabase
         .from('carretas_checklists')
-        .insert({ ...checklist, aprovado: false })
+        .insert({ ...checklist, fotos_urls: fotos, foto_url: fotos[0] || checklist.foto_url || '', aprovado: false })
         .select()
         .single();
     if (error) throw error;
@@ -363,14 +364,51 @@ export async function createChecklist(checklist) {
 }
 
 export async function updateChecklist(id, fields) {
+    const patch = { ...fields };
+    if (patch.fotos_urls) {
+        patch.fotos_urls = await uploadFotosChecklistSeNecessario(patch.fotos_urls);
+        if (patch.foto_url !== undefined) patch.foto_url = patch.fotos_urls[0] || patch.foto_url || '';
+    }
     const { data, error } = await supabase
         .from('carretas_checklists')
-        .update(fields)
+        .update(patch)
         .eq('id', id)
         .select()
         .single();
     if (error) throw error;
     return data;
+}
+
+// ─── Upload de fotos do checklist ────────────────────────────────────────────
+// As fotos chegam do MultiFotoField como data-URLs base64 (ex: "data:image/...").
+// Enviar isso direto pro banco (coluna jsonb) fazia o payload do checklist
+// passar de dezenas de MB quando havia várias fotos, e o insert/update no
+// Supabase ficava "carregando" pra sempre sem nunca terminar (corpo grande
+// demais). Agora, antes de gravar, cada foto em base64 é enviada pro Storage
+// (bucket "checklist-fotos") e trocada pela URL pública — bem mais leve.
+// Fotos que já são URL (ex: ao editar um checklist existente) são mantidas.
+async function uploadFotosChecklistSeNecessario(fotos) {
+    if (!Array.isArray(fotos) || fotos.length === 0) return fotos || [];
+    const resultados = await Promise.all(fotos.map(async (foto, idx) => {
+        if (typeof foto !== 'string' || !foto.startsWith('data:')) return foto; // já é uma URL
+        try {
+            const resp = await fetch(foto);
+            const blob = await resp.blob();
+            const ext = (blob.type.split('/')[1] || 'jpg').split('+')[0];
+            const nome = `checklist_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+            const { data: uploadData, error: uploadErr } = await supabase.storage
+                .from('checklist-fotos').upload(nome, blob, { contentType: blob.type, upsert: true });
+            if (uploadErr) throw uploadErr;
+            const { data: urlData } = supabase.storage.from('checklist-fotos').getPublicUrl(uploadData.path);
+            return urlData?.publicUrl || foto;
+        } catch (e) {
+            // Se o upload de uma foto falhar, não trava o checklist inteiro —
+            // só essa foto fica de fora (evita o "carrega e não salva").
+            console.error('Falha ao enviar foto do checklist:', e);
+            return null;
+        }
+    }));
+    return resultados.filter(Boolean);
 }
 
 export async function aprovarChecklist(id, adminId) {
@@ -1193,7 +1231,7 @@ export async function fetchRomaneios(filters = {}) {
             pedidos:carretas_romaneio_pedidos(
                 id, numero_pedido, cidade_destino, valor_pedido, categoria_frete,
                 categorias_extra, percentual_frete, frete_calculado, empresa,
-                nome_cliente, nome_vendedor
+                nome_cliente, nome_vendedor, observacao
             ),
             itens:carretas_romaneio_itens(
                 id, quantidade, unidade, peso_total, peso_unit, descricao, observacoes,

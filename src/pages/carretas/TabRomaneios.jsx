@@ -286,7 +286,7 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
 // ─── Card de Pedido — cabeçalho (cliente/vendedor/frete) + materiais do pedido ─
 const EMPTY_PEDIDO_CARRETAS = () => ({
     numero_pedido: '', cidade_destino: '', valor_pedido: '', categoria_frete: 'Cimento',
-    categorias_extra: [], empresa: '', nome_cliente: '', nome_vendedor: '', itens: [],
+    categorias_extra: [], empresa: '', nome_cliente: '', nome_vendedor: '', itens: [], observacao: '',
 });
 
 function PedidoCardCarretas({ pedido, index, materiais, empresas, onUpdate, onRemove, defaultAberto = false }) {
@@ -436,6 +436,13 @@ function PedidoCardCarretas({ pedido, index, materiais, empresas, onUpdate, onRe
                         </div>
                     )}
                 </div>
+
+                {/* Observação específica deste pedido — some acompanha esse pedido em
+                    específico (diferente da observação geral do romaneio) */}
+                <Field label="Observação do pedido">
+                    <textarea value={pedido.observacao || ''} onChange={e => patch({ observacao: e.target.value })}
+                        rows={2} className={inputCls} style={inputStyle} placeholder="Alguma observação sobre este pedido específico..." />
+                </Field>
             </div>
             )}
         </div>
@@ -451,6 +458,7 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
     const emptyForm = () => ({
         status: 'Aguardando',
         motorista_id: '',
+        vincularMotorista: true,
         veiculo_id: '',
         empresa: '',
         data_saida: new Date().toISOString().split('T')[0],
@@ -473,6 +481,7 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
             setForm({
                 status:               rom.status || 'Aguardando',
                 motorista_id:         rom.motorista_id || '',
+                vincularMotorista:    !!rom.motorista_id,
                 veiculo_id:           rom.veiculo_id || '',
                 empresa:              rom.empresa || '',
                 data_saida:           rom.data_saida || '',
@@ -503,6 +512,7 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 categoria_frete: p.categoria_frete || 'Cimento',
                 categorias_extra: Array.isArray(p.categorias_extra) ? p.categorias_extra : [],
                 empresa: p.empresa || '', nome_cliente: p.nome_cliente || '', nome_vendedor: p.nome_vendedor || '',
+                observacao: p.observacao || '',
                 itens: (rom.itens || []).filter(it => it.pedido_id === p.id).map(itemToForm),
             }));
             // Romaneio antigo (de antes de "Pedidos múltiplos" existir) — tinha
@@ -570,6 +580,7 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                     empresa: p.empresa || null,
                     nome_cliente: (p.nome_cliente || '').trim() || null,
                     nome_vendedor: (p.nome_vendedor || '').trim() || null,
+                    observacao: (p.observacao || '').trim() || null,
                 };
             });
             // Itens ganham pedido_index (posição no array de pedidos) para o
@@ -592,7 +603,10 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 destino:             form.destino,
                 data_saida:          form.data_saida   || undefined,
                 data_chegada:        form.data_chegada || undefined,
-                motorista_id:        form.motorista_id || undefined,
+                // "Sem motorista (só a carga)" precisa gravar null explicitamente —
+                // undefined seria removido do payload logo abaixo e o motorista_id
+                // antigo continuaria salvo no banco, mesmo aparecendo desmarcado na tela.
+                motorista_id:        form.vincularMotorista === false ? null : (form.motorista_id || undefined),
                 veiculo_id:          form.veiculo_id   || undefined,
                 empresa:             form.empresa       || undefined,
                 numero_nf:           form.numero_nf     || undefined,
@@ -651,11 +665,29 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                             </PrettySelect>
                         </Field>
                         <Field label="Motorista">
-                            <PrettySelect value={form.motorista_id} onChange={e => set('motorista_id', e.target.value)}
-                                className={inputCls} style={inputStyle}>
-                                <option value="">Selecione o motorista...</option>
-                                {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                            </PrettySelect>
+                            <div className="flex items-center gap-2 mb-2">
+                                <button type="button" onClick={() => set('vincularMotorista', true)}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
+                                    style={form.vincularMotorista !== false
+                                        ? { backgroundColor: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE' }
+                                        : { backgroundColor: '#fff', color: 'var(--color-muted-foreground)', borderColor: 'var(--color-border)' }}>
+                                    Vincular a um motorista
+                                </button>
+                                <button type="button" onClick={() => { set('vincularMotorista', false); set('motorista_id', ''); }}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors"
+                                    style={form.vincularMotorista === false
+                                        ? { backgroundColor: '#EFF6FF', color: '#1D4ED8', borderColor: '#BFDBFE' }
+                                        : { backgroundColor: '#fff', color: 'var(--color-muted-foreground)', borderColor: 'var(--color-border)' }}>
+                                    Sem motorista (só a carga)
+                                </button>
+                            </div>
+                            {form.vincularMotorista !== false && (
+                                <PrettySelect value={form.motorista_id} onChange={e => set('motorista_id', e.target.value)}
+                                    className={inputCls} style={inputStyle}>
+                                    <option value="">Selecione o motorista...</option>
+                                    {motoristas.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                </PrettySelect>
+                            )}
                         </Field>
                         <Field label="Destino de Entrega" required>
                             <DestinoSelect
@@ -816,6 +848,11 @@ function RomaneioDetailModal({ romaneio, onClose }) {
                                             <span><span style={{ color: 'var(--color-muted-foreground)' }}>Valor: </span>{BRL(p.valor_pedido)}</span>
                                             <span><span style={{ color: 'var(--color-muted-foreground)' }}>Categoria: </span>{p.categoria_frete}{Array.isArray(p.categorias_extra) && p.categorias_extra.length > 0 ? ` +${p.categorias_extra.length}` : ''}</span>
                                         </div>
+                                        {p.observacao && (
+                                            <p className="mt-1.5 text-xs italic px-2 py-1.5 rounded-lg bg-white" style={{ color: '#7C3AED', border: '1px dashed #E9D5FF' }}>
+                                                💬 {p.observacao}
+                                            </p>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -1346,7 +1383,7 @@ export default function TabRomaneios({ isAdmin }) {
                                             <td className="px-3 py-3 text-right hidden lg:table-cell font-data text-xs font-semibold whitespace-nowrap" style={{ color: '#065F46' }}>{r.valor_carga ? BRL(r.valor_carga) : '—'}</td>
                                             <td className="px-3 py-3 text-right hidden lg:table-cell font-data text-xs font-semibold whitespace-nowrap" style={{ color: '#7C3AED' }}>{r.valor_frete ? BRL(r.valor_frete) : '—'}</td>
                                             <td className="px-3 py-3 text-center">
-                                                {r.lancado_por_motorista
+                                                {r.motorista_id
                                                     ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: '#DCFCE7', color: '#166534' }}>✓ Vinculado</span>
                                                     : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: '#FEF9C3', color: '#92400E' }}>⏳ Pendente</span>
                                                 }

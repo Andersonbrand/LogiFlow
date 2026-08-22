@@ -10,6 +10,7 @@ import { fetchAllUsers, updateUserProfile, fetchMaintenanceAlerts, resolveMainte
 import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { fetchRomaneios, aprovarRomaneio, reprovarRomaneio } from 'utils/romaneioService';
 import { fetchBonificacoesConsolidadas } from 'utils/bonificacaoService';
+import { exportBonificacoesAdminExcel } from 'utils/excelUtils';
 import { fetchCorredores, upsertCorredor, deleteCorredor, invalidarCache } from 'utils/corredoresService';
 import { supabase, subscribeTabela } from 'utils/supabaseClient';
 import { useNavigate } from 'react-router-dom';
@@ -45,6 +46,13 @@ export default function AdminPanel() {
     const [modalReprovar, setModalReprovar] = useState({ open: false, romaneio: null, motivo: '' });
     const [romaneios, setRomaneios] = useState([]);
     const [bonifs, setBonifs]       = useState([]);
+    // Filtro de período das Bonificações — mês vigente por padrão; o admin
+    // pode trocar pra um período personalizado quando precisar.
+    const mesAtualStr = new Date().toISOString().slice(0, 7); // 'YYYY-MM'
+    const [bonifFiltroMes, setBonifFiltroMes] = useState(mesAtualStr);
+    const [bonifPeriodoCustom, setBonifPeriodoCustom] = useState(false); // true = usar dataIni/dataFim abaixo
+    const [bonifDataIni, setBonifDataIni] = useState('');
+    const [bonifDataFim, setBonifDataFim] = useState('');
     const [tab, setTab]             = useState('usuarios');
     const [loading, setLoading]     = useState(true);
     const [editandoUsuario, setEditandoUsuario] = useState(null); // usuário sendo editado (qualquer papel)
@@ -56,6 +64,27 @@ export default function AdminPanel() {
     const [savingNovoUsuario, setSavingNovoUsuario] = useState(false);
     const [confirmarExclusaoUsuario, setConfirmarExclusaoUsuario] = useState(null);
     const [excluindoUsuarioId, setExcluindoUsuarioId] = useState(null);
+
+    // Calcula o intervalo de datas (dataInicio/dataFim) usado pra filtrar as
+    // Bonificações — mês selecionado, ou período personalizado quando ativo.
+    const calcularPeriodoBonif = useCallback(() => {
+        if (bonifPeriodoCustom) {
+            return { dataInicio: bonifDataIni || undefined, dataFim: bonifDataFim || undefined };
+        }
+        if (!bonifFiltroMes) return {};
+        const [ano, mes] = bonifFiltroMes.split('-').map(Number);
+        const ultimoDia = new Date(ano, mes, 0).getDate();
+        return { dataInicio: `${bonifFiltroMes}-01`, dataFim: `${bonifFiltroMes}-${String(ultimoDia).padStart(2, '0')}` };
+    }, [bonifPeriodoCustom, bonifDataIni, bonifDataFim, bonifFiltroMes]);
+
+    const loadBonifs = useCallback(async () => {
+        try {
+            const bon = await fetchBonificacoesConsolidadas(calcularPeriodoBonif());
+            setBonifs(bon || []);
+        } catch {
+            setBonifs([]);
+        }
+    }, [calcularPeriodoBonif]);
 
     // ✅ FIX: useCallback garante referência estável para o hook useRecarregarAoVoltar
     const load = useCallback(async () => {
@@ -72,15 +101,13 @@ export default function AdminPanel() {
         } catch (err) {
             showToast('Erro ao carregar dados: ' + err.message, 'error');
         }
-        try {
-            const bon = await fetchBonificacoesConsolidadas();
-            setBonifs(bon || []);
-        } catch {
-            setBonifs([]);
-        } finally {
-            setLoading(false);
-        }
-    }, []); // eslint-disable-line
+        await loadBonifs();
+        setLoading(false);
+    }, [loadBonifs]); // eslint-disable-line
+
+    // Recarrega só as bonificações quando o filtro de período muda (sem
+    // precisar recarregar usuários/romaneios/alertas de novo).
+    useEffect(() => { loadBonifs(); }, [bonifFiltroMes, bonifPeriodoCustom, bonifDataIni, bonifDataFim]); // eslint-disable-line
 
     // ✅ FIX: useEffect e useRecarregarAoVoltar no nível raiz do componente
     useEffect(() => {
@@ -481,17 +508,56 @@ export default function AdminPanel() {
                     {/* ── ABA BONIFICAÇÕES ─────────────────────────────────── */}
                     {tab === 'bonificacoes' && (
                         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-2">
+                            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
                                 <div className="flex items-center gap-2">
                                     <Icon name="Award" size={18} color="#D97706" />
                                     <h2 className="text-base font-semibold text-slate-800">Bonificações dos Motoristas</h2>
                                 </div>
-
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {!bonifPeriodoCustom ? (
+                                        <input type="month" value={bonifFiltroMes} onChange={e => setBonifFiltroMes(e.target.value)}
+                                            className="h-9 px-3 rounded-lg border border-slate-200 text-sm" />
+                                    ) : (
+                                        <>
+                                            <input type="date" value={bonifDataIni} onChange={e => setBonifDataIni(e.target.value)}
+                                                className="h-9 px-3 rounded-lg border border-slate-200 text-sm" />
+                                            <span className="text-xs text-slate-400">até</span>
+                                            <input type="date" value={bonifDataFim} onChange={e => setBonifDataFim(e.target.value)}
+                                                className="h-9 px-3 rounded-lg border border-slate-200 text-sm" />
+                                        </>
+                                    )}
+                                    <button onClick={() => setBonifPeriodoCustom(v => !v)}
+                                        className="h-9 px-3 rounded-lg border text-xs font-medium hover:bg-slate-50"
+                                        style={bonifPeriodoCustom ? { borderColor: '#93C5FD', color: '#1D4ED8', backgroundColor: '#EFF6FF' } : { borderColor: '#E2E8F0', color: '#64748B' }}>
+                                        {bonifPeriodoCustom ? 'Usar mês' : 'Período personalizado'}
+                                    </button>
+                                    <button onClick={() => exportBonificacoesAdminExcel(bonifs)} disabled={bonifs.length === 0}
+                                        className="h-9 px-3 rounded-lg border text-xs font-medium hover:bg-slate-50 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        style={{ borderColor: '#E2E8F0', color: '#64748B' }}>
+                                        <Icon name="Download" size={14} /> Exportar
+                                    </button>
+                                </div>
                             </div>
+                            {/* Totais gerais do período selecionado */}
+                            {bonifs.length > 0 && (
+                                <div className="px-6 py-3 border-b border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                    {[
+                                        { l: 'Motoristas', v: bonifs.length, color: '#1D4ED8' },
+                                        { l: 'Viagens', v: bonifs.reduce((s, b) => s + Number(b.total_viagens || 0), 0), color: '#7C3AED' },
+                                        { l: 'Peso Total', v: `${bonifs.reduce((s, b) => s + Number(b.peso_total || 0), 0).toLocaleString('pt-BR')} kg`, color: '#B45309' },
+                                        { l: 'Bonificação Total', v: BRL(bonifs.reduce((s, b) => s + Number(b.bonificacao_total || 0), 0)), color: '#059669' },
+                                    ].map(({ l, v, color }) => (
+                                        <div key={l} className="p-3 rounded-xl bg-slate-50">
+                                            <p className="text-xs text-slate-500 mb-0.5">{l}</p>
+                                            <p className="text-sm font-bold font-mono" style={{ color }}>{v}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                             {bonifs.length === 0 ? (
                                 <div className="py-12 flex flex-col items-center justify-center gap-1.5 text-slate-400">
                                     <Icon name="Award" size={36} color="#CBD5E1" />
-                                    <p className="text-sm">Nenhuma bonificação calculada ainda</p>
+                                    <p className="text-sm">Nenhuma bonificação calculada neste período</p>
                                     <p className="text-xs text-slate-300">Aprove romaneios para que as bonificações apareçam aqui</p>
                                 </div>
                             ) : (
@@ -514,6 +580,14 @@ export default function AdminPanel() {
                                                 </tr>
                                             ))}
                                         </tbody>
+                                        <tfoot>
+                                            <tr className="bg-slate-50 border-t-2 border-slate-200">
+                                                <td className="px-4 py-3 font-bold text-slate-800">TOTAL</td>
+                                                <td className="px-4 py-3 font-bold text-slate-800">{bonifs.reduce((s, b) => s + Number(b.total_viagens || 0), 0)}</td>
+                                                <td className="px-4 py-3 font-bold text-slate-800">{bonifs.reduce((s, b) => s + Number(b.peso_total || 0), 0).toLocaleString('pt-BR')} kg</td>
+                                                <td className="px-4 py-3 font-bold text-green-700">{BRL(bonifs.reduce((s, b) => s + Number(b.bonificacao_total || 0), 0))}</td>
+                                            </tr>
+                                        </tfoot>
                                     </table>
                                 </div>
                             )}

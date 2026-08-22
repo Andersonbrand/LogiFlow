@@ -175,6 +175,25 @@ export function exportHorasExtrasExcel(dados, valorHora = 0) {
     XLSX.writeFile(wb, `horas_extras_${today()}.xlsx`);
 }
 
+// ── EXPORTAR BONIFICAÇÕES DOS MOTORISTAS (Admin) ─────────────────────────────
+export function exportBonificacoesAdminExcel(bonifs) {
+    const rows = bonifs.map(b => ({
+        'Motorista': b.motorista, 'Viagens': b.total_viagens,
+        'Peso Total (kg)': Number(b.peso_total || 0), 'Bonificação (R$)': brl(b.bonificacao_total),
+    }));
+    rows.push({
+        'Motorista': 'TOTAL',
+        'Viagens': bonifs.reduce((s, b) => s + Number(b.total_viagens || 0), 0),
+        'Peso Total (kg)': bonifs.reduce((s, b) => s + Number(b.peso_total || 0), 0),
+        'Bonificação (R$)': brl(bonifs.reduce((s, b) => s + Number(b.bonificacao_total || 0), 0)),
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{ wch:24 },{ wch:10 },{ wch:16 },{ wch:16 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Bonificações');
+    XLSX.writeFile(wb, `bonificacoes_motoristas_${today()}.xlsx`);
+}
+
 // ── EXPORTAR ROMANEIO INDIVIDUAL NO MODELO ARAGUAIA ──────────────────────────
 /**
  * Gera um .xlsx no mesmo formato do modelo Excel da Comercial Araguaia.
@@ -433,7 +452,7 @@ export function exportRomaneioModelo1(romaneio) {
           })
         : '—';
 
-    // ── Agrupar itens por cidade + material ──────────────────────────────────
+    // ── Agrupar itens por Empresa → Cidade → Pedido → material ───────────────
     const pedMap = {};
     pedidos.forEach(p => { pedMap[p.id] = p; });
 
@@ -453,54 +472,50 @@ export function exportRomaneioModelo1(romaneio) {
     itens.forEach(item => {
         const mat        = item.materials || {};
         const pedido     = pedMap[item.pedido_id] || {};
-        const cidade     = pedido.cidade_destino || romaneio.destino || '—';
         const empresa    = pedido.empresa || '—';
+        const cidade     = pedido.cidade_destino || romaneio.destino || '—';
+        const pedidoNum  = pedido.numero_pedido || 'Sem número';
         const { isTelha, compTelha, metros: metrosItem } = getTelhaInfo(item);
         // Para telhas, cada comprimento de corte vira uma linha própria — não
         // podemos somar peças de comprimentos diferentes na mesma linha.
         const mid = String(item.material_id || mat.nome || 'x') + (isTelha ? `@${compTelha.toFixed(2)}` : '');
 
-        if (!grupos[cidade]) grupos[cidade] = {};
-        if (!grupos[cidade][empresa]) grupos[cidade][empresa] = {};
-        if (!grupos[cidade][empresa][mid]) {
-            grupos[cidade][empresa][mid] = {
+        if (!grupos[empresa]) grupos[empresa] = {};
+        if (!grupos[empresa][cidade]) grupos[empresa][cidade] = {};
+        if (!grupos[empresa][cidade][pedidoNum]) grupos[empresa][cidade][pedidoNum] = {};
+        if (!grupos[empresa][cidade][pedidoNum][mid]) {
+            grupos[empresa][cidade][pedidoNum][mid] = {
                 nome:     mat.nome     || `#${item.material_id}`,
                 unidade:  mat.unidade  || '',
                 isTelha, compTelha,
                 pesoUnit: Number(item.peso_unit || mat.peso || 0),
-                quant: 0, pesoTotal: 0, metrosTotais: 0, peds: [],
-                pedidoIds: new Set(),
+                quant: 0, pesoTotal: 0, metrosTotais: 0,
+                pedidoId: item.pedido_id,
             };
         }
-        grupos[cidade][empresa][mid].quant        += Number(item.quantidade    || 0);
-        grupos[cidade][empresa][mid].pesoTotal     += Number(item.peso_total    || 0);
-        grupos[cidade][empresa][mid].metrosTotais  += metrosItem;
-        const np = pedido.numero_pedido;
-        if (np && !grupos[cidade][empresa][mid].peds.includes(np)) grupos[cidade][empresa][mid].peds.push(np);
-        if (item.pedido_id) grupos[cidade][empresa][mid].pedidoIds.add(item.pedido_id);
+        grupos[empresa][cidade][pedidoNum][mid].quant        += Number(item.quantidade    || 0);
+        grupos[empresa][cidade][pedidoNum][mid].pesoTotal     += Number(item.peso_total    || 0);
+        grupos[empresa][cidade][pedidoNum][mid].metrosTotais  += metrosItem;
     });
 
-    const cidadesArr = Object.entries(grupos)
+    const empresasArr = Object.entries(grupos)
         .sort(([a],[b]) => a.localeCompare(b,'pt-BR'))
-        .map(([cidade, empresas]) => ({
-            cidade,
-            empresas: Object.entries(empresas)
+        .map(([empresa, cidades]) => ({
+            empresa,
+            cidades: Object.entries(cidades)
                 .sort(([a],[b]) => a.localeCompare(b,'pt-BR'))
-                .map(([empresa, mats]) => ({
-                    empresa,
-                    itens: Object.values(mats)
-                        .sort((a,b) => a.nome.localeCompare(b.nome,'pt-BR'))
-                        .map(item => {
-                            // Somar valor_pedido e frete de todos os pedidos associados a este item
-                            let totalValorPedido = 0, totalFrete = 0;
-                            item.pedidoIds.forEach(pid => {
-                                const pv = pedValorMap[pid];
-                                if (pv) {
-                                    totalValorPedido += pv.valor;
-                                    totalFrete += pv.frete || (pv.valor * pv.pct);
-                                }
-                            });
-                            return { ...item, valorPedido: totalValorPedido, fretePedido: totalFrete };
+                .map(([cidade, pedidosMap]) => ({
+                    cidade,
+                    pedidos: Object.entries(pedidosMap)
+                        .sort(([a],[b]) => a.localeCompare(b,'pt-BR',{numeric:true}))
+                        .map(([pedidoNum, mats]) => {
+                            const itensList = Object.values(mats).sort((a,b) => a.nome.localeCompare(b.nome,'pt-BR'));
+                            // Todo material dentro deste grupo pertence ao mesmo pedido_id —
+                            // usa o primeiro item pra buscar o valor/frete do pedido.
+                            const pv = itensList[0] ? pedValorMap[itensList[0].pedidoId] : null;
+                            const valorPedido = pv?.valor || 0;
+                            const fretePedido = pv ? (pv.frete || (pv.valor * pv.pct)) : 0;
+                            return { pedidoNum, valorPedido, fretePedido, itens: itensList };
                         }),
                 })),
         }));
@@ -562,49 +577,64 @@ export function exportRomaneioModelo1(romaneio) {
     merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:4,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:7}); R++;
 
     // Linha 4: cabeçalhos
-    rowsData.push(['Material','Un.','Quant.','Peso Unit.(kg)','Peso Total(kg)','Pedido(s)','Valor Pedido','Frete']
+    rowsData.push(['Material','Un.','Quant.','Peso Unit.(kg)','Peso Total(kg)','Pedido','Valor Pedido','Frete']
         .map(v => c(v, 5)));
     rowsHt.push(26); R++;
 
-    // Dados por cidade → empresa → material
-    cidadesArr.forEach(({ cidade, empresas }) => {
-        rowsData.push([c(`📍 ${cidade}`, 6), NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
+    // Dados por Empresa → Cidade → Pedido → material
+    empresasArr.forEach(({ empresa, cidades }) => {
+        rowsData.push([c(`🏢 ${empresa}`, 6), NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
         rowsHt.push(18);
         merges.push({r1:R,c1:0,r2:R,c2:7}); R++;
 
-        let pesoCidade = 0;
-        empresas.forEach(({ empresa, itens: itensEmpresa }) => {
-            rowsData.push([c(`🏢 ${empresa}`, 15), NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
+        let pesoEmpresaTotal = 0;
+        cidades.forEach(({ cidade, pedidos: pedidosArr }) => {
+            rowsData.push([c(`📍 ${cidade}`, 15), NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
             rowsHt.push(16);
             merges.push({r1:R,c1:0,r2:R,c2:7}); R++;
 
-            let pesoEmpresa = 0;
-            itensEmpresa.forEach(item => {
-                pesoEmpresa += item.pesoTotal;
-                const nomeExibido = item.isTelha && item.compTelha
-                    ? `${item.nome} (peça ${item.compTelha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}m — total ${item.metrosTotais.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}m)`
-                    : item.nome;
-                const unidadeExibida = item.isTelha ? 'PC' : item.unidade;
-                rowsData.push([
-                    c(nomeExibido, 7),
-                    c(unidadeExibida, 8),
-                    n(item.quant, 8),
-                    n(item.pesoUnit > 0 ? item.pesoUnit : 0, 8),
-                    n(Math.round(item.pesoTotal*100)/100, 8),
-                    c(item.peds.join(' / ')||'—', 8),
-                    item.valorPedido > 0 ? n(item.valorPedido, 14) : e(14),
-                    item.fretePedido > 0 ? n(item.fretePedido, 14) : e(14),
-                ]);
-                rowsHt.push(15); R++;
+            let pesoCidade = 0;
+            pedidosArr.forEach(({ pedidoNum, valorPedido, fretePedido, itens: itensPedido }) => {
+                rowsData.push([c(`📦 Pedido ${pedidoNum}`, 3), NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
+                rowsHt.push(15);
+                merges.push({r1:R,c1:0,r2:R,c2:7}); R++;
+
+                itensPedido.forEach(item => {
+                    pesoCidade += item.pesoTotal;
+                    const nomeExibido = item.isTelha && item.compTelha
+                        ? `${item.nome} (peça ${item.compTelha.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}m — total ${item.metrosTotais.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}m)`
+                        : item.nome;
+                    const unidadeExibida = item.isTelha ? 'PC' : item.unidade;
+                    rowsData.push([
+                        c(nomeExibido, 7),
+                        c(unidadeExibida, 8),
+                        n(item.quant, 8),
+                        n(item.pesoUnit > 0 ? item.pesoUnit : 0, 8),
+                        n(Math.round(item.pesoTotal*100)/100, 8),
+                        c(pedidoNum || '—', 8),
+                        valorPedido > 0 ? n(valorPedido, 14) : e(14),
+                        fretePedido > 0 ? n(fretePedido, 14) : e(14),
+                    ]);
+                    rowsHt.push(15); R++;
+                });
             });
-            pesoCidade += pesoEmpresa;
+            pesoEmpresaTotal += pesoCidade;
+
+            // Subtotal por cidade
+            rowsData.push([
+                e(11), e(11), e(11),
+                c(`Subtotal ${cidade}:`, 9),
+                n(Math.round(pesoCidade*100)/100, 10),
+                e(11), e(11), e(11),
+            ]);
+            rowsHt.push(14); R++;
         });
 
-        // Subtotal
+        // Subtotal por empresa
         rowsData.push([
             e(11), e(11), e(11),
-            c(`Subtotal ${cidade}:`, 9),
-            n(Math.round(pesoCidade*100)/100, 10),
+            c(`Subtotal ${empresa}:`, 9),
+            n(Math.round(pesoEmpresaTotal*100)/100, 10),
             e(11), e(11), e(11),
         ]);
         rowsHt.push(14); R++;

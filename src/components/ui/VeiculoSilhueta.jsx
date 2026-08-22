@@ -1,4 +1,5 @@
 import React from 'react';
+import PneuIcon from './PneuIcon';
 
 /**
  * VeiculoSilhueta — esboço lateral simplificado do veículo (cabine + eixos),
@@ -9,8 +10,8 @@ import React from 'react';
  * tipo: 'caminhao_leve' | 'truck' | 'bitruck' | 'rodotrem'
  */
 export default function VeiculoSilhueta({ tipo, className = '' }) {
-    const roda = (cx, filled = true) => (
-        <circle cx={cx} cy="40" r="5.5" fill={filled ? '#334155' : '#fff'} stroke="#334155" strokeWidth="1.6" />
+    const roda = (cx) => (
+        <PneuIcon cx={cx} cy={40} r={6} corAnel="#334155" corMiolo="#CBD5E1" strokeWidth={1.2} detalhado={false} />
     );
     const cabine = (x) => (
         <path d={`M${x} 34 L${x} 18 Q${x} 14 ${x + 4} 14 L${x + 14} 14 L${x + 14} 34 Z`} fill="#CBD5E1" stroke="#64748B" strokeWidth="1.2" />

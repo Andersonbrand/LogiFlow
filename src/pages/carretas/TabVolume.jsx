@@ -1695,6 +1695,36 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
 
     const pag = usePagination(carr, 15, [carr.length, filtroMotoristaTer, filtroPago, buscaTer]);
     const [resumoAberto, setResumoAberto] = useState(true);
+    const { showToast: showToastTer } = useToast();
+
+    // ── Exportar (Terceiros) ─────────────────────────────────────────────────
+    const exportarTerceiros = () => {
+        if (!carr.length) { showToastTer('Nenhum dado para exportar.', 'error'); return; }
+        const rows = carr.map(r => {
+            const { nome } = parseTipo(r);
+            return {
+                'Data': FMT(r.data_carregamento),
+                'Motorista': r.motorista?.name || nome || '—',
+                'Placa': r.veiculo?.placa || r.placa_terceiro || '—',
+                'Empresa': r.empresa || '—',
+                'Destino': r.destino || '—',
+                'Pedido': r.numero_pedido || '—',
+                'NF': r.numero_nota_fiscal || '—',
+                'Quantidade (sacos)': Number(r.quantidade) || 0,
+                'Frete (R$)': calcFrete(r),
+                'Pagamento': r.frete_pago ? 'Pago' : 'Pendente',
+            };
+        });
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Terceiros');
+        const sumRows = porMotorista.map(m => ({
+            'Motorista': m.nome, 'Viagens': m.viagens, 'Total (sacos)': m.sacos, 'Frete Total (R$)': m.frete,
+        }));
+        sumRows.push({ 'Motorista': 'TOTAL', 'Viagens': carregamentos.length, 'Total (sacos)': totalSacos, 'Frete Total (R$)': totalFrete });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sumRows), 'Resumo por Motorista');
+        XLSX.writeFile(wb, `terceiros_carretas_${mes || new Date().toISOString().slice(0, 7)}.xlsx`);
+    };
 
     return (
         <div className="flex flex-col gap-4">
@@ -1704,9 +1734,14 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                     <span>🚛</span>
                     <span>Carregamentos de <strong>veículos terceirizados</strong> — sem bonificações ou vínculo com a frota.</span>
                 </div>
-                {isAdmin && (
-                    <Button onClick={onNovo} iconName="Plus" size="sm">Novo Carregamento Terceiro</Button>
-                )}
+                <div className="flex items-center gap-2">
+                    <button onClick={exportarTerceiros} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)' }}>
+                        <Icon name="FileDown" size={14} /> Exportar
+                    </button>
+                    {isAdmin && (
+                        <Button onClick={onNovo} iconName="Plus" size="sm">Novo Carregamento Terceiro</Button>
+                    )}
+                </div>
             </div>
             <SearchInput value={buscaTer} onChange={setBuscaTer}
                 placeholder="Buscar por NF, pedido, motorista, destino, placa..." />

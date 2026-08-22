@@ -6,6 +6,7 @@ import { useToast } from 'utils/useToast';
 import { useConfirm } from 'components/ui/ConfirmDialog';
 import { supabase } from 'utils/supabaseClient';
 import { useCaptacaoConfig, saveCaptacaoConfig, useCustoConfig, saveCustoConfig } from 'utils/settingsService';
+import { useCollapsible, CollapseChevron } from 'components/ui/ExpandableList';
 
 // ─── Dados iniciais — Frota Própria (Tabela_Frete.pdf — coluna "Frete por saco") ──
 const FROTA_INICIAL = [
@@ -365,6 +366,7 @@ function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { cus
     const custoTotalUnitario = Number(custoConfig.custoMedioProduto || 0) + Number(custoConfig.custoOperacional || 0);
 
     const filtered = rows.filter(r => r.cidade?.toLowerCase().includes(busca.toLowerCase()));
+    const { open: filteredOpen, toggle: toggleFiltered } = useCollapsible(true);
 
     const startEdit = row => { setEditId(row.id); setEditData({ cidade: row.cidade, km: row.km ?? '', frete_por_saco: row.frete_por_saco ?? '', valor_venda: row.valor_venda ?? '' }); };
     const cancelEdit = () => { setEditId(null); setEditData({}); };
@@ -456,6 +458,9 @@ function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { cus
                     <span className="text-xs px-2 py-1 rounded-full font-semibold" style={{ backgroundColor: cor + '20', color: cor }}>
                         {filtered.length} cidades
                     </span>
+                    <button type="button" onClick={toggleFiltered} className="hover:opacity-70 transition-opacity">
+                        <CollapseChevron open={filteredOpen} color="var(--color-muted-foreground)" />
+                    </button>
                 </div>
                 <Button size="sm" iconName="Plus" onClick={() => { setAddMode(true); setEditId(null); }}>
                     Adicionar Cidade
@@ -463,6 +468,7 @@ function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { cus
             </div>
 
             {/* Tabela */}
+            {filteredOpen && (
             <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                 <table className={`w-full text-sm ${tipo === 'frota' ? 'min-w-[980px]' : 'min-w-[500px]'}`}>
                     <thead className="text-xs border-b" style={{ backgroundColor: cor + '15', borderColor: 'var(--color-border)' }}>
@@ -638,6 +644,7 @@ function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { cus
                     </tbody>
                 </table>
             </div>
+            )}
 
             <Toast toast={toast} />
             {ConfirmDialog}

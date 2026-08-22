@@ -25,7 +25,7 @@ const EMPTY_FORM = {
     vehicle_id:'', distancia_km:'', custo_combustivel:'', custo_pedagio:'', custo_motorista:'',
     dias_diaria:'1', valor_diaria_dia:'', diaria_descricao:'',
 };
-const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', categorias_extra:[], empresa:'Comercial Araguaia', nome_cliente:'', nome_vendedor:'', itens:[] };
+const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', categorias_extra:[], empresa:'Comercial Araguaia', nome_cliente:'', nome_vendedor:'', observacao:'', itens:[] };
 
 export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRomaneio, vehicles: vehiclesProp=[], materials: materialsProp=[] }) {
     const [form, setForm]           = useState(EMPTY_FORM);
@@ -173,6 +173,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                         empresa:         p.empresa || 'Comercial Araguaia',
                         nome_cliente:    p.nome_cliente || '',
                         nome_vendedor:   p.nome_vendedor || '',
+                        observacao:      p.observacao || '',
                         itens: itensDoPedido,
                     };
                 });
@@ -567,6 +568,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     empresa:         p.empresa || 'Comercial Araguaia',
                     nome_cliente:    (p.nome_cliente || '').trim(),
                     nome_vendedor:   (p.nome_vendedor || '').trim(),
+                    observacao:      (p.observacao || '').trim() || null,
                     percentual_frete: FRETE_CATEGORIAS.find(f => f.categoria === p.categoria_frete)?.percentual || 0.05,
                     frete_calculado: calcularFretePedidoMulti(p).total,
                 })),
@@ -922,6 +924,11 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                             Cliente: {pedido.nome_cliente}
                                                         </span>
                                                     )}
+                                                    {pedido.observacao && (
+                                                        <span className="text-xs font-caption truncate flex items-center gap-1" style={{ color:'#B45309' }} title={pedido.observacao}>
+                                                            <Icon name="MessageSquare" size={11} /> {pedido.observacao}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-0.5">
                                                     <span className="text-xs font-data" style={{ color:'var(--color-muted-foreground)' }}>
@@ -1009,6 +1016,13 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                                 <option key={f.categoria} value={f.categoria}>{f.label} – {fmtPct(f.percentual)}</option>
                                                             ))}
                                                         </PrettySelect>
+                                                    </div>
+                                                    <div className="col-span-2">
+                                                        <label className="block text-xs font-caption mb-1" style={{ color:'var(--color-text-secondary)' }}>Observação do pedido</label>
+                                                        <textarea value={pedido.observacao || ''}
+                                                            onChange={e => updatePedidoField(pIdx,'observacao',e.target.value)}
+                                                            rows={2} placeholder="Alguma observação sobre este pedido específico..."
+                                                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white font-data resize-none" />
                                                     </div>
                                                 </div>
 

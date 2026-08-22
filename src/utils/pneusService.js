@@ -171,8 +171,26 @@ export async function updatePneu(id, updates) {
 }
 
 export async function deletePneu(id) {
-    const { error } = await supabase.from('pneus').delete().eq('id', id);
+    // .select() depois do delete devolve as linhas realmente apagadas — sem
+    // isso, uma política de RLS que bloqueia o delete "silenciosamente"
+    // (sem gerar erro, mas sem apagar nada) fazia a tela mostrar "excluído
+    // com sucesso" mesmo com o registro continuando no banco.
+    const { data, error } = await supabase.from('pneus').delete().eq('id', id).select('id');
     if (error) throw error;
+    if (!data || data.length === 0) {
+        throw new Error('O registro não foi excluído (0 linhas afetadas). Verifique a política de exclusão (RLS) da tabela "pneus" no Supabase.');
+    }
+}
+
+// Exclui todos os registros de um mesmo lote (troca de várias posições
+// registrada de uma vez) — usado no botão "Excluir lote inteiro".
+export async function deleteLotePneus(loteId) {
+    const { data, error } = await supabase.from('pneus').delete().eq('lote_id', loteId).select('id');
+    if (error) throw error;
+    if (!data || data.length === 0) {
+        throw new Error('Nenhum registro foi excluído (0 linhas afetadas). Verifique a política de exclusão (RLS) da tabela "pneus" no Supabase.');
+    }
+    return data.length;
 }
 
 // Registra a substituição do pneu (retirada de uso): grava km_final, data e

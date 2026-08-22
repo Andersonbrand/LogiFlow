@@ -436,6 +436,7 @@ export default function CarreteiroDashboard() {
         if (salvandoAbast) return;
         if (!formAbast.veiculo_id || !formAbast.data_abastecimento) { showToast('Veículo e data são obrigatórios', 'error'); return; }
         if (!formAbast.cupom_fiscal?.trim()) { showToast('Informe o N° do cupom fiscal', 'error'); return; }
+        if (!formAbast.posto_id) { showToast('Selecione o posto de abastecimento', 'error'); return; }
         const precoDiesel = getPrecoCarreteiro(formAbast.posto_id, 'diesel');
         const precoArla   = getPrecoCarreteiro(formAbast.posto_id, 'arla');
         const valorDiesel = formAbast.valor_diesel
@@ -1702,7 +1703,7 @@ export default function CarreteiroDashboard() {
                                     maxLength={50}
                                 />
                             </Field>
-                            <Field label="Posto">
+                            <Field label="Posto" required>
                                 <PrettySelect value={formAbast.posto_id} onChange={e => handlePostoChangeCarreteiro(e.target.value)} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione o posto...</option>
                                     {postos.map(p => (
@@ -1879,7 +1880,11 @@ export default function CarreteiroDashboard() {
                             </div>
                             <div className={formRegistro.local_carregamento === 'Estoque' ? 'sm:col-span-2' : ''}>
                                 <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Destino da carga <span className="text-red-500">*</span></label>
-                                <input value={formRegistro.destino} onChange={e => setFormRegistro(f => ({ ...f, destino: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Cidade de destino" />
+                                <PrettySelect value={formRegistro.destino} onChange={e => setFormRegistro(f => ({ ...f, destino: e.target.value }))}
+                                    className={inputCls} style={inputStyle} placeholder="Cidade de destino">
+                                    <option value="">Cidade de destino</option>
+                                    {cidadesFrete.map(c => <option key={c.id} value={c.cidade}>{c.cidade}</option>)}
+                                </PrettySelect>
                             </div>
 
                             {formRegistro.local_carregamento === 'Estoque' ? (
@@ -2012,8 +2017,12 @@ export default function CarreteiroDashboard() {
                         </Field>
                         <div className="grid grid-cols-2 gap-4">
                             <Field label="Destino" required>
-                                <input value={formFerragem.destino} onChange={e => setFormFerragem(f => ({ ...f, destino: e.target.value }))}
-                                    className={inputCls} style={inputStyle} placeholder="Cidade ou estoque" />
+                                <PrettySelect value={formFerragem.destino} onChange={e => setFormFerragem(f => ({ ...f, destino: e.target.value }))}
+                                    className={inputCls} style={inputStyle}>
+                                    <option value="">Cidade ou estoque</option>
+                                    <option value="Estoque">Estoque</option>
+                                    {cidadesFrete.map(c => <option key={c.id} value={c.cidade}>{c.cidade}</option>)}
+                                </PrettySelect>
                             </Field>
                             <Field label="Peso (ton)">
                                 <input type="number" step="0.001" value={formFerragem.toneladas} onChange={e => setFormFerragem(f => ({ ...f, toneladas: e.target.value }))}
@@ -2115,11 +2124,11 @@ export default function CarreteiroDashboard() {
                                 />
                             </Field>
 
-                            <Field label="Veículo">
+                            <Field label="Veículo" required>
                                 <PrettySelect value={formPonto.veiculo_id}
                                     onChange={e => setFormPonto(f => ({ ...f, veiculo_id: e.target.value }))}
                                     className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione (opcional)...</option>
+                                    <option value="">Selecione...</option>
                                     {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
                                 </PrettySelect>
                             </Field>
@@ -2336,6 +2345,9 @@ export default function CarreteiroDashboard() {
                             <Button onClick={async () => {
                                 if (!formPonto.local?.trim() || !formPonto.data_saida) {
                                     showToast('Local e data de saída são obrigatórios', 'error'); return;
+                                }
+                                if (!formPonto.veiculo_id) {
+                                    showToast('Selecione o veículo — obrigatório pra saber qual placa fez essa parada', 'error'); return;
                                 }
                                 if ((formPonto.horarios_extras || []).length > 1) {
                                     showToast('Cada registro permite no máximo um ponto principal e um ponto extra. Crie um novo registro de parada.', 'error'); return;

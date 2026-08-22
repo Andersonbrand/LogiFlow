@@ -36,6 +36,7 @@ import { supabase } from 'utils/supabaseClient';
 import { gerarParcelasAutomaticas, somaParcelas, detectarPossiveisDuplicatas, adicionarDiasUteis, buscarDespesasComMesmaNf, garantirFornecedorCadastrado, EMPRESAS_LOGIFLOW } from 'utils/parcelasGenerator';
 import PrettySelect from 'components/ui/PrettySelect';
 import { usePagination, PaginationBar } from 'components/ui/Pagination';
+import { useCollapsible, CollapseChevron } from 'components/ui/ExpandableList';
 
 async function fetchDespesaAdmById(id) {
     const { data } = await supabase.from('transporte_despesas_adm').select('*').eq('id', id).single();
@@ -1436,6 +1437,7 @@ export default function DespesasAdmTransporte() {
         despesas.forEach(d => { acc[d.categoria] = (acc[d.categoria] || 0) + Number(d.valor || 0); });
         return Object.entries(acc).sort((a, b) => b[1] - a[1]);
     }, [despesas]);
+    const { open: categoriasOpen, toggle: toggleCategorias } = useCollapsible(true);
 
     const boletosVencendo = useMemo(() => {
         const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
@@ -1575,35 +1577,44 @@ export default function DespesasAdmTransporte() {
 
                     {/* Resumo por categoria */}
                     {totalPorCategoria.length > 0 && (
-                        <div className="rounded-2xl border p-4 shadow-sm mb-5" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface, white)' }}>
-                            <p className="text-xs font-semibold mb-4" style={{ color: 'var(--color-text-secondary)' }}>
-                                Resumo de Gastos por Categoria
-                            </p>
-                            <div className="space-y-3">
-                                {totalPorCategoria.map(([cat, val]) => {
-                                    const pct = totalPeriodo > 0 ? (val / totalPeriodo) * 100 : 0;
-                                    const color = getCatColor(cat);
-                                    return (
-                                        <div key={cat}>
-                                            <div className="flex justify-between items-center text-xs mb-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                                                    <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{cat}</span>
+                        <div className="rounded-2xl border shadow-sm mb-5 overflow-hidden" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-surface, white)' }}>
+                            <button type="button" onClick={toggleCategorias}
+                                className="w-full px-4 py-4 flex items-center justify-between gap-2 hover:bg-gray-50 transition-colors">
+                                <p className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
+                                    Resumo de Gastos por Categoria
+                                </p>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                    <span className="text-xs font-data font-semibold" style={{ color: 'var(--color-text-primary)' }}>{BRL(totalPeriodo)}</span>
+                                    <CollapseChevron open={categoriasOpen} color="var(--color-text-secondary)" />
+                                </div>
+                            </button>
+                            {categoriasOpen && (
+                                <div className="px-4 pb-4 space-y-3">
+                                    {totalPorCategoria.map(([cat, val]) => {
+                                        const pct = totalPeriodo > 0 ? (val / totalPeriodo) * 100 : 0;
+                                        const color = getCatColor(cat);
+                                        return (
+                                            <div key={cat}>
+                                                <div className="flex justify-between items-center text-xs mb-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                                                        <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{cat}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-data font-semibold" style={{ color }}>{BRL(val)}</span>
+                                                        <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ backgroundColor: color + '20', color }}>
+                                                            {pct.toFixed(1)}%
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-data font-semibold" style={{ color }}>{BRL(val)}</span>
-                                                    <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ backgroundColor: color + '20', color }}>
-                                                        {pct.toFixed(1)}%
-                                                    </span>
+                                                <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+                                                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
                                                 </div>
                                             </div>
-                                            <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                                                <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     )}
 

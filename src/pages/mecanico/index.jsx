@@ -7,7 +7,7 @@ import { useAuth } from 'utils/AuthContext';
 import { subscribeTabela } from 'utils/supabaseClient';
 import { fetchOrdensServico, finalizarOrdemServico, reportarProblemaOS, updateOrdemServico, fetchPecasCatalogo, fetchVeiculosProprios, fetchMotoristasProprios } from 'utils/carretasService';
 import { fetchCaminhoesPlacas } from 'utils/vehicleService';
-import { fetchCatalogoPneus, createPneu, updatePneu, deletePneu, gerarNumeroSequencialPneu, fetchPneus, agruparPneusPorLote } from 'utils/pneusService';
+import { fetchCatalogoPneus, createPneu, updatePneu, deletePneu, deleteLotePneus, gerarNumeroSequencialPneu, fetchPneus, agruparPneusPorLote } from 'utils/pneusService';
 import { CONFIGURACOES_OPTIONS, getConfiguracao } from 'utils/pneuDiagramaConfig';
 import DiagramaPneuVeiculo from 'components/ui/DiagramaPneuVeiculo';
 import { useConfirm } from 'components/ui/ConfirmDialog';
@@ -57,7 +57,7 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 // Uma linha de registro de pneu na lista "Meus Últimos Registros". `indent`
 // é usado quando ela aparece dentro de um lote expandido (troca em várias
 // posições registrada de uma vez).
-function RegistroPneuRow({ p, editando, onEditar, onExcluir, indent = false }) {
+function RegistroPneuRow({ p, editando, onVer, onEditar, onExcluir, indent = false }) {
     return (
         <div className={`px-4 py-3 flex items-start gap-3 ${indent ? 'pl-9' : ''}`}
             style={editando ? { backgroundColor: '#EFF6FF' } : undefined}>
@@ -78,6 +78,10 @@ function RegistroPneuRow({ p, editando, onEditar, onExcluir, indent = false }) {
                 {p.tipo_pneu === 'recapado' ? 'Recapado' : 'Novo'}
             </span>
             <div className="flex items-center gap-1 flex-shrink-0">
+                <button onClick={() => onVer(p)} title="Ver detalhes"
+                    className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-slate-100">
+                    <Icon name="Eye" size={13} color="var(--color-muted-foreground)" />
+                </button>
                 <button onClick={() => onEditar(p)} title="Editar"
                     className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-blue-50">
                     <Icon name="Pencil" size={13} color="#1D4ED8" />
@@ -88,6 +92,47 @@ function RegistroPneuRow({ p, editando, onEditar, onExcluir, indent = false }) {
                 </button>
             </div>
         </div>
+    );
+}
+
+// Modal somente-leitura com todos os dados de um registro de pneu — pra
+// consultar rapidamente sem precisar entrar no modo de edição.
+function ModalVerPneu({ p, onClose }) {
+    if (!p) return null;
+    const linha = (label, valor) => (
+        <div className="flex items-center justify-between gap-3 py-1.5">
+            <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{label}</span>
+            <span className="text-xs font-medium text-right" style={{ color: 'var(--color-text-primary)' }}>{valor || '—'}</span>
+        </div>
+    );
+    return (
+        <ModalOverlay onClose={onClose}>
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="flex items-center gap-2">
+                    <Icon name="Eye" size={18} color="var(--color-primary)" />
+                    <h3 className="font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Detalhes do Registro</h3>
+                </div>
+                <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100">
+                    <Icon name="X" size={16} color="var(--color-muted-foreground)" />
+                </button>
+            </div>
+            <div className="p-5 divide-y" style={{ borderColor: 'var(--color-border)' }}>
+                {linha('Nº do registro', p.numero_sequencial)}
+                {linha('Veículo / Placa', p.veiculo?.placa || p.veiculo_caminhao_placa)}
+                {linha('Eixo / Posição', p.eixo_trocado)}
+                {linha('Tipo do pneu', p.tipo_pneu === 'recapado' ? 'Recapado' : 'Novo')}
+                {linha('Marca', p.marca)}
+                {linha('Medida', p.medida)}
+                {linha('Bandagem', p.categoria_bandagem)}
+                {linha('Motorista que solicitou', p.motorista?.name)}
+                {linha('Km do veículo no momento', p.km_atual != null ? Number(p.km_atual).toLocaleString('pt-BR') : null)}
+                {linha('Data da instalação', p.data_instalacao ? new Date(p.data_instalacao + 'T00:00:00').toLocaleDateString('pt-BR') : null)}
+                {linha('Observações', p.observacoes)}
+            </div>
+            <div className="flex justify-end px-5 py-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                <button onClick={onClose} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
+            </div>
+        </ModalOverlay>
     );
 }
 
@@ -181,6 +226,7 @@ export default function MecanicoPage() {
     [pneusRegistrados, user?.id]);
     const [lotesExpandidos, setLotesExpandidos] = useState({});
     const toggleLote = (loteId) => setLotesExpandidos(s => ({ ...s, [loteId]: !s[loteId] }));
+    const [verPneu, setVerPneu] = useState(null); // registro sendo visualizado (somente leitura)
 
     const handleEditarPneu = (p) => {
         const veiculoId = p.veiculo_id ? `cv:${p.veiculo_id}` : (p.veiculo_caminhao_id ? `vh:${p.veiculo_caminhao_id}` : '');
@@ -206,6 +252,24 @@ export default function MecanicoPage() {
             if (editandoPneuId === p.id) handleCancelarEdicaoPneu();
             loadDadosPneus();
         } catch (e) { showToast('Erro ao excluir: ' + e.message, 'error'); }
+    };
+
+    // Exclui de uma vez todos os registros de um lote (troca em várias
+    // posições feita numa única ação) — antes só dava pra excluir pneu por
+    // pneu, um de cada vez.
+    const handleExcluirLote = async (item) => {
+        const ok = await confirmPneu({
+            title: 'Excluir lote inteiro?',
+            message: `Remove os ${item.itens.length} registros deste lote (${item.itens[0].veiculo?.placa || item.itens[0].veiculo_caminhao_placa || 'veículo'}) — esta ação não pode ser desfeita.`,
+            confirmLabel: 'Excluir tudo', variant: 'danger',
+        });
+        if (!ok) return;
+        try {
+            const qtd = await deleteLotePneus(item.lote_id);
+            showToast(`${qtd} registro(s) excluído(s).`, 'success');
+            if (item.itens.some(p => p.id === editandoPneuId)) handleCancelarEdicaoPneu();
+            loadDadosPneus();
+        } catch (e) { showToast('Erro ao excluir lote: ' + e.message, 'error'); }
     };
 
     const handleSalvarPneu = async () => {
@@ -762,38 +826,48 @@ export default function MecanicoPage() {
                                     <div className="divide-y" style={{ borderColor: 'var(--color-border)' }}>
                                         {meusPneusAgrupados.map(item => item.grupo ? (
                                             <div key={item.lote_id}>
-                                                <button type="button" onClick={() => toggleLote(item.lote_id)}
-                                                    className="w-full px-4 py-3 flex items-start gap-3 hover:bg-slate-50 text-left">
-                                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#DBEAFE' }}>
-                                                        <Icon name="Layers" size={14} color="#1D4ED8" />
+                                                <div className="w-full px-4 py-3 flex items-start gap-3 hover:bg-slate-50">
+                                                    <button type="button" onClick={() => toggleLote(item.lote_id)} className="flex items-start gap-3 flex-1 min-w-0 text-left">
+                                                        <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#DBEAFE' }}>
+                                                            <Icon name="Layers" size={14} color="#1D4ED8" />
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                                                                {item.itens.length} pneus trocados · {item.itens[0].veiculo?.placa || item.itens[0].veiculo_caminhao_placa || 'Sem placa'}
+                                                            </p>
+                                                            <p className="text-xs truncate" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                {item.itens[0].marca} {item.itens[0].medida} · {new Date(item.itens[0].data_instalacao + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                                            </p>
+                                                        </div>
+                                                    </button>
+                                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                                        <button onClick={() => handleExcluirLote(item)} title="Excluir lote inteiro"
+                                                            className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-red-50">
+                                                            <Icon name="Trash2" size={13} color="#DC2626" />
+                                                        </button>
+                                                        <button onClick={() => toggleLote(item.lote_id)} className="w-6 h-6 rounded-md flex items-center justify-center">
+                                                            <Icon name={lotesExpandidos[item.lote_id] ? 'ChevronUp' : 'ChevronDown'} size={16} color="var(--color-muted-foreground)" />
+                                                        </button>
                                                     </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="text-xs font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                                                            {item.itens.length} pneus trocados · {item.itens[0].veiculo?.placa || item.itens[0].veiculo_caminhao_placa || 'Sem placa'}
-                                                        </p>
-                                                        <p className="text-xs truncate" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                            {item.itens[0].marca} {item.itens[0].medida} · {new Date(item.itens[0].data_instalacao + 'T00:00:00').toLocaleDateString('pt-BR')}
-                                                        </p>
-                                                    </div>
-                                                    <Icon name={lotesExpandidos[item.lote_id] ? 'ChevronUp' : 'ChevronDown'} size={16} color="var(--color-muted-foreground)" className="flex-shrink-0 mt-1" />
-                                                </button>
+                                                </div>
                                                 {lotesExpandidos[item.lote_id] && (
                                                     <div className="divide-y bg-slate-50/60" style={{ borderColor: 'var(--color-border)' }}>
                                                         {item.itens.map(p => (
                                                             <RegistroPneuRow key={p.id} p={p} editando={editandoPneuId === p.id}
-                                                                onEditar={handleEditarPneu} onExcluir={handleExcluirPneu} indent />
+                                                                onVer={setVerPneu} onEditar={handleEditarPneu} onExcluir={handleExcluirPneu} indent />
                                                         ))}
                                                     </div>
                                                 )}
                                             </div>
                                         ) : (
                                             <RegistroPneuRow key={item.pneu.id} p={item.pneu} editando={editandoPneuId === item.pneu.id}
-                                                onEditar={handleEditarPneu} onExcluir={handleExcluirPneu} />
+                                                onVer={setVerPneu} onEditar={handleEditarPneu} onExcluir={handleExcluirPneu} />
                                         ))}
                                     </div>
                                 )}
                             </div>
                         </div>
+                        {verPneu && <ModalVerPneu p={verPneu} onClose={() => setVerPneu(null)} />}
                         {ConfirmDialogPneu}
                         </>
                     )}

@@ -78,10 +78,10 @@ export async function fetchBonificacoes(motoristaId, periodo) {
 
 // Busca bonificações consolidadas — calcula diretamente dos romaneios aprovados
 // (não depende da tabela bonificacoes estar preenchida)
-export async function fetchBonificacoesConsolidadas() {
+export async function fetchBonificacoesConsolidadas(filters = {}) {
     // Busca romaneios que foram aprovados OU finalizados (compatível com registros antigos)
     // Alguns têm aprovado=true, outros têm status_aprovacao='aprovado', outros apenas status='Finalizado'
-    const { data: romaneios, error } = await supabase
+    let q = supabase
         .from('romaneios')
         .select(`
             id, numero, motorista, motorista_id, destino, saida, status, aprovado, status_aprovacao,
@@ -90,6 +90,9 @@ export async function fetchBonificacoesConsolidadas() {
         `)
         .or('aprovado.eq.true,status_aprovacao.eq.aprovado,status.eq.Finalizado')
         .order('created_at', { ascending: false });
+    if (filters.dataInicio) q = q.gte('saida', filters.dataInicio);
+    if (filters.dataFim)    q = q.lte('saida', `${filters.dataFim}T23:59:59`);
+    const { data: romaneios, error } = await q;
 
     if (error) throw error;
     if (!romaneios || romaneios.length === 0) return [];

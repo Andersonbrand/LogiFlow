@@ -5,6 +5,7 @@ import TabFretes from './TabFretes';
 import TabCustos from './TabCustos';
 import TabPneus from './TabPneus';
 import { usePagination, PaginationBar } from 'components/ui/Pagination';
+import { useCollapsible, CollapseChevron } from 'components/ui/ExpandableList';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -3195,6 +3196,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
         despesas.forEach(d => { acc[d.categoria] = (acc[d.categoria] || 0) + Number(d.valor || 0); });
         return Object.entries(acc).sort((a, b) => b[1] - a[1]);
     }, [despesas]);
+    const { open: categoriasOpen, toggle: toggleCategorias } = useCollapsible(true);
 
     // Item 9: leitura de XML de NF
     const handleXmlNF = (e) => {
@@ -3586,24 +3588,33 @@ function TabDespesasExtras({ isAdmin, profile }) {
             </div>
 
             {totalPorCategoria.length > 0 && (
-                <div className="bg-white rounded-xl border p-4 shadow-sm mb-5" style={{ borderColor: 'var(--color-border)' }}>
-                    <p className="text-xs font-semibold mb-3" style={{ color: 'var(--color-text-secondary)' }}>Distribuição por categoria</p>
-                    <div className="space-y-2">
-                        {totalPorCategoria.map(([cat, val]) => {
-                            const pct = totalPeriodo > 0 ? (val / totalPeriodo) * 100 : 0;
-                            return (
-                                <div key={cat}>
-                                    <div className="flex justify-between text-xs mb-1">
-                                        <span style={{ color: 'var(--color-text-primary)' }}>{cat}</span>
-                                        <span className="font-data font-medium">{BRL(val)} <span style={{ color: 'var(--color-muted-foreground)' }}>({pct.toFixed(1)}%)</span></span>
+                <div className="bg-white rounded-xl border shadow-sm mb-5 overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                    <button type="button" onClick={toggleCategorias}
+                        className="w-full px-4 py-3 flex items-center justify-between gap-2 hover:bg-gray-50 transition-colors">
+                        <p className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Distribuição por categoria</p>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-xs font-data font-semibold" style={{ color: '#F97316' }}>{BRL(totalPeriodo)}</span>
+                            <CollapseChevron open={categoriasOpen} color="var(--color-text-secondary)" />
+                        </div>
+                    </button>
+                    {categoriasOpen && (
+                        <div className="px-4 pb-4 space-y-2">
+                            {totalPorCategoria.map(([cat, val]) => {
+                                const pct = totalPeriodo > 0 ? (val / totalPeriodo) * 100 : 0;
+                                return (
+                                    <div key={cat}>
+                                        <div className="flex justify-between text-xs mb-1">
+                                            <span style={{ color: 'var(--color-text-primary)' }}>{cat}</span>
+                                            <span className="font-data font-medium">{BRL(val)} <span style={{ color: 'var(--color-muted-foreground)' }}>({pct.toFixed(1)}%)</span></span>
+                                        </div>
+                                        <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                            <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: '#F97316' }} />
+                                        </div>
                                     </div>
-                                    <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                                        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: '#F97316' }} />
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -4598,7 +4609,7 @@ function TabDiarias({ isAdmin, profile }) {
                 <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                     <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Total Diárias</p>
                     <p className="text-2xl font-bold font-data text-indigo-600">{BRL(totais.total)}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{totais.dias} dia{totais.dias !== 1 ? 's' : ''} no filtro atual</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{totais.dias} diária{totais.dias !== 1 ? 's' : ''} somadas (todos os motoristas)</p>
                 </div>
                 {totais.porMotorista.slice(0, 2).map(m => (
                     <div key={m.nome} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
@@ -6466,6 +6477,8 @@ function TabHistoricoViagens({ isAdmin }) {
         return { porMotorista, destinosGlobais, alertasRotas };
     }, [viagens]);
 
+    const { open: destinosOpen, toggle: toggleDestinos } = useCollapsible(true);
+
     // ── Filtro de motorista selecionado ───────────────────────────────────────
     const dadosFiltrados = useMemo(() => {
         let base = porMotorista;
@@ -6647,47 +6660,47 @@ function TabHistoricoViagens({ isAdmin }) {
                     {/* ── Ranking de destinos globais ── */}
                     {destinosGlobais.length > 0 && (
                         <div className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="px-5 py-3 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
+                            <button type="button" onClick={toggleDestinos}
+                                className="w-full px-5 py-3 border-b flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                                style={{ borderColor: 'var(--color-border)', backgroundColor: '#F8FAFC' }}>
                                 <Icon name="BarChart2" size={16} color="var(--color-muted-foreground)" />
                                 <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
                                     Ranking de Destinos {filtroMotorista ? `— ${motoristas.find(m => m.id === filtroMotorista)?.name}` : '(todos os motoristas)'}
                                 </h3>
                                 <span className="ml-auto text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{destinosGlobais.length} destino{destinosGlobais.length > 1 ? 's' : ''}</span>
-                            </div>
-                            <div className="p-5">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                    {destinosGlobais.slice(0, 16).map((d, i) => {
-                                        const maxCount = destinosGlobais[0]?.count || 1;
-                                        const pct = (d.count / maxCount) * 100;
-                                        const cor = heatColor(d.count, maxCount);
-                                        return (
-                                            <div key={d.cidade} className="flex items-center gap-3">
-                                                <span className="w-5 text-xs font-data text-right flex-shrink-0" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                    {i + 1}
-                                                </span>
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center justify-between mb-1">
-                                                        <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{d.cidade}</span>
-                                                        <span className="text-xs font-data font-semibold ml-2 flex-shrink-0 px-1.5 py-0.5 rounded-full"
-                                                            style={{ backgroundColor: cor.bg, color: cor.text }}>
-                                                            {d.count}×
-                                                        </span>
-                                                    </div>
-                                                    <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
-                                                        <div className="h-full rounded-full transition-all"
-                                                            style={{ width: `${pct}%`, backgroundColor: cor.text }} />
+                                <CollapseChevron open={destinosOpen} color="var(--color-muted-foreground)" />
+                            </button>
+                            {destinosOpen && (
+                                <div className="p-5">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {destinosGlobais.map((d, i) => {
+                                            const maxCount = destinosGlobais[0]?.count || 1;
+                                            const pct = (d.count / maxCount) * 100;
+                                            const cor = heatColor(d.count, maxCount);
+                                            return (
+                                                <div key={d.cidade} className="flex items-center gap-3">
+                                                    <span className="w-5 text-xs font-data text-right flex-shrink-0" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                        {i + 1}
+                                                    </span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text-primary)' }}>{d.cidade}</span>
+                                                            <span className="text-xs font-data font-semibold ml-2 flex-shrink-0 px-1.5 py-0.5 rounded-full"
+                                                                style={{ backgroundColor: cor.bg, color: cor.text }}>
+                                                                {d.count}×
+                                                            </span>
+                                                        </div>
+                                                        <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                                                            <div className="h-full rounded-full transition-all"
+                                                                style={{ width: `${pct}%`, backgroundColor: cor.text }} />
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        );
-                                    })}
+                                            );
+                                        })}
+                                    </div>
                                 </div>
-                                {destinosGlobais.length > 16 && (
-                                    <p className="text-xs text-center mt-3" style={{ color: 'var(--color-muted-foreground)' }}>
-                                        +{destinosGlobais.length - 16} destinos · exporte para ver todos
-                                    </p>
-                                )}
-                            </div>
+                            )}
                         </div>
                     )}
 
@@ -7487,6 +7500,7 @@ function TabPontosParada({ isAdmin }) {
     const [filtroMotorista, setFiltroMotorista] = useState('');
     const [pesquisa, setPesquisa] = useState('');
     const [motoristas, setMotoristas] = useState([]);
+    const [veiculosRef, setVeiculosRef] = useState([]);
     const [editModal, setEditModal] = useState(null);
     const [formEdit, setFormEdit] = useState({});
     const [saving, setSaving] = useState(false);
@@ -7510,7 +7524,7 @@ function TabPontosParada({ isAdmin }) {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [p, m, emps, cidades, postosData, fabricas, outros, abast] = await Promise.all([
+            const [p, m, emps, cidades, postosData, fabricas, outros, abast, veiculosData] = await Promise.all([
                 fetchPontosParada(null), // null = todos os motoristas
                 isAdmin ? fetchTodosMotoristas() : Promise.resolve([]),
                 fetchEmpresas().catch(() => []),
@@ -7519,6 +7533,7 @@ function TabPontosParada({ isAdmin }) {
                 fetchLocaisParada('Fábrica').catch(() => []),
                 fetchLocaisParada('Outro').catch(() => []),
                 fetchAbastecimentos({ apenasCarretas: true }).catch(() => []),
+                fetchVeiculosProprios().catch(() => []),
             ]);
             setPontos(p);
             setMotoristas(m);
@@ -7528,6 +7543,7 @@ function TabPontosParada({ isAdmin }) {
             setPostosRef(postosData || []);
             setLocaisFabricaRef(fabricas || []);
             setLocaisOutroRef(outros || []);
+            setVeiculosRef(veiculosData || []);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, []); // eslint-disable-line
@@ -7644,6 +7660,7 @@ function TabPontosParada({ isAdmin }) {
 
     const openEdit = (p) => {
         setFormEdit({
+            veiculo_id: p.veiculo_id != null ? String(p.veiculo_id) : '',
             tipo_local: p.tipo_local || 'Fábrica',
             local: p.local || '',
             tipo_local_chegada: p.tipo_local_chegada || 'Fábrica',
@@ -7662,9 +7679,13 @@ function TabPontosParada({ isAdmin }) {
 
     const handleSave = async () => {
         if (!editModal) return;
+        if (!formEdit.veiculo_id) {
+            showToast('Selecione o veículo — obrigatório pra saber qual placa fez essa parada', 'error'); return;
+        }
         setSaving(true);
         try {
             await updatePontoParada(editModal.id, {
+                veiculo_id: formEdit.veiculo_id,
                 local: formEdit.local,
                 tipo_local: formEdit.tipo_local,
                 local_chegada: formEdit.local_chegada || null,
@@ -7906,6 +7927,13 @@ function TabPontosParada({ isAdmin }) {
                                     <button type="button" onClick={() => setGerenciarLocaisModal(true)} className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--color-primary)' }}>
                                         <Icon name="Settings" size={12} color="var(--color-primary)" />Gerenciar locais de Fábrica/Outro
                                     </button>
+                                </div>
+                                <div className="col-span-2 flex flex-col gap-1.5">
+                                    <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Veículo / Placa <span className="text-red-500">*</span></label>
+                                    <PrettySelect value={formEdit.veiculo_id} onChange={e => setFormEdit(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione...</option>
+                                        {veiculosRef.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                    </PrettySelect>
                                 </div>
                                 <div className="flex flex-col gap-1.5">
                                     <label className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Cupom Fiscal / NF</label>

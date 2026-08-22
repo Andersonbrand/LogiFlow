@@ -1,6 +1,7 @@
 import React from 'react';
 import { getConfiguracao, COR_TIPO_EIXO, LABEL_TIPO_EIXO } from 'utils/pneuDiagramaConfig';
 import VeiculoSilhueta from 'components/ui/VeiculoSilhueta';
+import PneuIcon from 'components/ui/PneuIcon';
 
 /**
  * Diagrama visual (SVG, ilustrativo) do veículo visto de cima, com um
@@ -135,20 +136,10 @@ export default function DiagramaPneuVeiculo({ configuracao, value, onChange, ocu
                     const r = selecionada ? 5.3 : 4.4;
                     return (
                         <g key={p.id} style={{ cursor: 'pointer' }} onClick={() => toggle(p.id)}>
-                            {/* Banda de rodagem do pneu (borracha escura) */}
-                            <circle cx={p.x} cy={p.y} r={r} fill="#1F2937" stroke={corAnel} strokeWidth={selecionada ? 1.5 : 1.1} />
-                            {/* Sulcos da banda de rodagem — linhas radiais simulando o desenho do pneu */}
-                            {Array.from({ length: 10 }).map((_, i) => {
-                                const ang = (i / 10) * Math.PI * 2;
-                                const rIn = r * 0.6, rOut = r * 0.9;
-                                const x1 = p.x + Math.cos(ang) * rIn, y1 = p.y + Math.sin(ang) * rIn;
-                                const x2 = p.x + Math.cos(ang) * rOut, y2 = p.y + Math.sin(ang) * rOut;
-                                return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#4B5563" strokeWidth="0.55" strokeLinecap="round" />;
-                            })}
-                            {/* Aro / miolo — muda de cor conforme o status da posição */}
-                            <circle cx={p.x} cy={p.y} r={r * 0.48} fill={corMiolo} stroke={corAnel} strokeWidth="0.7" />
+                            <PneuIcon cx={p.x} cy={p.y} r={r} corAnel={corAnel} corMiolo={corMiolo}
+                                strokeWidth={selecionada ? 1.5 : 1.1} detalhado />
                             {selecionada && (
-                                <circle cx={p.x} cy={p.y} r={1.3} fill="#059669" />
+                                <circle cx={p.x} cy={p.y} r={1.1} fill="#059669" />
                             )}
                         </g>
                     );

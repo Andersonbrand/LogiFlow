@@ -283,6 +283,12 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                                                 )}
                                             </div>
                                         )}
+                                        {p.observacao && (
+                                            <div className="px-4 pt-3 flex items-start gap-1.5 border-t" style={{ borderColor: cfg.cor + '40' }}>
+                                                <Icon name="MessageSquare" size={12} color="#B45309" className="mt-0.5 flex-shrink-0" />
+                                                <span className="text-xs font-caption" style={{ color:'#92400E' }}>{p.observacao}</span>
+                                            </div>
+                                        )}
                                         <div className="px-4 py-3 flex items-center justify-between border-t" style={{ borderColor: cfg.cor + '40' }}>
                                             <span className="text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
                                                 Frete calculado: {fmtPct(p.percentual_frete)} × {brl(p.valor_pedido)}

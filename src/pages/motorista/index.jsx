@@ -214,6 +214,9 @@ export default function MotoristaDashboard() {
         if (!formAbast.cupom_fiscal?.trim()) {
             showToast('Informe o N° do cupom fiscal', 'error'); return;
         }
+        if (!formAbast.posto_id) {
+            showToast('Selecione o posto de abastecimento', 'error'); return;
+        }
         setSavingAbast(true);
         try {
             const caminhao = veiculos.find(v => String(v.id) === String(formAbast.veiculo_caminhao_id));
@@ -848,7 +851,7 @@ export default function MotoristaDashboard() {
                                     maxLength={50}
                                 />
                             </Field>
-                            <Field label="Posto">
+                            <Field label="Posto" required>
                                 <PrettySelect value={formAbast.posto_id} onChange={e => handlePostoChange(e.target.value)} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione o posto...</option>
                                     {postos.map(p => (

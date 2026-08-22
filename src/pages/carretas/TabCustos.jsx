@@ -4,6 +4,7 @@ import Button from 'components/ui/Button';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useConfirm } from 'components/ui/ConfirmDialog';
+import { useCollapsible, CollapseChevron } from 'components/ui/ExpandableList';
 import {
     fetchCustosItens, createCustoItem, updateCustoItem, deleteCustoItem,
     fetchCustosConfig, updateCustosConfig,
@@ -280,6 +281,7 @@ function PainelCustos({ tipoVeiculo, isAdmin }) {
         const q = busca.toLowerCase();
         return destinos.filter(d => d.destino?.toLowerCase().includes(q));
     }, [destinos, busca]);
+    const { open: destinosOpen, toggle: toggleDestinos } = useCollapsible(true);
 
     const salvarMargem = async () => {
         try {
@@ -394,10 +396,12 @@ function PainelCustos({ tipoVeiculo, isAdmin }) {
             {/* Custos por destino */}
             <div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2">
+                    <button type="button" onClick={toggleDestinos} className="flex items-center gap-2 hover:opacity-70 transition-opacity">
                         <Icon name="MapPin" size={15} color="#4F46E5" />
                         <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>Estimativa de Frete por Destino</h3>
-                    </div>
+                        <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>({destinosFiltrados.length})</span>
+                        <CollapseChevron open={destinosOpen} color="var(--color-muted-foreground)" />
+                    </button>
                     <div className="flex items-center gap-2">
                         <div className="relative">
                             <Icon name="Search" size={14} color="var(--color-muted-foreground)" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
@@ -407,6 +411,7 @@ function PainelCustos({ tipoVeiculo, isAdmin }) {
                         {isAdmin && <Button size="sm" iconName="Plus" onClick={() => setAddDestinoMode(true)}>Destino</Button>}
                     </div>
                 </div>
+                {destinosOpen && (
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
                     <table className="w-full text-sm min-w-[900px]">
                         <thead className="text-xs border-b" style={{ backgroundColor: 'var(--color-muted)', borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
@@ -450,6 +455,7 @@ function PainelCustos({ tipoVeiculo, isAdmin }) {
                         </tbody>
                     </table>
                 </div>
+                )}
             </div>
             <Toast toast={toast} />
             {ConfirmDialog}

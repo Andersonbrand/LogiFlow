@@ -120,7 +120,7 @@ export const CONFIGURACOES_OPTIONS = Object.entries(CONFIGURACOES_PNEUS)
     .map(([value, cfg]) => ({ value, label: `${cfg.label} — ${cfg.totalPneus} pneus` }));
 
 // Cores por tipo de eixo — mesmo código do diagrama de referência (D azul / T verde / A laranja)
-export const COR_TIPO_EIXO = { D: '#2563EB', T: '#059669', A: '#EA580C' };
+export const COR_TIPO_EIXO = { D: '#2563EB', T: '#7C3AED', A: '#EA580C' };
 export const LABEL_TIPO_EIXO = { D: 'Direcional', T: 'Tração', A: 'Auxiliar' };
 
 export function getConfiguracao(key) {
