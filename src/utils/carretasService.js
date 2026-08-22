@@ -360,13 +360,18 @@ export async function createChecklist(checklist) {
         .select()
         .single();
     if (error) throw error;
-    return data;
+    // _fotosFalhas: quantas fotos selecionadas não conseguiram ser enviadas
+    // (checklist é salvo mesmo assim com as que deram certo). As telas que
+    // chamam createChecklist usam isso pra avisar o motorista.
+    return { ...data, _fotosFalhas: fotos.falhas || 0 };
 }
 
 export async function updateChecklist(id, fields) {
     const patch = { ...fields };
+    let fotosFalhas = 0;
     if (patch.fotos_urls) {
         patch.fotos_urls = await uploadFotosChecklistSeNecessario(patch.fotos_urls);
+        fotosFalhas = patch.fotos_urls.falhas || 0;
         if (patch.foto_url !== undefined) patch.foto_url = patch.fotos_urls[0] || patch.foto_url || '';
     }
     const { data, error } = await supabase
@@ -376,7 +381,7 @@ export async function updateChecklist(id, fields) {
         .select()
         .single();
     if (error) throw error;
-    return data;
+    return { ...data, _fotosFalhas: fotosFalhas };
 }
 
 // ─── Upload de fotos do checklist ────────────────────────────────────────────
@@ -389,6 +394,7 @@ export async function updateChecklist(id, fields) {
 // Fotos que já são URL (ex: ao editar um checklist existente) são mantidas.
 async function uploadFotosChecklistSeNecessario(fotos) {
     if (!Array.isArray(fotos) || fotos.length === 0) return fotos || [];
+    let falhas = 0;
     const resultados = await Promise.all(fotos.map(async (foto, idx) => {
         if (typeof foto !== 'string' || !foto.startsWith('data:')) return foto; // já é uma URL
         try {
@@ -403,12 +409,17 @@ async function uploadFotosChecklistSeNecessario(fotos) {
             return urlData?.publicUrl || foto;
         } catch (e) {
             // Se o upload de uma foto falhar, não trava o checklist inteiro —
-            // só essa foto fica de fora (evita o "carrega e não salva").
+            // só essa foto fica de fora (evita o "carrega e não salva"). Mas
+            // a falha é contada e devolvida pro chamador (antes ficava só no
+            // console, e o motorista nunca sabia que uma foto tinha sumido).
             console.error('Falha ao enviar foto do checklist:', e);
+            falhas += 1;
             return null;
         }
     }));
-    return resultados.filter(Boolean);
+    const urls = resultados.filter(Boolean);
+    urls.falhas = falhas;
+    return urls;
 }
 
 export async function aprovarChecklist(id, adminId) {

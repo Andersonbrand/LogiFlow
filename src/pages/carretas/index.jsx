@@ -1296,12 +1296,15 @@ function TabChecklist({ isAdmin, profile }) {
         if (form.odometro === '' || form.odometro == null) { showToast('Informe o odômetro do veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
         try {
-            await createChecklist({
+            const salvo = await createChecklist({
                 ...form, foto_url: form.fotos_urls[0] || '', motorista_id: profile.id,
                 odometro: form.odometro !== '' && form.odometro != null ? Number(form.odometro) : null,
                 semana_ref: semana.toISOString().split('T')[0],
             });
             showToast('Checklist enviado!', 'success'); setModal(null); load();
+            if (salvo?._fotosFalhas) {
+                setTimeout(() => showToast(`Atenção: ${salvo._fotosFalhas} foto(s) não foram enviadas. Edite o checklist para tentar novamente.`, 'error'), 1400);
+            }
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
     const handleAprovarClick = (c) => {

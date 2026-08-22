@@ -283,13 +283,17 @@ export default function MotoristaDashboard() {
                 veiculo_caminhao_placa: caminhao?.placa || checkOriginal?.veiculo_caminhao_placa || null,
                 veiculo_caminhao_modelo: caminhao?.modelo || checkOriginal?.veiculo_caminhao_modelo || null,
             };
+            let salvo;
             if (editingCheckId) {
-                await updateChecklist(editingCheckId, payload);
+                salvo = await updateChecklist(editingCheckId, payload);
                 showToast('Checklist atualizado!', 'success');
             } else {
                 payload.semana_ref = semana.toISOString().split('T')[0];
-                await createChecklist(payload);
+                salvo = await createChecklist(payload);
                 showToast('Checklist enviado!', 'success');
+            }
+            if (salvo?._fotosFalhas) {
+                setTimeout(() => showToast(`Atenção: ${salvo._fotosFalhas} foto(s) não foram enviadas. Edite o checklist para tentar novamente.`, 'error'), 1400);
             }
             setModalCheck(false); setFormCheck(emptyCheck()); setEditingCheckId(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }

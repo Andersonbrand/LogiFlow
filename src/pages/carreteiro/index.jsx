@@ -501,13 +501,17 @@ export default function CarreteiroDashboard() {
         setSalvandoCheck(true);
         try {
             const payload = { ...formCheck, foto_url: formCheck.fotos_urls[0] || '', odometro: formCheck.odometro !== '' && formCheck.odometro != null ? Number(formCheck.odometro) : null };
+            let salvo;
             if (editandoCheckId) {
-                await updateChecklist(editandoCheckId, payload);
+                salvo = await updateChecklist(editandoCheckId, payload);
                 showToast('Checklist atualizado!', 'success');
                 setEditandoCheckId(null);
             } else {
-                await createChecklist({ ...payload, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
+                salvo = await createChecklist({ ...payload, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
                 showToast('Checklist enviado para análise!', 'success');
+            }
+            if (salvo?._fotosFalhas) {
+                setTimeout(() => showToast(`Atenção: ${salvo._fotosFalhas} foto(s) não foram enviadas. Edite o checklist para tentar novamente.`, 'error'), 1400);
             }
             setModalCheck(false);
             setFormCheck({ veiculo_id: '', odometro: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] });

@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import Icon from 'components/AppIcon';
 
 /**
@@ -10,38 +10,101 @@ import Icon from 'components/AppIcon';
  *  - fotos: string[]  (data-URLs ou URLs)
  *  - onChange(novoArray)
  *  - max: número máximo de fotos (default 8)
+ *
+ * Correção (ago/2026): motoristas anexando 8 fotos tiradas direto da câmera
+ * do celular só conseguiam enviar 1. Duas causas:
+ *  1) O input tinha `capture="environment"` junto de `multiple` — em boa
+ *     parte dos navegadores mobile (Safari iOS, Chrome Android) essa
+ *     combinação abre a câmera em modo de captura única e ignora a seleção
+ *     múltipla da galeria, mesmo com `multiple` presente.
+ *  2) Fotos de câmera de celular costumam vir com vários MB (às vezes
+ *     8-12MB), acima do limite de 5MB que existia aqui — a maioria das
+ *     fotos era descartada silenciosamente (o toast de erro de uma foto
+ *     sumia antes do usuário perceber que outras também tinham falhado).
+ * Agora cada foto é redimensionada/comprimida no navegador (canvas) antes de
+ * virar data-URL, então fica bem menor que o original e não esbarra em
+ * limite nenhum — e o input deixa de forçar a câmera, permitindo escolher
+ * várias fotos de uma vez na galeria.
  */
+
+const MAX_DIMENSAO = 1600; // px no maior lado, suficiente para checklist
+const QUALIDADE_JPEG = 0.75;
+
+function comprimirImagem(file, maxDim = MAX_DIMENSAO, qualidade = QUALIDADE_JPEG) {
+    return new Promise((resolve, reject) => {
+        const leitor = new FileReader();
+        leitor.onerror = () => reject(new Error('Falha ao ler o arquivo'));
+        leitor.onload = (ev) => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('Falha ao decodificar a imagem'));
+            img.onload = () => {
+                let { width, height } = img;
+                if (width > maxDim || height > maxDim) {
+                    if (width >= height) {
+                        height = Math.round((height * maxDim) / width);
+                        width = maxDim;
+                    } else {
+                        width = Math.round((width * maxDim) / height);
+                        height = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', qualidade));
+            };
+            img.src = ev.target.result;
+        };
+        leitor.readAsDataURL(file);
+    });
+}
+
 export default function MultiFotoField({ fotos = [], onChange, max = 8, showToast }) {
     const inputRef = useRef(null);
+    const [processando, setProcessando] = useState(false);
 
-    const handleFiles = (e) => {
+    const handleFiles = async (e) => {
         const files = Array.from(e.target.files || []);
+        e.target.value = ''; // libera pra poder re-selecionar o mesmo arquivo depois
         if (!files.length) return;
+
         const espacoRestante = max - fotos.length;
         if (espacoRestante <= 0) {
             showToast?.(`Máximo de ${max} fotos por checklist.`, 'error');
-            e.target.value = '';
             return;
         }
+
         const aProcessar = files.slice(0, espacoRestante);
-        let pendentes = aProcessar.length;
+        if (files.length > aProcessar.length) {
+            showToast?.(`Só cabiam mais ${aProcessar.length} foto(s) (limite de ${max}); o restante foi ignorado.`, 'error');
+        }
+
+        setProcessando(true);
+        // Processa uma foto de cada vez (evita picos de memória com várias
+        // fotos grandes de câmera abertas ao mesmo tempo no navegador).
         const novas = [];
-        aProcessar.forEach(file => {
-            if (file.size > 5 * 1024 * 1024) {
-                showToast?.(`"${file.name}" é maior que 5MB e foi ignorada.`, 'error');
-                pendentes -= 1;
-                if (pendentes === 0 && novas.length) onChange([...fotos, ...novas]);
-                return;
+        const comFalha = [];
+        for (const file of aProcessar) {
+            if (!file.type || !file.type.startsWith('image/')) {
+                comFalha.push(file.name);
+                continue;
             }
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-                novas.push(ev.target.result);
-                pendentes -= 1;
-                if (pendentes === 0) onChange([...fotos, ...novas]);
-            };
-            reader.readAsDataURL(file);
-        });
-        e.target.value = '';
+            try {
+                const dataUrl = await comprimirImagem(file);
+                novas.push(dataUrl);
+            } catch (err) {
+                console.error('Falha ao processar foto do checklist:', file.name, err);
+                comFalha.push(file.name);
+            }
+        }
+        setProcessando(false);
+
+        if (novas.length) onChange([...fotos, ...novas]);
+        if (comFalha.length) {
+            showToast?.(`Não foi possível processar ${comFalha.length} foto(s). Tente novamente.`, 'error');
+        }
     };
 
     const remover = (idx) => onChange(fotos.filter((_, i) => i !== idx));
@@ -66,15 +129,23 @@ export default function MultiFotoField({ fotos = [], onChange, max = 8, showToas
                     </div>
                 ))}
                 {fotos.length < max && (
-                    <button type="button" onClick={() => inputRef.current?.click()}
-                        className="w-20 h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 hover:bg-gray-50 transition-colors"
+                    <button type="button" onClick={() => inputRef.current?.click()} disabled={processando}
+                        className="w-20 h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 hover:bg-gray-50 transition-colors disabled:opacity-60"
                         style={{ borderColor: '#93C5FD' }}>
-                        <Icon name="Camera" size={18} color="#1D4ED8" />
-                        <span className="text-[10px] font-medium" style={{ color: '#1D4ED8' }}>Adicionar</span>
+                        {processando ? (
+                            <div className="animate-spin h-4 w-4 rounded-full border-2" style={{ borderColor: '#1D4ED8', borderTopColor: 'transparent' }} />
+                        ) : (
+                            <Icon name="Camera" size={18} color="#1D4ED8" />
+                        )}
+                        <span className="text-[10px] font-medium" style={{ color: '#1D4ED8' }}>{processando ? 'Aguarde...' : 'Adicionar'}</span>
                     </button>
                 )}
             </div>
-            <input ref={inputRef} type="file" accept="image/*" capture="environment" multiple onChange={handleFiles} className="hidden" />
+            {/* Sem `capture`: em mobile isso força a câmera e impede escolher
+                várias fotos já tiradas na galeria de uma vez só. Sem o
+                atributo, o próprio SO ainda oferece "Câmera" como opção no
+                seletor, então nada é perdido. */}
+            <input ref={inputRef} type="file" accept="image/*" multiple onChange={handleFiles} className="hidden" />
         </div>
     );
 }
