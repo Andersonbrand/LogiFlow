@@ -424,11 +424,14 @@ export function toModelo1Romaneio(romaneioCarretas) {
             frete_calculado: p.frete_calculado,
         })),
         romaneio_itens: (r.itens || []).map(i => ({
-            pedido_id: i.pedido_id,
+            id:         i.id,
+            pedido_id:  i.pedido_id,
             material_id: i.material?.id,
+            descricao:  i.descricao,
+            unidade:    i.unidade,
             quantidade: i.quantidade,
             peso_total: i.peso_total,
-            peso_unit: i.peso_unit,
+            peso_unit:  i.peso_unit,
             is_telha_zinco: i.is_telha_zinco,
             comprimento_telha: i.comprimento_telha,
             metros_totais: i.metros_totais,
@@ -476,17 +479,23 @@ export function exportRomaneioModelo1(romaneio) {
         const cidade     = pedido.cidade_destino || romaneio.destino || '—';
         const pedidoNum  = pedido.numero_pedido || 'Sem número';
         const { isTelha, compTelha, metros: metrosItem } = getTelhaInfo(item);
+        // Nome do item: material do catálogo → texto livre (descricao, quando o
+        // item foi lançado sem vínculo com o catálogo de materiais) → fallback.
+        const nomeItem = mat.nome || item.descricao || (item.material_id ? `Material #${item.material_id}` : 'Item sem descrição');
         // Para telhas, cada comprimento de corte vira uma linha própria — não
         // podemos somar peças de comprimentos diferentes na mesma linha.
-        const mid = String(item.material_id || mat.nome || 'x') + (isTelha ? `@${compTelha.toFixed(2)}` : '');
+        // A chave de agrupamento usa material_id → descricao/nome → id do próprio
+        // item como último recurso, pra nunca misturar itens diferentes numa
+        // linha só (o que fazia materiais sem material_id virarem "#undefined").
+        const mid = String(item.material_id || item.descricao || mat.nome || item.id || Math.random()) + (isTelha ? `@${compTelha.toFixed(2)}` : '');
 
         if (!grupos[empresa]) grupos[empresa] = {};
         if (!grupos[empresa][cidade]) grupos[empresa][cidade] = {};
         if (!grupos[empresa][cidade][pedidoNum]) grupos[empresa][cidade][pedidoNum] = {};
         if (!grupos[empresa][cidade][pedidoNum][mid]) {
             grupos[empresa][cidade][pedidoNum][mid] = {
-                nome:     mat.nome     || `#${item.material_id}`,
-                unidade:  mat.unidade  || '',
+                nome:     nomeItem,
+                unidade:  mat.unidade  || item.unidade || '',
                 isTelha, compTelha,
                 pesoUnit: Number(item.peso_unit || mat.peso || 0),
                 quant: 0, pesoTotal: 0, metrosTotais: 0,

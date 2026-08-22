@@ -4,6 +4,7 @@ import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useConfirm } from 'components/ui/ConfirmDialog';
+import { EditButton, DeleteButton, ViewButton, ActionButtonsGroup } from 'components/ActionButtons';
 import {
     fetchRomaneios, createRomaneio, updateRomaneio, deleteRomaneio,
     fetchCarretasVeiculos, fetchTodosMotoristas, fetchCarreteirosPropriosOnly, fetchEmpresas,
@@ -1383,10 +1384,9 @@ export default function TabRomaneios({ isAdmin }) {
                                             <td className="px-3 py-3 text-right hidden lg:table-cell font-data text-xs font-semibold whitespace-nowrap" style={{ color: '#065F46' }}>{r.valor_carga ? BRL(r.valor_carga) : '—'}</td>
                                             <td className="px-3 py-3 text-right hidden lg:table-cell font-data text-xs font-semibold whitespace-nowrap" style={{ color: '#7C3AED' }}>{r.valor_frete ? BRL(r.valor_frete) : '—'}</td>
                                             <td className="px-3 py-3 text-center">
-                                                {r.motorista_id
-                                                    ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: '#DCFCE7', color: '#166534' }}>✓ Vinculado</span>
-                                                    : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap" style={{ backgroundColor: '#FEF9C3', color: '#92400E' }}>⏳ Pendente</span>
-                                                }
+                                                <div className="flex items-center justify-center" title={r.motorista_id ? 'Vinculado a um motorista' : 'Pendente — sem motorista vinculado'}>
+                                                    <Icon name={r.motorista_id ? 'CheckCircle2' : 'Clock'} size={20} color={r.motorista_id ? '#059669' : '#9CA3AF'} className="flex-shrink-0" />
+                                                </div>
                                             </td>
                                             <td className="px-4 py-3 text-center">
                                                 <PrettySelect
@@ -1398,22 +1398,13 @@ export default function TabRomaneios({ isAdmin }) {
                                                 </PrettySelect>
                                             </td>
                                             <td className="px-4 py-3">
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <button onClick={() => setDetailModal(r)}
-                                                        className="p-1.5 rounded hover:bg-blue-50 transition-colors flex-shrink-0" title="Ver detalhes">
-                                                        <Icon name="Eye" size={16} color="var(--color-primary)" className="flex-shrink-0" />
-                                                    </button>
+                                                <ActionButtonsGroup className="justify-center">
+                                                    <ViewButton onClick={() => setDetailModal(r)} title="Ver detalhes" />
                                                     {isAdmin && (<>
-                                                        <button onClick={() => setModal({ mode: 'edit', data: r })}
-                                                            className="p-1.5 rounded hover:bg-gray-100 transition-colors" title="Editar">
-                                                            <Icon name="Pencil" size={16} color="var(--color-muted-foreground)" />
-                                                        </button>
-                                                        <button onClick={() => handleDelete(r.id)}
-                                                            className="p-1.5 rounded hover:bg-red-50 transition-colors" title="Excluir">
-                                                            <Icon name="Trash2" size={16} color="var(--color-destructive)" />
-                                                        </button>
+                                                        <EditButton onClick={() => setModal({ mode: 'edit', data: r })} />
+                                                        <DeleteButton onClick={() => handleDelete(r.id)} />
                                                     </>)}
-                                                </div>
+                                                </ActionButtonsGroup>
                                             </td>
                                         </tr>
                                     );
