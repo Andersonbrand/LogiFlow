@@ -98,6 +98,7 @@ export default function MotoristaDashboard() {
     const [formCheck, setFormCheck] = useState(emptyCheck());
     const [savingAbast, setSavingAbast] = useState(false);
     const [savingCheck, setSavingCheck] = useState(false);
+    const [progressoFotosCheck, setProgressoFotosCheck] = useState(null); // { atual, total } | null
 
     // ── Load ─────────────────────────────────────────────────────────────────
     const load = useCallback(async () => {
@@ -284,12 +285,13 @@ export default function MotoristaDashboard() {
                 veiculo_caminhao_modelo: caminhao?.modelo || checkOriginal?.veiculo_caminhao_modelo || null,
             };
             let salvo;
+            const onProgressoFotos = (atual, total) => setProgressoFotosCheck(total > 0 ? { atual, total } : null);
             if (editingCheckId) {
-                salvo = await updateChecklist(editingCheckId, payload);
+                salvo = await updateChecklist(editingCheckId, payload, onProgressoFotos);
                 showToast('Checklist atualizado!', 'success');
             } else {
                 payload.semana_ref = semana.toISOString().split('T')[0];
-                salvo = await createChecklist(payload);
+                salvo = await createChecklist(payload, onProgressoFotos);
                 showToast('Checklist enviado!', 'success');
             }
             if (salvo?._fotosFalhas) {
@@ -297,7 +299,7 @@ export default function MotoristaDashboard() {
             }
             setModalCheck(false); setFormCheck(emptyCheck()); setEditingCheckId(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-        finally { setSavingCheck(false); }
+        finally { setSavingCheck(false); setProgressoFotosCheck(null); }
     };
 
     const abrirEdicaoCheck = (c) => {
@@ -984,7 +986,7 @@ export default function MotoristaDashboard() {
                             <button onClick={() => { setModalCheck(false); setEditingCheckId(null); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
                             <button onClick={handleCheck} disabled={savingCheck} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed" style={{ backgroundColor: 'var(--color-primary)' }}>
                                 {savingCheck ? <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Icon name="Send" size={15} color="white" />}
-                                {savingCheck ? 'Enviando...' : (editingCheckId ? 'Salvar alterações' : 'Enviar')}
+                                {savingCheck ? (progressoFotosCheck ? `Enviando foto ${progressoFotosCheck.atual}/${progressoFotosCheck.total}...` : 'Enviando...') : (editingCheckId ? 'Salvar alterações' : 'Enviar')}
                             </button>
                         </div>
                     </div>

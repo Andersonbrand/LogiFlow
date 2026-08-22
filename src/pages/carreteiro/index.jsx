@@ -182,6 +182,7 @@ export default function CarreteiroDashboard() {
     const [editandoCheckId, setEditandoCheckId] = useState(null);
     const [salvandoAbast, setSalvandoAbast] = useState(false);
     const [salvandoCheck, setSalvandoCheck] = useState(false);
+    const [progressoFotosCheck, setProgressoFotosCheck] = useState(null); // { atual, total } | null
     const [formAbast, setFormAbast]     = useState({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '' });
     const [formCheck, setFormCheck]     = useState({ veiculo_id: '', odometro: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] });
     const [checklistItens, setChecklistItens] = useState([]);
@@ -501,13 +502,14 @@ export default function CarreteiroDashboard() {
         setSalvandoCheck(true);
         try {
             const payload = { ...formCheck, foto_url: formCheck.fotos_urls[0] || '', odometro: formCheck.odometro !== '' && formCheck.odometro != null ? Number(formCheck.odometro) : null };
+            const onProgressoFotos = (atual, total) => setProgressoFotosCheck(total > 0 ? { atual, total } : null);
             let salvo;
             if (editandoCheckId) {
-                salvo = await updateChecklist(editandoCheckId, payload);
+                salvo = await updateChecklist(editandoCheckId, payload, onProgressoFotos);
                 showToast('Checklist atualizado!', 'success');
                 setEditandoCheckId(null);
             } else {
-                salvo = await createChecklist({ ...payload, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] });
+                salvo = await createChecklist({ ...payload, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] }, onProgressoFotos);
                 showToast('Checklist enviado para análise!', 'success');
             }
             if (salvo?._fotosFalhas) {
@@ -517,7 +519,7 @@ export default function CarreteiroDashboard() {
             setFormCheck({ veiculo_id: '', odometro: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] });
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-        finally { setSalvandoCheck(false); }
+        finally { setSalvandoCheck(false); setProgressoFotosCheck(null); }
     };
 
     const handleEditCheck = (c) => {
@@ -1822,7 +1824,7 @@ export default function CarreteiroDashboard() {
                         </div>
                         <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => { setModalCheck(false); setEditandoCheckId(null); }} disabled={salvandoCheck} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center disabled:opacity-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleCheck} disabled={salvandoCheck} loading={salvandoCheck} size="sm" iconName={editandoCheckId ? 'Check' : 'Send'} className="w-full sm:w-auto">{editandoCheckId ? 'Salvar' : 'Enviar'}</Button>
+                            <Button onClick={handleCheck} disabled={salvandoCheck} loading={salvandoCheck} size="sm" iconName={editandoCheckId ? 'Check' : 'Send'} className="w-full sm:w-auto">{salvandoCheck && progressoFotosCheck ? `Foto ${progressoFotosCheck.atual}/${progressoFotosCheck.total}...` : (editandoCheckId ? 'Salvar' : 'Enviar')}</Button>
                         </div>
                     </div>
                 </div>

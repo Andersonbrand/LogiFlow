@@ -352,8 +352,8 @@ export async function fetchChecklists(filters = {}) {
     return data || [];
 }
 
-export async function createChecklist(checklist) {
-    const fotos = await uploadFotosChecklistSeNecessario(checklist.fotos_urls);
+export async function createChecklist(checklist, onProgressoFotos) {
+    const fotos = await uploadFotosChecklistSeNecessario(checklist.fotos_urls, onProgressoFotos);
     const { data, error } = await supabase
         .from('carretas_checklists')
         .insert({ ...checklist, fotos_urls: fotos, foto_url: fotos[0] || checklist.foto_url || '', aprovado: false })
@@ -366,11 +366,11 @@ export async function createChecklist(checklist) {
     return { ...data, _fotosFalhas: fotos.falhas || 0 };
 }
 
-export async function updateChecklist(id, fields) {
+export async function updateChecklist(id, fields, onProgressoFotos) {
     const patch = { ...fields };
     let fotosFalhas = 0;
     if (patch.fotos_urls) {
-        patch.fotos_urls = await uploadFotosChecklistSeNecessario(patch.fotos_urls);
+        patch.fotos_urls = await uploadFotosChecklistSeNecessario(patch.fotos_urls, onProgressoFotos);
         fotosFalhas = patch.fotos_urls.falhas || 0;
         if (patch.foto_url !== undefined) patch.foto_url = patch.fotos_urls[0] || patch.foto_url || '';
     }
@@ -392,11 +392,17 @@ export async function updateChecklist(id, fields) {
 // demais). Agora, antes de gravar, cada foto em base64 é enviada pro Storage
 // (bucket "checklist-fotos") e trocada pela URL pública — bem mais leve.
 // Fotos que já são URL (ex: ao editar um checklist existente) são mantidas.
-async function uploadFotosChecklistSeNecessario(fotos) {
-    if (!Array.isArray(fotos) || fotos.length === 0) return fotos || [];
-    let falhas = 0;
-    const resultados = await Promise.all(fotos.map(async (foto, idx) => {
-        if (typeof foto !== 'string' || !foto.startsWith('data:')) return foto; // já é uma URL
+//
+// IMPORTANTE (ago/2026): isto rodava com Promise.all — as N fotos subiam
+// todas AO MESMO TEMPO. Em wifi de escritório isso é ótimo, mas motorista
+// envia checklist do pátio/estrada com sinal de celular fraco: 8 uploads
+// simultâneos brigando pela mesma conexão instável faziam a imensa maioria
+// cair (timeout/conexão perdida no meio do upload), sobrando só 1 ou 2 —
+// exatamente o "de 8 fotos só 1 chegou" relatado. Trocado para SEQUENCIAL
+// (uma foto de cada vez) com retry automático, que é muito mais confiável
+// em rede móvel mesmo sendo um pouco mais lento.
+async function uploadUmaFotoComRetry(foto, idx, tentativas = 3) {
+    for (let tentativa = 1; tentativa <= tentativas; tentativa++) {
         try {
             const resp = await fetch(foto);
             const blob = await resp.blob();
@@ -406,18 +412,35 @@ async function uploadFotosChecklistSeNecessario(fotos) {
                 .from('checklist-fotos').upload(nome, blob, { contentType: blob.type, upsert: true });
             if (uploadErr) throw uploadErr;
             const { data: urlData } = supabase.storage.from('checklist-fotos').getPublicUrl(uploadData.path);
-            return urlData?.publicUrl || foto;
+            return urlData?.publicUrl || null;
         } catch (e) {
-            // Se o upload de uma foto falhar, não trava o checklist inteiro —
-            // só essa foto fica de fora (evita o "carrega e não salva"). Mas
-            // a falha é contada e devolvida pro chamador (antes ficava só no
-            // console, e o motorista nunca sabia que uma foto tinha sumido).
-            console.error('Falha ao enviar foto do checklist:', e);
-            falhas += 1;
-            return null;
+            console.error(`Falha ao enviar foto do checklist (tentativa ${tentativa}/${tentativas}):`, e);
+            if (tentativa < tentativas) {
+                // pequena pausa antes de tentar de novo — dá tempo da conexão
+                // móvel se recuperar em vez de martelar a rede instável
+                await new Promise(r => setTimeout(r, 600 * tentativa));
+            }
         }
-    }));
-    const urls = resultados.filter(Boolean);
+    }
+    return null;
+}
+
+async function uploadFotosChecklistSeNecessario(fotos, onProgresso) {
+    if (!Array.isArray(fotos) || fotos.length === 0) return fotos || [];
+    let falhas = 0;
+    const urls = [];
+    for (let idx = 0; idx < fotos.length; idx++) {
+        const foto = fotos[idx];
+        if (typeof foto !== 'string' || !foto.startsWith('data:')) {
+            urls.push(foto); // já é uma URL (edição de checklist existente)
+            onProgresso?.(idx + 1, fotos.length);
+            continue;
+        }
+        const url = await uploadUmaFotoComRetry(foto, idx);
+        if (url) urls.push(url); else falhas += 1;
+        onProgresso?.(idx + 1, fotos.length);
+    }
+    urls.falhas = falhas;
     urls.falhas = falhas;
     return urls;
 }
