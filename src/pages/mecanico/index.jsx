@@ -161,6 +161,7 @@ export default function MecanicoPage() {
     const [pecaItem, setPecaItem]             = useState('');
     const [pecaItemOutro, setPecaItemOutro]   = useState('');
     const [pecaQtd, setPecaQtd]               = useState('1');
+    const [pecasParaSolicitar, setPecasParaSolicitar] = useState([]); // itens já adicionados à requisição atual, antes de enviar
     const [obsFinalizar, setObsFinalizar]     = useState('');
     const [descProblema, setDescProblema]     = useState('');
     const [pdfUrl, setPdfUrl]                 = useState(null);
@@ -379,16 +380,35 @@ export default function MecanicoPage() {
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
-    const handleSolicitarPeca = async () => {
+    const handleAdicionarPecaNaLista = () => {
         const nomeItem = pecaItem === '__outro__' ? pecaItemOutro.trim() : pecaItem;
         if (!nomeItem) { showToast('Selecione ou informe o nome da peça', 'error'); return; }
         const qtd = Number(pecaQtd) || 1;
+        setPecasParaSolicitar(prev => [...prev, { key: `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, item: nomeItem, quantidade: qtd }]);
+        setPecaItem(''); setPecaItemOutro(''); setPecaQtd('1');
+    };
+
+    const handleRemoverPecaDaLista = (key) => {
+        setPecasParaSolicitar(prev => prev.filter(p => p.key !== key));
+    };
+
+    const handleSolicitarPeca = async () => {
+        // Se o mecânico ainda tem algo digitado nos campos e não clicou em
+        // "Adicionar", inclui esse item também na hora de enviar — evita que
+        // a última peça digitada se perca por esquecimento de clicar em Adicionar.
+        const nomeItemAtual = pecaItem === '__outro__' ? pecaItemOutro.trim() : pecaItem;
+        const itensFinais = [...pecasParaSolicitar];
+        if (nomeItemAtual) itensFinais.push({ item: nomeItemAtual, quantidade: Number(pecaQtd) || 1 });
+        if (itensFinais.length === 0) { showToast('Adicione ao menos uma peça à solicitação', 'error'); return; }
         try {
-            const novaPeca = { id: `${Date.now()}`, item: nomeItem, quantidade: qtd, status: 'Pendente', solicitado_em: new Date().toISOString() };
-            const lista = [...(modalPeca.pecas_solicitadas || []), novaPeca];
+            const agora = new Date().toISOString();
+            const novasPecas = itensFinais.map((p, i) => ({
+                id: `${Date.now()}_${i}`, item: p.item, quantidade: p.quantidade, status: 'Pendente', solicitado_em: agora,
+            }));
+            const lista = [...(modalPeca.pecas_solicitadas || []), ...novasPecas];
             await updateOrdemServico(modalPeca.id, { pecas_solicitadas: lista });
-            showToast('Peça solicitada! Aguardando aprovação do admin.', 'success');
-            setModalPeca(null); setPecaItem(''); setPecaItemOutro(''); setPecaQtd('1'); load();
+            showToast(`${novasPecas.length} peça${novasPecas.length > 1 ? 's' : ''} solicitada${novasPecas.length > 1 ? 's' : ''}! Aguardando aprovação do admin.`, 'success');
+            setModalPeca(null); setPecaItem(''); setPecaItemOutro(''); setPecaQtd('1'); setPecasParaSolicitar([]); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
@@ -656,7 +676,7 @@ export default function MecanicoPage() {
                                                         <Icon name="CheckCircle2" size={14} color="#fff" />
                                                         Finalizar OS
                                                     </button>
-                                                    <button onClick={() => { setModalPeca(o); setPecaItem(''); setPecaItemOutro(''); setPecaQtd('1'); }}
+                                                    <button onClick={() => { setModalPeca(o); setPecaItem(''); setPecaItemOutro(''); setPecaQtd('1'); setPecasParaSolicitar([]); }}
                                                         className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold border w-full sm:w-auto"
                                                         style={{ borderColor: '#DDD6FE', color: '#6D28D9' }}>
                                                         <Icon name="Package" size={14} color="#6D28D9" />
@@ -989,7 +1009,7 @@ export default function MecanicoPage() {
                             <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#EDE9FE' }}>
                                 <Icon name="Package" size={18} color="#6D28D9" />
                             </div>
-                            <h2 className="font-heading font-bold text-base sm:text-lg truncate" style={{ color: 'var(--color-text-primary)' }}>Solicitar Peça</h2>
+                            <h2 className="font-heading font-bold text-base sm:text-lg truncate" style={{ color: 'var(--color-text-primary)' }}>Solicitar Peça{pecasParaSolicitar.length > 0 ? `s (${pecasParaSolicitar.length})` : ''}</h2>
                         </div>
                         <button onClick={() => setModalPeca(null)} className="p-1.5 rounded-lg hover:bg-gray-100 flex-shrink-0">
                             <Icon name="X" size={18} color="var(--color-muted-foreground)" />
@@ -1002,9 +1022,29 @@ export default function MecanicoPage() {
                                 {(modalPeca.veiculo?.placa || modalPeca.veiculo_caminhao_placa) && <span className="font-data"> · {modalPeca.veiculo?.placa || modalPeca.veiculo_caminhao_placa}</span>}
                             </p>
                         </div>
+
+                        {/* Peças já adicionadas nesta requisição — "carrinho" antes de enviar tudo junto */}
+                        {pecasParaSolicitar.length > 0 && (
+                            <div className="rounded-xl border overflow-hidden" style={{ borderColor: '#DDD6FE' }}>
+                                <div className="px-3 py-2 text-xs font-semibold" style={{ backgroundColor: '#F5F3FF', color: '#6D28D9' }}>
+                                    Peças nesta solicitação ({pecasParaSolicitar.length})
+                                </div>
+                                <ul className="divide-y" style={{ borderColor: '#EDE9FE' }}>
+                                    {pecasParaSolicitar.map(p => (
+                                        <li key={p.key} className="flex items-center justify-between px-3 py-2 text-sm">
+                                            <span className="truncate min-w-0">{p.item} <span className="font-data" style={{ color: 'var(--color-muted-foreground)' }}>× {p.quantidade}</span></span>
+                                            <button onClick={() => handleRemoverPecaDaLista(p.key)} className="p-1 rounded-md hover:bg-red-50 flex-shrink-0" title="Remover">
+                                                <Icon name="X" size={13} color="var(--color-destructive)" />
+                                            </button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
                         <div>
                             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                                Item / peça <span className="text-red-500">*</span>
+                                Item / peça{pecasParaSolicitar.length === 0 && <span className="text-red-500"> *</span>}
                             </label>
                             <PrettySelect value={pecaItem} onChange={e => setPecaItem(e.target.value)}
                                 className={inputCls} style={inputStyle}>
@@ -1020,11 +1060,21 @@ export default function MecanicoPage() {
                                     placeholder="Digite o nome da peça" autoFocus />
                             )}
                         </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Quantidade</label>
-                            <input type="number" min="1" value={pecaQtd} onChange={e => setPecaQtd(e.target.value)}
-                                className={inputCls} style={inputStyle} />
+                        <div className="flex items-end gap-2">
+                            <div className="flex-1">
+                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Quantidade</label>
+                                <input type="number" min="1" value={pecaQtd} onChange={e => setPecaQtd(e.target.value)}
+                                    className={inputCls} style={inputStyle} />
+                            </div>
+                            <button type="button" onClick={handleAdicionarPecaNaLista}
+                                className="h-10 px-4 rounded-lg text-sm font-semibold flex items-center gap-1.5 flex-shrink-0"
+                                style={{ backgroundColor: '#EDE9FE', color: '#6D28D9' }}>
+                                <Icon name="Plus" size={15} color="#6D28D9" /> Adicionar
+                            </button>
                         </div>
+                        <p className="text-xs -mt-2" style={{ color: 'var(--color-muted-foreground)' }}>
+                            Precisa de mais de uma peça? Clique em "Adicionar" pra cada uma e envie tudo junto numa só solicitação.
+                        </p>
                         <div className="p-3 rounded-xl text-xs" style={{ backgroundColor: '#FEF9C3', border: '1px solid #FDE68A' }}>
                             <p className="text-amber-700">⚠️ A solicitação será enviada ao administrador, que poderá aprovar ou reprovar a compra.</p>
                         </div>
@@ -1037,7 +1087,7 @@ export default function MecanicoPage() {
                             className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
                             style={{ backgroundColor: '#6D28D9' }}>
                             <Icon name="Send" size={14} color="#fff" />
-                            Enviar Solicitação
+                            Enviar Solicitação{(pecasParaSolicitar.length > 1 || (pecasParaSolicitar.length === 1 && (pecaItem === '__outro__' ? pecaItemOutro.trim() : pecaItem))) ? ` (${pecasParaSolicitar.length + ((pecaItem === '__outro__' ? pecaItemOutro.trim() : pecaItem) ? 1 : 0)})` : ''}
                         </button>
                     </div>
                 </ModalOverlay>

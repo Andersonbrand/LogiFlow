@@ -6,6 +6,7 @@ import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useConfirm } from 'components/ui/ConfirmDialog';
 import { fetchTodosBoletos, pagarBoletosEmMassa, ORIGEM_LABEL } from 'utils/boletosService';
+import { usePagination, PaginationBar } from 'components/ui/Pagination';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -95,6 +96,11 @@ export default function Boletos() {
     const toggleSel = (key) => setSelecionados(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
     const selecionaveisFiltrados = useMemo(() => filtrados.filter(b => !b.pago), [filtrados]);
     const todosFiltradosSelecionados = selecionaveisFiltrados.length > 0 && selecionaveisFiltrados.every(b => selecionados.has(b.key));
+    // Lista limitada a 20 boletos visíveis por vez — a tela consolidada soma
+    // boletos de Carretas + Caminhões + Adm. Transporte e podia chegar a
+    // centenas de linhas de uma vez. Seleção e baixa em massa continuam
+    // considerando TODOS os filtrados, não só a página visível.
+    const boletosPag = usePagination(filtrados, 20, [filtrados.length, status, origem, busca, periodo.inicio, periodo.fim]);
     const toggleTodos = () => {
         setSelecionados(prev => {
             if (todosFiltradosSelecionados) {
@@ -281,7 +287,7 @@ export default function Boletos() {
                             ) : filtrados.length === 0 ? (
                                 <p className="p-6 text-sm text-center" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum boleto encontrado com esses filtros.</p>
                             ) : (
-                                filtrados.map(b => {
+                                boletosPag.pageItems.map(b => {
                                     const vencido = !b.pago && b.vencimento && b.vencimento < hojeISO();
                                     return (
                                         <div key={b.key} className={`grid ${BOLETOS_COLS} gap-3 px-4 py-3 items-center border-t text-sm`} style={{ borderColor: 'var(--color-border)' }}>
@@ -316,6 +322,10 @@ export default function Boletos() {
                                 })
                             )}
                         </div>
+                        {!loading && filtrados.length > 0 && (
+                            <PaginationBar page={boletosPag.page} setPage={boletosPag.setPage} totalPages={boletosPag.totalPages}
+                                totalItems={boletosPag.totalItems} pageSize={boletosPag.pageSize} itemLabel="boleto" />
+                        )}
                     </div>
                 </div>
             </main>

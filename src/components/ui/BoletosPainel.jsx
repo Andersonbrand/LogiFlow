@@ -5,6 +5,7 @@ import { useToast } from 'utils/useToast';
 import { useConfirm } from 'components/ui/ConfirmDialog';
 import { fetchTodosBoletos, pagarBoletosEmMassa } from 'utils/boletosService';
 import PeriodRangeFilter, { usePeriodRangeFilter } from 'components/ui/PeriodRangeFilter';
+import { usePagination, PaginationBar } from 'components/ui/Pagination';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -76,6 +77,12 @@ export default function BoletosPainel({ origem, onChanged }) {
 
     const selecionaveisFiltrados = filtrados.filter(b => !b.pago);
     const todosFiltradosSelecionados = selecionaveisFiltrados.length > 0 && selecionaveisFiltrados.every(b => selecionados.has(b.key));
+
+    // Lista limitada a 20 boletos por vez — telas com centenas de boletos
+    // ficavam pesadas renderizando tudo de uma vez. "Selecionar todos" e as
+    // ações em massa continuam operando sobre TODOS os filtrados (não só a
+    // página visível), então dar baixa em massa continua funcionando igual.
+    const boletosPag = usePagination(filtrados, 20, [filtrados.length, status, busca, periodo.inicio, periodo.fim]);
 
     const toggleSel = (key) => setSelecionados(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
     const toggleTodos = () => {
@@ -204,7 +211,7 @@ export default function BoletosPainel({ origem, onChanged }) {
                     ) : filtrados.length === 0 ? (
                         <p className="p-6 text-sm text-center" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum boleto encontrado com esses filtros.</p>
                     ) : (
-                        filtrados.map(b => {
+                        boletosPag.pageItems.map(b => {
                             const vencido = !b.pago && b.vencimento && b.vencimento < hojeISO();
                             return (
                                 <div key={b.key} className={`grid ${BOLETOS_COLS} gap-3 px-4 py-3 items-center border-t text-sm`} style={{ borderColor: 'var(--color-border)' }}>
@@ -236,6 +243,10 @@ export default function BoletosPainel({ origem, onChanged }) {
                         })
                     )}
                 </div>
+                {!loading && filtrados.length > 0 && (
+                    <PaginationBar page={boletosPag.page} setPage={boletosPag.setPage} totalPages={boletosPag.totalPages}
+                        totalItems={boletosPag.totalItems} pageSize={boletosPag.pageSize} itemLabel="boleto" />
+                )}
             </div>
             <Toast toast={toast} />
             {ConfirmDialog}

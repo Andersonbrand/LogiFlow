@@ -6,6 +6,8 @@ import TabCustos from './TabCustos';
 import TabPneus from './TabPneus';
 import { usePagination, PaginationBar } from 'components/ui/Pagination';
 import { useCollapsible, CollapseChevron } from 'components/ui/ExpandableList';
+import TabelaLancamentosPaginada from 'components/ui/TabelaLancamentosPaginada';
+import CardMesParcelas from 'components/ui/CardMesParcelas';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -1260,7 +1262,19 @@ function TabChecklist({ isAdmin, profile }) {
         try { sessionStorage.setItem('carretas_checklist_filtroMes', v); } catch {}
     };
     const [form, setForm] = useState({ veiculo_id: '', odometro: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] });
-    const [modalFoto, setModalFoto] = useState(null); // url para visualizar
+    const [modalFoto, setModalFoto] = useState(null); // { fotos: string[], index: number } | null
+
+    // Navegação por teclado no visualizador de fotos: ← → pra trocar, Esc pra fechar
+    useEffect(() => {
+        if (!modalFoto) return;
+        const onKey = (e) => {
+            if (e.key === 'ArrowLeft') setModalFoto(m => m && ({ ...m, index: (m.index - 1 + m.fotos.length) % m.fotos.length }));
+            else if (e.key === 'ArrowRight') setModalFoto(m => m && ({ ...m, index: (m.index + 1) % m.fotos.length }));
+            else if (e.key === 'Escape') setModalFoto(null);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [modalFoto]);
     const [checklistItens, setChecklistItens] = useState([]); // itens ativos vindos do banco
     const [modalItens, setModalItens] = useState(false); // gerenciador de itens (admin)
     const [expandidos, setExpandidos] = useState(() => new Set()); // ids dos checklists com detalhes expandidos
@@ -1463,7 +1477,7 @@ function TabChecklist({ isAdmin, profile }) {
                                     <div className="flex flex-wrap gap-2 mb-3">
                                         {fotos.map((f, idx) => (
                                             <div key={idx} className="relative group">
-                                                <button onClick={() => setModalFoto(f)}>
+                                                <button onClick={() => setModalFoto({ fotos, index: idx })}>
                                                     <img src={f} alt={`Foto ${idx + 1}`} className="w-16 h-16 rounded-lg border object-cover hover:opacity-80 transition-opacity" style={{ borderColor: 'var(--color-border)' }} />
                                                 </button>
                                                 <button onClick={() => downloadImagem(f, `checklist_${c.veiculo?.placa || c.id}_${idx + 1}.jpg`)} title="Baixar foto"
@@ -1591,19 +1605,36 @@ function TabChecklist({ isAdmin, profile }) {
                 </ModalOverlay>
             )}
 
-            {/* Modal visualizar foto */}
+            {/* Modal visualizar foto — com setas laterais pra navegar entre as fotos do checklist */}
             {modalFoto && (
                 <div className="fixed inset-0 z-[300] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)' }} onClick={() => setModalFoto(null)}>
                     <div className="relative max-w-2xl w-full" onClick={e => e.stopPropagation()}>
                         <div className="absolute -top-10 right-0 flex items-center gap-3">
-                            <button onClick={() => downloadImagem(modalFoto, `checklist_foto_${Date.now()}.jpg`)} className="text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
+                            {modalFoto.fotos.length > 1 && (
+                                <span className="text-white opacity-70 text-xs font-medium">{modalFoto.index + 1} / {modalFoto.fotos.length}</span>
+                            )}
+                            <button onClick={() => downloadImagem(modalFoto.fotos[modalFoto.index], `checklist_foto_${modalFoto.index + 1}_${Date.now()}.jpg`)} className="text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
                                 <Icon name="Download" size={16} color="white" /> Baixar
                             </button>
                             <button onClick={() => setModalFoto(null)} className="text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
                                 <Icon name="X" size={16} color="white" /> Fechar
                             </button>
                         </div>
-                        <img src={modalFoto} alt="Foto do checklist" className="rounded-xl w-full object-contain max-h-[80vh]" />
+                        {modalFoto.fotos.length > 1 && (
+                            <button onClick={() => setModalFoto(m => ({ ...m, index: (m.index - 1 + m.fotos.length) % m.fotos.length }))}
+                                className="absolute left-0 sm:-left-14 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-colors"
+                                title="Foto anterior">
+                                <Icon name="ChevronLeft" size={22} color="white" />
+                            </button>
+                        )}
+                        <img src={modalFoto.fotos[modalFoto.index]} alt="Foto do checklist" className="rounded-xl w-full object-contain max-h-[80vh]" />
+                        {modalFoto.fotos.length > 1 && (
+                            <button onClick={() => setModalFoto(m => ({ ...m, index: (m.index + 1) % m.fotos.length }))}
+                                className="absolute right-0 sm:-right-14 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-colors"
+                                title="Próxima foto">
+                                <Icon name="ChevronRight" size={22} color="white" />
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
@@ -3199,7 +3230,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
         despesas.forEach(d => { acc[d.categoria] = (acc[d.categoria] || 0) + Number(d.valor || 0); });
         return Object.entries(acc).sort((a, b) => b[1] - a[1]);
     }, [despesas]);
-    const { open: categoriasOpen, toggle: toggleCategorias } = useCollapsible(true);
+    const { open: categoriasOpen, toggle: toggleCategorias } = useCollapsible(false);
 
     // Item 9: leitura de XML de NF
     const handleXmlNF = (e) => {
@@ -3710,52 +3741,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
                             </div>
                         </div>
                         {parcelasFuturas.map(mes => (
-                            <div key={mes.mes} className="rounded-xl border overflow-hidden" style={{ borderColor: '#FED7AA' }}>
-                                <div className="flex items-center justify-between px-4 py-3" style={{ backgroundColor: '#FFF7ED' }}>
-                                    <p className="text-sm font-bold" style={{ color: '#9A3412' }}>
-                                        {new Date(mes.mes + '-01T00:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-                                    </p>
-                                    <p className="text-sm font-bold font-data text-orange-600">{BRL(mes.total)}</p>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-xs table-fixed">
-                                        <thead style={{ color: 'var(--color-muted-foreground)', backgroundColor: '#FFFBF5' }}>
-                                            <tr>
-                                                <th className="text-left px-4 py-2 font-medium w-[12%]">Vencimento</th>
-                                                <th className="text-left px-4 py-2 font-medium w-[38%]">Despesa</th>
-                                                <th className="text-left px-4 py-2 font-medium w-[16%]">Tipo</th>
-                                                <th className="text-left px-4 py-2 font-medium w-[16%]">Veículo</th>
-                                                <th className="text-right px-4 py-2 font-medium w-[18%]">Valor</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {mes.itens.map((it, idx) => (
-                                                <tr key={idx} className="border-t" style={{ borderColor: '#FEF3C7' }}>
-                                                    <td className="px-4 py-2 font-data whitespace-nowrap">{FMT_DATE(it.vencimento)}</td>
-                                                    <td className="px-4 py-2 overflow-hidden">
-                                                        <div className="flex items-center gap-1 min-w-0">
-                                                            <span className="shrink-0 text-xs px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">{it.despesa.categoria}</span>
-                                                            <span className="truncate" title={it.despesa.fornecedor || it.despesa.descricao || '—'}>{it.despesa.fornecedor || it.despesa.descricao || '—'}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-2 truncate">
-                                                        {it.tipo}{it.cartao ? ` (${it.cartao})` : ''}
-                                                        {it.numeroBoleto && <span className="text-orange-500 font-data"> · Nº {it.numeroBoleto}</span>}
-                                                    </td>
-                                                    <td className="px-4 py-2 font-data truncate">{it.despesa.veiculo?.placa || '—'}</td>
-                                                    <td className="px-4 py-2 text-right font-data font-semibold text-orange-600">{BRL(it.valor)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                        <tfoot>
-                                            <tr className="border-t font-semibold" style={{ borderColor: '#FED7AA', backgroundColor: '#FFF7ED' }}>
-                                                <td colSpan={4} className="px-4 py-2 text-right" style={{ color: '#9A3412' }}>Total do mês:</td>
-                                                <td className="px-4 py-2 text-right font-data text-orange-600">{BRL(mes.total)}</td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                            </div>
+                            <CardMesParcelas key={mes.mes} mes={mes} comVeiculo />
                         ))}
                     </>)}
                 </div>
@@ -3796,50 +3782,10 @@ function TabDespesasExtras({ isAdmin, profile }) {
                         </div>
 
                         {[
-                            { lista: relatorioStatus.abertos, titulo: 'Em Aberto', cor: '#DC2626', bg: '#FFF1F2', border: '#FCA5A5', badgeBg: '#FEE2E2', badgeCor: '#DC2626' },
-                            { lista: relatorioStatus.pagos,   titulo: 'Pagos',     cor: '#059669', bg: '#F0FDF4', border: '#A7F3D0', badgeBg: '#D1FAE5', badgeCor: '#059669' },
-                        ].map(({ lista, titulo, cor, bg, border, badgeBg, badgeCor }) => lista.length > 0 && (
-                            <div key={titulo} className="rounded-xl border overflow-hidden" style={{ borderColor: border }}>
-                                <div className="px-4 py-3 font-bold text-sm" style={{ backgroundColor: bg, color: cor }}>{titulo} — {lista.length} lançamento{lista.length !== 1 ? 's' : ''}</div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-xs table-fixed">
-                                        <thead style={{ color: 'var(--color-muted-foreground)' }}>
-                                            <tr>
-                                                <th className="text-left px-4 py-2 font-medium w-[13%]">Data/Venc.</th>
-                                                <th className="text-left px-4 py-2 font-medium w-[36%]">Despesa</th>
-                                                <th className="text-left px-4 py-2 font-medium w-[17%]">Tipo Pgto</th>
-                                                <th className="text-left px-4 py-2 font-medium w-[16%]">Veículo</th>
-                                                <th className="text-right px-4 py-2 font-medium w-[18%]">Valor</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {lista.map((it, idx) => (
-                                                <tr key={idx} className="border-t" style={{ borderColor: border }}>
-                                                    <td className="px-4 py-2 font-data whitespace-nowrap">{FMT_DATE(it.vencimento)}</td>
-                                                    <td className="px-4 py-2 overflow-hidden">
-                                                        <div className="flex items-center gap-1 min-w-0">
-                                                            <span className="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: badgeBg, color: badgeCor }}>{it.despesa.categoria}</span>
-                                                            <span className="truncate" title={it.despesa.fornecedor || it.despesa.descricao || '—'}>{it.despesa.fornecedor || it.despesa.descricao || '—'}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-2 truncate">
-                                                        {it.tipo}{it.cartao ? ` (${it.cartao})` : ''}
-                                                        {it.numeroBoleto && <span className="font-data" style={{ color: cor }}> · Nº {it.numeroBoleto}</span>}
-                                                    </td>
-                                                    <td className="px-4 py-2 font-data truncate">{it.despesa.veiculo?.placa || '—'}</td>
-                                                    <td className="px-4 py-2 text-right font-data font-semibold" style={{ color: cor }}>{BRL(it.valor)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                        <tfoot>
-                                            <tr className="border-t font-bold" style={{ borderColor: border, backgroundColor: bg }}>
-                                                <td colSpan={4} className="px-4 py-2 text-right" style={{ color: cor }}>Total {titulo}:</td>
-                                                <td className="px-4 py-2 text-right font-data" style={{ color: cor }}>{BRL(titulo === 'Em Aberto' ? relatorioStatus.totalAberto : relatorioStatus.totalPago)}</td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                            </div>
+                            { lista: relatorioStatus.abertos, titulo: 'Em Aberto', cor: '#DC2626', bg: '#FFF1F2', border: '#FCA5A5', total: relatorioStatus.totalAberto },
+                            { lista: relatorioStatus.pagos,   titulo: 'Pagos',     cor: '#059669', bg: '#F0FDF4', border: '#A7F3D0', total: relatorioStatus.totalPago },
+                        ].map(({ lista, titulo, cor, bg, border, total }) => (
+                            <TabelaLancamentosPaginada key={titulo} lista={lista} titulo={titulo} cor={cor} bg={bg} border={border} totalGeral={total} />
                         ))}
                     </>)}
                 </div>
@@ -6480,7 +6426,7 @@ function TabHistoricoViagens({ isAdmin }) {
         return { porMotorista, destinosGlobais, alertasRotas };
     }, [viagens]);
 
-    const { open: destinosOpen, toggle: toggleDestinos } = useCollapsible(true);
+    const { open: destinosOpen, toggle: toggleDestinos } = useCollapsible(false);
 
     // ── Filtro de motorista selecionado ───────────────────────────────────────
     const dadosFiltrados = useMemo(() => {

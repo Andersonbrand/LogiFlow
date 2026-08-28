@@ -1640,6 +1640,8 @@ function PainelFornecedores({ fornecedores, isAdmin, onNovo, onDelete }) {
 function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onTogglePago, fretosTerceiros = [], motoristas = [], mes }) {
     const [filtroMotoristaTer, setFiltroMotoristaTer] = useState('');
     const [filtroPago, setFiltroPago] = useState('todos'); // 'todos' | 'pendentes' | 'pagos'
+    const [valorMin, setValorMin] = useState('');
+    const [valorMax, setValorMax] = useState('');
 
     // Calcula frete de cada carregamento: usa valor_frete_calculado se existir,
     // senão busca na tabela de fretes pelo destino
@@ -1676,7 +1678,15 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
     const carrBase = (filtroMotoristaTer
         ? carregamentos.filter(r => r.motorista_id === filtroMotoristaTer)
         : carregamentos
-    ).filter(r => filtroPago === 'todos' ? true : filtroPago === 'pagos' ? !!r.frete_pago : !r.frete_pago);
+    ).filter(r => filtroPago === 'todos' ? true : filtroPago === 'pagos' ? !!r.frete_pago : !r.frete_pago)
+     .filter(r => {
+        const v = calcFrete(r);
+        const min = valorMin !== '' ? Number(valorMin.replace(',', '.')) : null;
+        const max = valorMax !== '' ? Number(valorMax.replace(',', '.')) : null;
+        if (min != null && !Number.isNaN(min) && v < min) return false;
+        if (max != null && !Number.isNaN(max) && v > max) return false;
+        return true;
+     });
 
     const carr = buscaTer
         ? carrBase.filter(r => {
@@ -1693,8 +1703,9 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
         })
         : carrBase;
 
-    const pag = usePagination(carr, 15, [carr.length, filtroMotoristaTer, filtroPago, buscaTer]);
-    const [resumoAberto, setResumoAberto] = useState(true);
+    const pag = usePagination(carr, 15, [carr.length, filtroMotoristaTer, filtroPago, buscaTer, valorMin, valorMax]);
+    const totalFreteFiltrado = carr.reduce((s, r) => s + calcFrete(r), 0);
+    const [resumoAberto, setResumoAberto] = useState(false);
     const { showToast: showToastTer } = useToast();
 
     // ── Exportar (Terceiros) ─────────────────────────────────────────────────
@@ -1770,7 +1781,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                 </div>
             </div>
 
-            {/* Filtro por status de pagamento */}
+            {/* Filtro por status de pagamento + faixa de valor */}
             <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Pagamento:</span>
                 {[
@@ -1786,6 +1797,20 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                         {op.label}
                     </button>
                 ))}
+                <div className="flex items-center gap-1.5 ml-2 pl-2 border-l" style={{ borderColor: 'var(--color-border)' }}>
+                    <span className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Valor:</span>
+                    <input value={valorMin} onChange={e => setValorMin(e.target.value)} placeholder="Mín."
+                        inputMode="decimal" className="w-20 h-7 px-2 rounded-md border text-xs" style={{ borderColor: 'var(--color-border)' }} />
+                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>a</span>
+                    <input value={valorMax} onChange={e => setValorMax(e.target.value)} placeholder="Máx."
+                        inputMode="decimal" className="w-20 h-7 px-2 rounded-md border text-xs" style={{ borderColor: 'var(--color-border)' }} />
+                    {(valorMin !== '' || valorMax !== '') && (
+                        <button onClick={() => { setValorMin(''); setValorMax(''); }} title="Limpar filtro de valor"
+                            className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-gray-100 transition-colors">
+                            <Icon name="X" size={12} color="var(--color-muted-foreground)" />
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Card de resumo por motorista */}
@@ -1923,6 +1948,15 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                     </table>
                     <PaginationBar page={pag.page} setPage={pag.setPage} totalPages={pag.totalPages}
                         totalItems={pag.totalItems} pageSize={pag.pageSize} itemLabel="carregamento" itemLabelPlural="carregamentos" />
+                    {/* Linha de totais do que está filtrado (status + motorista + valor) — atualiza sozinha conforme os filtros acima */}
+                    <div className="flex items-center justify-between px-4 py-2.5 border-t text-xs font-semibold" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB', color: '#92400E' }}>
+                        <span>
+                            {filtroPago === 'pendentes' ? 'Total pendente' : filtroPago === 'pagos' ? 'Total pago' : 'Total filtrado'}
+                            {filtroMotoristaTer && ` · ${motoristas.find(m => m.id === filtroMotoristaTer)?.name || 'motorista selecionado'}`}
+                            {' — '}{carr.length} registro{carr.length !== 1 ? 's' : ''}
+                        </span>
+                        <span className="font-data text-sm">{BRL(totalFreteFiltrado)}</span>
+                    </div>
                 </div>
             )}
         </div>

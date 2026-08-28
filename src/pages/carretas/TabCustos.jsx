@@ -281,7 +281,7 @@ function PainelCustos({ tipoVeiculo, isAdmin }) {
         const q = busca.toLowerCase();
         return destinos.filter(d => d.destino?.toLowerCase().includes(q));
     }, [destinos, busca]);
-    const { open: destinosOpen, toggle: toggleDestinos } = useCollapsible(true);
+    const { open: destinosOpen, toggle: toggleDestinos } = useCollapsible(false);
 
     const salvarMargem = async () => {
         try {

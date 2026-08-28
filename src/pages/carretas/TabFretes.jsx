@@ -366,7 +366,7 @@ function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { cus
     const custoTotalUnitario = Number(custoConfig.custoMedioProduto || 0) + Number(custoConfig.custoOperacional || 0);
 
     const filtered = rows.filter(r => r.cidade?.toLowerCase().includes(busca.toLowerCase()));
-    const { open: filteredOpen, toggle: toggleFiltered } = useCollapsible(true);
+    const { open: filteredOpen, toggle: toggleFiltered } = useCollapsible(false);
 
     const startEdit = row => { setEditId(row.id); setEditData({ cidade: row.cidade, km: row.km ?? '', frete_por_saco: row.frete_por_saco ?? '', valor_venda: row.valor_venda ?? '' }); };
     const cancelEdit = () => { setEditId(null); setEditData({}); };

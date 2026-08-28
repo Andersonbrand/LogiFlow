@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 import Autocomplete from 'components/ui/Autocomplete';
+import SelectBusca from 'components/ui/SelectBusca';
 import { fetchMotoristas, fetchMotoristasComId, fetchDestinos } from 'utils/romaneioService';
 import { fetchPostos } from 'utils/carretasService';
 import { fetchVehicles } from 'utils/vehicleService';
@@ -630,23 +631,33 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                     {tab === 'dados' && (
                         <div className="flex flex-col gap-4">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <Autocomplete label="Motorista" required name="motorista"
-                                    value={form.motorista} onChange={v => {
-                                        // Ao selecionar nome, tenta vincular o UUID do motorista
-                                        const match = motoristasComId.find(m =>
-                                            m.name?.toLowerCase().trim() === v?.toLowerCase().trim()
-                                        );
-                                        setForm(prev => ({
-                                            ...prev,
-                                            motorista: v,
-                                            motorista_id: match?.id || prev.motorista_id || '',
-                                        }));
-                                    }}
-                                    suggestions={motoristas} placeholder="Nome do motorista" error={errors.motorista} />
+                                <SelectBusca label="Motorista" required
+                                    options={
+                                        form.motorista && !motoristasComId.some(m => m.id === form.motorista_id)
+                                            ? [{ value: form.motorista_id || `__legacy__${form.motorista}`, label: form.motorista, sublabel: 'valor atual (sem vínculo cadastrado)' }, ...motoristasComId.map(m => ({ value: m.id, label: m.name }))]
+                                            : motoristasComId.map(m => ({ value: m.id, label: m.name }))
+                                    }
+                                    value={form.motorista_id || (form.motorista ? `__legacy__${form.motorista}` : '')}
+                                    placeholder="Selecione o motorista"
+                                    error={errors.motorista}
+                                    onSelect={opt => setForm(prev => ({ ...prev, motorista: opt.label, motorista_id: opt.value.startsWith?.('__legacy__') ? '' : opt.value }))}
+                                />
                                 <div className="flex flex-col gap-2">
-                                    <Autocomplete label="Destino Final" required name="destino"
-                                        value={form.destino} onChange={v => setF('destino', v)}
-                                        suggestions={destinos} placeholder="Cidade, UF" error={errors.destino} />
+                                    <SelectBusca label="Destino Final" required
+                                        options={
+                                            form.destino && !destinos.includes(form.destino)
+                                                ? [{ value: form.destino, label: form.destino, sublabel: 'valor atual' }, ...destinos.map(d => ({ value: d, label: d }))]
+                                                : destinos.map(d => ({ value: d, label: d }))
+                                        }
+                                        value={form.destino}
+                                        placeholder="Selecione a cidade"
+                                        error={errors.destino}
+                                        allowCustom
+                                        customValue={form.destino}
+                                        customPlaceholder="Cidade, UF"
+                                        onCustomSubmit={v => setF('destino', v)}
+                                        onSelect={opt => setF('destino', opt.value)}
+                                    />
                                 </div>
                             </div>
                             {/* Paradas intermediárias */}
@@ -665,10 +676,22 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                 {paradas.map((p, idx) => (
                                     <div key={idx} className="flex gap-2 items-center">
                                         <span className="text-xs text-gray-400 w-4">{idx + 1}.</span>
-                                        <input value={p}
-                                            onChange={e => setParadas(prev => prev.map((c, i) => i === idx ? e.target.value : c))}
-                                            placeholder="Cidade, UF"
-                                            className="flex-1 h-8 px-3 rounded-lg border border-gray-200 text-xs bg-white" />
+                                        <div className="flex-1">
+                                            <SelectBusca
+                                                options={
+                                                    p && !destinos.includes(p)
+                                                        ? [{ value: p, label: p, sublabel: 'valor atual' }, ...destinos.map(d => ({ value: d, label: d }))]
+                                                        : destinos.map(d => ({ value: d, label: d }))
+                                                }
+                                                value={p}
+                                                placeholder="Selecione a cidade"
+                                                allowCustom
+                                                customValue={p}
+                                                customPlaceholder="Cidade, UF"
+                                                onCustomSubmit={v => setParadas(prev => prev.map((c, i) => i === idx ? v : c))}
+                                                onSelect={opt => setParadas(prev => prev.map((c, i) => i === idx ? opt.value : c))}
+                                            />
+                                        </div>
                                         <button type="button" onClick={() => setParadas(prev => prev.filter((_, i) => i !== idx))}>
                                             <Icon name="X" size={14} color="#DC2626" />
                                         </button>
@@ -818,21 +841,19 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                 )}
                             </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4">
                                     <div>
                                         <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Veículo</label>
-                                        <PrettySelect value={form.vehicle_id} onChange={e => setF('vehicle_id', e.target.value)}
+                                        <PrettySelect value={form.vehicle_id} onChange={e => {
+                                            const v = vehicles.find(x => String(x.id) === e.target.value);
+                                            setForm(prev => ({ ...prev, vehicle_id: e.target.value, placa: v?.placa || '' }));
+                                        }}
                                             disabled={loadingRefs}
                                             className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white disabled:opacity-60">
                                             <option value="">{loadingRefs ? '⏳ Carregando veículos...' : vehicles.length === 0 ? 'Nenhum veículo cadastrado' : 'Selecione um veículo'}</option>
                                             {vehicles.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.tipo}</option>)}
                                         </PrettySelect>
                                     </div>
-                                <div>
-                                    <label className="block text-xs font-medium font-caption mb-1.5" style={{ color:'var(--color-text-primary)' }}>Placa</label>
-                                    <input value={form.placa} onChange={e => setF('placa', e.target.value)} placeholder="ABC-1234"
-                                        className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white font-data uppercase" />
-                                </div>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>

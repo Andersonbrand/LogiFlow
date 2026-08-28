@@ -94,9 +94,23 @@ export async function fetchMotoristasComId() {
         .order('name');
     return data || [];
 }
+// Cidades cadastradas oficialmente no LogiFlow (cadastro de Fretes por Cidade
+// do módulo de Carretas — `carretas_fretes`), não mais um histórico de textos
+// já digitados em romaneios anteriores. Mantém isso uniforme com o resto do
+// sistema. Como o cadastro guarda só o nome da cidade (sem UF), adiciona
+// ", BA" — todas essas cidades são da região de atuação (Bahia) — pra manter
+// o mesmo formato "Cidade, UF" que o cálculo de rota por IA já usava e
+// precisa pra geocodificar com precisão.
 export async function fetchDestinos() {
-    const { data } = await supabase.from('romaneios').select('destino').not('destino','is',null);
-    return [...new Set((data||[]).map(r=>r.destino).filter(Boolean))].sort();
+    const { data, error } = await supabase
+        .from('carretas_fretes')
+        .select('cidade')
+        .not('cidade', 'is', null);
+    if (error) throw error;
+    const nomes = [...new Set((data || []).map(r => (r.cidade || '').trim()).filter(Boolean))];
+    return nomes
+        .map(c => c.includes(',') ? c : `${c}, BA`)
+        .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 
 // ── Build payload ─────────────────────────────────────────────────────────────
@@ -288,6 +302,31 @@ export async function updateRomaneio(id, romaneio, itens) {
     // `diaria_criada_em` precisa ser (re)gravada nesta edição.
     const { data: romAntes } = await supabase.from('romaneios')
         .select('vehicle_id, placa, custo_motorista, diaria_criada_em').eq('id', id).single();
+
+    // ── 0. TRAVA DE SEGURANÇA — nunca apagar pedidos/itens que já existem no
+    // banco por causa de um formulário que chegou vazio por engano ──────────
+    // Bug real (ago/2026): editar só o campo "motorista" de um romaneio
+    // apagou TODOS os pedidos dele, porque em algum momento o formulário
+    // chegou aqui com `romaneio._pedidos` vazio mesmo o romaneio já tendo
+    // pedidos cadastrados (o form deletava tudo do banco ANTES de reinserir,
+    // sem checar se o que ia reinserir fazia sentido). Se isso acontecer de
+    // novo — não importa a causa — a gente recusa a operação em vez de
+    // apagar dados de verdade. Pra realmente esvaziar os pedidos de um
+    // romaneio, é preciso confirmar explicitamente via `permitirEsvaziarPedidos`.
+    const pedidosMetaCheck = romaneio._pedidos || [];
+    if (pedidosMetaCheck.length === 0 && !romaneio._permitirEsvaziarPedidos) {
+        const { count: pedidosAtuais } = await supabase
+            .from('romaneio_pedidos')
+            .select('id', { count: 'exact', head: true })
+            .eq('romaneio_id', id);
+        if ((pedidosAtuais || 0) > 0) {
+            throw new Error(
+                `Este romaneio tem ${pedidosAtuais} pedido(s) cadastrado(s), mas a edição foi enviada sem nenhum pedido. ` +
+                `Para proteger os dados, a atualização foi cancelada e nada foi apagado. Feche e reabra o romaneio ` +
+                `pra edição (isso costuma resolver quando os pedidos não carregaram corretamente na tela).`
+            );
+        }
+    }
 
     // ── 1. Pedidos e itens ANTES de atualizar o romaneio ─────────────────────
     // Assim quando o Realtime disparar (após o UPDATE abaixo), o fetch
