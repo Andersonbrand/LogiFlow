@@ -7,6 +7,7 @@ import { useConfirm } from 'components/ui/ConfirmDialog';
 import { supabase } from 'utils/supabaseClient';
 import { useCaptacaoConfig, saveCaptacaoConfig, useCustoConfig, saveCustoConfig } from 'utils/settingsService';
 import { useCollapsible, CollapseChevron } from 'components/ui/ExpandableList';
+import { normalizarCidadeBA } from 'utils/cidadeUtils';
 
 // ─── Dados iniciais — Frota Própria (Tabela_Frete.pdf — coluna "Frete por saco") ──
 const FROTA_INICIAL = [
@@ -330,7 +331,7 @@ function useFretes(tipo) {
                 const seed = tipo === 'frota' ? FROTA_INICIAL : TERCEIROS_INICIAL;
                 const { data: inserted, error: insErr } = await supabase
                     .from(table)
-                    .insert(seed.map(r => ({ ...r, tipo })))
+                    .insert(seed.map(r => ({ ...r, cidade: normalizarCidadeBA(r.cidade), tipo })))
                     .select();
                 if (insErr) throw insErr;
                 setRows(inserted || []);
@@ -378,7 +379,7 @@ function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { cus
         try {
             const isLocal = String(editId).startsWith('local_');
             const payload = {
-                cidade: editData.cidade.trim(),
+                cidade: normalizarCidadeBA(editData.cidade),
                 km: editData.km ? Number(editData.km) : null,
                 frete_por_saco: Number(editData.frete_por_saco),
                 valor_venda: editData.valor_venda !== '' && editData.valor_venda != null ? Number(editData.valor_venda) : null,
@@ -419,7 +420,7 @@ function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { cus
         setSaving(true);
         try {
             const payload = {
-                cidade: newRow.cidade.trim(),
+                cidade: normalizarCidadeBA(newRow.cidade),
                 km: newRow.km ? Number(newRow.km) : null,
                 frete_por_saco: Number(newRow.frete_por_saco),
                 valor_venda: newRow.valor_venda !== '' && newRow.valor_venda != null ? Number(newRow.valor_venda) : null,
@@ -455,13 +456,17 @@ function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { cus
                             style={{ borderColor: 'var(--color-border)', width: 220 }}
                         />
                     </div>
+                </div>
+                <button type="button" onClick={toggleFiltered} className="flex items-center gap-2 hover:opacity-70 transition-opacity">
+                    <Icon name={tipo === 'frota' ? 'Truck' : 'Users'} size={15} color={cor} />
+                    <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                        {tipo === 'frota' ? 'Fretes da Frota Própria' : 'Fretes de Terceiros'}
+                    </h3>
                     <span className="text-xs px-2 py-1 rounded-full font-semibold" style={{ backgroundColor: cor + '20', color: cor }}>
                         {filtered.length} cidades
                     </span>
-                    <button type="button" onClick={toggleFiltered} className="hover:opacity-70 transition-opacity">
-                        <CollapseChevron open={filteredOpen} color="var(--color-muted-foreground)" />
-                    </button>
-                </div>
+                    <CollapseChevron open={filteredOpen} color="var(--color-muted-foreground)" />
+                </button>
                 <Button size="sm" iconName="Plus" onClick={() => { setAddMode(true); setEditId(null); }}>
                     Adicionar Cidade
                 </Button>

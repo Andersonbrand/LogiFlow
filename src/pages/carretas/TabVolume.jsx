@@ -14,7 +14,7 @@ import {
     fetchVeiculosProprios, fetchVeiculosTerceiros,
     fetchMotoristasProprios, fetchMotoristasTerceiros, fetchCarreteirosPropriosOnly,
     calcularFrete, TIPOS_CALCULO_FRETE,
-    fetchFretesCidades, marcarFreteCarregamentoPago,
+    fetchFretesCidades, marcarFreteCarregamentoPago, marcarFretesCarregamentoPagoEmMassa,
 } from 'utils/carretasService';
 import {
     fetchFornecedores as fetchFornecedoresCarretas,
@@ -22,6 +22,8 @@ import {
     deleteFornecedor as deleteFornecedorCarretas,
 } from 'utils/fornecedoresService';
 import { useCaptacaoConfig } from 'utils/settingsService';
+import { fetchCaminhoesPlacas } from 'utils/vehicleService';
+import { fetchMotoristasComId } from 'utils/romaneioService';
 import PrettySelect from 'components/ui/PrettySelect';
 import { usePagination, PaginationBar } from 'components/ui/Pagination';
 
@@ -376,6 +378,8 @@ export default function TabVolume({ isAdmin }) {
     const [motoristas, setMotoristas] = useState([]);       // todos (modal carregamento frota)
     const [motoristasProprios, setMotoristasProprios] = useState([]); // frota própria (modal retira)
     const [motoristasTerceiros, setMotoristasTerceiros] = useState([]); // terceirizados (modal terceiro)
+    const [motoristasCaminhoes, setMotoristasCaminhoes] = useState([]); // motoristas de caminhão (frota, não-carreta) — carregamento avulso em Montes Claros
+    const [veiculosCaminhoes, setVeiculosCaminhoes] = useState([]); // caminhões cadastrados (não-carreta) — mesmo uso acima
     const [loading, setLoading] = useState(true);
     const [subAba, setSubAba] = useState('dashboard'); // 'dashboard' | 'tabela' | 'terceiros' | 'retira'
 
@@ -386,6 +390,8 @@ export default function TabVolume({ isAdmin }) {
         veiculo_id: '', motorista_id: '', empresa_id: '', numero_pedido: '', numero_nota_fiscal: '',
         destino: '', observacoes: '', tipo_cimento: '',
         tipo_calculo_frete: 'por_saco', valor_base_frete: '',
+        origem_frota: 'carreta', // 'carreta' | 'caminhao' — carregamento avulso feito por um caminhão da frota
+        placa_caminhao_avulso: '', // texto livre (não referencia carretas_veiculos) — só usado quando origem_frota='caminhao'
     });
     const [modal, setModal] = useState(null); // null | { mode: 'create'|'edit', id?: string }
     const [form, setForm] = useState(emptyForm());
@@ -455,7 +461,8 @@ export default function TabVolume({ isAdmin }) {
                 carr, emp, forn,
                 ve, vePropr, veTer,
                 mot, motPropr, motTer,
-                carrTerc, fretFr, fretTerc, carrRet
+                carrTerc, fretFr, fretTerc, carrRet,
+                motCaminhoes, veiCaminhoes,
             ] = await Promise.all([
                 fetchCarregamentos({ ...filters, is_terceiro: false, is_retira: false }),
                 fetchEmpresas(),
@@ -472,6 +479,11 @@ export default function TabVolume({ isAdmin }) {
                 fetchFretesCidades('frota'),
                 fetchFretesCidades('terceiros'),
                 fetchCarregamentos({ ...filters, is_retira: true }),
+                // Motoristas/veículos de CAMINHÃO (frota, não-carreta) — usado só na
+                // opção "Carregamento com caminhão" do modal (caso raro: caminhão
+                // carregando em Montes Claros, sem gerar bônus de carreteiro).
+                isAdmin ? fetchMotoristasComId() : Promise.resolve([]),
+                isAdmin ? fetchCaminhoesPlacas()  : Promise.resolve([]),
             ]);
             setCarregamentos(carr);
             setEmpresas(emp);
@@ -486,6 +498,8 @@ export default function TabVolume({ isAdmin }) {
             setFretesFretas(fretFr);
             setFretesTerceiros(fretTerc);
             setCarregamentosRetira(carrRet);
+            setMotoristasCaminhoes(motCaminhoes);
+            setVeiculosCaminhoes(veiCaminhoes);
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [mes, dia, usarPeriodo, periodoCustom, empresaFiltro, isAdmin]); // eslint-disable-line
@@ -518,6 +532,7 @@ export default function TabVolume({ isAdmin }) {
     const openCreate = () => { setForm(emptyForm()); setModal({ mode: 'create' }); };
     const openEdit = r => {
         const { tipo, nome } = parseTipo(r);
+        const isCaminhaoAvulso = !r.veiculo_id && !!r.placa_terceiro;
         setForm({
             tipo: tipo || '',
             data_carregamento: r.data_carregamento || new Date().toISOString().slice(0, 10),
@@ -534,18 +549,23 @@ export default function TabVolume({ isAdmin }) {
             tipo_cimento: r.tipo_cimento || '',
             tipo_calculo_frete: r.tipo_calculo_frete || 'por_saco',
             valor_base_frete: r.valor_base_frete || '',
+            origem_frota: isCaminhaoAvulso ? 'caminhao' : 'carreta',
+            placa_caminhao_avulso: isCaminhaoAvulso ? (r.placa_terceiro || '') : '',
         });
         setModal({ mode: 'edit', id: r.id });
     };
 
     const handleSave = async () => {
         const isEstoque = form.tipo === 'ESTOQUE';
+        const isCaminhaoAvulsoCheck = form.origem_frota === 'caminhao' && !isEstoque;
         if (!form.tipo) { showToast('Selecione o tipo de carregamento.', 'error'); return; }
         if (!form.data_carregamento) { showToast('Informe a data.', 'error'); return; }
         // Carregamento no Estoque dispensa quantidade/frete/fornecedor, mas exige
         // destino, placa, motorista e tipo de cimento. Motorista é obrigatório aqui
         // porque o cálculo de bônus (calcularBonusCarreteiro, igual à aba
         // Bonificações) só considera carregamentos com motorista_id preenchido.
+        // Por gerar bônus, o Estoque sempre usa veículo/motorista da frota de
+        // carretas — a opção "caminhão avulso" (sem bônus) não se aplica aqui.
         if (isEstoque) {
             if (!form.destino) { showToast('Informe o destino.', 'error'); return; }
             if (!form.veiculo_id) { showToast('Selecione o veículo (placa).', 'error'); return; }
@@ -553,11 +573,14 @@ export default function TabVolume({ isAdmin }) {
             if (!form.tipo_cimento) { showToast('Selecione o tipo de cimento.', 'error'); return; }
         } else if (!form.quantidade || isNaN(form.quantidade)) {
             showToast('Informe a quantidade.', 'error'); return;
+        } else if (isCaminhaoAvulsoCheck && !form.placa_caminhao_avulso.trim()) {
+            showToast('Informe a placa do caminhão.', 'error'); return;
         }
 
         const empresaOrigem = isEstoque
             ? 'ESTOQUE'
             : (form.empresa_origem ? `${form.tipo}|${form.empresa_origem}` : form.tipo);
+        const isCaminhaoAvulso = isCaminhaoAvulsoCheck;
         const payload = {
             empresa_origem: empresaOrigem,
             data_carregamento: form.data_carregamento,
@@ -567,7 +590,15 @@ export default function TabVolume({ isAdmin }) {
             tipo_calculo_frete: isEstoque ? null : (form.tipo_calculo_frete || 'por_saco'),
             valor_base_frete: isEstoque ? null : (form.valor_base_frete ? Number(form.valor_base_frete) : null),
             _consumoVeiculo: veiculoSelecionado?.media_consumo,
-            veiculo_id: form.veiculo_id || null,
+            // Carregamento avulso de caminhão (fora da frota de carretas): não
+            // referencia carretas_veiculos (evita conflito de FK entre tabelas
+            // diferentes) — a placa fica só como texto informativo. O motorista
+            // continua vinculado normalmente (user_profiles é compartilhado
+            // entre motoristas de carreta e de caminhão), então ele aparece no
+            // volume de sacos do período — só não entra no cálculo de bônus de
+            // carreteiro, que é calculado por outra lógica separada.
+            veiculo_id: isCaminhaoAvulso ? null : (form.veiculo_id || null),
+            placa_terceiro: isCaminhaoAvulso ? (form.placa_caminhao_avulso || null) : null,
             motorista_id: form.motorista_id || null,
             numero_pedido: isEstoque ? null : (form.numero_pedido || null),
             numero_nota_fiscal: isEstoque ? null : (form.numero_nota_fiscal || null),
@@ -678,6 +709,24 @@ export default function TabVolume({ isAdmin }) {
             load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
+    // Baixa em massa — dá baixa (ou desfaz) em vários fretes selecionados de
+    // uma vez, sem precisar clicar linha por linha e esperar recarregar a cada vez.
+    const handleTogglePagoEmMassaTerceiro = async (ids, pago = true) => {
+        if (!ids || ids.length === 0) return;
+        const ok = await confirm({
+            title: pago ? `Marcar ${ids.length} frete(s) como pago(s)?` : `Desfazer pagamento de ${ids.length} frete(s)?`,
+            message: pago
+                ? `Confirma o pagamento de ${ids.length} frete(s) de terceiros selecionado(s)?`
+                : `Isso vai marcar ${ids.length} frete(s) selecionado(s) de volta como pendente.`,
+            confirmLabel: pago ? 'Marcar como pago' : 'Desfazer pagamento', variant: 'info',
+        });
+        if (!ok) return;
+        try {
+            const { sucesso } = await marcarFretesCarregamentoPagoEmMassa(ids, pago);
+            showToast(`${sucesso} frete(s) ${pago ? 'marcado(s) como pago' : 'marcado(s) como pendente'}!`, 'success');
+            load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
 
     // ── Handlers retira ───────────────────────────────────────────────────────
     const openCreateRetira = () => { setFormRetira(emptyFormRetira()); setModalRetira({ mode: 'create' }); };
@@ -774,37 +823,51 @@ export default function TabVolume({ isAdmin }) {
     // ── Exportar ──────────────────────────────────────────────────────────────
     const exportar = () => {
         if (!carregamentos.length) { showToast('Nenhum dado para exportar.', 'error'); return; }
-        const rows = carregamentos.map(r => {
-            const { tipo, nome } = parseTipo(r);
-            return {
-                'Data': FMT(r.data_carregamento),
-                'Tipo': TIPOS[tipo]?.label || tipo || '—',
-                'Fornecedor/Origem': nome || '—',
-                'Tipo de Cimento': r.tipo_cimento || '—',
-                'Placa': r.veiculo?.placa || r.veiculo_id || '—',
-                'Motorista': r.motorista?.name || r.motorista_id || '—',
-                'Pedido': r.numero_pedido || '—',
-                'NF': r.numero_nota_fiscal || '—',
-                'Destino': r.destino || '—',
-                'Quantidade': Number(r.quantidade) || 0,
-                'Unidade': r.unidade_quantidade || 'saco',
-                'Tipo Frete': r.tipo_calculo_frete || '',
-                'Valor Base Frete': Number(r.valor_base_frete || 0),
-                'Frete Calculado (R$)': Number(r.valor_frete_calculado || 0),
-            };
-        });
-        const ws = XLSX.utils.json_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Volume');
-        // Summary sheet
-        const sumRows = Object.entries(TIPOS).map(([key, t]) => ({
-            'Tipo': t.label,
-            'Volume (sacos)': totais[key] || 0,
-            'Participação (%)': totais.total > 0 ? ((totais[key] / totais.total) * 100).toFixed(1) + '%' : '0%',
-        }));
-        sumRows.push({ 'Tipo': 'TOTAL', 'Volume (sacos)': totais.total, 'Participação (%)': '100%' });
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sumRows), 'Resumo');
-        XLSX.writeFile(wb, `volume_carretas_${mes}.xlsx`);
+        try {
+            const rows = carregamentos.map(r => {
+                const { tipo, nome } = parseTipo(r);
+                const cd = calcCaptacaoDistribuicao(r, captacaoConfig.valorPorSaco) || { captacao: 0, distribuicao: 0 };
+                return {
+                    'Data': FMT(r.data_carregamento),
+                    'Tipo': TIPOS[tipo]?.label || tipo || '—',
+                    'Fornecedor/Origem': nome || '—',
+                    'Tipo de Cimento': r.tipo_cimento || '—',
+                    'Placa': r.veiculo?.placa || r.placa_terceiro || r.veiculo_id || '—',
+                    'Motorista': r.motorista?.name || r.motorista_id || '—',
+                    'Pedido': r.numero_pedido || '—',
+                    'NF': r.numero_nota_fiscal || '—',
+                    'Destino': r.destino || '—',
+                    'Quantidade': Number(r.quantidade) || 0,
+                    'Unidade': r.unidade_quantidade || 'saco',
+                    'Tipo Frete': r.tipo_calculo_frete || '',
+                    'Valor Base Frete': Number(r.valor_base_frete || 0),
+                    'Frete Calculado (R$)': Number(r.valor_frete_calculado || 0),
+                    'Valor de Captação (R$)': Number(cd.captacao || 0),
+                    'Valor de Distribuição (R$)': Number(cd.distribuicao || 0),
+                };
+            });
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Volume');
+            // Summary sheet
+            const sumRows = Object.entries(TIPOS).map(([key, t]) => ({
+                'Tipo': t.label,
+                'Volume (sacos)': totais[key] || 0,
+                'Participação (%)': totais.total > 0 ? ((totais[key] / totais.total) * 100).toFixed(1) + '%' : '0%',
+            }));
+            sumRows.push({ 'Tipo': 'TOTAL', 'Volume (sacos)': totais.total, 'Participação (%)': '100%' });
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sumRows), 'Resumo');
+            // Totais de frete/captação/distribuição — soma de tudo que foi exportado
+            const totalFreteExp = rows.reduce((s, r) => s + r['Frete Calculado (R$)'], 0);
+            const totalCaptacaoExp = rows.reduce((s, r) => s + r['Valor de Captação (R$)'], 0);
+            const totalDistribuicaoExp = rows.reduce((s, r) => s + r['Valor de Distribuição (R$)'], 0);
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+                { 'Total de Registros': rows.length, 'Frete Total (R$)': totalFreteExp, 'Captação Total (R$)': totalCaptacaoExp, 'Distribuição Total (R$)': totalDistribuicaoExp },
+            ]), 'Totais Frete');
+            XLSX.writeFile(wb, `volume_carretas_${mes || dia || 'periodo'}.xlsx`);
+        } catch (e) {
+            showToast('Erro ao exportar: ' + e.message, 'error');
+        }
     };
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -931,6 +994,7 @@ export default function TabVolume({ isAdmin }) {
                     onEdit={openEditTerceiro}
                     onDelete={handleDeleteTerceiro}
                     onTogglePago={handleTogglePagoTerceiro}
+                    onTogglePagoEmMassa={handleTogglePagoEmMassaTerceiro}
                     fretosTerceiros={fretosTerceiros}
                     motoristas={motoristasTerceiros}
                     mes={mes}
@@ -1020,17 +1084,53 @@ export default function TabVolume({ isAdmin }) {
                                 <Field label="Fornecedor / Origem">
                                     <OrigemDropdown value={form.empresa_origem} onChange={v => setForm(f => ({ ...f, empresa_origem: v }))} fornecedores={fornecedores} />
                                 </Field>
+                                {/* Origem do carregamento: frota de carretas (padrão) ou, raramente,
+                                    um caminhão da frota que carregou avulso (ex: Montes Claros) — não
+                                    gera bônus de carreteiro, só conta no volume de sacos e no frete. */}
+                                <div className="flex gap-2 p-1 rounded-lg border w-fit" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F9FAFB' }}>
+                                    {[
+                                        { v: 'carreta', label: 'Frota de Carretas' },
+                                        { v: 'caminhao', label: 'Caminhão (frota própria)' },
+                                    ].map(op => (
+                                        <button key={op.v} type="button"
+                                            onClick={() => setForm(f => ({ ...f, origem_frota: op.v, veiculo_id: '', motorista_id: '', placa_caminhao_avulso: '' }))}
+                                            className="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+                                            style={form.origem_frota === op.v
+                                                ? { backgroundColor: 'white', color: '#D97706', boxShadow: '0 1px 3px rgba(0,0,0,0.1)', fontWeight: 600 }
+                                                : { color: 'var(--color-muted-foreground)' }}>
+                                            {op.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                {form.origem_frota === 'caminhao' && (
+                                    <div className="flex items-start gap-2 p-3 rounded-xl border" style={{ backgroundColor: '#FFF7ED', borderColor: '#FED7AA' }}>
+                                        <Icon name="Info" size={14} color="#C2410C" className="flex-shrink-0 mt-0.5" />
+                                        <p className="text-xs" style={{ color: '#9A3412' }}>
+                                            Carregamento avulso feito por um caminhão da frota (não é uma carreta). Não gera
+                                            bonificação de carreteiro — só entra no volume de sacos e no valor de frete do setor.
+                                        </p>
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-2 gap-3">
-                                    <Field label="Veículo (placa)">
-                                        <PrettySelect value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                            <option value="">Selecione...</option>
-                                            {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
-                                        </PrettySelect>
-                                    </Field>
+                                    {form.origem_frota === 'caminhao' ? (
+                                        <Field label="Placa do caminhão" required>
+                                            <PrettySelect value={form.placa_caminhao_avulso} onChange={e => setForm(f => ({ ...f, placa_caminhao_avulso: e.target.value }))} className={inputCls} style={inputStyle}>
+                                                <option value="">Selecione...</option>
+                                                {veiculosCaminhoes.map(v => <option key={v.id} value={v.placa}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
+                                            </PrettySelect>
+                                        </Field>
+                                    ) : (
+                                        <Field label="Veículo (placa)">
+                                            <PrettySelect value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                                <option value="">Selecione...</option>
+                                                {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
+                                            </PrettySelect>
+                                        </Field>
+                                    )}
                                     <Field label="Motorista">
                                         <PrettySelect value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                             <option value="">Selecione...</option>
-                                            {motoristasProprios.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                            {(form.origem_frota === 'caminhao' ? motoristasCaminhoes : motoristasProprios).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                         </PrettySelect>
                                     </Field>
                                 </div>
@@ -1468,7 +1568,7 @@ function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], c
                                             <td className="px-3 py-2.5 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
                                             <td className="px-3 py-2.5"><TipoBadge tipo={tipo} /></td>
                                             <td className="px-3 py-2.5 max-w-[140px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{nome || '—'}</td>
-                                            <td className="px-3 py-2.5 font-mono text-xs">{r.veiculo?.placa || r.veiculo_id || '—'}</td>
+                                            <td className="px-3 py-2.5 font-mono text-xs">{r.veiculo?.placa || r.placa_terceiro || r.veiculo_id || '—'}</td>
                                             <td className="px-3 py-2.5 text-xs max-w-[120px] truncate">{r.destino || '—'}</td>
                                             <td className="px-3 py-2.5 font-bold font-mono text-right">{fmtNum(r.quantidade)}</td>
                                         </tr>
@@ -1554,7 +1654,7 @@ function TabelaCarregamentos({ carregamentos, isAdmin, onEdit, onDelete, onNovo,
                                 <td className="px-3 py-2.5 max-w-[140px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
                                     {tipo === 'ESTOQUE' ? (r.tipo_cimento || '—') : (nome || '—')}
                                 </td>
-                                <td className="px-3 py-2.5 font-mono text-xs">{r.veiculo?.placa || r.veiculo_id || '—'}</td>
+                                <td className="px-3 py-2.5 font-mono text-xs">{r.veiculo?.placa || r.placa_terceiro || r.veiculo_id || '—'}</td>
                                 <td className="px-3 py-2.5 text-xs">{r.motorista?.name || r.motorista_id || '—'}</td>
                                 <td className="px-3 py-2.5 font-mono text-xs">{r.numero_pedido || '—'}</td>
                                 <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>
@@ -1637,11 +1737,13 @@ function PainelFornecedores({ fornecedores, isAdmin, onNovo, onDelete }) {
 }
 
 // ─── Sub-componente: Tabela Terceiros ─────────────────────────────────────────
-function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onTogglePago, fretosTerceiros = [], motoristas = [], mes }) {
-    const [filtroMotoristaTer, setFiltroMotoristaTer] = useState('');
-    const [filtroPago, setFiltroPago] = useState('todos'); // 'todos' | 'pendentes' | 'pagos'
-    const [valorMin, setValorMin] = useState('');
-    const [valorMax, setValorMax] = useState('');
+function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onTogglePago, onTogglePagoEmMassa, fretosTerceiros = [], motoristas = [], mes }) {
+    const [filtroMotoristaTer, setFiltroMotoristaTer] = useState(() => sessionStorage.getItem('lf_ter_filtroMotorista') || '');
+    const [filtroPago, setFiltroPago] = useState(() => sessionStorage.getItem('lf_ter_filtroPago') || 'todos'); // 'todos' | 'pendentes' | 'pagos'
+    // Persiste os filtros no navegador — sobrevivem a um F5/reload da página,
+    // não só a recarregamentos internos dos dados.
+    useEffect(() => { sessionStorage.setItem('lf_ter_filtroMotorista', filtroMotoristaTer); }, [filtroMotoristaTer]);
+    useEffect(() => { sessionStorage.setItem('lf_ter_filtroPago', filtroPago); }, [filtroPago]);
 
     // Calcula frete de cada carregamento: usa valor_frete_calculado se existir,
     // senão busca na tabela de fretes pelo destino
@@ -1678,15 +1780,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
     const carrBase = (filtroMotoristaTer
         ? carregamentos.filter(r => r.motorista_id === filtroMotoristaTer)
         : carregamentos
-    ).filter(r => filtroPago === 'todos' ? true : filtroPago === 'pagos' ? !!r.frete_pago : !r.frete_pago)
-     .filter(r => {
-        const v = calcFrete(r);
-        const min = valorMin !== '' ? Number(valorMin.replace(',', '.')) : null;
-        const max = valorMax !== '' ? Number(valorMax.replace(',', '.')) : null;
-        if (min != null && !Number.isNaN(min) && v < min) return false;
-        if (max != null && !Number.isNaN(max) && v > max) return false;
-        return true;
-     });
+    ).filter(r => filtroPago === 'todos' ? true : filtroPago === 'pagos' ? !!r.frete_pago : !r.frete_pago);
 
     const carr = buscaTer
         ? carrBase.filter(r => {
@@ -1703,10 +1797,31 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
         })
         : carrBase;
 
-    const pag = usePagination(carr, 15, [carr.length, filtroMotoristaTer, filtroPago, buscaTer, valorMin, valorMax]);
+    const pag = usePagination(carr, 15, [carr.length, filtroMotoristaTer, filtroPago, buscaTer]);
     const totalFreteFiltrado = carr.reduce((s, r) => s + calcFrete(r), 0);
     const [resumoAberto, setResumoAberto] = useState(false);
     const { showToast: showToastTer } = useToast();
+
+    // ── Seleção múltipla para baixa em massa ────────────────────────────────
+    const [selecionados, setSelecionados] = useState(new Set());
+    // Limpa a seleção quando o filtro muda — evita dar baixa sem querer num
+    // registro que já saiu da vista por causa de um filtro diferente.
+    useEffect(() => { setSelecionados(new Set()); }, [filtroMotoristaTer, filtroPago, buscaTer, mes]);
+    const toggleSelecionado = (id) => setSelecionados(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
+    const pendentesNaPagina = pag.pageItems.filter(r => !r.frete_pago);
+    const todosPendentesPaginaSelecionados = pendentesNaPagina.length > 0 && pendentesNaPagina.every(r => selecionados.has(r.id));
+    const toggleSelecionarTodosPagina = () => setSelecionados(prev => {
+        const next = new Set(prev);
+        if (todosPendentesPaginaSelecionados) pendentesNaPagina.forEach(r => next.delete(r.id));
+        else pendentesNaPagina.forEach(r => next.add(r.id));
+        return next;
+    });
+    const idsSelecionadosPendentes = [...selecionados].filter(id => carr.some(r => r.id === id && !r.frete_pago));
+    const idsSelecionadosPagos = [...selecionados].filter(id => carr.some(r => r.id === id && r.frete_pago));
 
     // ── Exportar (Terceiros) ─────────────────────────────────────────────────
     const exportarTerceiros = () => {
@@ -1797,20 +1912,14 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                         {op.label}
                     </button>
                 ))}
-                <div className="flex items-center gap-1.5 ml-2 pl-2 border-l" style={{ borderColor: 'var(--color-border)' }}>
-                    <span className="text-xs font-semibold" style={{ color: 'var(--color-text-secondary)' }}>Valor:</span>
-                    <input value={valorMin} onChange={e => setValorMin(e.target.value)} placeholder="Mín."
-                        inputMode="decimal" className="w-20 h-7 px-2 rounded-md border text-xs" style={{ borderColor: 'var(--color-border)' }} />
-                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>a</span>
-                    <input value={valorMax} onChange={e => setValorMax(e.target.value)} placeholder="Máx."
-                        inputMode="decimal" className="w-20 h-7 px-2 rounded-md border text-xs" style={{ borderColor: 'var(--color-border)' }} />
-                    {(valorMin !== '' || valorMax !== '') && (
-                        <button onClick={() => { setValorMin(''); setValorMax(''); }} title="Limpar filtro de valor"
-                            className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-gray-100 transition-colors">
-                            <Icon name="X" size={12} color="var(--color-muted-foreground)" />
-                        </button>
-                    )}
-                </div>
+                {isAdmin && pendentesNaPagina.length > 0 && (
+                    <button onClick={toggleSelecionarTodosPagina}
+                        className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors hover:bg-amber-50"
+                        style={{ borderColor: '#FDE68A', color: '#92400E' }}>
+                        <Icon name={todosPendentesPaginaSelecionados ? 'CheckSquare' : 'Square'} size={13} color="#92400E" />
+                        {todosPendentesPaginaSelecionados ? 'Desmarcar todos' : 'Selecionar todos (pendentes desta página)'}
+                    </button>
+                )}
             </div>
 
             {/* Card de resumo por motorista */}
@@ -1886,6 +1995,33 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                 </div>
             )}
 
+            {/* Barra de ação em massa — aparece quando há registros selecionados */}
+            {isAdmin && selecionados.size > 0 && (
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border flex-wrap" style={{ borderColor: '#FDE68A', backgroundColor: '#FEF3C7' }}>
+                    <span className="text-xs font-semibold" style={{ color: '#92400E' }}>{selecionados.size} selecionado{selecionados.size > 1 ? 's' : ''}</span>
+                    <div className="flex items-center gap-2">
+                        {idsSelecionadosPendentes.length > 0 && (
+                            <button onClick={() => onTogglePagoEmMassa?.(idsSelecionadosPendentes, true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-colors"
+                                style={{ backgroundColor: '#059669' }}>
+                                <Icon name="CheckCircle2" size={13} color="#fff" /> Dar baixa em {idsSelecionadosPendentes.length}
+                            </button>
+                        )}
+                        {idsSelecionadosPagos.length > 0 && (
+                            <button onClick={() => onTogglePagoEmMassa?.(idsSelecionadosPagos, false)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors hover:bg-gray-50"
+                                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                                <Icon name="Undo2" size={13} /> Desfazer {idsSelecionadosPagos.length}
+                            </button>
+                        )}
+                        <button onClick={() => setSelecionados(new Set())}
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-medium hover:bg-amber-100 transition-colors" style={{ color: '#92400E' }}>
+                            Limpar seleção
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Tabela de carregamentos */}
             {carr.length === 0 ? (
                 <div className="bg-white rounded-xl border p-12 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
@@ -1896,11 +2032,12 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                 </div>
             ) : (
                 <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: '#FDE68A' }}>
-                    <table className="w-full text-sm min-w-[900px]">
+                    <table className="w-full text-sm min-w-[780px]">
                         <thead className="text-xs border-b" style={{ background: '#FFFBEB', borderColor: '#FDE68A', color: '#92400E' }}>
                             <tr>
+                                {isAdmin && <th className="w-4 px-1 py-2.5" />}
                                 {['Data', 'Motorista', 'Placa', 'Tipo', 'Empresa', 'Fornecedor/Origem', 'Destino', 'Pedido', 'NF', 'Qtd (sacos)', 'Frete', 'Pagamento'].map(h => (
-                                    <th key={h} className="px-3 py-3 text-left font-medium whitespace-nowrap">{h}</th>
+                                    <th key={h} className="px-2 py-2.5 text-left font-medium whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
                         </thead>
@@ -1910,19 +2047,24 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                                 const frete = calcFrete(r);
                                 return (
                                     <tr key={r.id} className="border-t hover:bg-amber-50 transition-colors"
-                                        style={{ borderColor: '#FDE68A', background: i % 2 === 0 ? '#fff' : '#FFFBEB' }}>
-                                        <td className="px-3 py-2.5 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
-                                        <td className="px-3 py-2.5 text-xs font-medium">{r.motorista?.name || '—'}</td>
-                                        <td className="px-3 py-2.5 font-mono text-xs">{r.veiculo?.placa || '—'}</td>
-                                        <td className="px-3 py-2.5"><TipoBadge tipo={tipo} /></td>
-                                        <td className="px-3 py-2.5 text-xs max-w-[110px] truncate" style={{ color: 'var(--color-text-primary)' }}>{r.empresa?.nome || '—'}</td>
-                                        <td className="px-3 py-2.5 max-w-[130px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{nome || '—'}</td>
-                                        <td className="px-3 py-2.5 text-xs max-w-[120px] truncate">{r.destino || '—'}</td>
-                                        <td className="px-3 py-2.5 font-mono text-xs">{r.numero_pedido || '—'}</td>
-                                        <td className="px-3 py-2.5 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>
-                                        <td className="px-3 py-2.5 font-bold font-mono whitespace-nowrap" style={{ color: '#D97706' }}>{(Number(r.quantidade)||0).toLocaleString('pt-BR')}</td>
-                                        <td className="px-3 py-2.5 font-mono font-semibold whitespace-nowrap" style={{ color: '#059669' }}>{frete > 0 ? BRL(frete) : '—'}</td>
-                                        <td className="px-3 py-2.5">
+                                        style={{ borderColor: '#FDE68A', background: selecionados.has(r.id) ? '#FEF3C7' : (i % 2 === 0 ? '#fff' : '#FFFBEB') }}>
+                                        {isAdmin && (
+                                            <td className="w-4 px-1 py-2">
+                                                <input type="checkbox" checked={selecionados.has(r.id)} onChange={() => toggleSelecionado(r.id)} className="w-3 h-3 cursor-pointer align-middle" />
+                                            </td>
+                                        )}
+                                        <td className="px-2 py-2 whitespace-nowrap">{FMT(r.data_carregamento)}</td>
+                                        <td className="px-2 py-2 text-xs font-medium">{r.motorista?.name || '—'}</td>
+                                        <td className="px-2 py-2 font-mono text-xs">{r.veiculo?.placa || '—'}</td>
+                                        <td className="px-2 py-2"><TipoBadge tipo={tipo} /></td>
+                                        <td className="px-2 py-2 text-xs max-w-[90px] truncate" style={{ color: 'var(--color-text-primary)' }}>{r.empresa?.nome || '—'}</td>
+                                        <td className="px-2 py-2 max-w-[100px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{nome || '—'}</td>
+                                        <td className="px-2 py-2 text-xs max-w-[100px] truncate">{r.destino || '—'}</td>
+                                        <td className="px-2 py-2 font-mono text-xs">{r.numero_pedido || '—'}</td>
+                                        <td className="px-2 py-2 font-mono text-xs">{r.numero_nota_fiscal || '—'}</td>
+                                        <td className="px-2 py-2 font-bold font-mono whitespace-nowrap" style={{ color: '#D97706' }}>{(Number(r.quantidade)||0).toLocaleString('pt-BR')}</td>
+                                        <td className="px-2 py-2 font-mono font-semibold whitespace-nowrap" style={{ color: '#059669' }}>{frete > 0 ? BRL(frete) : '—'}</td>
+                                        <td className="px-2 py-2">
                                             <ActionButtonsGroup>
                                                 {isAdmin ? (
                                                     <button type="button" onClick={() => onTogglePago?.(r)}
@@ -1946,8 +2088,6 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                             })}
                         </tbody>
                     </table>
-                    <PaginationBar page={pag.page} setPage={pag.setPage} totalPages={pag.totalPages}
-                        totalItems={pag.totalItems} pageSize={pag.pageSize} itemLabel="carregamento" itemLabelPlural="carregamentos" />
                     {/* Linha de totais do que está filtrado (status + motorista + valor) — atualiza sozinha conforme os filtros acima */}
                     <div className="flex items-center justify-between px-4 py-2.5 border-t text-xs font-semibold" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB', color: '#92400E' }}>
                         <span>
@@ -1957,6 +2097,8 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
                         </span>
                         <span className="font-data text-sm">{BRL(totalFreteFiltrado)}</span>
                     </div>
+                    <PaginationBar page={pag.page} setPage={pag.setPage} totalPages={pag.totalPages}
+                        totalItems={pag.totalItems} pageSize={pag.pageSize} itemLabel="carregamento" itemLabelPlural="carregamentos" />
                 </div>
             )}
         </div>

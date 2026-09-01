@@ -537,7 +537,7 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
 
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-    const addPedido = () => setPedidos(p => [...p, { ...EMPTY_PEDIDO_CARRETAS(), _novo: true }]);
+    const addPedido = () => setPedidos(p => [...p, { ...EMPTY_PEDIDO_CARRETAS(), empresa: form.empresa || '', _novo: true }]);
     const updatePedido = (idx, patch) => setPedidos(p => p.map((pd, i) => i === idx ? { ...pd, ...patch } : pd));
     const removePedido = (idx) => setPedidos(p => p.filter((_, i) => i !== idx));
 
@@ -696,6 +696,13 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                                 onChange={v => set('destino', v)}
                                 fretes={fretesFretas}
                             />
+                        </Field>
+                        <Field label="Empresa">
+                            <PrettySelect value={form.empresa} onChange={e => set('empresa', e.target.value)}
+                                className={inputCls} style={inputStyle}>
+                                <option value="">Selecione...</option>
+                                {empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}
+                            </PrettySelect>
                         </Field>
                         <Field label="Data de Saída">
                             <input type="date" value={form.data_saida} onChange={e => set('data_saida', e.target.value)}
@@ -1062,24 +1069,64 @@ export default function TabRomaneios({ isAdmin }) {
 
     const exportar = () => {
         if (!romaneios.length) { showToast('Nenhum romaneio para exportar', 'error'); return; }
-        const rows = romaneios.map(r => ({
-            'Número':      r.numero,
-            'Status':      r.status,
-            'Motorista':   r.motorista?.name || '',
-            'Placa':       r.veiculo?.placa  || '',
-            'Empresa':     r.empresa          || '',
-            'Destino':     r.destino          || '',
-            'Data Saída':  FMT_DATE(r.data_saida),
-            'Nº NF':       r.numero_nf        || '',
-            'Nº Pedido':   r.numero_pedido    || '',
-            'Valor Carga': Number(r.valor_carga || 0),
-            'Frete (R$)':  Number(r.valor_frete  || 0),
-            'Materiais':   (r.itens || []).map(it => it.material?.nome || it.descricao || '').filter(Boolean).join(', '),
-        }));
-        const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [12,16,20,12,18,22,12,12,12,14,14,40].map(w => ({ wch: w }));
+        // Uma linha por PEDIDO (não por romaneio) — um romaneio pode ter
+        // pedidos de empresas diferentes, então quebrar por pedido é o que
+        // permite separar corretamente a receita de frete por empresa.
+        // Romaneios sem nenhum pedido (só carga solta) ainda geram 1 linha,
+        // usando os dados do próprio romaneio.
+        const linhas = [];
+        romaneios.forEach(r => {
+            const peds = r.pedidos || [];
+            if (peds.length === 0) {
+                linhas.push({
+                    'Romaneio': r.numero, 'Status': r.status, 'Motorista': r.motorista?.name || '', 'Placa': r.veiculo?.placa || '',
+                    'Empresa': r.empresa || '', 'Data Saída': FMT_DATE(r.data_saida), 'Nº Pedido': r.numero_pedido || '',
+                    'Cidade Destino': r.destino || '', 'NF': r.numero_nf || '',
+                    'Valor Pedido (R$)': Number(r.valor_carga || 0), 'Frete (R$)': Number(r.valor_frete || 0),
+                });
+            } else {
+                peds.forEach(p => {
+                    const pct = Number(p.percentual_frete || 0.05);
+                    linhas.push({
+                        'Romaneio': r.numero, 'Status': r.status, 'Motorista': r.motorista?.name || '', 'Placa': r.veiculo?.placa || '',
+                        'Empresa': p.empresa || r.empresa || '', 'Data Saída': FMT_DATE(r.data_saida), 'Nº Pedido': p.numero_pedido || '',
+                        'Cidade Destino': p.cidade_destino || r.destino || '', 'NF': r.numero_nf || '',
+                        'Valor Pedido (R$)': Number(p.valor_pedido || 0), 'Frete (R$)': Number(p.valor_pedido || 0) * pct,
+                    });
+                });
+            }
+        });
+        // Ordena por Empresa pra ficar tudo agrupado visualmente na planilha
+        linhas.sort((a, b) => (a['Empresa'] || 'zzz').localeCompare(b['Empresa'] || 'zzz') || a['Romaneio'].localeCompare(b['Romaneio']));
+
+        const ws = XLSX.utils.json_to_sheet(linhas);
+        ws['!cols'] = [10, 16, 20, 12, 22, 12, 12, 22, 12, 14, 14].map(w => ({ wch: w }));
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Romaneios');
+        XLSX.utils.book_append_sheet(wb, ws, 'Romaneios por Pedido');
+
+        // Resumo por empresa — total de pedidos, valor de carga e frete gerado,
+        // pra ver de cara quanto cada empresa solicitante gerou de receita.
+        const porEmpresa = {};
+        linhas.forEach(l => {
+            const emp = l['Empresa'] || '(sem empresa)';
+            if (!porEmpresa[emp]) porEmpresa[emp] = { pedidos: 0, valorCarga: 0, frete: 0 };
+            porEmpresa[emp].pedidos++;
+            porEmpresa[emp].valorCarga += l['Valor Pedido (R$)'];
+            porEmpresa[emp].frete += l['Frete (R$)'];
+        });
+        const resumoRows = Object.entries(porEmpresa)
+            .sort((a, b) => b[1].frete - a[1].frete)
+            .map(([emp, v]) => ({
+                'Empresa': emp, 'Pedidos': v.pedidos,
+                'Valor de Carga (R$)': v.valorCarga, 'Frete Gerado (R$)': v.frete,
+            }));
+        resumoRows.push({
+            'Empresa': 'TOTAL', 'Pedidos': linhas.length,
+            'Valor de Carga (R$)': resumoRows.reduce((s, r) => s + r['Valor de Carga (R$)'], 0),
+            'Frete Gerado (R$)': resumoRows.reduce((s, r) => s + r['Frete Gerado (R$)'], 0),
+        });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumoRows), 'Resumo por Empresa');
+
         XLSX.writeFile(wb, `romaneios_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`);
         showToast('Exportado!', 'success');
     };

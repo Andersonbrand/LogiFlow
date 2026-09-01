@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { normalizarCidadeBA } from './cidadeUtils';
 
 // Mapa de status do romaneio → status do veículo
 const STATUS_VEICULO = {
@@ -108,8 +109,9 @@ export async function fetchDestinos() {
         .not('cidade', 'is', null);
     if (error) throw error;
     const nomes = [...new Set((data || []).map(r => (r.cidade || '').trim()).filter(Boolean))];
-    return nomes
-        .map(c => c.includes(',') ? c : `${c}, BA`)
+    // Padroniza todas: sem parênteses e sempre terminando em ", BA" — nunca some
+    // exceção, senão o cálculo de rota da IA integrada fica impreciso.
+    return [...new Set(nomes.map(c => normalizarCidadeBA(c)))]
         .sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 

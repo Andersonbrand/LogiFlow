@@ -630,6 +630,20 @@ export async function marcarFreteCarregamentoPago(id, pago = true) {
     return data;
 }
 
+// Dá baixa (ou desfaz) em vários fretes de carregamentos de terceiros de uma
+// vez só — usado na seleção múltipla da tela de Volume de Carregamento >
+// Terceiros, pra não precisar marcar um por um e esperar a tela recarregar
+// a cada clique.
+export async function marcarFretesCarregamentoPagoEmMassa(ids, pago = true) {
+    if (!ids || ids.length === 0) return { sucesso: 0, falha: 0 };
+    const { error, count } = await supabase
+        .from('carretas_carregamentos')
+        .update({ frete_pago: pago, frete_pago_em: pago ? new Date().toISOString() : null }, { count: 'exact' })
+        .in('id', ids);
+    if (error) throw error;
+    return { sucesso: count ?? ids.length, falha: 0 };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // EMPRESAS
 // ─────────────────────────────────────────────────────────────────────────────

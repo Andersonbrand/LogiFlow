@@ -1226,9 +1226,28 @@ export default function Relatorios() {
                                     'Status Romaneio':   p._rom.status || '',
                                 };
                             });
+                            // Linha de totais ao final da mesma planilha — soma Valor Pedido e Frete
+                            rows.push({
+                                'Romaneio': `TOTAL (${rows.length} pedido${rows.length > 1 ? 's' : ''})`,
+                                'Motorista': '', 'Saída': '', 'Nº Pedido': '', 'Cidade Destino': '', 'Empresa': '', 'Categoria Frete': '', '% Frete': '',
+                                'Valor Pedido (R$)': valorCarga,
+                                'Frete (R$)': freteTotal,
+                                'Status Romaneio': '',
+                            });
                             const ws = XLSX.utils.json_to_sheet(rows);
                             ws['!cols'] = Object.keys(rows[0] || {}).map(() => ({ wch: 20 }));
                             XLSX.utils.book_append_sheet(wb, ws, empresaFiltro.slice(0, 31));
+                            // Aba de resumo — mesmos números dos cards exibidos na tela (Pedidos,
+                            // Valor da Carga, Frete Gerado, Margem Estimada), pra bater com o que
+                            // o usuário já vê antes de exportar.
+                            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{
+                                'Empresa': empresaFiltro,
+                                'Mês': mesLabel,
+                                'Pedidos no Mês': totalPedidos,
+                                'Valor da Carga (R$)': valorCarga,
+                                'Frete Gerado (R$)': freteTotal,
+                                'Margem Estimada (R$)': margemTotal,
+                            }]), 'Resumo');
                             XLSX.writeFile(wb, `relatorio_${empresaFiltro.replace(/\s/g,'_')}_${mesFiltro}.xlsx`);
                             showToast('Relatório exportado!');
                         };

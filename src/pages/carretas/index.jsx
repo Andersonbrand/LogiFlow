@@ -300,7 +300,7 @@ function TabViagens({ isAdmin }) {
     // Placas disponíveis para o filtro, extraídas dos dados já carregados
     const placasDisponiveis = useMemo(() => {
         const set = new Set();
-        carregamentos.forEach(c => c.veiculo?.placa && set.add(c.veiculo.placa));
+        carregamentos.forEach(c => { if (c.veiculo?.placa) set.add(c.veiculo.placa); else if (c.placa_terceiro) set.add(c.placa_terceiro); });
         registrosMotoristas.forEach(r => r.veiculo?.placa && set.add(r.veiculo.placa));
         return Array.from(set).sort();
     }, [carregamentos, registrosMotoristas]);
@@ -308,7 +308,11 @@ function TabViagens({ isAdmin }) {
     const carregamentosComBonus = useMemo(() => {
         const base = carregamentos
             .filter(c => !isCIF(c))
-            .filter(c => !filtroPlaca || c.veiculo?.placa === filtroPlaca)
+            // Carregamentos avulsos de caminhão da frota (fora da frota de
+            // carretas — ex: Montes Claros) não geram bônus de carreteiro:
+            // marcados por não ter veiculo_id de carreta mas ter placa_terceiro.
+            .filter(c => !(!c.veiculo_id && c.placa_terceiro))
+            .filter(c => !filtroPlaca || c.veiculo?.placa === filtroPlaca || c.placa_terceiro === filtroPlaca)
             .map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino, bonusConfig) }));
         if (!pesquisa.trim()) return base;
         const q = pesquisa.trim().toLowerCase();
@@ -317,7 +321,7 @@ function TabViagens({ isAdmin }) {
             (c.numero_nota_fiscal || '').toLowerCase().includes(q) ||
             (c.motorista?.name || '').toLowerCase().includes(q) ||
             (c.destino || '').toLowerCase().includes(q) ||
-            (c.veiculo?.placa || '').toLowerCase().includes(q)
+            (c.veiculo?.placa || c.placa_terceiro || '').toLowerCase().includes(q)
         );
     }, [carregamentos, pesquisa, filtroPlaca]); // eslint-disable-line
 
@@ -346,7 +350,7 @@ function TabViagens({ isAdmin }) {
             const rows = carregamentosComBonus.map(c => ({
                 'Data': FMT_DATE(c.data_carregamento),
                 'Motorista': c.motorista?.name || '',
-                'Placa': c.veiculo?.placa || '',
+                'Placa': c.veiculo?.placa || c.placa_terceiro || '',
                 'Empresa': c.empresa?.nome || '',
                 'Destino': c.destino || '',
                 'Qtd (sacos)': c.quantidade || 0,
@@ -487,7 +491,7 @@ function TabViagens({ isAdmin }) {
                                             style={{ borderColor: 'var(--color-border)', backgroundColor: i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
                                             <td className="px-3 py-3 whitespace-nowrap">{FMT_DATE(c.data_carregamento)}</td>
                                             <td className="px-3 py-3 font-medium whitespace-nowrap">{c.motorista?.name || '—'}</td>
-                                            <td className="px-3 py-3 font-data whitespace-nowrap">{c.veiculo?.placa || '—'}</td>
+                                            <td className="px-3 py-3 font-data whitespace-nowrap">{c.veiculo?.placa || c.placa_terceiro || '—'}</td>
                                             <td className="px-3 py-3 text-xs">{c.empresa?.nome || '—'}</td>
                                             <td className="px-3 py-3 max-w-[140px] truncate">{c.destino || '—'}</td>
                                             <td className="px-3 py-3 font-data text-right font-semibold" style={{ color: 'var(--color-primary)' }}>
@@ -1695,7 +1699,7 @@ function TabCarregamentos({ isAdmin }) {
             (c.numero_nota_fiscal || '').toLowerCase().includes(q) ||
             (c.motorista?.name || '').toLowerCase().includes(q) ||
             (c.destino || '').toLowerCase().includes(q) ||
-            (c.veiculo?.placa || '').toLowerCase().includes(q)
+            (c.veiculo?.placa || c.placa_terceiro || '').toLowerCase().includes(q)
         );
     }, [carregamentos, pesquisa]);
 
@@ -1722,7 +1726,7 @@ function TabCarregamentos({ isAdmin }) {
         if (!carregamentos.length) { showToast('Nenhum carregamento encontrado para exportar no período selecionado.', 'error'); return; }
         const rows = carregamentos.map(c => ({
             'Data': FMT_DATE(c.data_carregamento), 'Pedido': c.numero_pedido || '', 'Motorista': c.motorista?.name || '',
-            'Placa': c.veiculo?.placa || '', 'Empresa': c.empresa?.nome || '', 'Destino': c.destino || '',
+            'Placa': c.veiculo?.placa || c.placa_terceiro || '', 'Empresa': c.empresa?.nome || '', 'Destino': c.destino || '',
             'Qtd': c.quantidade || 0, 'Unidade': c.unidade_quantidade || '', 'Tipo Frete': c.tipo_calculo_frete || '',
             'Base Frete': c.valor_base_frete || 0, 'Frete Calc.': c.valor_frete_calculado || 0,
         }));
@@ -2108,7 +2112,13 @@ function TabBonificacoes({ isAdmin }) {
 
     const carregamentosComBonus = useMemo(() =>
         carregamentos
-            .filter(c => !isCIF(c) && c.motorista_id) // exclui CIF e carregamentos sem motorista (retira/terceiros)
+            // exclui CIF, carregamentos sem motorista (retira/terceiros) e
+            // carregamentos avulsos feitos por caminhão da frota (fora da
+            // frota de carretas — ex: Montes Claros). Esses são marcados por
+            // não terem veiculo_id de carreta mas terem placa_terceiro
+            // preenchida; contam no volume de sacos e no frete, mas nunca
+            // geram bônus de carreteiro.
+            .filter(c => !isCIF(c) && c.motorista_id && !(!c.veiculo_id && c.placa_terceiro))
             .map(c => ({ ...c, bonus: calcularBonusCarreteiro(c.destino, bonusConfig) }))
     , [carregamentos]); // eslint-disable-line
 
@@ -2170,7 +2180,7 @@ function TabBonificacoes({ isAdmin }) {
         const wb = XLSX.utils.book_new();
         if (carregamentosComBonus.length) {
             const rows = carregamentosComBonus.map(c => ({
-                'Motorista': c.motorista?.name || '', 'Placa': c.veiculo?.placa || '',
+                'Motorista': c.motorista?.name || '', 'Placa': c.veiculo?.placa || c.placa_terceiro || '',
                 'Destino': c.destino || '', 'Data': FMT_DATE(c.data_carregamento),
                 'Qtd (sacos)': c.quantidade || 0, 'Bônus (R$)': c.bonus,
             }));
@@ -2219,7 +2229,7 @@ function TabBonificacoes({ isAdmin }) {
             (c.motorista?.name || '').toLowerCase().includes(q) ||
             (c.destino || '').toLowerCase().includes(q) ||
             (c.numero_nota_fiscal || '').toLowerCase().includes(q) ||
-            (c.veiculo?.placa || '').toLowerCase().includes(q)
+            (c.veiculo?.placa || c.placa_terceiro || '').toLowerCase().includes(q)
         );
     }, [carregamentosComBonus, pesquisa]);
 
@@ -4895,8 +4905,12 @@ function TabRelatorioFinanceiro({ isAdmin }) {
             const viagensFinalizadas = viagens.filter(v => v.status === 'Entrega finalizada');
             const bonusPorMotorista = {};
 
-            // Bônus de viagens: calculado por carregamento (igual à aba Bonificações)
-            carregamentos.forEach(c => {
+            // Bônus de viagens: calculado por carregamento (igual à aba Bonificações).
+            // Exclui carregamentos avulsos de caminhão da frota (fora da frota de
+            // carretas — ex: Montes Claros), que não geram bônus.
+            carregamentos
+                .filter(c => !(!c.veiculo_id && c.placa_terceiro))
+                .forEach(c => {
                 const id   = c.motorista_id || 'sem_id';
                 const nome = c.motorista?.name || 'Sem motorista';
                 if (!bonusPorMotorista[id]) bonusPorMotorista[id] = { nome, viagens: 0, bonusViagens: 0, bonusExtras: 0 };
@@ -8772,13 +8786,18 @@ export default function CarretasPage() {
                     <div className="flex">
 
                         {/* ── Sidebar desktop (lg+) ──────────────────────── */}
-                        <aside className="hidden lg:flex flex-col flex-shrink-0 sticky top-[60px] h-[calc(100vh-60px)] overflow-y-auto border-r"
-                            style={{ width: 220, borderColor: 'var(--color-border)', backgroundColor: 'var(--color-card)' }}>
+                        {/* position: fixed (não sticky) — sticky só trava o eixo vertical;
+                            se alguma tabela larga empurra a página pra rolar na horizontal,
+                            um elemento sticky "anda" junto e fica cortado à esquerda. fixed
+                            trava nos dois eixos, sempre relativo à janela, então a sidebar
+                            nunca some, não importa o quanto o conteúdo role. */}
+                        <aside className="hidden lg:flex flex-col flex-shrink-0 fixed top-[60px] h-[calc(100vh-60px)] overflow-y-auto border-r z-20"
+                            style={{ width: 220, left: 'max(0px, calc((100vw - 1920px) / 2))', borderColor: 'var(--color-border)', backgroundColor: 'var(--color-card)' }}>
                             <SidebarContent />
                         </aside>
 
                         {/* ── Conteúdo principal ─────────────────────────── */}
-                        <div className="flex-1 min-w-0 px-4 sm:px-6 py-6">
+                        <div className="flex-1 min-w-0 px-4 sm:px-6 py-6 lg:ml-[220px]">
                             <BreadcrumbTrail className="mb-4" />
 
                             {/* Header com botão hamburger no mobile/tablet */}
