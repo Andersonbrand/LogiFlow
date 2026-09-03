@@ -178,12 +178,14 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             const dataFimTs = f.dataFim + 'T23:59:59';
             const romaneioRes = await supabase
                 .from('romaneios')
-                .select('id, numero, motorista, motorista_id, placa, destino, status, saida, created_at, diaria_criada_em, custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao, assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at')
+                .select('id, numero, motorista, motorista_id, placa, destino, status, saida, created_at, diaria_criada_em, diaria_mes_referencia, custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao, assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at')
                 .or(`motorista_id.eq.${motorista.id},motorista.ilike.${motorista.name}`)
                 .gt('custo_motorista', 0)
                 .order('created_at', { ascending: false });
             const romaneiosDiariasFiltrados = (romaneioRes.data || []).filter(r => {
-                const dataRef = r.diaria_criada_em || r.saida || r.created_at;
+                // Data de referência definida manualmente no romaneio manda mais que
+                // qualquer detecção automática — é exatamente pra isso que ela existe.
+                const dataRef = r.diaria_mes_referencia || r.diaria_criada_em || r.saida || r.created_at;
                 if (!dataRef) return false;
                 return dataRef >= f.dataInicio && dataRef <= dataFimTs;
             });
@@ -776,7 +778,9 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                     <td className="px-3 py-2.5 max-w-[150px] truncate text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{r.destino || '—'}</td>
                                                                     <td className="px-3 py-2.5 whitespace-nowrap text-xs">{r.saida ? FMT(r.saida.slice(0,10)) : '—'}</td>
                                                                     <td className="px-3 py-2.5 whitespace-nowrap text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                        {r.diaria_criada_em ? FMT(r.diaria_criada_em.slice(0,10)) : (r.saida ? FMT(r.saida.slice(0,10)) : FMT(r.created_at.slice(0,10)))}
+                                                                        {r.diaria_mes_referencia ? FMT(r.diaria_mes_referencia.slice(0,10))
+                                                                            : r.diaria_criada_em ? FMT(r.diaria_criada_em.slice(0,10))
+                                                                            : (r.saida ? FMT(r.saida.slice(0,10)) : FMT(r.created_at.slice(0,10)))}
                                                                     </td>
                                                                     <td className="px-3 py-2.5">
                                                                         <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{r.status}</span>

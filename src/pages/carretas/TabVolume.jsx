@@ -26,6 +26,7 @@ import { fetchCaminhoesPlacas } from 'utils/vehicleService';
 import { fetchMotoristasComId } from 'utils/romaneioService';
 import PrettySelect from 'components/ui/PrettySelect';
 import { usePagination, PaginationBar } from 'components/ui/Pagination';
+import CidadesAdicionaisField, { parseParadas } from 'components/ui/CidadesAdicionaisField';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -395,6 +396,7 @@ export default function TabVolume({ isAdmin }) {
     });
     const [modal, setModal] = useState(null); // null | { mode: 'create'|'edit', id?: string }
     const [form, setForm] = useState(emptyForm());
+    const [paradasForm, setParadasForm] = useState([]); // cidades adicionais além do destino (frota própria)
     const [saving, setSaving] = useState(false);
 
     // Modal carregamento terceiro
@@ -407,6 +409,7 @@ export default function TabVolume({ isAdmin }) {
     });
     const [modalTerceiro, setModalTerceiro] = useState(null);
     const [formTerceiro, setFormTerceiro] = useState(emptyFormTerceiro());
+    const [paradasFormTerceiro, setParadasFormTerceiro] = useState([]); // cidades adicionais além do destino (terceiros)
     const [savingTerceiro, setSavingTerceiro] = useState(false);
     const [carregamentosTerceiros, setCarregamentosTerceiros] = useState([]);
     const [carregamentosRetira, setCarregamentosRetira] = useState([]);
@@ -529,7 +532,7 @@ export default function TabVolume({ isAdmin }) {
     })();
 
     // ── Handlers carregamento ─────────────────────────────────────────────────
-    const openCreate = () => { setForm(emptyForm()); setModal({ mode: 'create' }); };
+    const openCreate = () => { setForm(emptyForm()); setParadasForm([]); setModal({ mode: 'create' }); };
     const openEdit = r => {
         const { tipo, nome } = parseTipo(r);
         const isCaminhaoAvulso = !r.veiculo_id && !!r.placa_terceiro;
@@ -552,6 +555,7 @@ export default function TabVolume({ isAdmin }) {
             origem_frota: isCaminhaoAvulso ? 'caminhao' : 'carreta',
             placa_caminhao_avulso: isCaminhaoAvulso ? (r.placa_terceiro || '') : '',
         });
+        setParadasForm(parseParadas(r.paradas));
         setModal({ mode: 'edit', id: r.id });
     };
 
@@ -605,6 +609,7 @@ export default function TabVolume({ isAdmin }) {
             destino: form.destino || '',
             observacoes: form.observacoes || null,
             tipo_cimento: isEstoque ? form.tipo_cimento : null,
+            paradas: paradasForm.filter(p => p && p.trim()),
         };
 
         setSaving(true);
@@ -630,7 +635,7 @@ export default function TabVolume({ isAdmin }) {
     };
 
     // ── Handlers carregamento terceiro ───────────────────────────────────────
-    const openCreateTerceiro = () => { setFormTerceiro(emptyFormTerceiro()); setModalTerceiro({ mode: 'create' }); };
+    const openCreateTerceiro = () => { setFormTerceiro(emptyFormTerceiro()); setParadasFormTerceiro([]); setModalTerceiro({ mode: 'create' }); };
     const openEditTerceiro = r => {
         const { tipo, nome } = parseTipo(r);
         setFormTerceiro({
@@ -649,6 +654,7 @@ export default function TabVolume({ isAdmin }) {
             tipo_calculo_frete: r.tipo_calculo_frete || 'por_saco',
             valor_base_frete: r.valor_base_frete || '',
         });
+        setParadasFormTerceiro(parseParadas(r.paradas));
         setModalTerceiro({ mode: 'edit', id: r.id });
     };
     const handleSaveTerceiro = async () => {
@@ -672,6 +678,7 @@ export default function TabVolume({ isAdmin }) {
             tipo_calculo_frete: formTerceiro.tipo_calculo_frete || null,
             valor_base_frete: formTerceiro.valor_base_frete ? Number(formTerceiro.valor_base_frete) : null,
             _consumoVeiculo: null,
+            paradas: paradasFormTerceiro.filter(p => p && p.trim()),
         };
         setSavingTerceiro(true);
         try {
@@ -1062,6 +1069,12 @@ export default function TabVolume({ isAdmin }) {
                                         placeholder="Cidade de destino"
                                     />
                                 </Field>
+                                <CidadesAdicionaisField
+                                    cidades={[...new Set((fretesFretas || []).map(f => f.cidade).filter(Boolean))]}
+                                    value={paradasForm}
+                                    onChange={setParadasForm}
+                                    label="Cidades adicionais desta viagem"
+                                />
                                 <Field label="Tipo de cimento" required>
                                     <PrettySelect value={form.tipo_cimento} onChange={e => setForm(f => ({ ...f, tipo_cimento: e.target.value }))} className={inputCls} style={inputStyle}>
                                         <option value="">Selecione...</option>
@@ -1151,6 +1164,12 @@ export default function TabVolume({ isAdmin }) {
                                         placeholder="Cidade ou estoque"
                                     />
                                 </Field>
+                                <CidadesAdicionaisField
+                                    cidades={[...new Set((fretesFretas || []).map(f => f.cidade).filter(Boolean))]}
+                                    value={paradasForm}
+                                    onChange={setParadasForm}
+                                    label="Cidades adicionais desta viagem"
+                                />
                                 <Field label="Empresa (frete)">
                                     <PrettySelect value={form.empresa_id} onChange={e => setForm(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                         <option value="">Selecione...</option>
@@ -1322,6 +1341,12 @@ export default function TabVolume({ isAdmin }) {
                                 placeholder="Cidade ou estoque"
                             />
                         </Field>
+                        <CidadesAdicionaisField
+                            cidades={[...new Set((fretosTerceiros || []).map(f => f.cidade).filter(Boolean))]}
+                            value={paradasFormTerceiro}
+                            onChange={setParadasFormTerceiro}
+                            label="Cidades adicionais desta viagem"
+                        />
                         <div className="grid grid-cols-2 gap-3">
                             <Field label="Nº Pedido">
                                 <input value={formTerceiro.numero_pedido} onChange={e => setFormTerceiro(f => ({ ...f, numero_pedido: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 123456" />

@@ -13,11 +13,22 @@ import {
     fetchFretesCidades,
 } from 'utils/carretasService';
 import { fetchMaterials } from 'utils/materialService';
+import { fetchAllUsers } from 'utils/userService';
 import { subscribeTabela } from 'utils/supabaseClient';
 import { printRomaneioCarretas, exportRomaneioModelo1, toModelo1Romaneio } from 'utils/excelUtils';
 import * as XLSX from 'xlsx';
 import PrettySelect from 'components/ui/PrettySelect';
 import { FRETE_CATEGORIAS, calcularFretePedidoMulti, fmtPct } from 'utils/freteConfig';
+import CidadesAdicionaisField, { parseParadas } from 'components/ui/CidadesAdicionaisField';
+
+// Modos de cálculo do frete do romaneio inteiro — 'percentual_pedido' é o
+// padrão de sempre (soma o percentual de cada pedido); os outros dois
+// substituem esse cálculo por um valor único pro romaneio todo.
+const TIPOS_CALCULO_FRETE_ROMANEIO = [
+    { value: 'percentual_pedido', label: 'Percentual por pedido (padrão)' },
+    { value: 'percentual_fixo',   label: 'Percentual fixo sobre o valor total' },
+    { value: 'valor_fixo',        label: 'Valor fixo em R$ (combinado com o transporte)' },
+];
 
 // ─── SearchInput — campo de busca reutilizável (local a este arquivo) ────────
 function SearchInput({ value, onChange, placeholder = 'Buscar...', width = '260px' }) {
@@ -207,7 +218,19 @@ function ItemRow({ item, index, materiais, onUpdate, onRemove }) {
                     {materiais.map(m => (
                         <option key={m.id} value={m.id}>{m.nome}</option>
                     ))}
+                    {/* Material do item não está (mais) na lista carregada — ex.: removido/renomeado
+                        no catálogo depois que este pedido foi salvo. Sem isso o select ficava em
+                        branco mesmo com o item corretamente salvo (peso/qtd vêm direto do item,
+                        não dependem desse lookup — só o nome pra exibição precisa desse fallback). */}
+                    {item.material_id && !materiais.some(m => String(m.id) === String(item.material_id)) && (
+                        <option value={item.material_id}>{item.descricao || 'Material não encontrado no catálogo'}</option>
+                    )}
                 </PrettySelect>
+                {item.material_id && !mat && (
+                    <p className="text-xs mt-1 font-medium text-amber-600">
+                        ⚠ Este material não está mais no catálogo — o valor salvo é mantido, mas confira se ainda é o correto
+                    </p>
+                )}
                 {mat && !pesoUnit && item.material_id && (
                     <p className="text-xs mt-1 font-medium text-amber-600">
                         ⚠ Peso não cadastrado em /materiais — preencha manualmente
@@ -451,7 +474,7 @@ function PedidoCardCarretas({ pedido, index, materiais, empresas, onUpdate, onRe
 }
 
 // ─── Modal Formulário Romaneio ─────────────────────────────────────────────────
-function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empresas, materiais, fretesFretas = [] }) {
+function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empresas, materiais, fretesFretas = [], adminsFrete = [] }) {
     const { toast, showToast } = useToast();
     const isEdit = modal?.mode === 'edit';
     const rom = modal?.data;
@@ -468,13 +491,17 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
         numero_nf: '',
         numero_pedido: '',
         valor_carga: '',
-        tipo_calculo_frete: 'fixo',
+        tipo_calculo_frete: 'percentual_pedido',
+        percentual_frete_fixo: '',
+        frete_fixo_responsavel: '',
+        frete_fixo_combinado_em: new Date().toISOString().split('T')[0],
         valor_frete: '',
         observacoes: '',
     });
 
     const [form, setForm] = useState(emptyForm());
     const [pedidos, setPedidos] = useState([]);
+    const [paradas, setParadas] = useState([]); // cidades adicionais além do destino principal
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
@@ -491,10 +518,14 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 numero_nf:            rom.numero_nf || '',
                 numero_pedido:        rom.numero_pedido || '',
                 valor_carga:          rom.valor_carga != null ? String(rom.valor_carga) : '',
-                tipo_calculo_frete:   rom.tipo_calculo_frete || 'fixo',
+                tipo_calculo_frete:   rom.tipo_calculo_frete || 'percentual_pedido',
+                percentual_frete_fixo:    rom.percentual_frete_fixo != null ? String(rom.percentual_frete_fixo * 100) : '',
+                frete_fixo_responsavel:   rom.frete_fixo_responsavel || '',
+                frete_fixo_combinado_em:  rom.frete_fixo_combinado_em || new Date().toISOString().split('T')[0],
                 valor_frete:          rom.valor_frete != null ? String(rom.valor_frete) : '',
                 observacoes:          rom.observacoes || '',
             });
+            setParadas(parseParadas(rom.paradas));
             const itemToForm = it => {
                 const matPeso = it.material?.peso && Number(it.material.peso) > 0 ? Number(it.material.peso) : null;
                 const pesoTotalSalvo = it.peso_total != null ? Number(it.peso_total) : null;
@@ -532,6 +563,7 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
         } else {
             setForm(emptyForm());
             setPedidos([]);
+            setParadas([]);
         }
     }, [modal]); // eslint-disable-line
 
@@ -544,13 +576,29 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
     // Totais calculados a partir dos pedidos
     const totaisPedidos = useMemo(() => {
         const valorCarga = pedidos.reduce((s, p) => s + (Number(p.valor_pedido) || 0), 0);
-        const frete = pedidos.reduce((s, p) => s + calcularFretePedidoMulti(p).total, 0);
         const pesoItens = pedidos.reduce((s, p) => s + p.itens.reduce((s2, it) => s2 + (Number(it.peso_total) || 0), 0), 0);
-        return { valorCarga, frete, pesoItens };
-    }, [pedidos]);
+        // Frete "por pedido" — só usado de fato quando o modo do romaneio é
+        // 'percentual_pedido'; nos outros dois modos o frete final vem de um
+        // valor único pro romaneio inteiro (ver freteFinal em handleSave).
+        const fretePorPedido = pedidos.reduce((s, p) => s + calcularFretePedidoMulti(p).total, 0);
+        let frete = fretePorPedido;
+        if (form.tipo_calculo_frete === 'percentual_fixo') {
+            frete = valorCarga * (Number(form.percentual_frete_fixo || 0) / 100);
+        } else if (form.tipo_calculo_frete === 'valor_fixo') {
+            frete = Number(form.valor_frete || 0);
+        }
+        return { valorCarga, frete, fretePorPedido, pesoItens };
+    }, [pedidos, form.tipo_calculo_frete, form.percentual_frete_fixo, form.valor_frete]);
 
     const handleSave = async () => {
         if (!form.destino) { showToast('Destino é obrigatório', 'error'); return; }
+        if (form.tipo_calculo_frete === 'percentual_fixo' && !(Number(form.percentual_frete_fixo) > 0)) {
+            showToast('Informe o percentual fixo do frete', 'error'); return;
+        }
+        if (form.tipo_calculo_frete === 'valor_fixo') {
+            if (!(Number(form.valor_frete) > 0)) { showToast('Informe o valor fixo do frete', 'error'); return; }
+            if (!form.frete_fixo_responsavel.trim()) { showToast('Informe quem combinou o valor fixo com o transporte', 'error'); return; }
+        }
         setSaving(true);
         try {
             const itensPayloadFrom = (lista) => lista.filter(it => it.material_id || it.descricao).map(it => {
@@ -614,9 +662,16 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                 numero_pedido:       form.numero_pedido || undefined,
                 valor_carga:         valorCargaFinal,
                 tipo_calculo_frete:  form.tipo_calculo_frete,
+                percentual_frete_fixo: form.tipo_calculo_frete === 'percentual_fixo'
+                    ? Number(form.percentual_frete_fixo) / 100 : null,
+                frete_fixo_responsavel: form.tipo_calculo_frete === 'valor_fixo'
+                    ? form.frete_fixo_responsavel.trim() : null,
+                frete_fixo_combinado_em: form.tipo_calculo_frete === 'valor_fixo'
+                    ? (form.frete_fixo_combinado_em || null) : null,
                 valor_frete:         freteFinal,
                 observacoes:         form.observacoes   || undefined,
                 toneladas:           toneladasCalculadas,
+                paradas:             paradas.filter(p => p && p.trim()),
                 itens: itensPayload,
                 _pedidos: pedidosPayload,
             };
@@ -713,15 +768,71 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
                                 className={inputCls} style={inputStyle} />
                         </Field>
                     </div>
+                    <div className="mt-3">
+                        <CidadesAdicionaisField
+                            cidades={[...new Set((fretesFretas || []).map(f => f.cidade).filter(Boolean))]}
+                            value={paradas}
+                            onChange={setParadas}
+                            label="Cidades adicionais desta viagem"
+                        />
+                    </div>
                 </div>
 
-                {/* ── Bloco 2: Frete total (somado automaticamente dos pedidos abaixo) ── */}
+                {/* ── Bloco 2: Frete total (padrão: soma automática dos pedidos; ou um modo fixo pro romaneio inteiro) ── */}
                 <div className="p-4 rounded-xl border" style={{ borderColor: '#C4B5FD', backgroundColor: '#FAF5FF' }}>
                     <p className="text-xs font-semibold text-purple-700 mb-3">💰 Resumo do Frete</p>
-                    <div className="p-3 rounded-xl bg-purple-600 text-white flex items-center justify-between flex-wrap gap-2">
+
+                    <Field label="Modo de cálculo do frete">
+                        <PrettySelect value={form.tipo_calculo_frete} onChange={e => set('tipo_calculo_frete', e.target.value)}
+                            className={inputCls} style={inputStyle}>
+                            {TIPOS_CALCULO_FRETE_ROMANEIO.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                        </PrettySelect>
+                    </Field>
+
+                    {form.tipo_calculo_frete === 'percentual_fixo' && (
+                        <div className="mt-3">
+                            <Field label="Percentual fixo sobre o valor total da carga (%)">
+                                <input type="number" min="0" step="0.01" value={form.percentual_frete_fixo}
+                                    onChange={e => set('percentual_frete_fixo', e.target.value)}
+                                    className={inputCls} style={inputStyle} placeholder="Ex: 5" />
+                            </Field>
+                        </div>
+                    )}
+
+                    {form.tipo_calculo_frete === 'valor_fixo' && (
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                            <Field label="Valor fixo do frete (R$)">
+                                <input type="number" min="0" step="0.01" value={form.valor_frete}
+                                    onChange={e => set('valor_frete', e.target.value)}
+                                    className={inputCls} style={inputStyle} placeholder="Ex: 1200" />
+                            </Field>
+                            <Field label="Combinado com">
+                                <PrettySelect value={form.frete_fixo_responsavel} onChange={e => set('frete_fixo_responsavel', e.target.value)}
+                                    className={inputCls} style={inputStyle}>
+                                    <option value="">Selecione o responsável...</option>
+                                    {adminsFrete.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
+                                    {/* Mantém o valor salvo visível mesmo se o admin não estiver mais na lista (ex.: desativado depois) */}
+                                    {form.frete_fixo_responsavel && !adminsFrete.some(a => a.name === form.frete_fixo_responsavel) && (
+                                        <option value={form.frete_fixo_responsavel}>{form.frete_fixo_responsavel}</option>
+                                    )}
+                                </PrettySelect>
+                            </Field>
+                            <Field label="Data combinada">
+                                <input type="date" value={form.frete_fixo_combinado_em}
+                                    onChange={e => set('frete_fixo_combinado_em', e.target.value)}
+                                    className={inputCls} style={inputStyle} />
+                            </Field>
+                        </div>
+                    )}
+
+                    <div className="mt-3 p-3 rounded-xl bg-purple-600 text-white flex items-center justify-between flex-wrap gap-2">
                         <div>
                             <span className="text-sm font-medium block">Valor da carga: {BRL(totaisPedidos.valorCarga)}</span>
-                            <span className="text-xs opacity-80">{pedidos.length} pedido{pedidos.length !== 1 ? 's' : ''} — cada um com seu percentual de frete</span>
+                            <span className="text-xs opacity-80">
+                                {form.tipo_calculo_frete === 'percentual_pedido'
+                                    ? `${pedidos.length} pedido${pedidos.length !== 1 ? 's' : ''} — cada um com seu percentual de frete`
+                                    : TIPOS_CALCULO_FRETE_ROMANEIO.find(t => t.value === form.tipo_calculo_frete)?.label}
+                            </span>
                         </div>
                         <span className="text-lg font-bold font-data">{BRL(totaisPedidos.frete)} de frete</span>
                     </div>
@@ -736,6 +847,14 @@ function RomaneioFormModal({ modal, onClose, onSaved, motoristas, veiculos, empr
 
                 {/* ── Bloco 3: Pedidos do Romaneio (cliente, vendedor, frete e materiais de cada um) ── */}
                 <div>
+                    {form.tipo_calculo_frete !== 'percentual_pedido' && (
+                        <div className="mb-3 p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                            <p className="text-xs text-amber-700">
+                                ℹ️ O frete deste romaneio está no modo "{TIPOS_CALCULO_FRETE_ROMANEIO.find(t => t.value === form.tipo_calculo_frete)?.label}".
+                                O percentual de cada pedido abaixo continua sendo salvo (útil pra relatórios por categoria), mas não é somado no frete total do romaneio.
+                            </p>
+                        </div>
+                    )}
                     <div className="flex items-center justify-between mb-3">
                         <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
                             📦 Pedidos do Romaneio
@@ -805,8 +924,13 @@ function RomaneioDetailModal({ romaneio, onClose }) {
                         { l: 'Motorista',   v: romaneio.motorista?.name || '—' },
                         { l: 'Placa',       v: romaneio.veiculo?.placa  || '—' },
                         { l: 'Destino',     v: romaneio.destino          || '—' },
+                        { l: 'Cidades adicionais', v: parseParadas(romaneio.paradas).length > 0 ? parseParadas(romaneio.paradas).join(', ') : '—' },
                         { l: 'Data Saída',  v: FMT_DATE(romaneio.data_saida) },
                         { l: 'Data Chegada',v: FMT_DATE(romaneio.data_chegada) },
+                        { l: 'Modo de frete', v: TIPOS_CALCULO_FRETE_ROMANEIO.find(t => t.value === (romaneio.tipo_calculo_frete || 'percentual_pedido'))?.label || '—' },
+                        ...(romaneio.tipo_calculo_frete === 'valor_fixo' && romaneio.frete_fixo_responsavel
+                            ? [{ l: 'Frete combinado com', v: `${romaneio.frete_fixo_responsavel}${romaneio.frete_fixo_combinado_em ? ' em ' + FMT_DATE(romaneio.frete_fixo_combinado_em) : ''}` }]
+                            : []),
                     ].map(({ l, v }) => (
                         <div key={l} className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)' }}>
                             <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>{l}</p>
@@ -941,6 +1065,7 @@ export default function TabRomaneios({ isAdmin }) {
     const [empresas, setEmpresas]       = useState([]);
     const [materiais, setMateriais]     = useState([]);
     const [fretesFretas, setFretesFretas] = useState([]);
+    const [adminsFrete, setAdminsFrete] = useState([]); // usuários com role 'admin' — quem pode combinar frete fixo
     const [loading, setLoading]         = useState(true);
     const [modal, setModal]             = useState(null);
     const [detailModal, setDetailModal] = useState(null);
@@ -1010,7 +1135,7 @@ export default function TabRomaneios({ isAdmin }) {
             if (f.dataInicio) fFerragem.dataInicio = f.dataInicio;
             if (f.dataFim)    fFerragem.dataFim    = f.dataFim;
 
-            const [r, v, m, e, matResult, rf, fr] = await Promise.all([
+            const [r, v, m, e, matResult, rf, fr, admins] = await Promise.all([
                 fetchRomaneios(f),
                 fetchCarretasVeiculos(),
                 fetchCarreteirosPropriosOnly(),
@@ -1018,6 +1143,7 @@ export default function TabRomaneios({ isAdmin }) {
                 fetchMaterials().catch(err => { console.warn('[TabRomaneios] fetchMaterials falhou:', err); return []; }),
                 fetchRomaneiosFerragem(fFerragem),
                 fetchFretesCidades('frota'),
+                fetchAllUsers().catch(err => { console.warn('[TabRomaneios] fetchAllUsers falhou:', err); return []; }),
             ]);
             // Enriquece materiais com dados do join dos romaneios (garante peso mesmo se catalog parcial)
             const matMap = {};
@@ -1035,6 +1161,7 @@ export default function TabRomaneios({ isAdmin }) {
             setRomaneios(r); setVeiculos((v || []).filter(x => !x.is_terceiro)); setMotoristas(m); setEmpresas(e); setMateriais(mat);
             setRomaneiosFerragem(rf || []);
             setFretesFretas(fr || []);
+            setAdminsFrete((admins || []).filter(u => u.role === 'admin'));
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtroStatus, filtroMes, filtroDia, usarPeriodo, periodoCustom]); // eslint-disable-line
@@ -1475,6 +1602,7 @@ export default function TabRomaneios({ isAdmin }) {
                     empresas={empresas}
                     materiais={materiais}
                     fretesFretas={fretesFretas}
+                    adminsFrete={adminsFrete}
                 />
             )}
 

@@ -36,6 +36,7 @@ import * as XLSX from 'xlsx';
 import PrettySelect from 'components/ui/PrettySelect';
 import ChecklistItemsField from 'components/ui/ChecklistItemsField';
 import MultiFotoField from 'components/ui/MultiFotoField';
+import CidadesAdicionaisField, { parseParadas } from 'components/ui/CidadesAdicionaisField';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT_DATE = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -144,6 +145,7 @@ export default function CarreteiroDashboard() {
         tipo_cimento: '',       // só usado quando local_carregamento === 'Estoque': 'Montes Claros' | 'Liz' | 'Ambas'
     });
     const [formRegistro, setFormRegistro] = useState(emptyRegistro());
+    const [paradasRegistro, setParadasRegistro] = useState([]); // cidades adicionais além do destino, quando a viagem passa por mais de uma
     const [modalPonto, setModalPonto] = useState(false);
     const [editandoPontoId, setEditandoPontoId] = useState(null);
     const [formPonto, setFormPonto] = useState({
@@ -175,6 +177,7 @@ export default function CarreteiroDashboard() {
         destino: '', toneladas: '', empresa: '', observacoes: '',
     });
     const [romsAbertos, setRomsAbertos] = useState([]); // ROMs do admin para vincular
+    const [paradasFerragem, setParadasFerragem] = useState([]); // cidades adicionais além do destino
     const [salvandoFerragem, setSalvandoFerragem] = useState(false);
     const [modalAbast, setModalAbast]   = useState(false);
     const [modalCheck, setModalCheck]   = useState(false);
@@ -563,6 +566,7 @@ export default function CarreteiroDashboard() {
             local_carregamento: r.local_carregamento || '',
             tipo_cimento: r.tipo_cimento || '',
         });
+        setParadasRegistro(parseParadas(r.paradas));
         setModalRegistro(true);
     };
 
@@ -1361,7 +1365,7 @@ export default function CarreteiroDashboard() {
                                             {seletorPlaca && <div className="flex justify-end mb-3">{seletorPlaca}</div>}
                                             {/* Dois botões de ação separados */}
                                             <div className="grid grid-cols-1 gap-3 mb-5">
-                                                <button onClick={() => { setEditandoRegistroId(null); setFormRegistro(emptyRegistro()); setModalRegistro(true); }}
+                                                <button onClick={() => { setEditandoRegistroId(null); setFormRegistro(emptyRegistro()); setParadasRegistro([]); setModalRegistro(true); }}
                                                     className="flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:shadow-md active:scale-[0.99]"
                                                     style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
                                                     <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#1D4ED8' }}>
@@ -1373,7 +1377,7 @@ export default function CarreteiroDashboard() {
                                                     </div>
                                                     <Icon name="ChevronRight" size={18} color="#1D4ED8" />
                                                 </button>
-                                                <button onClick={() => { setFormFerragem({ numero_romaneio: '', numero_nf: '', veiculo_id: '', data_saida: new Date().toISOString().split('T')[0], destino: '', toneladas: '', empresa: '', observacoes: '' }); setModalFerragem(true); }}
+                                                <button onClick={() => { setFormFerragem({ numero_romaneio: '', numero_nf: '', veiculo_id: '', data_saida: new Date().toISOString().split('T')[0], destino: '', toneladas: '', empresa: '', observacoes: '' }); setParadasFerragem([]); setModalFerragem(true); }}
                                                     className="flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:shadow-md active:scale-[0.99]"
                                                     style={{ borderColor: '#D1FAE5', backgroundColor: '#ECFDF5' }}>
                                                     <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#059669' }}>
@@ -1492,6 +1496,7 @@ export default function CarreteiroDashboard() {
                                                                                     empresa:     r.empresa || '',
                                                                                     observacoes: r.observacoes || '',
                                                                                 });
+                                                                                setParadasFerragem(parseParadas(r.paradas));
                                                                                 setModalFerragem(true);
                                                                             }}
                                                                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-200 text-amber-700 hover:bg-amber-50">
@@ -1892,6 +1897,14 @@ export default function CarreteiroDashboard() {
                                     {cidadesFrete.map(c => <option key={c.id} value={c.cidade}>{c.cidade}</option>)}
                                 </PrettySelect>
                             </div>
+                            <div className="sm:col-span-2">
+                                <CidadesAdicionaisField
+                                    cidades={[...new Set((cidadesFrete || []).map(c => c.cidade).filter(Boolean))]}
+                                    value={paradasRegistro}
+                                    onChange={setParadasRegistro}
+                                    label="Essa viagem passa por mais de uma cidade?"
+                                />
+                            </div>
 
                             {formRegistro.local_carregamento === 'Estoque' ? (
                                 <div className="sm:col-span-2">
@@ -1940,6 +1953,7 @@ export default function CarreteiroDashboard() {
                                     data_descarga:      isEstoque ? null : (formRegistro.data_descarga || null),
                                     tipo_cimento:        isEstoque ? formRegistro.tipo_cimento : null,
                                     local_carregamento:  isEstoque ? 'Estoque' : null,
+                                    paradas: paradasRegistro.filter(p => p && p.trim()),
                                 };
                                 setSalvandoRegistro(true);
                                 try {
@@ -2035,6 +2049,12 @@ export default function CarreteiroDashboard() {
                                     className={inputCls} style={inputStyle} placeholder="Ex: 5.920" />
                             </Field>
                         </div>
+                        <CidadesAdicionaisField
+                            cidades={[...new Set((cidadesFrete || []).map(c => c.cidade).filter(Boolean))]}
+                            value={paradasFerragem}
+                            onChange={setParadasFerragem}
+                            label="Essa viagem passa por mais de uma cidade?"
+                        />
                         <Field label="Empresa / Fornecedor">
                             <PrettySelect value={formFerragem.empresa} onChange={e => setFormFerragem(f => ({ ...f, empresa: e.target.value }))}
                                 className={inputCls} style={inputStyle}>
@@ -2064,6 +2084,7 @@ export default function CarreteiroDashboard() {
                                         toneladas:   formFerragem.toneladas ? Number(formFerragem.toneladas) : null,
                                         empresa:     formFerragem.empresa || null,
                                         observacoes: formFerragem.observacoes || null,
+                                        paradas:     paradasFerragem.filter(p => p && p.trim()),
                                     });
                                     showToast('Romaneio atualizado!', 'success');
                                     setRomaneiosFerragem(prev => prev.map(r =>
@@ -2082,6 +2103,7 @@ export default function CarreteiroDashboard() {
                                         empresa:      formFerragem.empresa || null,
                                         observacoes:  formFerragem.observacoes || null,
                                         motorista_id: user.id,
+                                        paradas:      paradasFerragem.filter(p => p && p.trim()),
                                     });
                                     showToast('Romaneio de ferragens registrado!', 'success');
                                 }

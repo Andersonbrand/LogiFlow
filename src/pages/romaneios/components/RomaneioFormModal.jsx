@@ -24,7 +24,7 @@ export const EMPRESAS = [
 const EMPTY_FORM = {
     motorista:'', motorista_id:'', placa:'', destino:'', status:'Aguardando', saida:'', chegada:'', observacoes:'',
     vehicle_id:'', distancia_km:'', custo_combustivel:'', custo_pedagio:'', custo_motorista:'',
-    dias_diaria:'1', valor_diaria_dia:'', diaria_descricao:'',
+    dias_diaria:'1', valor_diaria_dia:'', diaria_descricao:'', diaria_mes_referencia:'',
 };
 const EMPTY_PEDIDO = { numero_pedido:'', cidade_destino:'', valor_pedido:'', categoria_frete:'Ferragens', categorias_extra:[], empresa:'Comercial Araguaia', nome_cliente:'', nome_vendedor:'', observacao:'', itens:[] };
 
@@ -129,6 +129,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 dias_diaria:       editingRomaneio.dias_diaria || '1',
                 valor_diaria_dia:  editingRomaneio.valor_diaria_dia || editingRomaneio.custo_motorista || '',
                 diaria_descricao:  editingRomaneio.diaria_descricao || '',
+                diaria_mes_referencia: editingRomaneio.diaria_mes_referencia || '',
             });
             // Rebuild pedidos from romaneio_pedidos if editing
             const pedidosExistentes = editingRomaneio.romaneio_pedidos || [];
@@ -557,6 +558,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 dias_diaria:            n(form.dias_diaria) || null,
                 valor_diaria_dia:       n(form.valor_diaria_dia) || null,
                 diaria_descricao:       form.diaria_descricao || null,
+                diaria_mes_referencia:  form.diaria_mes_referencia || null,
                 valor_frete:            totais.freteCalculado,
                 valor_frete_calculado:  totais.freteCalculado,
                 valor_total_carga:      totais.valorTotalCarga,
@@ -1355,9 +1357,23 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                                 style={{ borderColor:'#E5E7EB' }} />
                                         </div>
                                         {n(form.dias_diaria) > 0 && n(form.valor_diaria_dia) > 0 && (
-                                            <p className="text-xs mt-2 font-caption" style={{ color:'#059669' }}>
-                                                Total da diária: <strong>{brl(n(form.dias_diaria) * n(form.valor_diaria_dia))}</strong> — essa diária será preenchida automaticamente na ficha do motorista, sem precisar de lançamento manual.
-                                            </p>
+                                            <>
+                                                <p className="text-xs mt-2 font-caption" style={{ color:'#059669' }}>
+                                                    Total da diária: <strong>{brl(n(form.dias_diaria) * n(form.valor_diaria_dia))}</strong> — essa diária será preenchida automaticamente na ficha do motorista, sem precisar de lançamento manual.
+                                                </p>
+                                                <div className="mt-3">
+                                                    <label className="block text-[11px] font-caption mb-1" style={{ color:'var(--color-muted-foreground)' }}>
+                                                        Mês de referência da diária (opcional)
+                                                    </label>
+                                                    <input type="date" name="diaria_mes_referencia" value={form.diaria_mes_referencia}
+                                                        onChange={e => setF(e.target.name, e.target.value)}
+                                                        className="w-full h-10 px-3 rounded-lg border text-sm font-data focus:outline-none bg-white"
+                                                        style={{ borderColor:'#E5E7EB' }} />
+                                                    <p className="text-[11px] mt-1" style={{ color:'var(--color-muted-foreground)' }}>
+                                                        Se deixar em branco, o sistema classifica automaticamente pela data do lançamento. Preencha aqui só se precisar forçar em qual mês essa diária deve contar.
+                                                    </p>
+                                                </div>
+                                            </>
                                         )}
                                     </div>
                                 </div>

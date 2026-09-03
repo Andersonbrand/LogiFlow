@@ -1282,7 +1282,7 @@ export async function fetchRomaneios(filters = {}) {
                 nome_cliente, nome_vendedor, observacao
             ),
             itens:carretas_romaneio_itens(
-                id, quantidade, unidade, peso_total, peso_unit, descricao, observacoes,
+                id, material_id, quantidade, unidade, peso_total, peso_unit, descricao, observacoes,
                 pedido_id, is_telha_zinco, comprimento_telha, metros_totais,
                 material:material_id(id, nome, peso, unidade, percentual_frete, categoria_frete, is_telha_zinco, peso_base_metro)
             )
@@ -1674,6 +1674,7 @@ export async function createRomaneioFerragem(payload) {
                     motorista_id: rest.motorista_id || existente.motorista_id,
                     tipo_carga:  'ferragem',
                     lancado_por_motorista: true,
+                    ...(rest.paradas ? { paradas: rest.paradas } : {}),
                 })
                 .eq('id', existente.id)
                 .select()

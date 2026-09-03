@@ -33,7 +33,7 @@ export async function fetchRomaneios() {
             aprovado, aprovado_por, aprovado_em, status_aprovacao, motivo_reprovacao,
             peso_total, saida, chegada, observacoes, vehicle_id, paradas,
             distancia_km, custo_combustivel, custo_pedagio,
-            custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao,
+            custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao, diaria_criada_em, diaria_mes_referencia,
             assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at,
             valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,
@@ -57,7 +57,7 @@ export async function fetchRomaneioById(id) {
             id, numero, motorista, placa, destino, status,
             peso_total, saida, chegada, observacoes, vehicle_id,
             distancia_km, custo_combustivel, custo_pedagio,
-            custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao,
+            custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao, diaria_criada_em, diaria_mes_referencia,
             assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at,
             valor_frete, valor_frete_calculado,
             valor_total_carga, created_at,
@@ -150,12 +150,27 @@ function buildPayload(r, diariaCriadaEmOverride) {
         dias_diaria:            r.dias_diaria            || null,
         valor_diaria_dia:       r.valor_diaria_dia        || null,
         diaria_descricao:       r.diaria_descricao        || null,
+        diaria_mes_referencia:  r.diaria_mes_referencia    || null,
         valor_frete:            r.valor_frete            || 0,
         valor_frete_calculado:  r.valor_frete_calculado  || 0,
         valor_total_carga:      r.valor_total_carga      || 0,
         ...(r.vehicle_id ? { vehicle_id: r.vehicle_id } : {}),
         ...(diariaCriadaEmOverride !== undefined ? { diaria_criada_em: diariaCriadaEmOverride } : {}),
     };
+}
+
+/**
+ * Garante que `placa` esteja preenchida sempre que `vehicle_id` estiver.
+ * Vários fluxos (rascunho sem veículo definido na hora, sugestão automática
+ * de veículo aceita depois, veículo trocado numa edição rápida, etc.) só
+ * gravam `vehicle_id` — e o texto `placa` (usado direto pelas telas de
+ * listagem/detalhe) ficava desatualizado ou vazio. Busca a placa do veículo
+ * quando falta, sem sobrescrever uma placa já preenchida manualmente.
+ */
+async function ensurePlaca(payload) {
+    if (payload.placa || !payload.vehicle_id) return payload;
+    const { data } = await supabase.from('vehicles').select('placa').eq('id', payload.vehicle_id).maybeSingle();
+    return data?.placa ? { ...payload, placa: data.placa } : payload;
 }
 
 // ─── Helpers de numeração compartilhada ───────────────────────────────────────
@@ -234,7 +249,7 @@ export async function createRomaneio(romaneio, itens = []) {
     const diariaCriadaEm = Number(romaneio.custo_motorista) > 0 ? new Date().toISOString() : null;
 
     const { data: romData, error } = await supabase.from('romaneios')
-        .insert({ ...buildPayload(romaneio, diariaCriadaEm), numero }).select('id').single();
+        .insert({ ...await ensurePlaca(buildPayload(romaneio, diariaCriadaEm)), numero }).select('id').single();
     if (error) throw error;
     const romId = romData.id;
 
@@ -404,7 +419,7 @@ export async function updateRomaneio(id, romaneio, itens) {
         diariaCriadaEm = romAntes?.diaria_criada_em || new Date().toISOString(); // mantém a data já gravada
     }
 
-    const { error } = await supabase.from('romaneios').update(buildPayload(romaneio, diariaCriadaEm)).eq('id', id);
+    const { error } = await supabase.from('romaneios').update(await ensurePlaca(buildPayload(romaneio, diariaCriadaEm))).eq('id', id);
     if (error) throw error;
 
     // Placa/veículo confirmado (ou trocado) neste romaneio → sincroniza status automaticamente
@@ -612,13 +627,19 @@ export async function fetchRascunhos() {
 
 export async function createRascunho(romaneio, itens = []) {
     const numero = 'RASC-' + Date.now();
-    const payload = {
-        ...buildPayload(romaneio),
+    // Mesma lógica do createRomaneio: se o rascunho já nasce com diária
+    // preenchida, esse é o momento do lançamento. Sem isso, diaria_criada_em
+    // ficava sempre NULL para rascunhos — e ao promover para romaneio oficial
+    // (promoverRascunho não mexe nessa coluna) a diária caía no mês do
+    // created_at do rascunho em vez do mês em que foi realmente lançada.
+    const diariaCriadaEm = Number(romaneio.custo_motorista) > 0 ? new Date().toISOString() : null;
+    const payload = await ensurePlaca({
+        ...buildPayload(romaneio, diariaCriadaEm),
         numero,
         status:      'Rascunho',
         is_rascunho: true,
         sugestao_veiculo: romaneio.sugestao_veiculo || null,
-    };
+    });
     const { data: romData, error } = await supabase
         .from('romaneios').insert(payload).select('id').single();
     if (error) throw error;
@@ -654,6 +675,12 @@ export async function createRascunho(romaneio, itens = []) {
 }
 
 export async function updateRascunho(id, romaneio, itens) {
+    // Guarda a diária anterior do rascunho — mesma lógica de transição usada
+    // em updateRomaneio — para saber se diaria_criada_em precisa ser
+    // (re)gravada nesta edição.
+    const { data: romAntes } = await supabase.from('romaneios')
+        .select('custo_motorista, diaria_criada_em').eq('id', id).single();
+
     // Mesma ordem de updateRomaneio: itens (filhos) antes de pedidos (pais),
     // pois romaneio_itens.pedido_id referencia romaneio_pedidos.id.
     const { error: delItensErr } = await supabase.from('romaneio_itens').delete().eq('romaneio_id', id);
@@ -689,10 +716,21 @@ export async function updateRascunho(id, romaneio, itens) {
         );
         if (ie) throw ie;
     }
-    const { error } = await supabase.from('romaneios').update({
-        ...buildPayload(romaneio),
+    const custoAntes = Number(romAntes?.custo_motorista || 0);
+    const custoDepois = Number(romaneio.custo_motorista || 0);
+    let diariaCriadaEm;
+    if (custoDepois <= 0) {
+        diariaCriadaEm = null; // diária zerada — limpa para recalcular no próximo lançamento
+    } else if (custoAntes <= 0) {
+        diariaCriadaEm = new Date().toISOString(); // acabou de ser lançada agora
+    } else {
+        diariaCriadaEm = romAntes?.diaria_criada_em || new Date().toISOString(); // mantém a data já gravada
+    }
+
+    const { error } = await supabase.from('romaneios').update(await ensurePlaca({
+        ...buildPayload(romaneio, diariaCriadaEm),
         sugestao_veiculo: romaneio.sugestao_veiculo || null,
-    }).eq('id', id);
+    })).eq('id', id);
     if (error) throw error;
     return fetchRomaneioById(id);
 }
@@ -712,9 +750,30 @@ export async function deleteRascunho(id) {
 
 export async function promoverRascunho(id) {
     const numero = await nextNumeroGlobal();
+
+    // Rede de segurança: se o rascunho já tem diária lançada (custo_motorista
+    // > 0) mas diaria_criada_em ainda está NULL — caso de rascunhos criados
+    // antes desta correção, ou qualquer outro caminho que tenha deixado a
+    // coluna vazia — grava agora, na promoção, em vez de deixar a exibição
+    // cair no fallback (saida/created_at) e classificar a diária no mês
+    // errado. Se diaria_criada_em já estiver preenchida, não mexe nela.
+    const { data: romAtual } = await supabase.from('romaneios')
+        .select('custo_motorista, diaria_criada_em, vehicle_id, placa').eq('id', id).single();
+    const precisaDiariaCriadaEm = Number(romAtual?.custo_motorista || 0) > 0 && !romAtual?.diaria_criada_em;
+    // Mesma lacuna do placa: um rascunho pode ter recebido vehicle_id (ex.:
+    // sugestão de veículo aceita) sem nunca preencher o texto `placa` usado
+    // nas telas de listagem/detalhe.
+    const placaFaltando = !romAtual?.placa && romAtual?.vehicle_id
+        ? (await ensurePlaca({ vehicle_id: romAtual.vehicle_id })).placa
+        : null;
+
     const { data, error } = await supabase
         .from('romaneios')
-        .update({ numero, is_rascunho: false, status: 'Aguardando' })
+        .update({
+            numero, is_rascunho: false, status: 'Aguardando',
+            ...(precisaDiariaCriadaEm ? { diaria_criada_em: new Date().toISOString() } : {}),
+            ...(placaFaltando ? { placa: placaFaltando } : {}),
+        })
         .eq('id', id)
         .select('id, vehicle_id, placa')
         .single();

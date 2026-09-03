@@ -64,21 +64,38 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
     const todasCidadesRota = ['Guanambi, BA', ...paradasSalvas, romaneio.destino].filter(Boolean);
 
     // URL do Google Maps Directions com todos os waypoints
+    // Título-caso + ", Brasil" no final: o embed sem chave de API (keyless)
+    // do Google Maps é sensível a nomes ambíguos — cidades pequenas em CAIXA
+    // ALTA ou sem o país no final às vezes caem numa tela de desambiguação
+    // ("Mais opções") e o mapa fica mostrando o mundo inteiro em vez da rota,
+    // mesmo quando o card de prévia já mostra o nome resolvido corretamente.
+    const paraGeocode = (cidade) => {
+        const bruto = String(cidade || '').trim();
+        if (!bruto) return '';
+        const partes = bruto.split(',').map(p => p.trim()).filter(Boolean);
+        const tituloCaso = (s) => s.toLowerCase().replace(/(^|\s)([a-zà-ú])/g, (m, sep, letra) => sep + letra.toUpperCase());
+        const ultima = partes[partes.length - 1];
+        const ehUf = /^[A-Za-z]{2}$/.test(ultima);
+        const partesFormatadas = partes.map((p, i) =>
+            (ehUf && i === partes.length - 1) ? p.toUpperCase() : tituloCaso(p)
+        );
+        return `${partesFormatadas.join(', ')}, Brasil`;
+    };
     const getMapsEmbedUrl = (cidades) => {
         if (cidades.length < 2) return null;
-        const origem  = encodeURIComponent(cidades[0]);
-        const destino = encodeURIComponent(cidades[cidades.length - 1]);
-        const waypoints = cidades.slice(1, -1).map(c => encodeURIComponent(c)).join('|');
+        const origem  = encodeURIComponent(paraGeocode(cidades[0]));
+        const destino = encodeURIComponent(paraGeocode(cidades[cidades.length - 1]));
+        const waypoints = cidades.slice(1, -1).map(c => encodeURIComponent(paraGeocode(c))).join('|');
         // Embed com directions API (sem chave) — funciona para visualização simples
         const base = `https://maps.google.com/maps?saddr=${origem}&daddr=${destino}`;
-        const waypointStr = cidades.slice(1, -1).map(c => encodeURIComponent(c)).join('+to:');
+        const waypointStr = cidades.slice(1, -1).map(c => encodeURIComponent(paraGeocode(c))).join('+to:');
         const full = waypointStr
             ? `https://maps.google.com/maps?saddr=${origem}&daddr=${waypointStr}+to:${destino}&output=embed`
             : `https://maps.google.com/maps?saddr=${origem}&daddr=${destino}&output=embed`;
         return full;
     };
     const getMapsLinkUrl = (cidades) =>
-        `https://www.google.com/maps/dir/${cidades.map(c => encodeURIComponent(c)).join('/')}`;
+        `https://www.google.com/maps/dir/${cidades.map(c => encodeURIComponent(paraGeocode(c))).join('/')}`;
 
     const mapsEmbedUrl = getMapsEmbedUrl(todasCidadesRota);
     const mapsLinkUrl  = getMapsLinkUrl(todasCidadesRota);
