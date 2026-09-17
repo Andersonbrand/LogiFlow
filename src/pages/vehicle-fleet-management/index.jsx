@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useRecarregarAoVoltar } from "utils/useRecarregarAoVoltar";
 import NavigationBar from "components/ui/NavigationBar";
 import BreadcrumbTrail from "components/ui/BreadcrumbTrail";
 import Icon from "components/AppIcon";
@@ -21,12 +22,12 @@ import AccessDeniedModal from "components/ui/AccessDeniedModal";
 import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle, fetchCaminhoesPlacas } from "utils/vehicleService";
 import { fetchRomaneios } from "utils/romaneioService";
 import {
-    fetchAbastecimentos, updateAbastecimento, deleteAbastecimento,
+    fetchAbastecimentos, createAbastecimento, updateAbastecimento, deleteAbastecimento,
     fetchChecklists, aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
     criarRascunhoOSDeChecklist,
     deleteChecklist,
     fetchDiarias, createDiaria, updateDiaria, deleteDiaria, assinarDiaria, desassinarDiaria,
-    fetchMotoristasCaminhao,
+    fetchMotoristasCaminhao, fetchPostos, fetchConfigAbastecimento,
     CHECKLIST_ITENS, fetchChecklistItens, itemIsOk, itemObsOf, itemLabelOf, contarItensOk,
 } from "utils/carretasService";
 import { deleteRomaneio, assinarDiariaRomaneio, desassinarDiariaRomaneio } from "utils/romaneioService";
@@ -151,10 +152,12 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
     });
     const [modalAbastEdit, setModalAbastEdit] = useState(null); // { id } quando editando
     const [formAbastEdit, setFormAbastEdit] = useState({
-        veiculo_caminhao_id: '', data_abastecimento: '', posto: '',
+        veiculo_caminhao_id: '', data_abastecimento: '', posto_id: '', cupom_fiscal: '',
         litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '',
     });
     const [savingAbastEdit, setSavingAbastEdit] = useState(false);
+    const [postos, setPostos] = useState([]);
+    const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -190,15 +193,19 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                 return dataRef >= f.dataInicio && dataRef <= dataFimTs;
             });
 
-            const [a, ch, d, vc] = await Promise.all([
+            const [a, ch, d, vc, ps, cfg] = await Promise.all([
                 fetchAbastecimentos(f),
                 fetchChecklists({ motoristaId: motorista.id }),
                 fetchDiarias({ motoristaId: motorista.id, dataInicio: f.dataInicio, dataFim: f.dataFim }),
                 fetchCaminhoesPlacas(),
+                fetchPostos().catch(() => []),
+                fetchConfigAbastecimento().catch(() => ({ preco_diesel: 0, preco_arla: 0 })),
             ]);
             setAbast(a); setChecklists(ch); setDiarias(d);
             setRomaneiosDiarias(romaneiosDiariasFiltrados);
             setVeiculosCaminhao(vc || []);
+            setPostos(ps || []);
+            setConfigAbast(cfg || { preco_diesel: 0, preco_arla: 0 });
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [motorista.id, motorista.name, mes, usarPeriodo, periodoCustom]); // eslint-disable-line
@@ -210,6 +217,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         const unsubChk = subscribeTabela('carretas_checklists', load);
         return () => { unsubRom(); unsubChk(); };
     }, [load]);
+    useRecarregarAoVoltar(load);
 
     // Totais
     const totaisAbast = useMemo(() => ({
@@ -300,24 +308,67 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
     // Abastecimentos: edição e exclusão (admin) — usa a mesma comparação de
     // id "string-safe" (String(v.id) === String(...)) já corrigida na tela
     // do motorista, para não reintroduzir o bug de placa/modelo ficando null.
+    // ── Preços: posto tem prioridade, senão usa config global (igual à tela do motorista) ──
+    const getPrecoAbast = useCallback((postoId, tipo) => {
+        const posto = postos.find(p => p.id === postoId);
+        if (tipo === 'diesel') return Number(posto?.preco_diesel || configAbast?.preco_diesel || 0);
+        if (tipo === 'arla')   return Number(posto?.preco_arla   || configAbast?.preco_arla   || 0);
+        return 0;
+    }, [postos, configAbast]);
+    const handlePostoAbastChange = (postoId) => {
+        const precoDiesel = getPrecoAbast(postoId, 'diesel');
+        const precoArla   = getPrecoAbast(postoId, 'arla');
+        setFormAbastEdit(f => ({
+            ...f, posto_id: postoId,
+            valor_diesel: precoDiesel && f.litros_diesel ? (Number(f.litros_diesel) * precoDiesel).toFixed(2) : f.valor_diesel,
+            valor_arla: precoArla && f.litros_arla ? (Number(f.litros_arla) * precoArla).toFixed(2) : f.valor_arla,
+        }));
+    };
+    const handleLitrosAbast = (campo, valor) => {
+        const precoDiesel = getPrecoAbast(formAbastEdit.posto_id, 'diesel');
+        const precoArla   = getPrecoAbast(formAbastEdit.posto_id, 'arla');
+        setFormAbastEdit(f => {
+            const n = { ...f, [campo]: valor };
+            if (campo === 'litros_diesel' && precoDiesel) n.valor_diesel = valor ? (Number(valor) * precoDiesel).toFixed(2) : '';
+            if (campo === 'litros_arla' && precoArla) n.valor_arla = valor ? (Number(valor) * precoArla).toFixed(2) : '';
+            return n;
+        });
+    };
+
     const openEditAbastecimento = (a) => {
         setFormAbastEdit({
             veiculo_caminhao_id: a.veiculo_caminhao_id != null ? String(a.veiculo_caminhao_id) : '',
             data_abastecimento: a.data_abastecimento || '',
-            posto: a.posto || '',
+            posto_id: a.posto_id || '', cupom_fiscal: a.cupom_fiscal || '',
             litros_diesel: a.litros_diesel ?? '', valor_diesel: a.valor_diesel ?? '',
             litros_arla: a.litros_arla ?? '', valor_arla: a.valor_arla ?? '',
         });
         setModalAbastEdit({ id: a.id });
     };
+    // Admin lança um abastecimento em nome do motorista (ex.: quando o
+    // motorista não consegue lançar pelo próprio cadastro, ou pra corrigir
+    // um lançamento que faltou).
+    const openNovoAbastecimento = () => {
+        setFormAbastEdit({
+            veiculo_caminhao_id: '', data_abastecimento: new Date().toISOString().split('T')[0],
+            posto_id: '', cupom_fiscal: '',
+            litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '',
+        });
+        setModalAbastEdit({ id: null });
+    };
     const handleSaveAbastecimento = async () => {
         if (!formAbastEdit.data_abastecimento) { showToast('Data é obrigatória', 'error'); return; }
+        if (!formAbastEdit.posto_id) { showToast('Selecione o posto de abastecimento', 'error'); return; }
+        if (!formAbastEdit.cupom_fiscal?.trim()) { showToast('Informe o N° do cupom fiscal', 'error'); return; }
         setSavingAbastEdit(true);
         try {
             const caminhao = veiculosCaminhao.find(v => String(v.id) === String(formAbastEdit.veiculo_caminhao_id));
+            const posto = postos.find(p => p.id === formAbastEdit.posto_id);
             const payload = {
                 data_abastecimento: formAbastEdit.data_abastecimento,
-                posto: formAbastEdit.posto || null,
+                posto_id: formAbastEdit.posto_id,
+                posto: posto?.nome || null,
+                cupom_fiscal: formAbastEdit.cupom_fiscal.trim(),
                 litros_diesel: Number(formAbastEdit.litros_diesel || 0),
                 valor_diesel: Number(formAbastEdit.valor_diesel || 0),
                 litros_arla: Number(formAbastEdit.litros_arla || 0),
@@ -327,8 +378,13 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                     veiculo_caminhao_placa: caminhao?.placa || null,
                 } : {}),
             };
-            await updateAbastecimento(modalAbastEdit.id, payload);
-            showToast('Abastecimento atualizado!', 'success');
+            if (modalAbastEdit.id) {
+                await updateAbastecimento(modalAbastEdit.id, payload);
+                showToast('Abastecimento atualizado!', 'success');
+            } else {
+                await createAbastecimento({ ...payload, motorista_id: motorista.id });
+                showToast('Abastecimento lançado!', 'success');
+            }
             setModalAbastEdit(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setSavingAbastEdit(false); }
@@ -526,6 +582,13 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                             {/* ── Abastecimentos ── */}
                             {tab === 'abastecimentos' && (
                                 <div className="space-y-4">
+                                    <div className="flex justify-end">
+                                        <button onClick={openNovoAbastecimento}
+                                            className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold text-white"
+                                            style={{ backgroundColor: 'var(--color-primary)' }}>
+                                            <Icon name="Plus" size={15} color="white" /> Novo abastecimento
+                                        </button>
+                                    </div>
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                         {[
                                             { l: 'Diesel (L)', v: totaisAbast.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#1D4ED8', bg: '#EFF6FF', i: 'Fuel' },
@@ -549,6 +612,11 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                             <Icon name="Fuel" size={32} color="var(--color-muted-foreground)" />
                                             <p className="text-sm mt-2 text-center">Nenhum abastecimento registrado no período</p>
                                             <p className="text-xs mt-1 text-center">Os lançamentos do motorista aparecerão aqui</p>
+                                            <button onClick={openNovoAbastecimento}
+                                                className="mt-4 flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold text-white"
+                                                style={{ backgroundColor: 'var(--color-primary)' }}>
+                                                <Icon name="Plus" size={15} color="white" /> Lançar abastecimento
+                                            </button>
                                         </div>
                                     ) : (
                                         <div className="bg-white rounded-xl border overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
@@ -933,7 +1001,9 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                         <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50"><Icon name="Fuel" size={18} color="#1D4ED8" /></div>
-                                <h3 className="font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Editar Abastecimento</h3>
+                                <h3 className="font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>
+                                    {modalAbastEdit.id ? 'Editar Abastecimento' : 'Novo Abastecimento'}
+                                </h3>
                             </div>
                             <button onClick={() => setModalAbastEdit(null)} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
                         </div>
@@ -947,19 +1017,43 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                     {veiculosCaminhao.map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
                                 </PrettySelect>
                             </Field>
+                            <Field label="N° do Cupom Fiscal" required>
+                                <input value={formAbastEdit.cupom_fiscal} onChange={e => setFormAbastEdit(f => ({ ...f, cupom_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 000123456" maxLength={50} />
+                            </Field>
                             <div className="col-span-2">
-                                <Field label="Posto">
-                                    <input value={formAbastEdit.posto} onChange={e => setFormAbastEdit(f => ({ ...f, posto: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Nome do posto" />
+                                <Field label="Posto" required>
+                                    <PrettySelect value={formAbastEdit.posto_id} onChange={e => handlePostoAbastChange(e.target.value)} className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione o posto...</option>
+                                        {postos.map(p => <option key={p.id} value={p.id}>{p.nome}{p.cidade ? ` — ${p.cidade}` : ''}</option>)}
+                                    </PrettySelect>
+                                    <div className="flex gap-3 mt-1 text-xs">
+                                        {getPrecoAbast(formAbastEdit.posto_id, 'diesel') > 0 && (
+                                            <span className="text-blue-600 font-medium">
+                                                🛢️ R${getPrecoAbast(formAbastEdit.posto_id, 'diesel').toFixed(3)}/L
+                                                {!postos.find(p => p.id === formAbastEdit.posto_id)?.preco_diesel && configAbast?.preco_diesel > 0 && (
+                                                    <span className="text-gray-400 ml-1">(padrão)</span>
+                                                )}
+                                            </span>
+                                        )}
+                                        {getPrecoAbast(formAbastEdit.posto_id, 'arla') > 0 && (
+                                            <span className="text-emerald-600 font-medium">
+                                                💧 R${getPrecoAbast(formAbastEdit.posto_id, 'arla').toFixed(3)}/L
+                                                {!postos.find(p => p.id === formAbastEdit.posto_id)?.preco_arla && configAbast?.preco_arla > 0 && (
+                                                    <span className="text-gray-400 ml-1">(padrão)</span>
+                                                )}
+                                            </span>
+                                        )}
+                                    </div>
                                 </Field>
                             </div>
                             <Field label="Diesel (L)">
-                                <input type="number" step="0.1" min="0" value={formAbastEdit.litros_diesel} onChange={e => setFormAbastEdit(f => ({ ...f, litros_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0" />
+                                <input type="number" step="0.1" min="0" value={formAbastEdit.litros_diesel} onChange={e => handleLitrosAbast('litros_diesel', e.target.value)} className={inputCls} style={inputStyle} placeholder="0" />
                             </Field>
                             <Field label="R$ Diesel">
                                 <input type="number" step="0.01" min="0" value={formAbastEdit.valor_diesel} onChange={e => setFormAbastEdit(f => ({ ...f, valor_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
                             </Field>
                             <Field label="Arla 32 (L)">
-                                <input type="number" step="0.1" min="0" value={formAbastEdit.litros_arla} onChange={e => setFormAbastEdit(f => ({ ...f, litros_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0" />
+                                <input type="number" step="0.1" min="0" value={formAbastEdit.litros_arla} onChange={e => handleLitrosAbast('litros_arla', e.target.value)} className={inputCls} style={inputStyle} placeholder="0" />
                             </Field>
                             <Field label="R$ Arla">
                                 <input type="number" step="0.01" min="0" value={formAbastEdit.valor_arla} onChange={e => setFormAbastEdit(f => ({ ...f, valor_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
@@ -1049,15 +1143,15 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
             {ConfirmDialog}
             {viewDiaria && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setViewDiaria(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden max-h-[85vh]" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                             <div className="flex items-center gap-2">
                                 <Icon name="CalendarDays" size={18} color="#4F46E5" />
                                 <h3 className="text-base font-bold" style={{ color: 'var(--color-text-primary)' }}>Detalhes da Diária</h3>
                             </div>
                             <button onClick={() => setViewDiaria(null)} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={16} color="var(--color-muted-foreground)" /></button>
                         </div>
-                        <div className="p-5 space-y-4">
+                        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
                             <div className="grid grid-cols-2 gap-3">
                                 {[
                                     { label: 'Motorista', value: viewDiaria.motorista?.name || '—' },
@@ -1134,7 +1228,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                             {viewDiaria.descricao && (
                                 <div className="p-3 rounded-xl border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-muted)' }}>
                                     <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Descrição / Motivo</p>
-                                    <p className="text-sm">{viewDiaria.descricao}</p>
+                                    <p className="text-sm whitespace-pre-wrap break-words">{viewDiaria.descricao}</p>
                                 </div>
                             )}
                             <div className="p-4 rounded-xl text-center" style={{ backgroundColor: '#EEF2FF', border: '1px solid #C7D2FE' }}>
@@ -1142,7 +1236,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                 <p className="text-3xl font-bold font-data text-indigo-700">{BRL(viewDiaria.valor_total)}</p>
                             </div>
                         </div>
-                        <div className="flex gap-3 p-5 justify-end border-t" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
                             <button onClick={() => setViewDiaria(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
                             <button onClick={() => printDiaria(viewDiaria)}
                                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border" style={{ borderColor: '#4F46E5', color: '#4F46E5' }}>

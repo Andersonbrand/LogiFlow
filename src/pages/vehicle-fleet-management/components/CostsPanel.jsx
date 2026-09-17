@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useRecarregarAoVoltar } from "utils/useRecarregarAoVoltar";
 import Icon from "components/AppIcon";
 import Toast from "components/ui/Toast";
 import { useToast } from "utils/useToast";
@@ -94,6 +95,7 @@ export default function CostsPanel() {
         const unsubR = subscribeTabela('romaneios', load);
         return () => { unsubA(); unsubD(); unsubR(); };
     }, [load]);
+    useRecarregarAoVoltar(load);
 
     // ── Totais gerais ───────────────────────────────────────────────────────
     const totAbast = useMemo(() => ({

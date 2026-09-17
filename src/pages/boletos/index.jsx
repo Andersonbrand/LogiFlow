@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Icon from 'components/AppIcon';
@@ -41,6 +42,7 @@ export default function Boletos() {
         finally { setLoading(false); }
     }, []); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     // Presets de período aplicados sobre a data de vencimento
     const aplicarPreset = (preset) => {

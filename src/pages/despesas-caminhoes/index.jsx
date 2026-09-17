@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -1471,6 +1472,7 @@ export default function DespesasCaminhoes() {
         finally { setLoading(false); }
     }, [filtro, periodo]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const handleDelete = async (id) => {
         const ok = await confirm({ title: 'Excluir despesa?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });

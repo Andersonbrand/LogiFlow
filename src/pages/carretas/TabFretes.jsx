@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import Icon from 'components/AppIcon';
 import Button from 'components/ui/Button';
 import Toast from 'components/ui/Toast';
@@ -349,6 +350,7 @@ function useFretes(tipo) {
     }, [tipo]);
 
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     return { rows, setRows, loading, reload: load };
 }

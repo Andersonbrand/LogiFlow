@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, Legend, LineChart, Line, AreaChart, Area
@@ -86,32 +87,33 @@ export default function Relatorios() {
     const [mesFiltro, setMesFiltro] = useState(() => new Date().toISOString().slice(0, 7)); // YYYY-MM
     const { toast, showToast } = useToast();
 
-    useEffect(() => {
-        (async () => {
-            try {
-                setLoading(true);
-                const [rom, veh, desp, motorCaminhao] = await Promise.all([
-                    fetchRomaneios(), fetchVehicles(), fetchDespesasCaminhoes(), fetchMotoristasCaminhao(),
-                ]);
-                setRomaneios(rom); setVehicles(veh); setDespesasCaminhoes(desp);
-                fetchDadosMargemFrete('caminhao').then(setDadosMargemCaminhao).catch(() => setDadosMargemCaminhao(null));
-                // Busca diárias avulsas lançadas por motoristas de caminhão
-                // (excluindo carreteiros para não duplicar a DRE)
-                const idsCaminhao = (motorCaminhao || []).map(m => m.id);
-                const diavs = idsCaminhao.length > 0
-                    ? await fetchDiarias({ motoristasIds: idsCaminhao })
-                    : [];
-                setDiariasAvulsasCaminhao(diavs);
-                // Custo real de combustível: vem dos registros de abastecimento feitos
-                // por cada motorista de caminhão (cadastro de motorista), não da previsão
-                // de consumo lançada dentro do romaneio.
-                const todosAbast = await fetchAbastecimentos();
-                const idsCaminhaoSet = new Set(idsCaminhao);
-                setAbastecimentosCaminhao((todosAbast || []).filter(a => idsCaminhaoSet.has(a.motorista_id)));
-            } catch (err) { showToast('Erro: ' + err.message, 'error'); }
-            finally { setLoading(false); }
-        })();
-    }, []);
+    const load = useCallback(async () => {
+        try {
+            setLoading(true);
+            const [rom, veh, desp, motorCaminhao] = await Promise.all([
+                fetchRomaneios(), fetchVehicles(), fetchDespesasCaminhoes(), fetchMotoristasCaminhao(),
+            ]);
+            setRomaneios(rom); setVehicles(veh); setDespesasCaminhoes(desp);
+            fetchDadosMargemFrete('caminhao').then(setDadosMargemCaminhao).catch(() => setDadosMargemCaminhao(null));
+            // Busca diárias avulsas lançadas por motoristas de caminhão
+            // (excluindo carreteiros para não duplicar a DRE)
+            const idsCaminhao = (motorCaminhao || []).map(m => m.id);
+            const diavs = idsCaminhao.length > 0
+                ? await fetchDiarias({ motoristasIds: idsCaminhao })
+                : [];
+            setDiariasAvulsasCaminhao(diavs);
+            // Custo real de combustível: vem dos registros de abastecimento feitos
+            // por cada motorista de caminhão (cadastro de motorista), não da previsão
+            // de consumo lançada dentro do romaneio.
+            const todosAbast = await fetchAbastecimentos();
+            const idsCaminhaoSet = new Set(idsCaminhao);
+            setAbastecimentosCaminhao((todosAbast || []).filter(a => idsCaminhaoSet.has(a.motorista_id)));
+        } catch (err) { showToast('Erro: ' + err.message, 'error'); }
+        finally { setLoading(false); }
+    }, []); // eslint-disable-line
+
+    useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     // Recarrega romaneios ao trocar empresa ou mês na aba Por Empresa
     useEffect(() => {

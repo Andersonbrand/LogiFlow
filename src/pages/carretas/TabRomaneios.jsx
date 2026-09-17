@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import Button from 'components/ui/Button';
 import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
@@ -1172,6 +1173,7 @@ export default function TabRomaneios({ isAdmin }) {
         const unsub = subscribeTabela('carretas_romaneios', load);
         return unsub;
     }, [load]);
+    useRecarregarAoVoltar(load);
 
     const handleStatusChange = async (id, novoStatus) => {
         try {

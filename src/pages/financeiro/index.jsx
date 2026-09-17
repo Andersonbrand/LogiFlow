@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import Button from 'components/ui/Button';
 import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
@@ -26,13 +27,14 @@ export default function Financeiro() {
     const [showFilters, setShowFilters]         = useState(false);
     const { toast, showToast }                  = useToast();
 
-    useEffect(() => {
-        (async () => {
-            try { setLoading(true); setRomaneios(await fetchRomaneios()); }
-            catch (err) { showToast('Erro: ' + err.message, 'error'); }
-            finally { setLoading(false); }
-        })();
-    }, []);
+    const load = useCallback(async () => {
+        try { setLoading(true); setRomaneios(await fetchRomaneios()); }
+        catch (err) { showToast('Erro: ' + err.message, 'error'); }
+        finally { setLoading(false); }
+    }, []); // eslint-disable-line
+
+    useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const safeRomaneios = useMemo(() =>
         romaneios.map(r => ({

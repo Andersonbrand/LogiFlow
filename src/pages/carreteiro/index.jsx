@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -329,6 +330,7 @@ export default function CarreteiroDashboard() {
         }, 30000);
         return () => { unsubViagens(); unsubChk(); unsubCarreg(); unsubRomaneios(); unsubPontos(); unsubRomCar(); clearInterval(pollInterval); };
     }, [load]);
+    useRecarregarAoVoltar(load);
 
     // Bônus por carregamentos (nova fonte)
     const carregamentosComBonus = useMemo(() =>

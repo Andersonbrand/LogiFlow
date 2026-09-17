@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import NavigationBar from 'components/ui/NavigationBar';
 import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
@@ -361,6 +362,7 @@ export default function MecanicoPage() {
         const unsub = subscribeTabela('carretas_ordens_servico', load);
         return () => unsub();
     }, [load]); // eslint-disable-line
+    useRecarregarAoVoltar(load);
 
     const handleFinalizar = async () => {
         try {

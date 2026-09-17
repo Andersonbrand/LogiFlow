@@ -67,16 +67,19 @@ export function AuthProvider({ children }) {
             }
         });
 
-        // Refresca sessão sempre que o evento supabase:recarregar for disparado
-        // (ao voltar para aba, após inatividade ou hibernação do free tier)
-        const handleRecarregar = () => {
-            supabase.auth.getSession().catch(() => {});
+        // Garante que a sessão/token estejam frescos ao voltar para a aba
+        // (o autoRefreshToken do supabase-js já cuida disso em segundo plano,
+        // isso aqui é só uma checagem extra ao focar a aba novamente)
+        const handleVisibility = () => {
+            if (!document.hidden) {
+                supabase.auth.getSession().catch(() => {});
+            }
         };
-        window.addEventListener('supabase:recarregar', handleRecarregar);
+        document.addEventListener('visibilitychange', handleVisibility);
 
         return () => {
             subscription.unsubscribe();
-            window.removeEventListener('supabase:recarregar', handleRecarregar);
+            document.removeEventListener('visibilitychange', handleVisibility);
         };
     }, []); // eslint-disable-line
 

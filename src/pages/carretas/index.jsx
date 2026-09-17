@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import TabRomaneios from './TabRomaneios';
 import TabVolume from './TabVolume';
 import TabFretes from './TabFretes';
@@ -280,6 +281,7 @@ function TabViagens({ isAdmin }) {
     }, [filtroMes, filtroDia, isAdmin, usarPeriodo, periodoCustom]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const handleDeleteRegistroMotorista = async (id) => {
         const ok = await confirm({ title: 'Excluir registro?', message: 'Este registro lançado pelo motorista será excluído permanentemente.', confirmLabel: 'Excluir', variant: 'danger' });
@@ -582,6 +584,7 @@ function TabVeiculos({ isAdmin }) {
         finally { setLoading(false); }
     }, []); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const openCreate = () => {
         setForm({ placa: '', marca: '', modelo: '', ano_fabricacao: '', tipo_composicao: 'Cavalo + Carreta', capacidade_carga: '', media_consumo: '', capacidade_tanque: '', observacoes: '', is_terceiro: false });
@@ -775,6 +778,7 @@ function TabAbastecimentos({ isAdmin, profile }) {
         finally { setLoading(false); }
     }, [filtro, periodoPreset, periodo]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const [pesquisa, setPesquisa] = useState('');
     const abastFiltrados = useMemo(() => {
@@ -1306,6 +1310,7 @@ function TabChecklist({ isAdmin, profile }) {
         finally { setLoading(false); }
     }, [filtro, filtroMes]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const recarregarItens = async () => { setChecklistItens(await fetchChecklistItens(false)); };
 
@@ -1684,6 +1689,7 @@ function TabCarregamentos({ isAdmin }) {
         finally { setLoading(false); }
     }, [filtro]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const totais = useMemo(() => ({
         carregamentos: carregamentos.length,
@@ -1898,6 +1904,7 @@ function TabEmpresas({ isAdmin }) {
         finally { setLoading(false); }
     }, []); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const handleSubmit = async () => {
         if (!form.nome.trim()) { showToast('Nome é obrigatório', 'error'); return; }
@@ -2102,6 +2109,7 @@ function TabBonificacoes({ isAdmin }) {
         finally { setLoading(false); }
     }, [filtroMotorista, filtroMes, filtroDia, usarPeriodo, periodoCustom]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     // ── Cálculos ─────────────────────────────────────────────────────────────────
     // CIF: apenas volume — excluir completamente de Viagens e Bonificações
@@ -3233,6 +3241,7 @@ function TabDespesasExtras({ isAdmin, profile }) {
         finally { setLoading(false); }
     }, [filtro, usarPeriodo, periodoCustom]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const totalPeriodo = useMemo(() => despesas.reduce((s, d) => s + Number(d.valor || 0), 0), [despesas]);
     const totalPorCategoria = useMemo(() => {
@@ -4425,6 +4434,7 @@ function TabDiarias({ isAdmin, profile }) {
         finally { setLoading(false); }
     }, [filtro, periodoPreset, periodo]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const [pesquisa, setPesquisa] = useState('');
     const diariasFiltradas = useMemo(() => {
@@ -5650,6 +5660,7 @@ function TabOrdensServico({ isAdmin, profile }) {
         finally { setLoading(false); }
     }, [filtroStatus, filtroMes]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const [pesquisa, setPesquisa] = useState('');
     const [filtroPlacaOS, setFiltroPlacaOS] = useState('');
@@ -6188,6 +6199,7 @@ function GerenciarPecasModal({ onClose, showToast }) {
         finally { setLoading(false); }
     }, []); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const listaFiltrada = filtroCategoria ? pecas.filter(p => p.categoria === filtroCategoria) : pecas;
 
@@ -6384,6 +6396,7 @@ function TabHistoricoViagens({ isAdmin }) {
     }, [filtroMotorista, filtroVeiculo, filtroPeriodo, filtroMes]); // eslint-disable-line
 
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     // ── Agregações ────────────────────────────────────────────────────────────
     const { porMotorista, destinosGlobais, alertasRotas } = useMemo(() => {
@@ -6997,6 +7010,7 @@ function TabDistribuicaoViagens() {
         finally { setLoading(false); }
     }, []); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const ultimosPorMotorista = useMemo(() => ultimosDestinosPorMotorista(historico), [historico]);
     const datasPorMotoristaECidade = useMemo(() => ultimaDataPorMotoristaECidade(historico), [historico]);
@@ -7300,6 +7314,7 @@ function TabDistribuicaoAco() {
         finally { setLoading(false); }
     }, []); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const fila = useMemo(() => {
         const ultimoPorMotorista = {};
@@ -7511,6 +7526,7 @@ function TabPontosParada({ isAdmin }) {
         finally { setLoading(false); }
     }, []); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const destinosParaTipo = useCallback((tipo) => {
         switch (tipo) {

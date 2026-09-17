@@ -44,18 +44,42 @@ export default function ResetPassword() {
     const [checking, setChecking]         = useState(true);
 
     useEffect(() => {
-        // O Supabase processa o hash do link de reset e cria uma sessão temporária
-        supabase.auth.onAuthStateChange((event) => {
+        let jaTratado = false;
+
+        // O Supabase processa o hash do link de reset (#access_token=...&type=recovery)
+        // assim que o app carrega — o AuthProvider, no topo da árvore, já está
+        // montado e escutando onAuthStateChange ANTES desta página de rota
+        // existir. Isso significa que o evento PASSWORD_RECOVERY pode disparar
+        // e "passar batido" antes deste listener aqui embaixo estar pronto —
+        // e como onAuthStateChange não reenvia eventos passados, o listener
+        // nunca recebe nada, o link aparece como "inválido/expirado" mesmo
+        // sendo válido, e o usuário não conseguia trocar a senha de forma
+        // alguma por esse fluxo.
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
             if (event === 'PASSWORD_RECOVERY') {
+                jaTratado = true;
                 setValidSession(true);
                 setChecking(false);
             }
         });
-        // Timeout: se após 3s não detectou o evento, link inválido/expirado
-        const t = setTimeout(() => {
+
+        // Fallback: se o evento já tiver disparado antes de chegarmos aqui, o
+        // Supabase já terá criado a sessão de recuperação mesmo assim — então
+        // confirmamos direto pela sessão + pelo hash da URL (garante que não é
+        // apenas uma sessão normal de alguém já logado navegando pra essa rota).
+        const hashDeRecuperacao = window.location.hash.includes('type=recovery');
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (!jaTratado && hashDeRecuperacao && session) {
+                jaTratado = true;
+                setValidSession(true);
+            }
             setChecking(false);
-        }, 3000);
-        return () => clearTimeout(t);
+        });
+
+        // Timeout: se após 4s não confirmou de nenhuma das duas formas, link
+        // realmente inválido/expirado
+        const t = setTimeout(() => setChecking(false), 4000);
+        return () => { subscription.unsubscribe(); clearTimeout(t); };
     }, []);
 
     const handleSubmit = async (e) => {

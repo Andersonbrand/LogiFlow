@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -41,21 +42,22 @@ export default function Consolidacao() {
     const [saving, setSaving]       = useState(false);
     const { toast, showToast }      = useToast();
 
-    useEffect(() => {
-        (async () => {
-            try {
-                setLoading(true);
-                await carregarCorredores();
-                setCorredoresLista(getAllCorredores());
-                const [rom, veh] = await Promise.all([fetchRomaneios(), fetchVehicles()]);
-                const ativos = rom.filter(r => r.status === 'Aguardando' || r.status === 'Carregando');
-                setRomaneios(ativos);
-                setAllVehicles(veh);
-                setVehicles(veh.filter(v => v.status === 'Disponível'));
-            } catch (err) { showToast('Erro: ' + err.message, 'error'); }
-            finally { setLoading(false); }
-        })();
-    }, []);
+    const load = useCallback(async () => {
+        try {
+            setLoading(true);
+            await carregarCorredores();
+            setCorredoresLista(getAllCorredores());
+            const [rom, veh] = await Promise.all([fetchRomaneios(), fetchVehicles()]);
+            const ativos = rom.filter(r => r.status === 'Aguardando' || r.status === 'Carregando');
+            setRomaneios(ativos);
+            setAllVehicles(veh);
+            setVehicles(veh.filter(v => v.status === 'Disponível'));
+        } catch (err) { showToast('Erro: ' + err.message, 'error'); }
+        finally { setLoading(false); }
+    }, []); // eslint-disable-line
+
+    useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     // Grupos sugeridos com lógica geográfica + utilização < 40%
     const grupos = useMemo(() =>

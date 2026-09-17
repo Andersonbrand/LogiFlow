@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
 import Button from 'components/ui/Button';
@@ -154,6 +155,7 @@ export default function MotoristaDashboard() {
         const unsubAbast = subscribeTabela('carretas_abastecimentos', load);
         return () => { unsubRom(); unsubCheck(); unsubAbast(); };
     }, [load]); // eslint-disable-line
+    useRecarregarAoVoltar(load);
 
     // ── Computed ─────────────────────────────────────────────────────────────
     const bonificacoes = useMemo(() =>

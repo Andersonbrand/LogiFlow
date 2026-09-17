@@ -21,6 +21,7 @@ const MSGS_ERRO = {
         'Aguarde 60 segundos antes de solicitar outro e-mail.',
     'User not found': 'Nenhuma conta encontrada com este e-mail.',
     'Email rate limit exceeded': 'Muitas tentativas. Aguarde alguns minutos.',
+    'Error sending recovery email': 'Não foi possível enviar o e-mail agora. Se o problema persistir, avise o suporte (configuração de envio de e-mail pendente).',
 };
 
 function translateError(msg) {

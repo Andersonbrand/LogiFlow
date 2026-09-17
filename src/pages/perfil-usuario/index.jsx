@@ -11,7 +11,7 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
 const readonlyCls = 'w-full text-sm px-3 py-2.5 rounded-lg border';
 const readonlyStyle = { borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: 'var(--color-muted)' };
 
-const AUTH_TIMEOUT_MS = 20_000;
+const AUTH_TIMEOUT_MS = 30_000;
 function withTimeout(promise, ms = AUTH_TIMEOUT_MS) {
     return Promise.race([
         promise,

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { createPortal } from 'react-dom';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
@@ -219,6 +220,7 @@ export default function EntregasAcessorios() {
         finally { setLoading(false); }
     }, [periodoPreset, periodo]); // eslint-disable-line
     useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
 
     const entregasFiltradas = useMemo(() => entregas.filter(e => {
         if (filtroMotorista && e.motorista_id !== filtroMotorista) return false;
