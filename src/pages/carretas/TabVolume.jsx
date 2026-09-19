@@ -1438,11 +1438,6 @@ function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], c
     const pct = v => totais.totalGeral > 0 ? ((v / totais.totalGeral) * 100).toFixed(1) : '0.0';
     const tipoEntries = Object.entries(TIPOS).filter(([key]) => key !== 'ESTOQUE');
 
-    // Barras de progresso empilhadas
-    const bars = tipoEntries.map(([key, t]) => ({
-        key, t, v: totais[key] || 0, p: totais.total > 0 ? (totais[key] / totais.total) * 100 : 0,
-    }));
-
     const freteTotal = carregamentos.reduce((s, r) => s + Number(r.valor_frete_calculado || 0), 0);
 
     const [expandido, setExpandido] = React.useState(false);
@@ -1517,28 +1512,6 @@ function DashboardVolume({ totais, carregamentos, carregamentosTerceiros = [], c
                         <p className="text-xs opacity-55" style={{ color: t.color }}>do volume total</p>
                     </div>
                 ))}
-            </div>
-
-            {/* Barra de progresso empilhada */}
-            <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                <p className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--color-muted-foreground)' }}>Distribuição de volume — {fmtMes(mes)}</p>
-                <div className="h-4 rounded-full overflow-hidden flex gap-0.5 mb-3" style={{ background: 'var(--color-border)' }}>
-                    {bars.map(({ key, t, p }) => p > 0 && (
-                        <div key={key} title={`${t.label}: ${p.toFixed(1)}%`}
-                            className="h-full flex items-center justify-center text-white text-xs font-bold overflow-hidden transition-all"
-                            style={{ width: `${p}%`, background: t.bar, minWidth: 0 }}>
-                            {p > 8 ? `${p.toFixed(0)}%` : ''}
-                        </div>
-                    ))}
-                </div>
-                <div className="flex flex-wrap gap-3">
-                    {tipoEntries.map(([key, t]) => (
-                        <div key={key} className="flex items-center gap-1.5 text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                            <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: t.bar }} />
-                            {t.label} · {fmtNum(totais[key] || 0)} sacos
-                        </div>
-                    ))}
-                </div>
             </div>
 
             {/* Card de Frete Total — frota própria, com detalhamento por tipo */}

@@ -114,7 +114,15 @@ export default function PrettySelect({
         : options;
 
     const emitir = (val) => {
-        if (onChange) onChange({ target: { value: val, name } });
+        // Um <select> nativo SEMPRE entrega e.target.value como string —
+        // é o contrato que este componente promete replicar (ver comentário
+        // no topo do arquivo). Sem essa normalização, uma <option value={id}>
+        // com id numérico (comum em colunas serial/bigint) faz o valor
+        // emitido ser um number, e código que compara com String(...) do
+        // outro lado (padrão usado em várias telas do app) nunca dá igual —
+        // foi exatamente isso que quebrava o filtro de placas na tela do
+        // motorista de caminhão.
+        if (onChange) onChange({ target: { value: val != null ? String(val) : '', name } });
         setOpen(false);
     };
 

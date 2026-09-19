@@ -465,10 +465,6 @@ export default function MotoristaDashboard() {
                                             </button>
                                         ))}
                                     </div>
-                                    <button onClick={load} className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
-                                        <Icon name="RefreshCw" size={14} color="currentColor" />
-                                        <span className="hidden sm:inline">Atualizar</span>
-                                    </button>
                                     <button onClick={exportar} className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
                                         <Icon name="FileDown" size={14} color="currentColor" />
                                         <span className="hidden sm:inline">Exportar</span>

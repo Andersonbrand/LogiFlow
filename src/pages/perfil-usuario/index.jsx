@@ -116,7 +116,7 @@ export default function PerfilUsuario() {
         setSavingSenha(true);
         setFeedbackSenha({ status: 'info', message: 'Alterando senha...' });
         try {
-            const { data: sessionData } = await supabase.auth.getSession();
+            const { data: sessionData } = await withTimeout(supabase.auth.getSession());
             if (!sessionData?.session) {
                 throw new Error('Sessão expirada. Faça logout e login novamente.');
             }

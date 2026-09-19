@@ -1921,7 +1921,7 @@ export default function CarreteiroDashboard() {
                             ) : (
                                 <>
                                     <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Nº da Nota Fiscal</label>
+                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Nº da Nota Fiscal <span className="text-red-500">*</span></label>
                                         <input value={formRegistro.numero_nota_fiscal} onChange={e => setFormRegistro(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
                                     </div>
                                     <div>
@@ -1947,6 +1947,9 @@ export default function CarreteiroDashboard() {
                                 }
                                 if (isEstoque && !formRegistro.tipo_cimento) {
                                     showToast('Selecione o tipo de cimento', 'error'); return;
+                                }
+                                if (!isEstoque && !formRegistro.numero_nota_fiscal?.trim()) {
+                                    showToast('Informe o Nº da Nota Fiscal', 'error'); return;
                                 }
                                 const payload = {
                                     ...formRegistro,

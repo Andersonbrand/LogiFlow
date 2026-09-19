@@ -25,12 +25,21 @@ export function AuthProvider({ children }) {
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const initialized = useRef(false);
+    // O listener de onAuthStateChange é registrado uma única vez (deps [])
+    // e por isso nunca "vê" o valor atualizado do state `user` — ele ficava
+    // sempre com o valor inicial (null) dentro do closure. Isso fazia a
+    // comparação abaixo (linha "Outros eventos") achar que o usuário
+    // sempre mudou, disparando getOrCreateProfile em praticamente todo
+    // evento — inclusive USER_UPDATED, gerado ao trocar a senha. Uma ref
+    // sempre reflete o valor atual, sem esse problema.
+    const userIdRef = useRef(null);
 
     useEffect(() => {
         // Inicialização — roda apenas uma vez
         supabase.auth.getSession().then(async ({ data: { session } }) => {
             const u = session?.user ?? null;
             setUser(u);
+            userIdRef.current = u?.id ?? null;
             if (u) {
                 const p = await getOrCreateProfile(u);
                 setProfile(p);
@@ -47,12 +56,14 @@ export function AuthProvider({ children }) {
 
             if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !u)) {
                 setUser(null);
+                userIdRef.current = null;
                 setProfile(null);
                 return;
             }
 
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
                 setUser(u);
+                userIdRef.current = u?.id ?? null;
                 if (u) {
                     const p = await getOrCreateProfile(u);
                     setProfile(p);
@@ -60,26 +71,17 @@ export function AuthProvider({ children }) {
                 return;
             }
 
-            // Outros eventos — atualiza se mudou
-            if (u?.id !== user?.id) {
+            // Outros eventos (ex.: USER_UPDATED após trocar a senha) —
+            // só busca o perfil de novo se o usuário realmente mudou.
+            if ((u?.id ?? null) !== userIdRef.current) {
                 setUser(u);
+                userIdRef.current = u?.id ?? null;
                 setProfile(u ? await getOrCreateProfile(u) : null);
             }
         });
 
-        // Garante que a sessão/token estejam frescos ao voltar para a aba
-        // (o autoRefreshToken do supabase-js já cuida disso em segundo plano,
-        // isso aqui é só uma checagem extra ao focar a aba novamente)
-        const handleVisibility = () => {
-            if (!document.hidden) {
-                supabase.auth.getSession().catch(() => {});
-            }
-        };
-        document.addEventListener('visibilitychange', handleVisibility);
-
         return () => {
             subscription.unsubscribe();
-            document.removeEventListener('visibilitychange', handleVisibility);
         };
     }, []); // eslint-disable-line
 
