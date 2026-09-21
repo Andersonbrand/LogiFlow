@@ -226,6 +226,13 @@ export default function MotoristaDashboard() {
             const abastOriginal = editingAbastId ? abast.find(a => a.id === editingAbastId) : null;
             const payload = {
                 ...formAbast, motorista_id: user.id,
+                // Campo deixado em branco (ex: só abasteceu Diesel, sem Arla)
+                // chegava como string vazia '' e o Postgres rejeita isso numa
+                // coluna numeric — precisa virar 0.
+                litros_diesel: Number(formAbast.litros_diesel || 0),
+                valor_diesel: Number(formAbast.valor_diesel || 0),
+                litros_arla: Number(formAbast.litros_arla || 0),
+                valor_arla: Number(formAbast.valor_arla || 0),
                 veiculo_caminhao_placa: caminhao?.placa || abastOriginal?.veiculo_caminhao_placa || null,
                 veiculo_caminhao_modelo: caminhao?.modelo || abastOriginal?.veiculo_caminhao_modelo || null,
             };

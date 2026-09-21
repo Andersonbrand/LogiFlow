@@ -827,7 +827,13 @@ function TabAbastecimentos({ isAdmin, profile }) {
     const handleSubmit = async () => {
         if (!form.veiculo_id || !form.motorista_id || !form.data_abastecimento) { showToast('Preencha veículo, motorista e data', 'error'); return; }
         if (!form.cupom_fiscal?.trim()) { showToast('Informe o N° do cupom fiscal', 'error'); return; }
-        const payload = { ...form };
+        const payload = {
+            ...form,
+            litros_diesel: Number(form.litros_diesel || 0),
+            valor_diesel: Number(form.valor_diesel || 0),
+            litros_arla: Number(form.litros_arla || 0),
+            valor_arla: Number(form.valor_arla || 0),
+        };
         if (!payload.posto_id) delete payload.posto_id;
         const posto = postos.find(p => p.id === form.posto_id);
         if (posto) payload.posto = posto.nome;

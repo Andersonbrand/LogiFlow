@@ -9,6 +9,7 @@ import { fetchVeiculosProprios, fetchMotoristasProprios } from 'utils/carretasSe
 import { fetchCaminhoesPlacas } from 'utils/vehicleService';
 import SearchableSelect from 'components/ui/SearchableSelect';
 import PrettySelect from 'components/ui/PrettySelect';
+import { usePagination, PaginationBar } from 'components/ui/Pagination';
 import {
     fetchCatalogoPneus, addItemCatalogoPneus, updateItemCatalogoPneus, deleteItemCatalogoPneus, fetchCatalogoPneusRaw,
     fetchComprasPneus, createCompraPneus, deleteCompraPneus,
@@ -418,6 +419,7 @@ function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo
     // Trocas registradas em lote (várias posições marcadas de uma vez pelo
     // mecânico) aparecem agrupadas num único item expansível na tabela.
     const linhasAgrupadas = useMemo(() => agruparPneusPorLote(filtrados), [filtrados]);
+    const pneusPag = usePagination(linhasAgrupadas, 20, [filtroStatus, busca]);
     const [gruposExpandidos, setGruposExpandidos] = useState({});
     const toggleGrupo = (loteId) => setGruposExpandidos(s => ({ ...s, [loteId]: !s[loteId] }));
 
@@ -526,7 +528,7 @@ function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo
                                 </tr>
                             </thead>
                             <tbody>
-                                {linhasAgrupadas.map((item, idx) => item.grupo ? (
+                                {pneusPag.pageItems.map((item, idx) => item.grupo ? (
                                     <React.Fragment key={item.lote_id}>
                                         <tr className="border-t hover:bg-blue-50/30 transition-colors cursor-pointer"
                                             style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}
@@ -566,9 +568,8 @@ function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo
                             </tbody>
                         </table>
                     </div>
-                    <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
-                        {filtrados.length} pneu{filtrados.length !== 1 ? 's' : ''}
-                    </div>
+                    <PaginationBar page={pneusPag.page} setPage={pneusPag.setPage} totalPages={pneusPag.totalPages}
+                        totalItems={pneusPag.totalItems} pageSize={pneusPag.pageSize} itemLabel="registro" />
                 </div>
             )}
 

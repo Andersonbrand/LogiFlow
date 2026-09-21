@@ -94,7 +94,26 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
     const [diarias, setDiarias]   = useState([]);
     const [modalManut, setModalManut] = useState(null);
     const [obsManut, setObsManut]     = useState('');
-    const [modalFoto, setModalFoto]   = useState(null);
+    const [modalFoto, setModalFoto]   = useState(null); // { fotos: string[], index: number } | null
+    const [expandidosChecklist, setExpandidosChecklist] = useState(() => new Set());
+    const toggleExpandidoChecklist = (id) => {
+        setExpandidosChecklist(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    };
+    // Navegação por teclado no visualizador de fotos: ← → pra trocar, Esc pra fechar
+    useEffect(() => {
+        if (!modalFoto) return;
+        const onKey = (e) => {
+            if (e.key === 'ArrowLeft') setModalFoto(m => m && ({ ...m, index: (m.index - 1 + m.fotos.length) % m.fotos.length }));
+            else if (e.key === 'ArrowRight') setModalFoto(m => m && ({ ...m, index: (m.index + 1) % m.fotos.length }));
+            else if (e.key === 'Escape') setModalFoto(null);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [modalFoto]);
     const [modalDiaria, setModalDiaria] = useState(null);
     const [viewDiaria, setViewDiaria] = useState(null);
     const [assinando, setAssinando] = useState(false);
@@ -678,9 +697,12 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                         const ok = contarItensOk(itens);
                                         const total = entradas.length || CHECKLIST_ITENS.length;
                                         const fotos = (c.fotos_urls && c.fotos_urls.length) ? c.fotos_urls : (c.foto_url ? [c.foto_url] : []);
+                                        const isExpandido = expandidosChecklist.has(c.id);
                                         return (
-                                            <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                <div className="flex items-start justify-between mb-3 gap-2">
+                                            <div key={c.id} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                                                <div className="flex items-start justify-between gap-2 p-4 pb-3 cursor-pointer select-none"
+                                                    style={isExpandido ? { borderBottom: '1px solid #F1F5F9' } : undefined}
+                                                    onClick={() => toggleExpandidoChecklist(c.id)}>
                                                     <div>
                                                         <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.veiculo?.placa || c.veiculo_caminhao_placa || 'Sem placa'}</p>
                                                         <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
@@ -688,7 +710,8 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                             {c.odometro != null && <> · <Icon name="Gauge" size={11} className="inline -mt-0.5" />{' '}{Number(c.odometro).toLocaleString('pt-BR')} km</>}
                                                         </p>
                                                     </div>
-                                                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                                    <div className="flex items-center gap-1.5 flex-wrap justify-end flex-shrink-0">
+                                                        <span className="text-xs font-semibold mr-0.5" style={{ color: ok === total ? '#059669' : ok >= total * 0.7 ? '#D97706' : '#DC2626' }}>{ok}/{total}</span>
                                                         {c.aprovado
                                                             ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"><Icon name="CheckCircle2" size={11} />Aprovado</span>
                                                             : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Icon name="Clock" size={11} />Pendente</span>
@@ -699,8 +722,14 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                                 <Icon name="Camera" size={11} />{fotos.length} foto{fotos.length > 1 ? 's' : ''}
                                                             </span>
                                                         )}
+                                                        <button onClick={(e) => { e.stopPropagation(); toggleExpandidoChecklist(c.id); }} title={isExpandido ? 'Recolher' : 'Expandir'}
+                                                            className="w-6 h-6 rounded-md flex items-center justify-center hover:bg-gray-100 transition-colors flex-shrink-0">
+                                                            <Icon name={isExpandido ? 'ChevronUp' : 'ChevronDown'} size={16} color="var(--color-muted-foreground)" />
+                                                        </button>
                                                     </div>
                                                 </div>
+                                                {isExpandido && (
+                                                <div className="p-4 pt-3">
                                                 <div className="mb-3">
                                                     <div className="flex justify-between text-xs mb-1">
                                                         <span style={{ color: 'var(--color-muted-foreground)' }}>Itens verificados</span>
@@ -733,7 +762,7 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                     <div className="flex flex-wrap gap-2 mb-3">
                                                         {fotos.map((f, idx) => (
                                                             <div key={idx} className="relative group">
-                                                                <button onClick={() => setModalFoto(f)}>
+                                                                <button onClick={() => setModalFoto({ fotos, index: idx })}>
                                                                     <img src={f} alt={`Foto ${idx + 1}`} className="w-16 h-16 rounded-lg border object-cover hover:opacity-80 transition-opacity" style={{ borderColor: 'var(--color-border)' }} />
                                                                 </button>
                                                                 <button onClick={() => downloadImagem(f, `checklist_${c.veiculo?.placa || c.veiculo_caminhao_placa || c.id}_${idx + 1}.jpg`)} title="Baixar foto"
@@ -767,6 +796,8 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                         <Icon name="Trash2" size={16} />Excluir
                                                     </button>
                                                 </div>
+                                                </div>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -1074,14 +1105,31 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(4px)' }} onClick={() => setModalFoto(null)}>
                     <div className="relative max-w-2xl w-full" onClick={e => e.stopPropagation()}>
                         <div className="absolute -top-10 right-0 flex items-center gap-3">
-                            <button onClick={() => downloadImagem(modalFoto, `checklist_foto_${Date.now()}.jpg`)} className="text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
+                            {modalFoto.fotos.length > 1 && (
+                                <span className="text-white opacity-70 text-xs font-medium">{modalFoto.index + 1} / {modalFoto.fotos.length}</span>
+                            )}
+                            <button onClick={() => downloadImagem(modalFoto.fotos[modalFoto.index], `checklist_foto_${modalFoto.index + 1}_${Date.now()}.jpg`)} className="text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
                                 <Icon name="Download" size={16} color="white" /> Baixar
                             </button>
                             <button onClick={() => setModalFoto(null)} className="text-white opacity-80 hover:opacity-100 flex items-center gap-1 text-sm">
                                 <Icon name="X" size={16} color="white" /> Fechar
                             </button>
                         </div>
-                        <img src={modalFoto} alt="Foto checklist" className="rounded-xl max-w-2xl w-full max-h-[80vh] object-contain" />
+                        {modalFoto.fotos.length > 1 && (
+                            <button onClick={() => setModalFoto(m => ({ ...m, index: (m.index - 1 + m.fotos.length) % m.fotos.length }))}
+                                className="absolute left-0 sm:-left-14 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-colors"
+                                title="Foto anterior">
+                                <Icon name="ChevronLeft" size={22} color="white" />
+                            </button>
+                        )}
+                        <img src={modalFoto.fotos[modalFoto.index]} alt="Foto checklist" className="rounded-xl max-w-2xl w-full max-h-[80vh] object-contain" />
+                        {modalFoto.fotos.length > 1 && (
+                            <button onClick={() => setModalFoto(m => ({ ...m, index: (m.index + 1) % m.fotos.length }))}
+                                className="absolute right-0 sm:-right-14 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-colors"
+                                title="Próxima foto">
+                                <Icon name="ChevronRight" size={22} color="white" />
+                            </button>
+                        )}
                     </div>
                 </div>
             )}

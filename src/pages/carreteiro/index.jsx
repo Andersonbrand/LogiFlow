@@ -454,6 +454,8 @@ export default function CarreteiroDashboard() {
         const payload = {
             ...formAbast,
             motorista_id: user.id,
+            litros_diesel: Number(formAbast.litros_diesel || 0),
+            litros_arla:   Number(formAbast.litros_arla || 0),
             valor_diesel: valorDiesel.toFixed(2),
             valor_arla:   valorArla.toFixed(2),
         };
