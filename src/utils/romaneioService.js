@@ -50,6 +50,33 @@ export async function fetchRomaneios() {
     return (data || []).map(addMargem);
 }
 
+// Versão sem os joins de romaneio_pedidos/romaneio_itens/materials — pra quem
+// só usa os campos soltos do romaneio (dashboard, KPIs, painel de custos,
+// telas administrativas). Os joins de pedidos/itens são pesados (3 tabelas
+// aninhadas) e várias páginas nunca chegam a usar esse dado — buscar só o
+// necessário reduz bastante o custo de cada consulta, principalmente porque
+// essas páginas recarregam via Realtime toda vez que qualquer romaneio muda.
+export async function fetchRomaneiosResumo() {
+    const { data, error } = await supabase
+        .from('romaneios')
+        .select(`
+            id, numero, motorista, motorista_id, placa, destino, status,
+            aprovado, aprovado_por, aprovado_em, status_aprovacao, motivo_reprovacao,
+            peso_total, saida, chegada, observacoes, vehicle_id, paradas,
+            distancia_km, custo_combustivel, custo_pedagio,
+            custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao, diaria_criada_em, diaria_mes_referencia,
+            assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at,
+            valor_frete, valor_frete_calculado,
+            valor_total_carga, created_at
+        `)
+        .eq('is_rascunho', false)
+        .order('created_at', { ascending: false })
+        .limit(200);
+    if (error) { console.error('[romaneioService] fetchRomaneiosResumo error:', error); throw error; }
+    console.log('[romaneioService] fetchRomaneiosResumo retornou:', (data||[]).length, 'registros');
+    return (data || []).map(addMargem);
+}
+
 export async function fetchRomaneioById(id) {
     const { data, error } = await supabase
         .from('romaneios')

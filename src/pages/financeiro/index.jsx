@@ -6,7 +6,7 @@ import Button from 'components/ui/Button';
 import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
-import { fetchRomaneios } from 'utils/romaneioService';
+import { fetchRomaneiosResumo } from 'utils/romaneioService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import * as XLSX from 'xlsx';
 
@@ -28,7 +28,7 @@ export default function Financeiro() {
     const { toast, showToast }                  = useToast();
 
     const load = useCallback(async () => {
-        try { setLoading(true); setRomaneios(await fetchRomaneios()); }
+        try { setLoading(true); setRomaneios(await fetchRomaneiosResumo()); }
         catch (err) { showToast('Erro: ' + err.message, 'error'); }
         finally { setLoading(false); }
     }, []); // eslint-disable-line

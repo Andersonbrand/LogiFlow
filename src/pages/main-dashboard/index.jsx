@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { fetchRomaneios } from "utils/romaneioService";
+import { fetchRomaneiosResumo } from "utils/romaneioService";
 import { fetchVehicles } from "utils/vehicleService";
 import { fetchMaintenanceAlerts, resolveMaintenanceAlert, createMaintenanceAlert } from "utils/userService";
 import { useNavigate } from "react-router-dom";
@@ -83,7 +83,7 @@ export default function MainDashboard() {
         try {
             setLoading(true);
             const [rom, veh, alerts] = await Promise.all([
-                fetchRomaneios(), fetchVehicles(), fetchMaintenanceAlerts()
+                fetchRomaneiosResumo(), fetchVehicles(), fetchMaintenanceAlerts()
             ]);
             // Forçar novos arrays/objetos para garantir que useMemo recompute
             setRomaneios([...rom]);
@@ -131,12 +131,15 @@ export default function MainDashboard() {
 
     useEffect(() => {
         load();
-        // Polling a cada 15s — garante atualização mesmo sem Realtime
-        const interval = setInterval(load, 15000);
-        // Realtime: atualiza instantaneamente quando há mudança no banco
+        // Polling bem espaçado — só uma rede de segurança pro caso raro do
+        // Realtime cair silenciosamente; não é mais o mecanismo principal de
+        // atualização (isso já é o Realtime abaixo + o reload ao focar a aba).
+        const interval = setInterval(load, 4 * 60 * 1000);
+        // Realtime: atualiza quando há mudança em romaneios (dado que muda o
+        // dia inteiro). "vehicles" não está mais assinado aqui — a frota muda
+        // pouco, e um cadastro/edição de veículo já aparece ao focar a aba.
         const unsubRom = subscribeTabela('romaneios', load);
-        const unsubVeh = subscribeTabela('vehicles', load);
-        return () => { clearInterval(interval); unsubRom(); unsubVeh(); };
+        return () => { clearInterval(interval); unsubRom(); };
     }, []);
     useRecarregarAoVoltar(load);
 

@@ -858,9 +858,12 @@ export default function MotoristaDashboard() {
                                     <Field label="Litros">
                                         <input type="number" step="0.01" value={formAbast.litros_diesel} onChange={e => handleLitros('litros_diesel', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" />
                                     </Field>
-                                    <Field label="Valor R$ (automático)">
-                                        <input type="number" step="0.01" value={formAbast.valor_diesel} readOnly tabIndex={-1}
-                                            className={inputCls} style={{ ...inputStyle, backgroundColor: '#F1F5F9', color: 'var(--color-muted-foreground)', cursor: 'not-allowed' }} placeholder="0,00" />
+                                    <Field label="Valor calculado">
+                                        <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0F9FF', color: '#1D4ED8' }}>
+                                            {formAbast.valor_diesel
+                                                ? Number(formAbast.valor_diesel).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                                : 'R$ 0,00'}
+                                        </div>
                                     </Field>
                                 </div>
                             </div>
@@ -870,11 +873,18 @@ export default function MotoristaDashboard() {
                                     <Field label="Litros">
                                         <input type="number" step="0.01" value={formAbast.litros_arla} onChange={e => handleLitros('litros_arla', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" />
                                     </Field>
-                                    <Field label="Valor R$ (automático)">
-                                        <input type="number" step="0.01" value={formAbast.valor_arla} readOnly tabIndex={-1}
-                                            className={inputCls} style={{ ...inputStyle, backgroundColor: '#F1F5F9', color: 'var(--color-muted-foreground)', cursor: 'not-allowed' }} placeholder="0,00" />
+                                    <Field label="Valor calculado">
+                                        <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0FDF4', color: '#059669' }}>
+                                            {formAbast.valor_arla
+                                                ? Number(formAbast.valor_arla).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                                : 'R$ 0,00'}
+                                        </div>
                                     </Field>
                                 </div>
+                            </div>
+                            <div className="sm:col-span-2 p-2 rounded-lg text-sm font-bold flex items-center justify-between" style={{ backgroundColor: '#7C3AED', color: 'white' }}>
+                                <span>Total do abastecimento:</span>
+                                <span>{(Number(formAbast.valor_diesel || 0) + Number(formAbast.valor_arla || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                             </div>
                             <div className="sm:col-span-2">
                                 <Field label="Observações">

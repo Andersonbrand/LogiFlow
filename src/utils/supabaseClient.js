@@ -108,14 +108,26 @@ if (typeof document !== 'undefined') {
 
 // Uso: const unsub = subscribeTabela('romaneios', load)
 // Retorna função para cancelar a assinatura (use no cleanup do useEffect)
-export function subscribeTabela(tabela, callback) {
+//
+// Debounce: se vários eventos chegarem em rajada (ex: alguém salvando vários
+// itens em sequência rápida), sem isso cada um dispararia uma recarga
+// completa da página separada. Aqui, cada evento novo reinicia um pequeno
+// atraso (900ms) e só o ÚLTIMO da rajada de fato chama o callback — uma
+// recarga só, não N.
+export function subscribeTabela(tabela, callback, debounceMs = 900) {
+    let timer = null;
+    const dispararComDebounce = (payload) => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => callback(payload), debounceMs);
+    };
+
     const channel = supabase
         .channel(`realtime:${tabela}:${Date.now()}`)
         .on('postgres_changes',
             { event: '*', schema: 'public', table: tabela },
             (payload) => {
                 console.log(`🔔 Realtime [${tabela}]:`, payload.eventType);
-                callback(payload);
+                dispararComDebounce(payload);
             }
         )
         .subscribe((status) => {
@@ -127,5 +139,5 @@ export function subscribeTabela(tabela, callback) {
             }
         });
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { if (timer) clearTimeout(timer); supabase.removeChannel(channel); };
 }

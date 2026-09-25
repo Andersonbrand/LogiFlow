@@ -20,7 +20,7 @@ import { exportVehiclesToExcel, parseVehiclesFromFile, downloadVehiclesTemplate,
 import { useAuth } from "utils/AuthContext";
 import AccessDeniedModal from "components/ui/AccessDeniedModal";
 import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle, fetchCaminhoesPlacas } from "utils/vehicleService";
-import { fetchRomaneios } from "utils/romaneioService";
+import { fetchRomaneiosResumo } from "utils/romaneioService";
 import {
     fetchAbastecimentos, createAbastecimento, updateAbastecimento, deleteAbastecimento,
     fetchChecklists, updateChecklist, aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
@@ -1174,20 +1174,50 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                     </div>
                                 </Field>
                             </div>
-                            <Field label="Diesel (L)">
-                                <input type="number" step="0.1" min="0" value={formAbastEdit.litros_diesel} onChange={e => handleLitrosAbast('litros_diesel', e.target.value)} className={inputCls} style={inputStyle} placeholder="0" />
-                            </Field>
-                            <Field label="R$ Diesel (automático)">
-                                <input type="number" step="0.01" min="0" value={formAbastEdit.valor_diesel} readOnly tabIndex={-1}
-                                    className={inputCls} style={{ ...inputStyle, backgroundColor: '#F1F5F9', color: 'var(--color-muted-foreground)', cursor: 'not-allowed' }} placeholder="0,00" />
-                            </Field>
-                            <Field label="Arla 32 (L)">
-                                <input type="number" step="0.1" min="0" value={formAbastEdit.litros_arla} onChange={e => handleLitrosAbast('litros_arla', e.target.value)} className={inputCls} style={inputStyle} placeholder="0" />
-                            </Field>
-                            <Field label="R$ Arla (automático)">
-                                <input type="number" step="0.01" min="0" value={formAbastEdit.valor_arla} readOnly tabIndex={-1}
-                                    className={inputCls} style={{ ...inputStyle, backgroundColor: '#F1F5F9', color: 'var(--color-muted-foreground)', cursor: 'not-allowed' }} placeholder="0,00" />
-                            </Field>
+                            <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-xs font-semibold text-blue-700">🛢️ Diesel</p>
+                                    {getPrecoAbast(formAbastEdit.posto_id, 'diesel') > 0 && (
+                                        <span className="text-xs text-blue-600">R$ {getPrecoAbast(formAbastEdit.posto_id, 'diesel').toFixed(3)}/L</span>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Litros">
+                                        <input type="number" step="0.1" min="0" value={formAbastEdit.litros_diesel} onChange={e => handleLitrosAbast('litros_diesel', e.target.value)} className={inputCls} style={inputStyle} placeholder="0" />
+                                    </Field>
+                                    <Field label="Valor calculado">
+                                        <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0F9FF', color: '#1D4ED8' }}>
+                                            {formAbastEdit.valor_diesel
+                                                ? Number(formAbastEdit.valor_diesel).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                                : 'R$ 0,00'}
+                                        </div>
+                                    </Field>
+                                </div>
+                            </div>
+                            <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-xs font-semibold text-emerald-700">💧 ARLA 32</p>
+                                    {getPrecoAbast(formAbastEdit.posto_id, 'arla') > 0 && (
+                                        <span className="text-xs text-emerald-600">R$ {getPrecoAbast(formAbastEdit.posto_id, 'arla').toFixed(3)}/L</span>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Litros">
+                                        <input type="number" step="0.1" min="0" value={formAbastEdit.litros_arla} onChange={e => handleLitrosAbast('litros_arla', e.target.value)} className={inputCls} style={inputStyle} placeholder="0" />
+                                    </Field>
+                                    <Field label="Valor calculado">
+                                        <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0FDF4', color: '#059669' }}>
+                                            {formAbastEdit.valor_arla
+                                                ? Number(formAbastEdit.valor_arla).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                                : 'R$ 0,00'}
+                                        </div>
+                                    </Field>
+                                </div>
+                            </div>
+                            <div className="sm:col-span-2 p-2 rounded-lg text-sm font-bold flex items-center justify-between" style={{ backgroundColor: '#7C3AED', color: 'white' }}>
+                                <span>Total do abastecimento:</span>
+                                <span>{(Number(formAbastEdit.valor_diesel || 0) + Number(formAbastEdit.valor_arla || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                            </div>
                         </div>
                         <div className="flex gap-3 p-5 pt-0 justify-end">
                             <button onClick={() => setModalAbastEdit(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
@@ -1507,7 +1537,7 @@ export default function VehicleFleetManagement() {
         (async () => {
             try {
                 setLoading(true);
-                const [data, roms] = await Promise.all([fetchVehicles(), fetchRomaneios()]);
+                const [data, roms] = await Promise.all([fetchVehicles(), fetchRomaneiosResumo()]);
                 setVehicles(data); setRomaneios(roms);
             } catch (err) { showToast("Erro ao carregar: " + err.message, "error"); }
             finally { setLoading(false); }

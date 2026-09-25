@@ -8,7 +8,7 @@ import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
 import { fetchAllUsers, updateUserProfile, fetchMaintenanceAlerts, resolveMaintenanceAlert, createDriverUser, fetchDriverProfiles, deleteDriverUser } from 'utils/userService';
 import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
-import { fetchRomaneios, aprovarRomaneio, reprovarRomaneio } from 'utils/romaneioService';
+import { fetchRomaneiosResumo, aprovarRomaneio, reprovarRomaneio } from 'utils/romaneioService';
 import { fetchBonificacoesConsolidadas } from 'utils/bonificacaoService';
 import { exportBonificacoesAdminExcel } from 'utils/excelUtils';
 import { fetchCorredores, upsertCorredor, deleteCorredor, invalidarCache } from 'utils/corredoresService';
@@ -93,7 +93,7 @@ export default function AdminPanel() {
             const [u, a, rom] = await Promise.all([
                 fetchAllUsers(),
                 fetchMaintenanceAlerts(),
-                fetchRomaneios(),
+                fetchRomaneiosResumo(),
             ]);
             setUsers(u || []);
             setAlerts(a || []);

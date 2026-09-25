@@ -313,8 +313,9 @@ export default function CarreteiroDashboard() {
         const unsubRomaneios = subscribeTabela('romaneios', load);
         const unsubPontos    = subscribeTabela('carretas_pontos_parada', load);
         const unsubRomCar    = subscribeTabela('carretas_romaneios', load);
-        // Polling de 30s como fallback — garante que status de romaneios
-        // atualizado pelo admin apareça mesmo se o Realtime falhar.
+        // Polling bem espaçado como fallback — garante que status de romaneios
+        // atualizado pelo admin apareça mesmo se o Realtime falhar (o Realtime
+        // acima + o reload ao focar a aba já cobrem o caso comum).
         // Atualiza AMBAS as fontes: carretas_romaneios e romaneios (admin).
         const pollInterval = setInterval(async () => {
             if (!user?.id) return;
@@ -327,7 +328,7 @@ export default function CarreteiroDashboard() {
                 setRomaneiosFerragem((roms || []).filter(r => r.tipo_carga === 'ferragem'));
                 setRomaneiosPrincipais(romsAdmin || []);
             } catch { /* silencioso */ }
-        }, 30000);
+        }, 4 * 60 * 1000);
         return () => { unsubViagens(); unsubChk(); unsubCarreg(); unsubRomaneios(); unsubPontos(); unsubRomCar(); clearInterval(pollInterval); };
     }, [load]);
     useRecarregarAoVoltar(load);
