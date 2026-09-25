@@ -62,7 +62,8 @@ function comprimirImagem(file, maxDim = MAX_DIMENSAO, qualidade = QUALIDADE_JPEG
 }
 
 export default function MultiFotoField({ fotos = [], onChange, max = 8, showToast }) {
-    const inputRef = useRef(null);
+    const inputCameraRef = useRef(null);
+    const inputGaleriaRef = useRef(null);
     const [processando, setProcessando] = useState(false);
 
     const handleFiles = async (e) => {
@@ -129,23 +130,42 @@ export default function MultiFotoField({ fotos = [], onChange, max = 8, showToas
                     </div>
                 ))}
                 {fotos.length < max && (
-                    <button type="button" onClick={() => inputRef.current?.click()} disabled={processando}
-                        className="w-20 h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 hover:bg-gray-50 transition-colors disabled:opacity-60"
-                        style={{ borderColor: '#93C5FD' }}>
-                        {processando ? (
-                            <div className="animate-spin h-4 w-4 rounded-full border-2" style={{ borderColor: '#1D4ED8', borderTopColor: 'transparent' }} />
-                        ) : (
-                            <Icon name="Camera" size={18} color="#1D4ED8" />
-                        )}
-                        <span className="text-[10px] font-medium" style={{ color: '#1D4ED8' }}>{processando ? 'Aguarde...' : 'Adicionar'}</span>
-                    </button>
+                    <>
+                        <button type="button" onClick={() => inputCameraRef.current?.click()} disabled={processando}
+                            className="w-20 h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 hover:bg-gray-50 transition-colors disabled:opacity-60"
+                            style={{ borderColor: '#93C5FD' }} title="Tirar foto com a câmera">
+                            {processando ? (
+                                <div className="animate-spin h-4 w-4 rounded-full border-2" style={{ borderColor: '#1D4ED8', borderTopColor: 'transparent' }} />
+                            ) : (
+                                <Icon name="Camera" size={18} color="#1D4ED8" />
+                            )}
+                            <span className="text-[10px] font-medium" style={{ color: '#1D4ED8' }}>{processando ? 'Aguarde...' : 'Câmera'}</span>
+                        </button>
+                        <button type="button" onClick={() => inputGaleriaRef.current?.click()} disabled={processando}
+                            className="w-20 h-20 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 hover:bg-gray-50 transition-colors disabled:opacity-60"
+                            style={{ borderColor: '#C4B5FD' }} title="Escolher fotos da galeria">
+                            {processando ? (
+                                <div className="animate-spin h-4 w-4 rounded-full border-2" style={{ borderColor: '#7C3AED', borderTopColor: 'transparent' }} />
+                            ) : (
+                                <Icon name="Image" size={18} color="#7C3AED" />
+                            )}
+                            <span className="text-[10px] font-medium" style={{ color: '#7C3AED' }}>{processando ? 'Aguarde...' : 'Galeria'}</span>
+                        </button>
+                    </>
                 )}
             </div>
-            {/* Sem `capture`: em mobile isso força a câmera e impede escolher
-                várias fotos já tiradas na galeria de uma vez só. Sem o
-                atributo, o próprio SO ainda oferece "Câmera" como opção no
-                seletor, então nada é perdido. */}
-            <input ref={inputRef} type="file" accept="image/*" multiple onChange={handleFiles} className="hidden" />
+            {/* Dois inputs separados — em vez de um só e ambíguo:
+                - Câmera: `capture="environment"` sem `multiple` (foto única,
+                  abre a câmera direto e de forma confiável em qualquer
+                  aparelho, já que não compete com a seleção múltipla).
+                - Galeria: sem `capture`, com `multiple` (várias fotos de
+                  uma vez, sem forçar/tentar a câmera).
+                Antes havia um único input sem `capture` esperando que o
+                próprio SO oferecesse a opção de câmera no seletor — mas em
+                vários aparelhos/navegadores isso não acontece e só a
+                galeria é aberta, sem alternativa de tirar foto na hora. */}
+            <input ref={inputCameraRef} type="file" accept="image/*" capture="environment" onChange={handleFiles} className="hidden" />
+            <input ref={inputGaleriaRef} type="file" accept="image/*" multiple onChange={handleFiles} className="hidden" />
         </div>
     );
 }

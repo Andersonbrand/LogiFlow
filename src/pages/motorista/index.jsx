@@ -7,6 +7,7 @@ import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
+import { usePageTabs } from 'utils/PageTabsContext';
 import { useConfirm } from 'components/ui/ConfirmDialog';
 import { supabase, subscribeTabela } from 'utils/supabaseClient';
 import { calcularBonificacao } from 'utils/bonificacaoService';
@@ -68,7 +69,6 @@ export default function MotoristaDashboard() {
     // Fica separado de `periodoCustom` de propósito: só deve disparar busca no banco quando o usuário
     // escolher as duas datas E clicar em "Buscar viagens" — nunca ao selecionar só a data inicial.
     const [periodoCustomInput, setPeriodoCustomInput] = useState(null); // { inicio, fim } | null
-    const [drawerOpen, setDrawerOpen] = useState(false);
     const [loading, setLoading]       = useState(true);
 
     const [romaneios, setRomaneios]   = useState([]);
@@ -390,6 +390,11 @@ export default function MotoristaDashboard() {
         { id: 'bonificacoes',   label: 'Bonificações',   icon: 'DollarSign' },
     ];
     const tabAtual = TABS.find(t => t.id === tab);
+    const { setPageTabs } = usePageTabs();
+    useEffect(() => {
+        setPageTabs(TABS, tab, setTab);
+        return () => setPageTabs(null);
+    }, [tab]); // eslint-disable-line
 
     // Helper: preço efetivo para exibir no modal
     const precoDieselEfetivo = getPreco(formAbast.posto_id, 'diesel');
@@ -475,11 +480,6 @@ export default function MotoristaDashboard() {
                                     <button onClick={exportar} className="flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
                                         <Icon name="FileDown" size={14} color="currentColor" />
                                         <span className="hidden sm:inline">Exportar</span>
-                                    </button>
-                                    <button onClick={() => setDrawerOpen(true)}
-                                        className="lg:hidden flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50"
-                                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
-                                        <Icon name="Menu" size={16} color="currentColor" />
                                     </button>
                                 </div>
                             </div>
@@ -781,45 +781,6 @@ export default function MotoristaDashboard() {
                 </div>
             </main>
 
-            {/* Drawer mobile */}
-            {drawerOpen && (
-                <>
-                    <div className="fixed inset-0 z-40 lg:hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={() => setDrawerOpen(false)} />
-                    <div className="fixed top-0 left-0 bottom-0 z-50 lg:hidden flex flex-col overflow-y-auto shadow-2xl"
-                        style={{ width: 240, backgroundColor: 'var(--color-card)' }}>
-                        <div className="flex items-center justify-between px-4 py-4 border-b flex-shrink-0"
-                            style={{ borderColor: 'var(--color-border)', paddingTop: 'max(env(safe-area-inset-top), 16px)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0"
-                                    style={{ background: 'linear-gradient(135deg, #1D4ED8, #7C3AED)' }}>
-                                    {(profile?.name || 'M')[0].toUpperCase()}
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="font-semibold text-sm truncate" style={{ color: 'var(--color-text-primary)' }}>{profile?.name || 'Motorista'}</p>
-                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Motorista</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setDrawerOpen(false)} className="p-2 rounded-lg hover:bg-gray-100 flex-shrink-0">
-                                <Icon name="X" size={20} color="var(--color-muted-foreground)" />
-                            </button>
-                        </div>
-                        <nav className="flex flex-col gap-1 p-3 flex-1">
-                            {TABS.map(t => {
-                                const ativo = tab === t.id;
-                                return (
-                                    <button key={t.id} onClick={() => { setTab(t.id); setDrawerOpen(false); }}
-                                        className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all text-left"
-                                        style={{ backgroundColor: ativo ? 'var(--color-primary)' : 'transparent', color: ativo ? '#fff' : 'var(--color-muted-foreground)' }}>
-                                        <Icon name={t.icon} size={18} color={ativo ? '#fff' : 'currentColor'} />
-                                        <span>{t.label}</span>
-                                    </button>
-                                );
-                            })}
-                        </nav>
-                    </div>
-                </>
-            )}
-
             {/* Modal Abastecimento */}
             {modalAbast && (
                 <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
@@ -897,8 +858,9 @@ export default function MotoristaDashboard() {
                                     <Field label="Litros">
                                         <input type="number" step="0.01" value={formAbast.litros_diesel} onChange={e => handleLitros('litros_diesel', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" />
                                     </Field>
-                                    <Field label="Valor R$">
-                                        <input type="number" step="0.01" value={formAbast.valor_diesel} onChange={e => setFormAbast(f => ({ ...f, valor_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                    <Field label="Valor R$ (automático)">
+                                        <input type="number" step="0.01" value={formAbast.valor_diesel} readOnly tabIndex={-1}
+                                            className={inputCls} style={{ ...inputStyle, backgroundColor: '#F1F5F9', color: 'var(--color-muted-foreground)', cursor: 'not-allowed' }} placeholder="0,00" />
                                     </Field>
                                 </div>
                             </div>
@@ -908,8 +870,9 @@ export default function MotoristaDashboard() {
                                     <Field label="Litros">
                                         <input type="number" step="0.01" value={formAbast.litros_arla} onChange={e => handleLitros('litros_arla', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" />
                                     </Field>
-                                    <Field label="Valor R$">
-                                        <input type="number" step="0.01" value={formAbast.valor_arla} onChange={e => setFormAbast(f => ({ ...f, valor_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                                    <Field label="Valor R$ (automático)">
+                                        <input type="number" step="0.01" value={formAbast.valor_arla} readOnly tabIndex={-1}
+                                            className={inputCls} style={{ ...inputStyle, backgroundColor: '#F1F5F9', color: 'var(--color-muted-foreground)', cursor: 'not-allowed' }} placeholder="0,00" />
                                     </Field>
                                 </div>
                             </div>

@@ -872,7 +872,9 @@ function ModalDespesa({ modal, despesasExistentes = [], categorias, onCategorias
     };
 
     const handleSave = async (forcarApesarDeDuplicata = false) => {
+        if (saving) return; // já tem um salvamento em andamento — ignora clique repetido
         if (!form.categoria || !form.valor || !form.data_despesa) { showToast('Categoria, valor e data são obrigatórios', 'error'); return; }
+        setSaving(true); // trava já aqui — a checagem de duplicata abaixo também é assíncrona
 
         if (!forcarApesarDeDuplicata) {
             const excluirId = isEdit ? modal.data.id : undefined;
@@ -897,11 +899,11 @@ function ModalDespesa({ modal, despesasExistentes = [], categorias, onCategorias
                 setDuplicatas(achados);
                 showToast(`⚠️ Possível duplicidade encontrada (${achados.length}) — revise antes de salvar.`, 'error');
                 corpoModalRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                setSaving(false);
                 return;
             }
         }
 
-        setSaving(true);
         try {
             const payload = {
                 ...form,

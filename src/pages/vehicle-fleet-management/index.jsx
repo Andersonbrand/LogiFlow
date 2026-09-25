@@ -23,7 +23,7 @@ import { fetchVehicles, createVehicle, updateVehicle, deleteVehicle, fetchCaminh
 import { fetchRomaneios } from "utils/romaneioService";
 import {
     fetchAbastecimentos, createAbastecimento, updateAbastecimento, deleteAbastecimento,
-    fetchChecklists, aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
+    fetchChecklists, updateChecklist, aprovarChecklistComNotificacao, reprovarChecklistComNotificacao,
     criarRascunhoOSDeChecklist,
     deleteChecklist,
     fetchDiarias, createDiaria, updateDiaria, deleteDiaria, assinarDiaria, desassinarDiaria,
@@ -33,6 +33,8 @@ import {
 import { deleteRomaneio, assinarDiariaRomaneio, desassinarDiariaRomaneio } from "utils/romaneioService";
 import { supabase, subscribeTabela } from "utils/supabaseClient";
 import PrettySelect from 'components/ui/PrettySelect';
+import ChecklistItemsField from 'components/ui/ChecklistItemsField';
+import MultiFotoField from 'components/ui/MultiFotoField';
 
 const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
@@ -177,6 +179,10 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
     const [savingAbastEdit, setSavingAbastEdit] = useState(false);
     const [postos, setPostos] = useState([]);
     const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
+    const [checklistItens, setChecklistItens] = useState([]);
+    const [modalEditChecklist, setModalEditChecklist] = useState(null); // id do checklist sendo editado
+    const [formEditChecklist, setFormEditChecklist] = useState(null);
+    const [savingEditChecklist, setSavingEditChecklist] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -212,19 +218,21 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                 return dataRef >= f.dataInicio && dataRef <= dataFimTs;
             });
 
-            const [a, ch, d, vc, ps, cfg] = await Promise.all([
+            const [a, ch, d, vc, ps, cfg, ci] = await Promise.all([
                 fetchAbastecimentos(f),
                 fetchChecklists({ motoristaId: motorista.id }),
                 fetchDiarias({ motoristaId: motorista.id, dataInicio: f.dataInicio, dataFim: f.dataFim }),
                 fetchCaminhoesPlacas(),
                 fetchPostos().catch(() => []),
                 fetchConfigAbastecimento().catch(() => ({ preco_diesel: 0, preco_arla: 0 })),
+                fetchChecklistItens(true).catch(() => []),
             ]);
             setAbast(a); setChecklists(ch); setDiarias(d);
             setRomaneiosDiarias(romaneiosDiariasFiltrados);
             setVeiculosCaminhao(vc || []);
             setPostos(ps || []);
             setConfigAbast(cfg || { preco_diesel: 0, preco_arla: 0 });
+            setChecklistItens(ci || []);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [motorista.id, motorista.name, mes, usarPeriodo, periodoCustom]); // eslint-disable-line
@@ -316,6 +324,39 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
         if (!ok) return;
         try { await deleteChecklist(id); showToast('Checklist excluído.', 'success'); load(); }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+    const openEditChecklist = (c) => {
+        setFormEditChecklist({
+            veiculo_caminhao_id: c.veiculo_caminhao_id != null ? String(c.veiculo_caminhao_id) : '',
+            odometro: c.odometro ?? '',
+            itens: c.itens || {},
+            problemas: c.problemas || '',
+            necessidades: c.necessidades || '',
+            observacoes_livres: c.observacoes_livres || '',
+            fotos_urls: c.fotos_urls || (c.foto_url ? [c.foto_url] : []),
+        });
+        setModalEditChecklist(c.id);
+    };
+    const handleSalvarEditChecklist = async () => {
+        if (!formEditChecklist.veiculo_caminhao_id) { showToast('Selecione o veículo', 'error'); return; }
+        if (formEditChecklist.odometro === '' || formEditChecklist.odometro == null) { showToast('Informe o odômetro', 'error'); return; }
+        setSavingEditChecklist(true);
+        try {
+            const caminhao = veiculosCaminhao.find(v => String(v.id) === String(formEditChecklist.veiculo_caminhao_id));
+            await updateChecklist(modalEditChecklist, {
+                veiculo_caminhao_id: formEditChecklist.veiculo_caminhao_id,
+                veiculo_caminhao_placa: caminhao?.placa || null,
+                odometro: Number(formEditChecklist.odometro),
+                itens: formEditChecklist.itens,
+                problemas: formEditChecklist.problemas,
+                necessidades: formEditChecklist.necessidades,
+                observacoes_livres: formEditChecklist.observacoes_livres,
+                fotos_urls: formEditChecklist.fotos_urls,
+            });
+            showToast('Checklist atualizado!', 'success');
+            setModalEditChecklist(null); setFormEditChecklist(null); load();
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingEditChecklist(false); }
     };
     const handleDeleteRomaneio = async (id) => {
         const ok = await confirm({ title: 'Excluir romaneio?', message: 'O romaneio e todos os seus dados serão removidos permanentemente da tela do motorista.', confirmLabel: 'Excluir', variant: 'danger' });
@@ -792,6 +833,9 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                                                     <button onClick={() => printChecklist(c, CHECKLIST_ITENS)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
                                                         <Icon name="Printer" size={13} color="var(--color-muted-foreground)" />Imprimir
                                                     </button>
+                                                    <button onClick={() => openEditChecklist(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
+                                                        <Icon name="Pencil" size={13} color="var(--color-muted-foreground)" />Editar
+                                                    </button>
                                                     <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 ml-auto">
                                                         <Icon name="Trash2" size={16} />Excluir
                                                     </button>
@@ -1025,6 +1069,59 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                 </div>
             )}
 
+            {/* Modal edição de checklist */}
+            {modalEditChecklist && formEditChecklist && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden max-h-[85vh]">
+                        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50"><Icon name="ClipboardCheck" size={18} color="#1D4ED8" /></div>
+                                <h3 className="font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>Editar Checklist</h3>
+                            </div>
+                            <button onClick={() => { setModalEditChecklist(null); setFormEditChecklist(null); }} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
+                        </div>
+                        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+                            <div className="grid grid-cols-2 gap-3">
+                                <Field label="Veículo (placa)" required>
+                                    <PrettySelect value={formEditChecklist.veiculo_caminhao_id} onChange={e => setFormEditChecklist(f => ({ ...f, veiculo_caminhao_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                                        <option value="">Selecione...</option>
+                                        {veiculosCaminhao.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                    </PrettySelect>
+                                </Field>
+                                <Field label="Odômetro (km)" required>
+                                    <input type="number" inputMode="decimal" min="0" value={formEditChecklist.odometro}
+                                        onChange={e => setFormEditChecklist(f => ({ ...f, odometro: e.target.value }))}
+                                        placeholder="Ex: 152340" className={inputCls} style={inputStyle} />
+                                </Field>
+                            </div>
+                            <div>
+                                <p className="text-xs font-medium mb-3" style={{ color: 'var(--color-text-secondary)' }}>Itens verificados</p>
+                                <ChecklistItemsField itens={checklistItens} value={formEditChecklist.itens} onChange={itens => setFormEditChecklist(f => ({ ...f, itens }))} />
+                            </div>
+                            <Field label="Problemas encontrados">
+                                <textarea value={formEditChecklist.problemas} onChange={e => setFormEditChecklist(f => ({ ...f, problemas: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
+                            </Field>
+                            <Field label="Necessidades / peças">
+                                <textarea value={formEditChecklist.necessidades} onChange={e => setFormEditChecklist(f => ({ ...f, necessidades: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
+                            </Field>
+                            <Field label="Observações">
+                                <textarea value={formEditChecklist.observacoes_livres} onChange={e => setFormEditChecklist(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
+                            </Field>
+                            <div>
+                                <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>Fotos</p>
+                                <MultiFotoField value={formEditChecklist.fotos_urls} onChange={fotos_urls => setFormEditChecklist(f => ({ ...f, fotos_urls }))} />
+                            </div>
+                        </div>
+                        <div className="flex gap-3 p-5 pt-4 justify-end border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
+                            <button onClick={() => { setModalEditChecklist(null); setFormEditChecklist(null); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
+                            <button onClick={handleSalvarEditChecklist} disabled={savingEditChecklist} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60" style={{ backgroundColor: 'var(--color-primary)' }}>
+                                <Icon name="Check" size={14} color="white" /> {savingEditChecklist ? 'Salvando...' : 'Salvar Alterações'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Modal edição de abastecimento */}
             {modalAbastEdit && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
@@ -1080,14 +1177,16 @@ function PainelMotorista({ motorista, adminProfile, onClose }) {
                             <Field label="Diesel (L)">
                                 <input type="number" step="0.1" min="0" value={formAbastEdit.litros_diesel} onChange={e => handleLitrosAbast('litros_diesel', e.target.value)} className={inputCls} style={inputStyle} placeholder="0" />
                             </Field>
-                            <Field label="R$ Diesel">
-                                <input type="number" step="0.01" min="0" value={formAbastEdit.valor_diesel} onChange={e => setFormAbastEdit(f => ({ ...f, valor_diesel: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                            <Field label="R$ Diesel (automático)">
+                                <input type="number" step="0.01" min="0" value={formAbastEdit.valor_diesel} readOnly tabIndex={-1}
+                                    className={inputCls} style={{ ...inputStyle, backgroundColor: '#F1F5F9', color: 'var(--color-muted-foreground)', cursor: 'not-allowed' }} placeholder="0,00" />
                             </Field>
                             <Field label="Arla 32 (L)">
                                 <input type="number" step="0.1" min="0" value={formAbastEdit.litros_arla} onChange={e => handleLitrosAbast('litros_arla', e.target.value)} className={inputCls} style={inputStyle} placeholder="0" />
                             </Field>
-                            <Field label="R$ Arla">
-                                <input type="number" step="0.01" min="0" value={formAbastEdit.valor_arla} onChange={e => setFormAbastEdit(f => ({ ...f, valor_arla: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
+                            <Field label="R$ Arla (automático)">
+                                <input type="number" step="0.01" min="0" value={formAbastEdit.valor_arla} readOnly tabIndex={-1}
+                                    className={inputCls} style={{ ...inputStyle, backgroundColor: '#F1F5F9', color: 'var(--color-muted-foreground)', cursor: 'not-allowed' }} placeholder="0,00" />
                             </Field>
                         </div>
                         <div className="flex gap-3 p-5 pt-0 justify-end">

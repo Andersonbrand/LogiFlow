@@ -8,6 +8,7 @@ import { EditButton, DeleteButton, ActionButtonsGroup } from 'components/ActionB
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
+import { usePageTabs } from 'utils/PageTabsContext';
 import { usePagination, PaginationBar } from 'components/ui/Pagination';
 import {
     fetchViagens, fetchCarretasVeiculos, fetchVeiculosProprios,
@@ -129,7 +130,6 @@ export default function CarreteiroDashboard() {
     const [locaisFabrica, setLocaisFabrica] = useState([]);
     const [locaisOutro, setLocaisOutro]     = useState([]);
     const [loading, setLoading]   = useState(true);
-    const [drawerOpen, setDrawerOpen] = useState(false);
     const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
     const [registros, setRegistros] = useState([]);
     const [notificacoes, setNotificacoes] = useState([]);
@@ -598,6 +598,11 @@ export default function CarreteiroDashboard() {
     ];
 
     const tabAtual = TABS.find(t => t.id === tab);
+    const { setPageTabs } = usePageTabs();
+    useEffect(() => {
+        setPageTabs(TABS, tab, setTab);
+        return () => setPageTabs(null);
+    }, [tab]); // eslint-disable-line
 
     return (
         <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
@@ -692,13 +697,6 @@ export default function CarreteiroDashboard() {
                                         style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
                                         <Icon name="FileDown" size={14} color="currentColor" />
                                         <span className="hidden sm:inline">Exportar</span>
-                                    </button>
-                                    {/* Botão hamburger — apenas mobile/tablet */}
-                                    <button onClick={() => setDrawerOpen(true)}
-                                        className="lg:hidden flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50"
-                                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
-                                        <Icon name="Menu" size={16} color="currentColor" />
-                                        <span className="hidden sm:inline">{tabAtual?.label}</span>
                                     </button>
                                 </div>
                             </div>
@@ -1639,48 +1637,6 @@ export default function CarreteiroDashboard() {
                     </div>
                 </div>
             </main>
-
-            {/* ── Drawer mobile/tablet (< lg) ──────────────────────────── */}
-            {drawerOpen && (
-                <>
-                    <div className="fixed inset-0 z-40 lg:hidden" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={() => setDrawerOpen(false)} />
-                    <div className="fixed top-0 left-0 bottom-0 z-50 lg:hidden flex flex-col overflow-y-auto shadow-2xl"
-                        style={{ width: 240, backgroundColor: 'var(--color-card)' }}>
-                        <div className="flex items-center justify-between px-4 py-4 border-b flex-shrink-0"
-                            style={{ borderColor: 'var(--color-border)', paddingTop: 'max(env(safe-area-inset-top), 16px)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0"
-                                    style={{ background: 'linear-gradient(135deg, #1D4ED8, #7C3AED)' }}>
-                                    {(profile?.name || 'C')[0].toUpperCase()}
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="font-semibold text-sm truncate" style={{ color: 'var(--color-text-primary)' }}>{profile?.name || 'Carreteiro'}</p>
-                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Motorista</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setDrawerOpen(false)} className="p-2 rounded-lg hover:bg-gray-100 flex-shrink-0">
-                                <Icon name="X" size={20} color="var(--color-muted-foreground)" />
-                            </button>
-                        </div>
-                        <nav className="flex flex-col gap-1 p-3 flex-1">
-                            {TABS.map(t => {
-                                const ativo = tab === t.id;
-                                return (
-                                    <button key={t.id} onClick={() => { setTab(t.id); setDrawerOpen(false); }}
-                                        className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-all text-left"
-                                        style={{
-                                            backgroundColor: ativo ? 'var(--color-primary)' : 'transparent',
-                                            color: ativo ? '#fff' : 'var(--color-muted-foreground)',
-                                        }}>
-                                        <Icon name={t.icon} size={18} color={ativo ? '#fff' : 'currentColor'} />
-                                        <span>{t.label}</span>
-                                    </button>
-                                );
-                            })}
-                        </nav>
-                    </div>
-                </>
-            )}
 
             {/* Modais */}
             {modalAbast && (

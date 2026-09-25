@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Icon from 'components/AppIcon';
 import MobileMenuOverlay from './MobileMenuOverlay';
 import { useAuth } from 'utils/AuthContext';
+import { usePageTabs } from 'utils/PageTabsContext';
 import NotificationBell from 'components/ui/NotificationBell';
 
 const NAV_ITEMS = [
@@ -30,6 +31,7 @@ export default function NavigationBar() {
     const location  = useLocation();
     const navigate  = useNavigate();
     const { user, profile, signOut, isAdmin } = useAuth();
+    const { pageTabs } = usePageTabs();
     const [mobileOpen, setMobileOpen] = useState(false);
     const [scrolled, setScrolled]     = useState(false);
 
@@ -152,6 +154,7 @@ export default function NavigationBar() {
                 onLogout={handleLogout}
                 user={user}
                 profile={profile}
+                pageTabs={pageTabs}
             />
         </>
     );

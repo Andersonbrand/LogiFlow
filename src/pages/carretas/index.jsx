@@ -29,7 +29,7 @@ import {
     fetchViagens, createViagem, updateViagem, deleteViagem,
     fetchCarretasVeiculos, createCarretaVeiculo, updateCarretaVeiculo, deleteCarretaVeiculo,
     fetchAbastecimentos, createAbastecimento, deleteAbastecimento,
-    fetchChecklists, createChecklist, aprovarChecklist, registrarManutencaoChecklist,
+    fetchChecklists, createChecklist, updateChecklist, aprovarChecklist, registrarManutencaoChecklist,
     deleteChecklist,
     fetchCarregamentos, createCarregamento, updateCarregamento, deleteCarregamento,
     fetchEmpresas, createEmpresa, deleteEmpresa,
@@ -1256,6 +1256,7 @@ function TabChecklist({ isAdmin, profile }) {
     }, [checklists, pesquisa]); // eslint-disable-line
 
     const [veiculos, setVeiculos] = useState([]);
+    const [caminhoes, setCaminhoes] = useState([]);
     const [motoristas, setMotoristas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState(null);
@@ -1275,7 +1276,7 @@ function TabChecklist({ isAdmin, profile }) {
         setFiltroMes(v);
         try { sessionStorage.setItem('carretas_checklist_filtroMes', v); } catch {}
     };
-    const [form, setForm] = useState({ veiculo_id: '', odometro: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] });
+    const [form, setForm] = useState({ veiculo_id: '', veiculo_caminhao_id: '', odometro: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] });
     const [modalFoto, setModalFoto] = useState(null); // { fotos: string[], index: number } | null
 
     // Navegação por teclado no visualizador de fotos: ← → pra trocar, Esc pra fechar
@@ -1310,8 +1311,8 @@ function TabChecklist({ isAdmin, profile }) {
                 f.dataInicio = `${filtroMes}-01`;
                 f.dataFim    = `${filtroMes}-${String(lastDay).padStart(2, '0')}`;
             }
-            const [c, v, m, it] = await Promise.all([fetchChecklists(f), fetchVeiculosProprios(), fetchCarreteirosPropriosOnly(), fetchChecklistItens(true)]);
-            setChecklists(c); setVeiculos(v); setMotoristas(m); setChecklistItens(it);
+            const [c, v, m, it, cam] = await Promise.all([fetchChecklists(f), fetchVeiculosProprios(), fetchCarreteirosPropriosOnly(), fetchChecklistItens(true), fetchCaminhoesPlacas().catch(() => [])]);
+            setChecklists(c); setVeiculos(v); setMotoristas(m); setChecklistItens(it); setCaminhoes(cam);
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
         finally { setLoading(false); }
     }, [filtro, filtroMes]); // eslint-disable-line
@@ -1320,11 +1321,41 @@ function TabChecklist({ isAdmin, profile }) {
 
     const recarregarItens = async () => { setChecklistItens(await fetchChecklistItens(false)); };
 
+    const openEditChecklist = (c) => {
+        setForm({
+            veiculo_id: c.veiculo_id != null ? String(c.veiculo_id) : '',
+            veiculo_caminhao_id: c.veiculo_caminhao_id != null ? String(c.veiculo_caminhao_id) : '',
+            odometro: c.odometro ?? '',
+            itens: c.itens || {},
+            problemas: c.problemas || '',
+            necessidades: c.necessidades || '',
+            observacoes_livres: c.observacoes_livres || '',
+            fotos_urls: c.fotos_urls || (c.foto_url ? [c.foto_url] : []),
+        });
+        setModal({ mode: 'edit', id: c.id });
+    };
+
     const handleSubmit = async () => {
-        if (!form.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
+        if (!form.veiculo_id && !form.veiculo_caminhao_id) { showToast('Selecione o veículo', 'error'); return; }
         if (form.odometro === '' || form.odometro == null) { showToast('Informe o odômetro do veículo', 'error'); return; }
         const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
         try {
+            if (modal?.mode === 'edit') {
+                const caminhaoSel = form.veiculo_caminhao_id ? caminhoes.find(c => String(c.id) === String(form.veiculo_caminhao_id)) : null;
+                await updateChecklist(modal.id, {
+                    veiculo_id: form.veiculo_id || null,
+                    veiculo_caminhao_id: form.veiculo_caminhao_id || null,
+                    veiculo_caminhao_placa: caminhaoSel?.placa || null,
+                    odometro: Number(form.odometro),
+                    itens: form.itens,
+                    problemas: form.problemas,
+                    necessidades: form.necessidades,
+                    observacoes_livres: form.observacoes_livres,
+                    fotos_urls: form.fotos_urls,
+                });
+                showToast('Checklist atualizado!', 'success'); setModal(null); load();
+                return;
+            }
             const salvo = await createChecklist({
                 ...form, foto_url: form.fotos_urls[0] || '', motorista_id: profile.id,
                 odometro: form.odometro !== '' && form.odometro != null ? Number(form.odometro) : null,
@@ -1404,7 +1435,7 @@ function TabChecklist({ isAdmin, profile }) {
                             <Icon name="ListChecks" size={14} color="var(--color-muted-foreground)" />Gerenciar itens
                         </button>
                     )}
-                    <Button onClick={() => { setForm({ veiculo_id: '', odometro: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] }); setModal(true); }} iconName="ClipboardCheck" size="sm">Novo Checklist</Button>
+                    <Button onClick={() => { setForm({ veiculo_id: '', veiculo_caminhao_id: '', odometro: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] }); setModal({ mode: 'create' }); }} iconName="ClipboardCheck" size="sm">Novo Checklist</Button>
                 </div>
             </div>
 
@@ -1518,6 +1549,7 @@ function TabChecklist({ isAdmin, profile }) {
                                 {isAdmin && !c.aprovado && (
                                     <div className="flex flex-wrap gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                         <button onClick={() => handleAprovarClick(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"><Icon name="CheckCircle2" size={13} />Aprovar</button>
+                                        <button onClick={() => openEditChecklist(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}><Icon name="Pencil" size={13} color="var(--color-muted-foreground)" />Editar</button>
                                         <button onClick={() => { setModalManut(c.id); setObsManut(''); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-orange-300 text-orange-700 hover:bg-orange-50 transition-colors"><Icon name="Wrench" size={13} />Registrar Manutenção</button>
                                         <button onClick={() => printChecklist(c, checklistItens)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}><Icon name="Printer" size={13} color="var(--color-muted-foreground)" />Imprimir</button>
                                         <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors ml-auto"><Icon name="Trash2" size={16} />Excluir</button>
@@ -1526,6 +1558,7 @@ function TabChecklist({ isAdmin, profile }) {
                                 {isAdmin && c.aprovado && (
                                     <div className="flex flex-wrap gap-2 justify-end pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                         <button onClick={() => printChecklist(c, checklistItens)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}><Icon name="Printer" size={13} color="var(--color-muted-foreground)" />Imprimir</button>
+                                        <button onClick={() => openEditChecklist(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border hover:bg-gray-50 transition-colors" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}><Icon name="Pencil" size={13} color="var(--color-muted-foreground)" />Editar</button>
                                         <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50 transition-colors"><Icon name="Trash2" size={16} />Excluir</button>
                                     </div>
                                 )}
@@ -1542,12 +1575,30 @@ function TabChecklist({ isAdmin, profile }) {
             {/* Modal novo checklist */}
             {modal && (
                 <ModalOverlay onClose={() => setModal(null)}>
-                    <ModalHeader title="Checklist Semanal" icon="ClipboardCheck" onClose={() => setModal(null)} />
+                    <ModalHeader title={modal.mode === 'edit' ? 'Editar Checklist' : 'Checklist Semanal'} icon="ClipboardCheck" onClose={() => setModal(null)} />
                     <div className="p-5 space-y-4 overflow-y-auto flex-1">
                         <Field label="Veículo" required>
-                            <PrettySelect value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
+                            <PrettySelect value={form.veiculo_id ? `cv:${form.veiculo_id}` : form.veiculo_caminhao_id ? `vh:${form.veiculo_caminhao_id}` : ''}
+                                onChange={e => {
+                                    const val = e.target.value;
+                                    if (!val) { setForm(f => ({ ...f, veiculo_id: '', veiculo_caminhao_id: '' })); return; }
+                                    const [tipo, id] = val.split(':');
+                                    setForm(f => tipo === 'cv'
+                                        ? { ...f, veiculo_id: id, veiculo_caminhao_id: '' }
+                                        : { ...f, veiculo_id: '', veiculo_caminhao_id: id });
+                                }}
+                                className={inputCls} style={inputStyle}>
                                 <option value="">Selecione...</option>
-                                {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
+                                {veiculos.length > 0 && (
+                                    <optgroup label="Frota Carretas">
+                                        {veiculos.map(v => <option key={`cv:${v.id}`} value={`cv:${v.id}`}>{v.placa} — {v.modelo}</option>)}
+                                    </optgroup>
+                                )}
+                                {caminhoes.length > 0 && (
+                                    <optgroup label="Caminhões (Veículos)">
+                                        {caminhoes.map(v => <option key={`vh:${v.id}`} value={`vh:${v.id}`}>{v.placa} — {v.modelo}</option>)}
+                                    </optgroup>
+                                )}
                             </PrettySelect>
                         </Field>
                         <Field label="Odômetro (km)" required>
@@ -1568,7 +1619,7 @@ function TabChecklist({ isAdmin, profile }) {
                     </div>
                     <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0">
                         <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button onClick={handleSubmit} size="sm" iconName="Send">Enviar Checklist</Button>
+                        <Button onClick={handleSubmit} size="sm" iconName={modal.mode === 'edit' ? 'Check' : 'Send'}>{modal.mode === 'edit' ? 'Salvar Alterações' : 'Enviar Checklist'}</Button>
                     </div>
                 </ModalOverlay>
             )}
@@ -2170,10 +2221,13 @@ function TabBonificacoes({ isAdmin }) {
         setFormExtra({ motorista_id: e.motorista_id, valor: String(e.valor), data: e.data, observacao: e.observacao || '' });
         setModalExtra({ mode: 'edit', data: e });
     };
+    const [savingExtra, setSavingExtra] = useState(false);
     const salvarExtra = async () => {
+        if (savingExtra) return; // já tem um envio em andamento — ignora clique repetido
         if (!formExtra.motorista_id)       { showToast('Selecione o motorista', 'error'); return; }
         if (!formExtra.valor || isNaN(+formExtra.valor)) { showToast('Informe um valor válido', 'error'); return; }
         if (!formExtra.observacao?.trim()) { showToast('Observação é obrigatória', 'error'); return; }
+        setSavingExtra(true);
         try {
             const payload = { ...formExtra, valor: Number(formExtra.valor) };
             if (modalExtra.mode === 'create') await createBonificacaoExtra(payload);
@@ -2181,6 +2235,7 @@ function TabBonificacoes({ isAdmin }) {
             showToast('Bonificação salva!', 'success');
             setModalExtra(null); load();
         } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSavingExtra(false); }
     };
     const excluirExtra = async id => {
         const ok = await confirm({ title: 'Excluir bonificação extra?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
@@ -2482,7 +2537,7 @@ function TabBonificacoes({ isAdmin }) {
                         <button onClick={() => setModalExtra(null)}
                             className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50"
                             style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button onClick={salvarExtra} size="sm" iconName="Check">Salvar</Button>
+                        <Button onClick={salvarExtra} size="sm" iconName="Check" loading={savingExtra} disabled={savingExtra}>Salvar</Button>
                     </div>
                 </ModalOverlay>
             )}

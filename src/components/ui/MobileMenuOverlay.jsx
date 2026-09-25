@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import Icon from 'components/AppIcon';
 
-export default function MobileMenuOverlay({ isOpen, onClose, navItems = [], activeChecker, onNavigate, onLogout, user, profile }) {
+export default function MobileMenuOverlay({ isOpen, onClose, navItems = [], activeChecker, onNavigate, onLogout, user, profile, pageTabs = null }) {
     const panelRef = useRef(null);
     const closeButtonRef = useRef(null);
 
@@ -44,6 +44,10 @@ export default function MobileMenuOverlay({ isOpen, onClose, navItems = [], acti
         onNavigate(path);
         onClose();
     };
+    const handleTabClick = (tabId) => {
+        pageTabs?.onSelect?.(tabId);
+        onClose();
+    };
 
     return (
         <div id="mobile-menu-overlay" role="dialog" aria-modal="true" aria-label="Menu de navegação">
@@ -84,7 +88,26 @@ export default function MobileMenuOverlay({ isOpen, onClose, navItems = [], acti
 
                 {/* Nav Items */}
                 <nav className="mobile-overlay-nav" aria-label="Menu mobile">
-                    {navItems?.map((item) => {
+                    {pageTabs ? pageTabs.tabs.map((t) => {
+                        const active = t.id === pageTabs.activeId;
+                        return (
+                            <button
+                                key={t.id}
+                                className={`mobile-nav-item${active ? ' active' : ''}`}
+                                aria-current={active ? 'page' : undefined}
+                                onClick={() => handleTabClick(t.id)}
+                                style={{ outline: 'none', width: '100%', textAlign: 'left' }}
+                            >
+                                <Icon name={t.icon} size={20} color="currentColor" strokeWidth={2} />
+                                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: '0.9375rem' }}>{t.label}</span>
+                                {active && (
+                                    <span className="ml-auto">
+                                        <Icon name="ChevronRight" size={16} color="currentColor" strokeWidth={2} />
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    }) : navItems?.map((item) => {
                         const active = activeChecker ? activeChecker(item?.path) : false;
                         return (
                             <button

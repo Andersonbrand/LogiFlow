@@ -910,7 +910,9 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], categorias, on
 
     // ── Salvar ────────────────────────────────────────────────────────────────
     const handleSave = async (forcarApesarDeDuplicata = false) => {
+        if (saving) return; // já tem um salvamento em andamento — ignora clique repetido
         if (!form.categoria || !form.valor || !form.data_despesa) { showToast('Categoria, valor e data são obrigatórios', 'error'); return; }
+        setSaving(true); // trava já aqui — a checagem de duplicata abaixo também é assíncrona
 
         // Checagem de possíveis duplicatas — só avisa, não bloqueia sozinha.
         if (!forcarApesarDeDuplicata) {
@@ -937,11 +939,11 @@ function ModalDespesa({ modal, veiculos, despesasExistentes = [], categorias, on
                 setDuplicatas(achados);
                 showToast(`⚠️ Possível duplicidade encontrada (${achados.length}) — revise antes de salvar.`, 'error');
                 corpoModalRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                setSaving(false);
                 return;
             }
         }
 
-        setSaving(true);
         try {
             const payload = {
                 ...form,

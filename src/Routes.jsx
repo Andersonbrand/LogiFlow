@@ -4,6 +4,7 @@ import ScrollToTop    from "components/ScrollToTop";
 import ErrorBoundary  from "components/ErrorBoundary";
 import ProtectedRoute, { AdminRoute, StaffRoute, MotoristaRoute, CarreteiroRoute, MecanicoRoute } from "components/ProtectedRoute";
 import { AuthProvider } from "utils/AuthContext";
+import { PageTabsProvider } from "utils/PageTabsContext";
 
 import NotFound              from "pages/NotFound";
 import Login                 from "pages/login";
@@ -28,6 +29,7 @@ import EntregasAcessorios   from "pages/entregas-acessorios";
 const Routes = () => (
     <BrowserRouter>
         <AuthProvider>
+            <PageTabsProvider>
             <ErrorBoundary>
                 <ScrollToTop />
                 <RouterRoutes>
@@ -77,6 +79,7 @@ const Routes = () => (
                     <Route path="*" element={<NotFound />} />
                 </RouterRoutes>
             </ErrorBoundary>
+            </PageTabsProvider>
         </AuthProvider>
     </BrowserRouter>
 );
