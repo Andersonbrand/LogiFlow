@@ -36,7 +36,7 @@ export async function fetchRomaneios() {
             custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao, diaria_criada_em, diaria_mes_referencia,
             assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at,
             valor_frete, valor_frete_calculado,
-            valor_total_carga, created_at,
+            valor_total_carga, created_at, rota_config,
             romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, categorias_extra, percentual_frete, frete_calculado, empresa, nome_cliente, nome_vendedor, observacao),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
                 is_telha_zinco, comprimento_telha, metros_totais, peso_unit,
@@ -67,7 +67,7 @@ export async function fetchRomaneiosResumo() {
             custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao, diaria_criada_em, diaria_mes_referencia,
             assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at,
             valor_frete, valor_frete_calculado,
-            valor_total_carga, created_at
+            valor_total_carga, created_at, rota_config
         `)
         .eq('is_rascunho', false)
         .order('created_at', { ascending: false })
@@ -81,13 +81,14 @@ export async function fetchRomaneioById(id) {
     const { data, error } = await supabase
         .from('romaneios')
         .select(`
-            id, numero, motorista, placa, destino, status,
-            peso_total, saida, chegada, observacoes, vehicle_id,
+            id, numero, motorista, motorista_id, placa, destino, status,
+            aprovado, aprovado_por, aprovado_em, status_aprovacao, motivo_reprovacao,
+            peso_total, saida, chegada, observacoes, vehicle_id, paradas,
             distancia_km, custo_combustivel, custo_pedagio,
             custo_motorista, dias_diaria, valor_diaria_dia, diaria_descricao, diaria_criada_em, diaria_mes_referencia,
             assinatura_diaria_logistica, assinatura_diaria_logistica_at, assinatura_diaria_transporte, assinatura_diaria_transporte_at,
             valor_frete, valor_frete_calculado,
-            valor_total_carga, created_at,
+            valor_total_carga, created_at, rota_config,
             romaneio_pedidos(id, numero_pedido, cidade_destino, valor_pedido, categoria_frete, categorias_extra, percentual_frete, frete_calculado, empresa, nome_cliente, nome_vendedor, observacao),
             romaneio_itens(id, quantidade, peso_total, material_id, pedido_id,
                 is_telha_zinco, comprimento_telha, metros_totais, peso_unit,
@@ -181,6 +182,9 @@ function buildPayload(r, diariaCriadaEmOverride) {
         valor_frete:            r.valor_frete            || 0,
         valor_frete_calculado:  r.valor_frete_calculado  || 0,
         valor_total_carga:      r.valor_total_carga      || 0,
+        // Configuração da rota/combustível (posto, diesel, pedágio, resultado do cálculo).
+        // Só entra no payload quando informada — não apaga o que já está salvo em outros fluxos.
+        ...(r.rota_config !== undefined ? { rota_config: r.rota_config } : {}),
         ...(r.vehicle_id ? { vehicle_id: r.vehicle_id } : {}),
         ...(diariaCriadaEmOverride !== undefined ? { diaria_criada_em: diariaCriadaEmOverride } : {}),
     };

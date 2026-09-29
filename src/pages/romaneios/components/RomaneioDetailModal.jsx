@@ -384,9 +384,9 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                                     {n(romaneio.distancia_km) > 0 && (
                                         <div className="flex items-center gap-2 text-xs font-caption" style={{ color:'var(--color-muted-foreground)' }}>
                                             <Icon name="Route" size={13} color="currentColor" />
-                                            Distância (ida): <strong className="font-data">{romaneio.distancia_km} km</strong>
+                                            Distância (ida): <strong className="font-data">{(n(romaneio.distancia_km) / 2).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km</strong>
                                             <span className="mx-1">·</span>
-                                            Total (ida+volta): <strong className="font-data">{romaneio.distancia_km * 2} km</strong>
+                                            Total (ida+volta): <strong className="font-data">{romaneio.distancia_km} km</strong>
                                         </div>
                                     )}
                                 </>
@@ -402,7 +402,7 @@ export default function RomaneioDetailModal({ isOpen, onClose, romaneio, onEdit,
                             )}
                             <div className="grid grid-cols-2 gap-3">
                                 <InfoCard icon="TrendingUp"  label="Frete Calculado"   value={brl(frete)}                           color="#059669" />
-                                <InfoCard icon="Route"       label="Distância"          value={n(romaneio.distancia_km)>0 ? `${romaneio.distancia_km} km` : '—'} />
+                                <InfoCard icon="Route"       label="Distância (ida+volta)" value={n(romaneio.distancia_km)>0 ? `${romaneio.distancia_km} km` : '—'} />
                                 <InfoCard icon="Fuel"        label="Combustível"        value={brl(romaneio.custo_combustivel)}       color="#DC2626" />
                                 <InfoCard icon="Navigation"  label="Pedágios"           value={brl(romaneio.custo_pedagio)}           color="#DC2626" />
                                 <InfoCard icon="User"        label="Diária Motorista"   value={brl(romaneio.custo_motorista)}         color="#DC2626" />

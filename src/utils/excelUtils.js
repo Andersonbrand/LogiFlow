@@ -273,7 +273,7 @@ export function exportRomaneioModeloAraguaia(romaneio) {
     rows.push(['RESUMO FINANCEIRO', '', '', '', '', '', '', '']);
     rows.push(['Frete Calculado pelos Pedidos', '', '', '', 'R$ ' + brl(frete), '', '', '']);
     if (n(romaneio.distancia_km) > 0)
-        rows.push(['Distância da Rota', '', '', '', romaneio.distancia_km + ' km', '', '', '']);
+        rows.push(['Distância da Rota (ida+volta)', '', '', '', romaneio.distancia_km + ' km', '', '', '']);
     rows.push(['(-) Combustível', '', '', '', 'R$ ' + brl(romaneio.custo_combustivel), '', '', '']);
     rows.push(['(-) Pedágios', '', '', '', 'R$ ' + brl(romaneio.custo_pedagio), '', '', '']);
     rows.push(['(-) Diária Motorista', '', '', '', 'R$ ' + brl(romaneio.custo_motorista), '', '', '']);

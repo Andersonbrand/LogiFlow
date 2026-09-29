@@ -100,6 +100,12 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         const incomingKey = `${editingRomaneio?.id ?? '__new__'}|${editingRomaneio?.numero ?? ''}`;
         if (loadedRomaneioIdRef.current === incomingKey) return;
         loadedRomaneioIdRef.current = incomingKey;
+
+        // Configuração de rota/combustível salva no romaneio (posto, diesel, pedágio, resultado da rota)
+        let cfg = editingRomaneio?.rota_config;
+        if (typeof cfg === 'string') { try { cfg = JSON.parse(cfg); } catch { cfg = null; } }
+        cfg = cfg && typeof cfg === 'object' ? cfg : null;
+
         if (editingRomaneio) {
             setForm({
                 motorista:         editingRomaneio.motorista         || '',
@@ -130,6 +136,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 valor_diaria_dia:  editingRomaneio.valor_diaria_dia || editingRomaneio.custo_motorista || '',
                 diaria_descricao:  editingRomaneio.diaria_descricao || '',
                 diaria_mes_referencia: editingRomaneio.diaria_mes_referencia || '',
+                _litros_estimados: cfg?.litros_estimados || 0,
             });
             // Rebuild pedidos from romaneio_pedidos if editing
             const pedidosExistentes = editingRomaneio.romaneio_pedidos || [];
@@ -233,12 +240,13 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
         setErrors({});
         setTab('dados');
         setExpanded(null);
-        setRotaInfo(null);
-        setCustoStatus(null);
-        setPostoSelecionado('');
-        setPrecoDiesel('6.50');
-        setUsarPedagio(true);
-        setPedagioPor100km('8.00');
+        // Restaura o que foi calculado/escolhido antes (ou usa os padrões num romaneio novo)
+        setRotaInfo(cfg?.rota_info || null);
+        setCustoStatus(Array.isArray(cfg?.custo_status) ? cfg.custo_status : null);
+        setPostoSelecionado(cfg?.posto_id ? String(cfg.posto_id) : '');
+        setPrecoDiesel(cfg?.preco_diesel != null ? String(cfg.preco_diesel) : '6.50');
+        setUsarPedagio(cfg?.usar_pedagio ?? true);
+        setPedagioPor100km(cfg?.pedagio_por_100km != null ? String(cfg.pedagio_por_100km) : '8.00');
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, editingRomaneio?.id]);
 
@@ -466,8 +474,9 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             setForm(prev => {
                 const next = { ...prev };
 
-                // Distância — salva apenas a ida (referência geográfica)
-                if (distKm) next.distancia_km = String(distKm);
+                // Distância — campo guarda o TOTAL (ida+volta), o mesmo valor usado no combustível.
+                // A distância só de ida continua em rotaInfo.distanciaTotal (card verde).
+                if (distIdaVolta) next.distancia_km = String(distIdaVolta);
 
                 // Combustível — calculado sobre IDA+VOLTA (caminhão retorna vazio)
                 if (consumoKm && consumoKm > 0 && distIdaVolta) {
@@ -550,7 +559,17 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 ...form,
                 peso_total:             totais.pesoTotal,
                 vehicle_id:             form.vehicle_id || null,
-                distancia_km:           rotaInfo?.distanciaTotal || n(form.distancia_km),
+                distancia_km:           n(form.distancia_km), // total ida+volta (o que está no campo)
+                rota_config: {
+                    km_total:          true,
+                    posto_id:          postoSelecionado || null,
+                    preco_diesel:      Number(precoDiesel) || null,
+                    usar_pedagio:      usarPedagio,
+                    pedagio_por_100km: Number(pedagioPor100km) || null,
+                    litros_estimados:  form._litros_estimados || null,
+                    rota_info:         rotaInfo && !rotaInfo.erro ? rotaInfo : null,
+                    custo_status:      rotaInfo && !rotaInfo.erro ? (custoStatus || null) : null,
+                },
                 paradas:                JSON.stringify(paradas.filter(p => p && p.trim())),
                 custo_combustivel:      n(form.custo_combustivel),
                 custo_pedagio:          n(form.custo_pedagio),
@@ -1279,7 +1298,7 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                                 </p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div className="sm:col-span-2">
-                                        <MoneyInput label="Distância (km)" name="distancia_km" value={form.distancia_km}
+                                        <MoneyInput label="Distância total ida+volta (km)" name="distancia_km" value={form.distancia_km}
                                             onChange={e => setF(e.target.name, e.target.value)} prefix="km" />
                                     </div>
 
