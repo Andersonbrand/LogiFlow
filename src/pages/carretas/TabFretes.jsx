@@ -149,6 +149,80 @@ const TERCEIROS_INICIAL = [
     { cidade: 'Barreiras',                          km: 1808, frete_por_saco: 13.86 },
 ];
 
+// ─── Dados iniciais — Frete Estoque (chave interna 'liz', planilha "Tabela_Frete_Liz.xlsx", colunas KM-MOC
+// e Frete por saco — CPII e CPV têm os mesmos valores de KM/frete, então uma
+// lista só cobre os dois) ─────────────────────────────────────────────────────
+const LIZ_INICIAL = [
+    { cidade: 'Urandi', km: 132, frete_por_saco: 1.01 },
+    { cidade: 'Pindai', km: 68, frete_por_saco: 0.54 },
+    { cidade: 'Pilões', km: 38, frete_por_saco: 0.42 },
+    { cidade: 'Candiba', km: 60, frete_por_saco: 0.46 },
+    { cidade: 'Mutans', km: 56, frete_por_saco: 0.43 },
+    { cidade: 'Morrinhos', km: 58, frete_por_saco: 0.45 },
+    { cidade: 'Matina', km: 86, frete_por_saco: 0.66 },
+    { cidade: 'Caetité', km: 78, frete_por_saco: 0.6 },
+    { cidade: 'Tanque Novo', km: 216, frete_por_saco: 1.66 },
+    { cidade: 'Igaporã', km: 156, frete_por_saco: 1.2 },
+    { cidade: 'Riacho de Santana (Por Matina)', km: 164, frete_por_saco: 1.26 },
+    { cidade: 'Palmas de M. Alto', km: 86, frete_por_saco: 0.66 },
+    { cidade: 'Sebastião Laranjeiras', km: 196, frete_por_saco: 1.51 },
+    { cidade: 'Julião', km: 192, frete_por_saco: 1.48 },
+    { cidade: 'Iuiú', km: 200, frete_por_saco: 1.54 },
+    { cidade: 'Malhada', km: 218, frete_por_saco: 1.68 },
+    { cidade: 'Carinhanha', km: 224, frete_por_saco: 1.72 },
+    { cidade: 'Agrovilia 14,15,16, Marrequeiro', km: 372, frete_por_saco: 2.86 },
+    { cidade: 'Agrovila 2,8,9,10,11', km: 432, frete_por_saco: 3.32 },
+    { cidade: 'Serra do Ramalho', km: 438, frete_por_saco: 3.37 },
+    { cidade: 'Cocôs (por Feira da Mata)', km: 412, frete_por_saco: 3.17 },
+    { cidade: 'Feira da Mata', km: 346, frete_por_saco: 2.66 },
+    { cidade: 'Malhada de Pedra', km: 266, frete_por_saco: 2.04 },
+    { cidade: 'Guajeru', km: 314, frete_por_saco: 2.41 },
+    { cidade: 'Rio do Antonio', km: 242, frete_por_saco: 1.86 },
+    { cidade: 'Brumado', km: 282, frete_por_saco: 2.17 },
+    { cidade: 'Aracatu', km: 348, frete_por_saco: 2.67 },
+    { cidade: 'Dom Basilio', km: 388, frete_por_saco: 2.98 },
+    { cidade: 'Livramento', km: 414, frete_por_saco: 3.18 },
+    { cidade: 'Rio de contas', km: 438, frete_por_saco: 3.37 },
+    { cidade: 'Arapiranga, Rio de Contas', km: 482, frete_por_saco: 3.7 },
+    { cidade: 'Marcolino Moura, Rio de Contas', km: 476, frete_por_saco: 3.66 },
+    { cidade: 'Jussiape', km: 522, frete_por_saco: 4.01 },
+    { cidade: 'Caraguataí, Jussiape', km: 546, frete_por_saco: 4.2 },
+    { cidade: 'Botuporã', km: 256, frete_por_saco: 1.97 },
+    { cidade: 'Caturama', km: 316, frete_por_saco: 2.43 },
+    { cidade: 'Paramirim', km: 340, frete_por_saco: 2.61 },
+    { cidade: 'Caraibas de Paramirim', km: 386, frete_por_saco: 2.97 },
+    { cidade: 'Erico Cardoso', km: 374, frete_por_saco: 2.87 },
+    { cidade: 'Rio do Pires', km: 380, frete_por_saco: 2.92 },
+    { cidade: 'Ibipitanga', km: 454, frete_por_saco: 3.49 },
+    { cidade: 'Macaubas', km: 418, frete_por_saco: 3.21 },
+    { cidade: 'Boquira', km: 464, frete_por_saco: 3.57 },
+    { cidade: 'Lagoa Real', km: 194, frete_por_saco: 1.49 },
+    { cidade: 'Ibitira', km: 174, frete_por_saco: 1.34 },
+    { cidade: 'Ibiassucê', km: 170, frete_por_saco: 1.31 },
+    { cidade: 'Caculé', km: 222, frete_por_saco: 1.31 },
+    { cidade: 'Bom Jesus da Lapa (Por Matina)', km: 298, frete_por_saco: 2.29 },
+    { cidade: 'Sitio do Mato', km: 436, frete_por_saco: 3.35 },
+    { cidade: 'Paratinga', km: 484, frete_por_saco: 3.72 },
+    { cidade: 'Santa Maria da Vitória', km: 526, frete_por_saco: 4.04 },
+    { cidade: 'Oliveira dos Brejinhos (frete c/ antecedência)', km: 576, frete_por_saco: 4.43 },
+    { cidade: 'Novo Horizonte (frete c/ antecedência)', km: 824, frete_por_saco: 6.33 },
+    { cidade: 'Boninal (frete c/ antecedência)', km: 882, frete_por_saco: 6.78 },
+    { cidade: 'Seabra (frete c/ antecedência)', km: 846, frete_por_saco: 6.5 },
+    { cidade: 'Ibitiara (frete c/ antecedência)', km: 572, frete_por_saco: 4.4 },
+    { cidade: 'Ibotirama (frete c/ antecedência)', km: 614, frete_por_saco: 4.72 },
+    { cidade: 'Morpará (frete c/ antecedência)', km: 790, frete_por_saco: 6.07 },
+    { cidade: 'Coribe (frete c/ antecedência)', km: 654, frete_por_saco: 5.03 },
+    { cidade: 'Vila Mariana (frete c/ antecedência)', km: 384, frete_por_saco: 2.95 },
+    { cidade: 'Presidente Jânio Quadros', km: 420, frete_por_saco: 3.23 },
+    { cidade: 'Maetinga (frete c/ antecedência)', km: 466, frete_por_saco: 3.58 },
+    { cidade: 'Condeúba', km: 352, frete_por_saco: 2.71 },
+    { cidade: 'Sussuarana', km: 382, frete_por_saco: 2.94 },
+    { cidade: 'Tanhaçu', km: 420, frete_por_saco: 3.23 },
+    { cidade: 'Ituaçu', km: 472, frete_por_saco: 3.63 },
+    { cidade: 'Barra da Estiva', km: 520, frete_por_saco: 4.0 },
+    { cidade: 'Barreiras', km: 1060, frete_por_saco: 8.15 },
+];
+
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const inputCls = 'w-full px-3 py-1.5 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
@@ -316,10 +390,12 @@ function PainelCustos({ isAdmin, onChange }) {
 function useFretes(tipo) {
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [erroCarga, setErroCarga] = useState(null);
     const table = 'carretas_fretes';
 
     const load = useCallback(async () => {
         setLoading(true);
+        setErroCarga(null);
         try {
             const { data, error } = await supabase
                 .from(table)
@@ -329,7 +405,7 @@ function useFretes(tipo) {
             if (error) throw error;
             // Se não há dados, semear com os valores iniciais
             if (!data || data.length === 0) {
-                const seed = tipo === 'frota' ? FROTA_INICIAL : TERCEIROS_INICIAL;
+                const seed = tipo === 'frota' ? FROTA_INICIAL : tipo === 'liz' ? LIZ_INICIAL : TERCEIROS_INICIAL;
                 const { data: inserted, error: insErr } = await supabase
                     .from(table)
                     .insert(seed.map(r => ({ ...r, cidade: normalizarCidadeBA(r.cidade), tipo })))
@@ -341,8 +417,9 @@ function useFretes(tipo) {
             }
         } catch (e) {
             console.error('Erro ao carregar fretes:', e);
+            setErroCarga(e?.message || 'erro desconhecido');
             // Fallback local se tabela não existir ainda
-            const seed = tipo === 'frota' ? FROTA_INICIAL : TERCEIROS_INICIAL;
+            const seed = tipo === 'frota' ? FROTA_INICIAL : tipo === 'liz' ? LIZ_INICIAL : TERCEIROS_INICIAL;
             setRows(seed.map((r, i) => ({ ...r, id: `local_${i}`, tipo })));
         } finally {
             setLoading(false);
@@ -352,12 +429,12 @@ function useFretes(tipo) {
     useEffect(() => { load(); }, [load]);
     useRecarregarAoVoltar(load);
 
-    return { rows, setRows, loading, reload: load };
+    return { rows, setRows, loading, erroCarga, reload: load };
 }
 
 // ─── Tabela de fretes (reutilizada para frota e terceiros) ────────────────────
-function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { custoMedioProduto: 0, custoOperacional: 0 } }) {
-    const { rows, setRows, loading, reload } = useFretes(tipo);
+function TabelaFretes({ tipo, label, icon = 'Truck', cor, captacaoValor = 0, custoConfig = { custoMedioProduto: 0, custoOperacional: 0 } }) {
+    const { rows, setRows, loading, erroCarga, reload } = useFretes(tipo);
     const { toast, showToast } = useToast();
     const { confirm, ConfirmDialog } = useConfirm();
     const [busca, setBusca] = useState('');
@@ -446,6 +523,12 @@ function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { cus
 
     return (
         <div className="flex flex-col gap-4">
+            {erroCarga && (
+                <div className="rounded-xl border px-4 py-3 text-sm" style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA', color: '#991B1B' }}>
+                    <strong>Esta tabela NÃO está salva no banco</strong> — os valores abaixo são só a lista inicial em memória
+                    e não aparecem em outras telas (ex.: Carregamento no Estoque). Erro: {erroCarga}
+                </div>
+            )}
             {/* Toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -460,9 +543,9 @@ function TabelaFretes({ tipo, label, cor, captacaoValor = 0, custoConfig = { cus
                     </div>
                 </div>
                 <button type="button" onClick={toggleFiltered} className="flex items-center gap-2 hover:opacity-70 transition-opacity">
-                    <Icon name={tipo === 'frota' ? 'Truck' : 'Users'} size={15} color={cor} />
+                    <Icon name={icon} size={15} color={cor} />
                     <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                        {tipo === 'frota' ? 'Fretes da Frota Própria' : 'Fretes de Terceiros'}
+                        {label}
                     </h3>
                     <span className="text-xs px-2 py-1 rounded-full font-semibold" style={{ backgroundColor: cor + '20', color: cor }}>
                         {filtered.length} cidades
@@ -678,8 +761,9 @@ export default function TabFretes({ isAdmin }) {
             {/* Sub-guias */}
             <div className="flex gap-1 p-1 rounded-xl w-fit" style={{ backgroundColor: 'var(--color-muted)' }}>
                 {[
-                    { id: 'frota',      label: 'Fretes da Frota',      icon: 'Truck',  cor: '#2563EB' },
-                    { id: 'terceiros',  label: 'Fretes de Terceiros',   icon: 'Users',  cor: '#D97706' },
+                    { id: 'frota',      label: 'Fretes da Frota',      icon: 'Truck',   cor: '#2563EB' },
+                    { id: 'terceiros',  label: 'Fretes de Terceiros',   icon: 'Users',   cor: '#D97706' },
+                    { id: 'liz',        label: 'Frete Estoque',         icon: 'Package', cor: '#9333EA' },
                 ].map(g => (
                     <button key={g.id} onClick={() => setGuia(g.id)}
                         className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all"
@@ -708,7 +792,8 @@ export default function TabFretes({ isAdmin }) {
             {guia === 'frota' && (
                 <TabelaFretes
                     tipo="frota"
-                    label="Fretes da Frota"
+                    label="Fretes da Frota Própria"
+                    icon="Truck"
                     cor="#2563EB"
                     isAdmin={isAdmin}
                     captacaoValor={captacaoValor}
@@ -719,7 +804,17 @@ export default function TabFretes({ isAdmin }) {
                 <TabelaFretes
                     tipo="terceiros"
                     label="Fretes de Terceiros"
+                    icon="Users"
                     cor="#D97706"
+                    isAdmin={isAdmin}
+                />
+            )}
+            {guia === 'liz' && (
+                <TabelaFretes
+                    tipo="liz"
+                    label="Frete Estoque"
+                    icon="Package"
+                    cor="#9333EA"
                     isAdmin={isAdmin}
                 />
             )}

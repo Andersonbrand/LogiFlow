@@ -447,7 +447,10 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
                 }),
             });
 
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            if (!resp.ok) {
+                const corpo = await resp.json().catch(() => null);
+                throw new Error(corpo?.error || `HTTP ${resp.status}`);
+            }
             const info = await resp.json();
             if (info.error) throw new Error(info.error);
 
@@ -499,11 +502,8 @@ export default function RomaneioFormModal({ isOpen, onClose, onSave, editingRoma
             setCustoStatus(statusMsgs);
         } catch (e) {
             // Erro na API: exibe mensagem e sugere preenchimento manual
-            const msgErro = e?.message?.includes('nao encontrada') || e?.message?.includes('não encontrada')
-                ? `Cidade não encontrada na rota. Verifique os nomes e tente novamente.`
-                : e?.message?.includes('ORS') || e?.message?.includes('HTTP 5')
-                    ? 'Serviço de rota indisponível. Preencha a distância manualmente.'
-                    : e?.message || 'Erro ao calcular rota.';
+            // Mostra a mensagem real devolvida pela função (inclui QUAL cidade falhou)
+            const msgErro = e?.message || 'Erro ao calcular rota.';
             console.error('calcular-rota:', e);
             setRotaInfo({
                 distanciaTotal: null,

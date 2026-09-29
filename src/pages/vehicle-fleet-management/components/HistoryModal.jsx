@@ -3,6 +3,7 @@ import Icon from "components/AppIcon";
 import Button from "components/ui/Button";
 import StatusBadge from "./StatusBadge";
 import { supabase } from "utils/supabaseClient";
+import * as XLSX from "xlsx";
 
 const STATUS_COLORS = {
     'Finalizado':  { bg: '#F0FDF4', text: '#166534', border: '#BBF7D0' },
@@ -12,23 +13,39 @@ const STATUS_COLORS = {
     'Cancelado':   { bg: '#FEF2F2', text: '#991B1B', border: '#FECACA' },
 };
 
+const mesAtual = () => new Date().toISOString().slice(0, 7);
+
+// Intervalo [início, início do mês seguinte) para um valor "YYYY-MM"
+function intervaloDoMes(mes) {
+    const [y, m] = mes.split('-').map(Number);
+    const prox = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+    return { ini: `${mes}-01`, fim: `${prox}-01` };
+}
+
 export default function HistoryModal({ isOpen, vehicle, onClose }) {
     const [romaneios, setRomaneios] = useState([]);
     const [loading, setLoading]     = useState(false);
+    const [mes, setMes]             = useState(mesAtual()); // '' = todos os meses
+
+    // Ao abrir outro veículo, volta pro mês atual
+    useEffect(() => { if (isOpen) setMes(mesAtual()); }, [isOpen, vehicle?.id]);
 
     useEffect(() => {
         if (!isOpen || !vehicle) return;
         (async () => {
             setLoading(true);
+            const cols = 'id, numero, motorista, destino, status, saida, peso_total, valor_frete';
+            const aplicaMes = (q) => {
+                if (!mes) return q.limit(200);
+                const { ini, fim } = intervaloDoMes(mes);
+                return q.gte('saida', ini).lt('saida', fim);
+            };
             try {
                 // Tenta primeiro por vehicle_id
                 if (vehicle.id) {
-                    const { data: byId } = await supabase
-                        .from('romaneios')
-                        .select('id, numero, motorista, destino, status, saida, peso_total, valor_frete')
-                        .eq('vehicle_id', vehicle.id)
-                        .order('saida', { ascending: false })
-                        .limit(20);
+                    const { data: byId } = await aplicaMes(
+                        supabase.from('romaneios').select(cols).eq('vehicle_id', vehicle.id)
+                    ).order('saida', { ascending: false });
 
                     if (byId && byId.length > 0) {
                         setRomaneios(byId);
@@ -38,12 +55,9 @@ export default function HistoryModal({ isOpen, vehicle, onClose }) {
                 }
                 // Fallback: busca por placa (case-insensitive)
                 if (vehicle.placa) {
-                    const { data: byPlaca } = await supabase
-                        .from('romaneios')
-                        .select('id, numero, motorista, destino, status, saida, peso_total, valor_frete')
-                        .ilike('placa', vehicle.placa.trim())
-                        .order('saida', { ascending: false })
-                        .limit(20);
+                    const { data: byPlaca } = await aplicaMes(
+                        supabase.from('romaneios').select(cols).ilike('placa', vehicle.placa.trim())
+                    ).order('saida', { ascending: false });
                     setRomaneios(byPlaca || []);
                 } else {
                     setRomaneios([]);
@@ -54,7 +68,23 @@ export default function HistoryModal({ isOpen, vehicle, onClose }) {
                 setLoading(false);
             }
         })();
-    }, [isOpen, vehicle]);
+    }, [isOpen, vehicle, mes]);
+
+    const exportar = () => {
+        if (!romaneios.length) return;
+        const rows = romaneios.map(r => ({
+            'Romaneio': r.numero,
+            'Data de saída': r.saida ? new Date(r.saida).toLocaleDateString('pt-BR') : '—',
+            'Status': r.status,
+            'Motorista': r.motorista || '—',
+            'Destino': r.destino || '—',
+            'Peso (kg)': Number(r.peso_total) || 0,
+            'Frete (R$)': Number(r.valor_frete) || 0,
+        }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Romaneios');
+        XLSX.writeFile(wb, `romaneios_${(vehicle.placa || 'veiculo').replace(/\s+/g, '')}_${mes || 'todos'}.xlsx`);
+    };
 
     if (!isOpen || !vehicle) return null;
 
@@ -124,9 +154,27 @@ export default function HistoryModal({ isOpen, vehicle, onClose }) {
                         </div>
                     )}
 
-                    <h4 className="text-xs font-semibold uppercase tracking-wide mb-3" style={{ color: "var(--color-muted-foreground)" }}>
-                        Últimos romaneios
-                    </h4>
+                    <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
+                        <h4 className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted-foreground)" }}>
+                            {mes ? 'Romaneios do mês' : 'Últimos romaneios'}
+                        </h4>
+                        <div className="flex items-center gap-2">
+                            <input type="month" value={mes} onChange={e => setMes(e.target.value)}
+                                className="px-2.5 py-1.5 rounded-lg border text-xs outline-none"
+                                style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-card)' }} />
+                            {mes && (
+                                <button onClick={() => setMes('')} className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
+                                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}>
+                                    Todos
+                                </button>
+                            )}
+                            <button onClick={exportar} disabled={!romaneios.length}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                style={{ borderColor: 'var(--color-border)' }}>
+                                <Icon name="FileDown" size={13} /> Exportar
+                            </button>
+                        </div>
+                    </div>
 
                     <div className="space-y-2">
                         {loading ? (
@@ -137,7 +185,7 @@ export default function HistoryModal({ isOpen, vehicle, onClose }) {
                             <div className="flex flex-col items-center gap-2 py-8 text-center">
                                 <Icon name="FileX" size={28} color="var(--color-muted-foreground)" />
                                 <p className="text-sm" style={{ color: "var(--color-muted-foreground)" }}>
-                                    Nenhum romaneio encontrado para este veículo.
+                                    {mes ? 'Nenhum romaneio deste veículo no mês selecionado.' : 'Nenhum romaneio encontrado para este veículo.'}
                                 </p>
                             </div>
                         ) : romaneios.map((r) => {

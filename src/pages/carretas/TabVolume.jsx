@@ -300,6 +300,20 @@ function ComboSelect({ value, onChange, options, placeholder = 'Selecione...', e
 }
 
 // ─── Select de Destino com auto-preenchimento de frete ───────────────────────
+// Normaliza nome de cidade p/ comparar "Candiba, BA" com "Candiba" da tabela de fretes
+const _normCidadeFrete = t => String(t || '')
+    .replace(/\([^)]*\)/g, ' ')
+    .split(',')[0]
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+
+// Acha a linha da tabela de fretes correspondente ao destino (tolerante a UF/acento/caixa)
+function buscarFretePorDestino(destino, fretes) {
+    const alvo = _normCidadeFrete(destino);
+    if (!alvo) return null;
+    return (fretes || []).find(f => _normCidadeFrete(f.cidade) === alvo) || null;
+}
+
 function DestinoSelect({ value, onChange, onFreteAutoFill, fretes, placeholder = 'Cidade ou estoque' }) {
     const [open, setOpen] = useState(false);
     const [q, setQ] = useState('');
@@ -415,6 +429,7 @@ export default function TabVolume({ isAdmin }) {
     const [carregamentosRetira, setCarregamentosRetira] = useState([]);
     const [fretesFretas, setFretesFretas] = useState([]);
     const [fretosTerceiros, setFretesTerceiros] = useState([]);
+    const [fretesEstoque, setFretesEstoque] = useState([]);
 
     // Modal retira
     const emptyFormRetira = () => ({
@@ -429,6 +444,10 @@ export default function TabVolume({ isAdmin }) {
 
     // Frete preview
     const veiculoSelecionado = veiculos.find(v => v.id === form.veiculo_id);
+    // Carregamento no ESTOQUE: o frete por saco vem SEMPRE da tabela "Frete Estoque" (pelo destino),
+    // não depende de o usuário ter clicado na cidade na lista — vale também ao editar e ao digitar.
+    const freteEstoqueRef = form.tipo === 'ESTOQUE' ? buscarFretePorDestino(form.destino, fretesEstoque) : null;
+    const valorBaseEstoque = freteEstoqueRef ? Number(freteEstoqueRef.frete_por_saco) : Number(form.valor_base_frete || 0);
     const previewFrete = calcularFrete(form.tipo_calculo_frete, form.quantidade, form.valor_base_frete, veiculoSelecionado?.media_consumo);
     // Captação (MOC → Estoque) x Distribuição — apenas informativo, frota própria
     const { captacaoConfig } = useCaptacaoConfig();
@@ -465,7 +484,7 @@ export default function TabVolume({ isAdmin }) {
                 ve, vePropr, veTer,
                 mot, motPropr, motTer,
                 carrTerc, fretFr, fretTerc, carrRet,
-                motCaminhoes, veiCaminhoes,
+                motCaminhoes, veiCaminhoes, fretEstoq,
             ] = await Promise.all([
                 fetchCarregamentos({ ...filters, is_terceiro: false, is_retira: false }),
                 fetchEmpresas(),
@@ -487,6 +506,9 @@ export default function TabVolume({ isAdmin }) {
                 // carregando em Montes Claros, sem gerar bônus de carreteiro).
                 isAdmin ? fetchMotoristasComId() : Promise.resolve([]),
                 isAdmin ? fetchCaminhoesPlacas()  : Promise.resolve([]),
+                // Frete Estoque: distâncias/frete de Guanambi até as cidades atendidas,
+                // usado só no destino do Carregamento no Estoque (não é FOB/CIF de fornecedor).
+                fetchFretesCidades('liz'),
             ]);
             setCarregamentos(carr);
             setEmpresas(emp);
@@ -500,6 +522,7 @@ export default function TabVolume({ isAdmin }) {
             setCarregamentosTerceiros(carrTerc);
             setFretesFretas(fretFr);
             setFretesTerceiros(fretTerc);
+            setFretesEstoque(fretEstoq);
             setCarregamentosRetira(carrRet);
             setMotoristasCaminhoes(motCaminhoes);
             setVeiculosCaminhoes(veiCaminhoes);
@@ -575,6 +598,7 @@ export default function TabVolume({ isAdmin }) {
             if (!form.veiculo_id) { showToast('Selecione o veículo (placa).', 'error'); return; }
             if (!form.motorista_id) { showToast('Selecione o motorista (necessário para gerar o bônus da viagem).', 'error'); return; }
             if (!form.tipo_cimento) { showToast('Selecione o tipo de cimento.', 'error'); return; }
+            if (modal?.mode !== 'edit' && (!form.quantidade || isNaN(form.quantidade))) { showToast('Informe a quantidade de sacos (necessária para calcular o frete).', 'error'); return; }
         } else if (!form.quantidade || isNaN(form.quantidade)) {
             showToast('Informe a quantidade.', 'error'); return;
         } else if (isCaminhaoAvulsoCheck && !form.placa_caminhao_avulso.trim()) {
@@ -591,8 +615,10 @@ export default function TabVolume({ isAdmin }) {
             quantidade: isEstoque ? (form.quantidade ? Number(form.quantidade) : null) : Number(form.quantidade),
             unidade_quantidade: form.unidade_quantidade || 'saco',
             empresa_id: isEstoque ? null : (form.empresa_id || null),
-            tipo_calculo_frete: isEstoque ? null : (form.tipo_calculo_frete || 'por_saco'),
-            valor_base_frete: isEstoque ? null : (form.valor_base_frete ? Number(form.valor_base_frete) : null),
+            tipo_calculo_frete: isEstoque ? 'por_saco' : (form.tipo_calculo_frete || 'por_saco'),
+            valor_base_frete: isEstoque
+                ? (valorBaseEstoque > 0 ? valorBaseEstoque : null)
+                : (form.valor_base_frete ? Number(form.valor_base_frete) : null),
             _consumoVeiculo: veiculoSelecionado?.media_consumo,
             // Carregamento avulso de caminhão (fora da frota de carretas): não
             // referencia carretas_veiculos (evita conflito de FK entre tabelas
@@ -860,9 +886,9 @@ export default function TabVolume({ isAdmin }) {
             const sumRows = Object.entries(TIPOS).map(([key, t]) => ({
                 'Tipo': t.label,
                 'Volume (sacos)': totais[key] || 0,
-                'Participação (%)': totais.total > 0 ? ((totais[key] / totais.total) * 100).toFixed(1) + '%' : '0%',
+                'Participação (%)': totais.totalGeral > 0 ? ((totais[key] / totais.totalGeral) * 100).toFixed(1) + '%' : '0%',
             }));
-            sumRows.push({ 'Tipo': 'TOTAL', 'Volume (sacos)': totais.total, 'Participação (%)': '100%' });
+            sumRows.push({ 'Tipo': 'TOTAL', 'Volume (sacos)': totais.totalGeral, 'Participação (%)': '100%' });
             XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sumRows), 'Resumo');
             // Totais de frete/captação/distribuição — soma de tudo que foi exportado
             const totalFreteExp = rows.reduce((s, r) => s + r['Frete Calculado (R$)'], 0);
@@ -1015,6 +1041,7 @@ export default function TabVolume({ isAdmin }) {
                     onDelete={handleDeleteRetira}
                     veiculos={veiculosTerceiros}
                     motoristas={motoristasTerceiros}
+                    mes={mes}
                 />
             ) : null}
 
@@ -1041,7 +1068,8 @@ export default function TabVolume({ isAdmin }) {
                                     <p className="text-xs" style={{ color: '#9A3412' }}>
                                         Carga retirada do estoque próprio (não veio direto do fornecedor) — por isso não
                                         entra no volume de sacos do dashboard. Gera bônus para o motorista normalmente,
-                                        calculado pelo destino (mesma regra da aba Bonificações).
+                                        calculado pelo destino (mesma regra da aba Bonificações), e o frete é calculado
+                                        pela tabela "Frete Estoque" (Fretes → Frete Estoque) × quantidade de sacos.
                                     </p>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
@@ -1061,16 +1089,34 @@ export default function TabVolume({ isAdmin }) {
                                         {motoristasProprios.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                     </PrettySelect>
                                 </Field>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Quantidade (sacos)" required={modal?.mode !== 'edit'}>
+                                        <input type="number" min="0" value={form.quantidade} onChange={e => setForm(f => ({ ...f, quantidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 800" />
+                                    </Field>
+                                    <Field label="Frete calculado">
+                                        <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0FDF4', color: '#059669' }}>
+                                            {(Number(form.quantidade || 0) * valorBaseEstoque).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </div>
+                                        {form.destino && (
+                                            <p className="text-[11px] mt-1" style={{ color: freteEstoqueRef ? '#059669' : '#B45309' }}>
+                                                {freteEstoqueRef
+                                                    ? `${Number(freteEstoqueRef.frete_por_saco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/saco (tabela Frete Estoque)`
+                                                    : 'Destino não encontrado na tabela Frete Estoque — cadastre a cidade em Fretes → Frete Estoque.'}
+                                            </p>
+                                        )}
+                                    </Field>
+                                </div>
                                 <Field label="Destino" required>
                                     <DestinoSelect
                                         value={form.destino}
                                         onChange={v => setForm(f => ({ ...f, destino: v }))}
-                                        fretes={fretesFretas}
+                                        onFreteAutoFill={v => setForm(f => ({ ...f, tipo_calculo_frete: 'por_saco', valor_base_frete: String(v) }))}
+                                        fretes={fretesEstoque}
                                         placeholder="Cidade de destino"
                                     />
                                 </Field>
                                 <CidadesAdicionaisField
-                                    cidades={[...new Set((fretesFretas || []).map(f => f.cidade).filter(Boolean))]}
+                                    cidades={[...new Set((fretesEstoque || []).map(f => f.cidade).filter(Boolean))]}
                                     value={paradasForm}
                                     onChange={setParadasForm}
                                     label="Cidades adicionais desta viagem"
@@ -2104,7 +2150,7 @@ function TabelaTerceiros({ carregamentos, isAdmin, onNovo, onEdit, onDelete, onT
 }
 
 // ─── Sub-componente: Retira de Clientes na Fábrica ───────────────────────────
-function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veiculos, motoristas }) {
+function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veiculos, motoristas, mes }) {
     const [buscaRetira, setBuscaRetira] = useState('');
 
     const itensRetira = buscaRetira
@@ -2126,6 +2172,40 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
 
     const totalSacos = itensRetira.reduce((s, r) => s + (Number(r.quantidade) || 0), 0);
 
+    // Exporta o que está na tela (respeita a busca). Inclui a coluna "Tipo" (FOB/CIF ·
+    // Guanambi/Barreiras) porque é ela que decide em qual card do Dashboard o volume entra —
+    // essencial pra conferir com a planilha de carregamento diário.
+    const exportarRetira = () => {
+        if (!itensRetira.length) return;
+        const rows = itensRetira.map(r => {
+            const { tipo, nome } = parseTipo(r);
+            return {
+                'Data': FMT(r.data_carregamento),
+                'Tipo': TIPOS[tipo]?.label || '—',
+                'Cliente/Origem': nome || '—',
+                'Cliente': r.nome_cliente || '—',
+                'Placa': r.veiculo?.placa || r.placa_terceiro || '—',
+                'Motorista': r.motorista?.name || '—',
+                'Pedido': r.numero_pedido || '—',
+                'NF': r.numero_nota_fiscal || '—',
+                'Destino': r.destino || '—',
+                'Quantidade (sacos)': Number(r.quantidade) || 0,
+            };
+        });
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Retira de Clientes');
+        const porTipo = {};
+        itensRetira.forEach(r => {
+            const { tipo } = parseTipo(r);
+            const k = TIPOS[tipo]?.label || 'Sem tipo';
+            porTipo[k] = (porTipo[k] || 0) + (Number(r.quantidade) || 0);
+        });
+        const sumRows = Object.entries(porTipo).map(([k, v]) => ({ 'Tipo': k, 'Volume (sacos)': v }));
+        sumRows.push({ 'Tipo': 'TOTAL', 'Volume (sacos)': totalSacos });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sumRows), 'Resumo por Tipo');
+        XLSX.writeFile(wb, `retira_clientes_${mes || new Date().toISOString().slice(0, 7)}.xlsx`);
+    };
+
     return (
         <div className="flex flex-col gap-4">
             {/* Header */}
@@ -2134,9 +2214,16 @@ function TabelaRetira({ carregamentos, isAdmin, onNovo, onEdit, onDelete, veicul
                     <span>🏭</span>
                     <span>Retira de clientes na fábrica — apenas volume, <strong>sem frete e sem bonificações</strong>.</span>
                 </div>
-                {isAdmin && (
-                    <Button onClick={onNovo} iconName="Plus" size="sm">Nova Retira</Button>
-                )}
+                <div className="flex items-center gap-2">
+                    <button onClick={exportarRetira} disabled={!itensRetira.length}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-medium hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{ borderColor: 'var(--color-border)' }}>
+                        <Icon name="FileDown" size={14} /> Exportar
+                    </button>
+                    {isAdmin && (
+                        <Button onClick={onNovo} iconName="Plus" size="sm">Nova Retira</Button>
+                    )}
+                </div>
             </div>
             <SearchInput value={buscaRetira} onChange={setBuscaRetira}
                 placeholder="Buscar por NF, pedido, cliente, placa..." />
