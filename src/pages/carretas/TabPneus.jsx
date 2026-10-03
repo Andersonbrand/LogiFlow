@@ -379,6 +379,10 @@ function LinhaPneu({ p, isAdmin, indent = false, stripe = false, onSubstituir, o
 function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo, isAdmin, showToast, confirm, load, handleAddCatalogo }) {
     const [busca, setBusca] = useState('');
     const [filtroStatus, setFiltroStatus] = useState('todos'); // todos | em_uso | substituido
+    // Filtro de data (padrão: mês de exercício atual). Vazio = todos os registros.
+    const [filtroMes, setFiltroMes] = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; });
+    const [usarPeriodo, setUsarPeriodo] = useState(false);
+    const [periodoCustom, setPeriodoCustom] = useState({ inicio: '', fim: '' });
     const [modal, setModal] = useState(null); // { mode: 'create'|'edit', pneu }
     const [modalSubstituir, setModalSubstituir] = useState(null);
     const [modalGerenciarEixos, setModalGerenciarEixos] = useState(false);
@@ -400,8 +404,27 @@ function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo
         ...caminhoes.map(v => ({ value: `vh:${v.id}`, label: v.placa, sublabel: v.modelo ? `${v.modelo} · Caminhão` : 'Caminhão' })),
     ]), [veiculos, caminhoes]);
 
+    // Intervalo [ini, fim] em YYYY-MM-DD conforme o filtro ativo
+    const intervaloData = useMemo(() => {
+        if (usarPeriodo && (periodoCustom.inicio || periodoCustom.fim)) return { ini: periodoCustom.inicio || '0000-01-01', fim: periodoCustom.fim || '9999-12-31' };
+        if (filtroMes) {
+            const [y, m] = filtroMes.split('-').map(Number);
+            return { ini: `${filtroMes}-01`, fim: `${filtroMes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}` };
+        }
+        return null;
+    }, [usarPeriodo, periodoCustom, filtroMes]);
+
+    // O pneu entra no período se foi instalado OU substituído dentro dele.
+    // "Em uso" ignora a data: é o estado atual da frota, não um evento do mês.
+    const noPeriodo = (p) => {
+        if (!intervaloData || filtroStatus === 'em_uso') return true;
+        const dentro = (d) => !!d && String(d).slice(0, 10) >= intervaloData.ini && String(d).slice(0, 10) <= intervaloData.fim;
+        return dentro(p.data_instalacao) || dentro(p.data_substituicao);
+    };
+
     const filtrados = pneus.filter(p => {
         if (filtroStatus !== 'todos' && p.status !== filtroStatus) return false;
+        if (!noPeriodo(p)) return false;
         if (busca.trim()) {
             const q = busca.toLowerCase();
             return (
@@ -419,7 +442,7 @@ function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo
     // Trocas registradas em lote (várias posições marcadas de uma vez pelo
     // mecânico) aparecem agrupadas num único item expansível na tabela.
     const linhasAgrupadas = useMemo(() => agruparPneusPorLote(filtrados), [filtrados]);
-    const pneusPag = usePagination(linhasAgrupadas, 20, [filtroStatus, busca]);
+    const pneusPag = usePagination(linhasAgrupadas, 20, [filtroStatus, busca, filtroMes, usarPeriodo, periodoCustom.inicio, periodoCustom.fim]);
     const [gruposExpandidos, setGruposExpandidos] = useState({});
     const toggleGrupo = (loteId) => setGruposExpandidos(s => ({ ...s, [loteId]: !s[loteId] }));
 
@@ -507,6 +530,34 @@ function PainelPneus({ pneus, compras, veiculos, caminhoes, motoristas, catalogo
                     </button>
                 ))}
                 {isAdmin && <Button onClick={openCreate} iconName="Plus" size="sm" className="ml-auto">Novo Pneu</Button>}
+            </div>
+
+            {/* Filtro por mês / período */}
+            <div className="flex flex-wrap items-center gap-2">
+                <input type="month" value={filtroMes} onChange={e => { setFiltroMes(e.target.value); setUsarPeriodo(false); }}
+                    className="px-3 py-1.5 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-blue-500/20" style={{ borderColor: 'var(--color-border)' }} title="Mês de exercício" />
+                <button type="button" onClick={() => setUsarPeriodo(u => !u)}
+                    className="px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors"
+                    style={usarPeriodo ? { backgroundColor: 'var(--color-primary)', color: '#fff', borderColor: 'var(--color-primary)' } : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                    {usarPeriodo ? '✓ Período ativo' : 'Usar período'}
+                </button>
+                {usarPeriodo && (
+                    <>
+                        <input type="date" value={periodoCustom.inicio} onChange={e => setPeriodoCustom(p => ({ ...p, inicio: e.target.value }))}
+                            className="px-2.5 py-1.5 rounded-lg border text-xs outline-none" style={{ borderColor: 'var(--color-border)' }} />
+                        <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>até</span>
+                        <input type="date" value={periodoCustom.fim} onChange={e => setPeriodoCustom(p => ({ ...p, fim: e.target.value }))}
+                            className="px-2.5 py-1.5 rounded-lg border text-xs outline-none" style={{ borderColor: 'var(--color-border)' }} />
+                    </>
+                )}
+                {(filtroMes || usarPeriodo) && (
+                    <button type="button" onClick={() => { setFiltroMes(''); setUsarPeriodo(false); setPeriodoCustom({ inicio: '', fim: '' }); }}
+                        className="px-2.5 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}
+                        title="Limpar data e ver todos os pneus">✕ Data</button>
+                )}
+                {filtroStatus === 'em_uso' && intervaloData && (
+                    <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>"Em uso" mostra todos, independente do mês</span>
+                )}
             </div>
 
             {filtrados.length === 0 ? (

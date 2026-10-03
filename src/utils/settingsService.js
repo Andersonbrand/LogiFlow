@@ -13,17 +13,44 @@ export const CUSTO_CONFIG_DEFAULT = { custoMedioProduto: 0, custoOperacional: 0 
 export const HORA_EXTRA_CONFIG_KEY = 'valor_hora_extra_carreteiro';
 export const HORA_EXTRA_CONFIG_DEFAULT = { valorHora: 0 };
 
+// Cache em memória (30 s) + junção de chamadas simultâneas: várias telas/hooks que
+// pedem a mesma configuração ao mesmo tempo fazem UMA só requisição ao banco.
+// O cache é limpo ao salvar e quando o Realtime avisa que app_settings mudou.
+const SETTINGS_TTL_MS = 30000;
+const _settingsCache = new Map(); // key -> { ts, promise }
+
+export function limparCacheSettings() { _settingsCache.clear(); }
+
 export async function fetchSetting(key, fallback = null) {
-    const { data, error } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', key)
-        .maybeSingle();
-    if (error) throw error;
-    return data?.value ?? fallback;
+    const hit = _settingsCache.get(key);
+    if (hit && Date.now() - hit.ts < SETTINGS_TTL_MS) {
+        const v = await hit.promise;
+        return v ?? fallback;
+    }
+    const promise = (async () => {
+        const { data, error } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', key)
+            .maybeSingle();
+        if (error) throw error;
+        return data?.value ?? null;
+    })();
+    _settingsCache.set(key, { ts: Date.now(), promise });
+    try {
+        const v = await promise;
+        return v ?? fallback;
+    } catch (e) {
+        _settingsCache.delete(key); // nunca guarda falha no cache
+        throw e;
+    }
 }
 
+// Ao mudar app_settings no servidor: descarta o cache e recarrega o hook
+const aoMudarSettings = (load) => () => { limparCacheSettings(); load(); };
+
 export async function saveSetting(key, value, userId = null) {
+    limparCacheSettings();
     const { data, error } = await supabase
         .from('app_settings')
         .upsert({ key, value, updated_by: userId, updated_at: new Date().toISOString() }, { onConflict: 'key' })
@@ -64,7 +91,7 @@ export function useBonusConfig() {
 
     useEffect(() => {
         load();
-        const unsub = subscribeTabela('app_settings', load);
+        const unsub = subscribeTabela('app_settings', aoMudarSettings(load));
         return () => unsub && unsub();
     }, [load]);
 
@@ -97,7 +124,7 @@ export function useCaptacaoConfig() {
 
     useEffect(() => {
         load();
-        const unsub = subscribeTabela('app_settings', load);
+        const unsub = subscribeTabela('app_settings', aoMudarSettings(load));
         return () => unsub && unsub();
     }, [load]);
 
@@ -135,7 +162,7 @@ export function useCustoConfig() {
 
     useEffect(() => {
         load();
-        const unsub = subscribeTabela('app_settings', load);
+        const unsub = subscribeTabela('app_settings', aoMudarSettings(load));
         return () => unsub && unsub();
     }, [load]);
 
@@ -166,7 +193,7 @@ export function useHoraExtraConfig() {
 
     useEffect(() => {
         load();
-        const unsub = subscribeTabela('app_settings', load);
+        const unsub = subscribeTabela('app_settings', aoMudarSettings(load));
         return () => unsub && unsub();
     }, [load]);
 

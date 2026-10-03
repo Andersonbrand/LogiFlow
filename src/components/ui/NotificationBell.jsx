@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Icon from 'components/AppIcon';
 import { fetchNotifications, markNotificationRead, markAllNotificationsRead } from 'utils/userService';
 import { useAuth } from 'utils/AuthContext';
+import { subscribeTabela } from 'utils/supabaseClient';
+import { setIntervalVisivel } from 'utils/pollingVisivel';
 
 // ✅ MELHORIA: NotificationBell com badge persistente, histórico e integração com alertas
 export default function NotificationBell() {
@@ -9,11 +11,13 @@ export default function NotificationBell() {
     const [notifs, setNotifs]   = useState([]);
     const [open, setOpen]       = useState(false);
     const ref                   = useRef();
+    const ultimaCargaRef        = useRef(0);
 
     const unread = notifs.filter(n => !n.lida).length;
 
     const load = useCallback(async () => {
         if (!user) return;
+        ultimaCargaRef.current = Date.now();
         try {
             const data = await fetchNotifications(user.id);
             setNotifs(data || []);
@@ -25,9 +29,22 @@ export default function NotificationBell() {
     useEffect(() => {
         if (!user) return;
         load();
-        // Polling a cada 30s para manter badge atualizado
-        const interval = setInterval(load, 30000);
-        return () => clearInterval(interval);
+        // Antes: consulta a cada 30 s em TODA aba aberta, mesmo oculta (até 2.880
+        // requisições/dia por aba, cada uma vira log no Supabase). Agora:
+        //  1) Realtime filtrado só nas notificações deste usuário (atualiza na hora);
+        //  2) polling de segurança a cada 3 min, somente com a aba visível;
+        //  3) ao voltar para a aba, recarrega se passou mais de 1 min desde a última carga.
+        const unsub = subscribeTabela('notifications', load, 1000, `user_id=eq.${user.id}`);
+        const stopPoll = setIntervalVisivel(load, 3 * 60 * 1000);
+        const aoVoltar = () => {
+            if (!document.hidden && Date.now() - ultimaCargaRef.current > 60 * 1000) load();
+        };
+        document.addEventListener('visibilitychange', aoVoltar);
+        return () => {
+            unsub();
+            stopPoll();
+            document.removeEventListener('visibilitychange', aoVoltar);
+        };
     }, [user, load]);
 
     useEffect(() => {

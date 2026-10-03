@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { fetchRomaneiosResumo } from "utils/romaneioService";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { setIntervalVisivel } from 'utils/pollingVisivel';
+import { fetchRomaneiosResumo, periodoDoMes } from "utils/romaneioService";
 import { fetchVehicles } from "utils/vehicleService";
 import { fetchMaintenanceAlerts, resolveMaintenanceAlert, createMaintenanceAlert } from "utils/userService";
 import { useNavigate } from "react-router-dom";
@@ -69,6 +70,10 @@ export default function MainDashboard() {
     const { toast, showToast } = useToast();
 
     const [romaneios, setRomaneios] = useState([]);
+    // Mês de exercício exibido nas tabelas (padrão: mês atual). Vazio = todos.
+    const [mesFiltro, setMesFiltro] = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; });
+    const mesRef = useRef(mesFiltro);
+    mesRef.current = mesFiltro;
     const [vehicles, setVehicles] = useState([]);
     const [maintenanceAlerts, setMaintenanceAlerts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -83,7 +88,7 @@ export default function MainDashboard() {
         try {
             setLoading(true);
             const [rom, veh, alerts] = await Promise.all([
-                fetchRomaneiosResumo(), fetchVehicles(), fetchMaintenanceAlerts()
+                fetchRomaneiosResumo(periodoDoMes(mesRef.current)), fetchVehicles(), fetchMaintenanceAlerts()
             ]);
             // Forçar novos arrays/objetos para garantir que useMemo recompute
             setRomaneios([...rom]);
@@ -134,14 +139,22 @@ export default function MainDashboard() {
         // Polling bem espaçado — só uma rede de segurança pro caso raro do
         // Realtime cair silenciosamente; não é mais o mecanismo principal de
         // atualização (isso já é o Realtime abaixo + o reload ao focar a aba).
-        const interval = setInterval(load, 4 * 60 * 1000);
+        // Só com a aba visível e a cada 5 min — aba oculta não consulta o banco
+        const stopPoll = setIntervalVisivel(load, 5 * 60 * 1000);
         // Realtime: atualiza quando há mudança em romaneios (dado que muda o
         // dia inteiro). "vehicles" não está mais assinado aqui — a frota muda
         // pouco, e um cadastro/edição de veículo já aparece ao focar a aba.
         const unsubRom = subscribeTabela('romaneios', load);
-        return () => { clearInterval(interval); unsubRom(); };
+        return () => { stopPoll(); unsubRom(); };
     }, []);
     useRecarregarAoVoltar(load);
+
+    // Trocou o mês → recarrega só o novo recorte (a 1ª carga já usa o mês atual)
+    const primeiraVezMes = useRef(true);
+    useEffect(() => {
+        if (primeiraVezMes.current) { primeiraVezMes.current = false; return; }
+        load();
+    }, [mesFiltro]); // eslint-disable-line
 
     const handleResolveAlert = async (id) => {
         try {
@@ -318,6 +331,18 @@ export default function MainDashboard() {
                             {metrics.map((m, i) => <MetricCard key={i} {...m} />)}
                         </div>
                     )}
+
+                    {/* Filtro mensal das tabelas */}
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium text-slate-500">Mês de exercício:</span>
+                        <input type="month" value={mesFiltro} onChange={e => setMesFiltro(e.target.value)}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 text-sm bg-white" title="Filtrar romaneios por mês" />
+                        {mesFiltro !== new Date().toISOString().slice(0, 7) && (
+                            <button type="button" onClick={() => { const h = new Date(); setMesFiltro(`${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`); }}
+                                className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50">Mês atual</button>
+                        )}
+                        {!mesFiltro && <span className="text-xs text-slate-400">exibindo os últimos 200 romaneios</span>}
+                    </div>
 
                     {/* Main Grid */}
                     <div className="grid grid-cols-1 tab:grid-cols-3 gap-6">

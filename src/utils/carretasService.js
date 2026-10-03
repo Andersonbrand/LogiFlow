@@ -1880,7 +1880,7 @@ export async function fetchEnviosAco(filters = {}) {
     return data || [];
 }
 
-export async function registrarEnvioAco({ motoristaId, dataEnvio, destino, observacoes, registradoPor }) {
+export async function registrarEnvioAco({ motoristaId, dataEnvio, destino, observacoes, registradoPor, placa, pedidos, assinaturaAdmin }) {
     const { data, error } = await supabase
         .from('carretas_envios_aco')
         .insert({
@@ -1889,7 +1889,44 @@ export async function registrarEnvioAco({ motoristaId, dataEnvio, destino, obser
             destino: destino || null,
             observacoes: observacoes || null,
             registrado_por: registradoPor || null,
+            placa: placa || null,
+            pedidos: pedidos || [],
+            assinatura_admin: assinaturaAdmin || null,
+            assinatura_admin_at: assinaturaAdmin ? new Date().toISOString() : null,
         })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+// Edita o envio. A data do envio (usada na fila de rodízio) NÃO muda.
+// A assinatura é refeita com a de quem editou, pois o conteúdo mudou.
+export async function atualizarEnvioAco(id, { motoristaId, destino, observacoes, placa, pedidos, assinaturaAdmin }) {
+    const { data, error } = await supabase
+        .from('carretas_envios_aco')
+        .update({
+            motorista_id: motoristaId,
+            destino: destino || null,
+            observacoes: observacoes || null,
+            placa: placa || null,
+            pedidos: pedidos || [],
+            assinatura_admin: assinaturaAdmin || null,
+            assinatura_admin_at: assinaturaAdmin ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function assinarEnvioAco(id, assinaturaTexto) {
+    const { data, error } = await supabase
+        .from('carretas_envios_aco')
+        .update({ assinatura_admin: assinaturaTexto, assinatura_admin_at: new Date().toISOString() })
+        .eq('id', id)
         .select()
         .single();
     if (error) throw error;

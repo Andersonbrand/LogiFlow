@@ -9,7 +9,7 @@ import RomaneioFormModal from './components/RomaneioFormModal';
 import RomaneioDetailModal from './components/RomaneioDetailModal';
 import RomaneioImportModal  from './components/RomaneioImportModal';
 import { exportRomaneiosToExcel } from 'utils/excelUtils';
-import { fetchRomaneios, createRomaneio, updateRomaneio, updateRomaneioStatus, deleteRomaneio, duplicateRomaneio, sincronizarStatusVeiculo, fetchRascunhos, createRascunho, updateRascunho, deleteRascunho, promoverRascunho, fetchMotoristasComId } from 'utils/romaneioService';
+import { fetchRomaneios, createRomaneio, updateRomaneio, updateRomaneioStatus, deleteRomaneio, duplicateRomaneio, sincronizarStatusVeiculo, fetchRascunhos, createRascunho, updateRascunho, deleteRascunho, promoverRascunho, fetchMotoristasComId, periodoDoMes, periodoDeDatas, STATUS_SEMPRE_VISIVEIS } from 'utils/romaneioService';
 import { FRETE_CATEGORIAS, getCategoriaConfig, calcularFretePedidoMulti } from 'utils/freteConfig';
 import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { fetchMaterials } from 'utils/materialService';
@@ -41,7 +41,8 @@ export default function Romaneios() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState('Todos');
-    const [filtroMes, setFiltroMes] = useState('');
+    // Padrão: só o mês corrente (mês de exercício). Limpar o filtro mostra todos.
+    const [filtroMes, setFiltroMes] = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; });
     const [usarPeriodo, setUsarPeriodo] = useState(false);
     const [periodoCustom, setPeriodoCustom] = useState({ inicio: '', fim: '' });
     const [formModal, setFormModal] = useState({ open: false, romaneio: null });
@@ -55,10 +56,20 @@ export default function Romaneios() {
     // Evita que o realtime sobrescreva o status durante uma atualização em andamento
     const updatingIdsRef = useRef(new Set());
 
+    // Período enviado ao servidor: só carrega o mês escolhido (ou o intervalo personalizado)
+    const periodoServidor = useMemo(() => {
+        if (usarPeriodo && (periodoCustom.inicio || periodoCustom.fim)) return periodoDeDatas(periodoCustom.inicio, periodoCustom.fim);
+        if (filtroMes) return periodoDoMes(filtroMes);
+        return null;
+    }, [usarPeriodo, periodoCustom, filtroMes]);
+    const periodoRef = useRef(periodoServidor);
+    periodoRef.current = periodoServidor;
+    const montadoRef = useRef(false);
+
     // Carrega APENAS romaneios (usado pelo Realtime — não recarrega veículos/materiais desnecessariamente)
     const loadRomaneios = useCallback(async () => {
         try {
-            const rom = await fetchRomaneios();
+            const rom = await fetchRomaneios(periodoRef.current);
             // Preserva o status dos romaneios que estão sendo atualizados no momento
             setRomaneios(prev => rom.map(r =>
                 updatingIdsRef.current.has(r.id)
@@ -75,7 +86,7 @@ export default function Romaneios() {
         try {
             setLoading(true);
             const [rom, mat, veh, rasc, mots] = await Promise.all([
-                fetchRomaneios(), fetchMaterials(), fetchVehicles(),
+                fetchRomaneios(periodoRef.current), fetchMaterials(), fetchVehicles(),
                 fetchRascunhos().catch(() => []),
                 fetchMotoristasComId().catch(() => []),
             ]);
@@ -96,6 +107,12 @@ export default function Romaneios() {
     }, []);
     useRecarregarAoVoltar(load);
 
+    // Trocou o mês/período → busca só o novo recorte no servidor (a 1ª carga já usa o período inicial)
+    useEffect(() => {
+        if (!montadoRef.current) { montadoRef.current = true; return; }
+        loadRomaneios();
+    }, [periodoServidor]); // eslint-disable-line
+
     const filtered = useMemo(() => {
         return romaneios.filter(r => {
             const q = search.toLowerCase();
@@ -103,8 +120,12 @@ export default function Romaneios() {
             // Comparação case-insensitive para garantir que "Cancelado" == "cancelado"
             const matchStatus = filterStatus === 'Todos' || (r.status || '').toLowerCase() === filterStatus.toLowerCase();
             let matchData = true;
-            const dataRef = r.saida ? String(r.saida).slice(0, 10) : null;
-            if (usarPeriodo && (periodoCustom.inicio || periodoCustom.fim)) {
+            // Referência: saída; sem saída (ex.: Aguardando) vale a data de criação
+            const dataRef = (r.saida || r.created_at) ? String(r.saida || r.created_at).slice(0, 10) : null;
+            // Na estrada (Carregando/Em Trânsito) sempre aparece, mesmo que tenha saído em outro mês
+            const naEstrada = STATUS_SEMPRE_VISIVEIS.includes(r.status);
+            if (naEstrada) { /* sempre visível */ }
+            else if (usarPeriodo && (periodoCustom.inicio || periodoCustom.fim)) {
                 if (!dataRef) matchData = false;
                 else {
                     if (periodoCustom.inicio && dataRef < periodoCustom.inicio) matchData = false;
@@ -347,7 +368,7 @@ export default function Romaneios() {
                                 <button onClick={() => { setFiltroMes(''); setUsarPeriodo(false); setPeriodoCustom({ inicio: '', fim: '' }); }}
                                     className="px-2 py-1.5 rounded-lg border text-xs font-medium hover:bg-gray-50"
                                     style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)' }}
-                                    title="Limpar data">✕ Data</button>
+                                    title="Limpar data e ver todos os romaneios">✕ Data</button>
                             )}
                         </div>
                     </div>
@@ -473,7 +494,7 @@ export default function Romaneios() {
                                                 {/* Painel de reprovação — aparece abaixo da linha, dentro do Fragment */}
                                                 {isReprovado && (
                                                     <tr style={{ backgroundColor: '#FFF8F8' }}>
-                                                        <td colSpan={11} style={{ padding: 0, borderBottom: '2px solid #FCA5A5', borderLeft: '3px solid #EF4444', borderRight: '1px solid #FCA5A5', borderTop: 'none' }}>
+                                                        <td colSpan={12} style={{ padding: 0, borderBottom: '2px solid #FCA5A5', borderLeft: '3px solid #EF4444', borderRight: '1px solid #FCA5A5', borderTop: 'none' }}>
                                                             <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3" style={{ backgroundColor: '#FEF2F2' }}>
                                                                 {/* Ícone + texto */}
                                                                 <div className="flex items-start gap-2 flex-1 min-w-0">

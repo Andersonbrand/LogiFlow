@@ -10,7 +10,8 @@ const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-tex
  *
  * options: [{ value, label, sublabel? }]
  */
-export default function SearchableSelect({ value, onChange, options = [], placeholder = 'Selecione...', emptyLabel = 'Nenhuma opção encontrada', disabled = false }) {
+// allowCustom: permite usar um texto que não está na lista (ex.: cidade ainda não cadastrada).
+export default function SearchableSelect({ value, onChange, options = [], placeholder = 'Selecione...', emptyLabel = 'Nenhuma opção encontrada', disabled = false, allowCustom = false }) {
     const [open, setOpen] = useState(false);
     const [busca, setBusca] = useState('');
     const ref = useRef();
@@ -25,6 +26,9 @@ export default function SearchableSelect({ value, onChange, options = [], placeh
     useEffect(() => { if (open) { setBusca(''); setTimeout(() => inputRef.current?.focus(), 0); } }, [open]);
 
     const selecionado = options.find(o => String(o.value) === String(value));
+    const textoLivre = allowCustom && !selecionado && value ? String(value) : null;
+    const buscaNorm = busca.trim().toLowerCase();
+    const mostrarUsarTexto = allowCustom && buscaNorm && !options.some(o => String(o.label).toLowerCase() === buscaNorm);
     const filtradas = busca.trim()
         ? options.filter(o => (`${o.label} ${o.sublabel || ''}`).toLowerCase().includes(busca.toLowerCase()))
         : options;
@@ -34,8 +38,8 @@ export default function SearchableSelect({ value, onChange, options = [], placeh
             <button type="button" disabled={disabled} onClick={() => setOpen(o => !o)}
                 className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg border text-sm text-left outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
                 style={{ ...inputStyle, backgroundColor: disabled ? '#F9FAFB' : 'transparent' }}>
-                <span className={selecionado ? '' : 'truncate'} style={{ color: selecionado ? 'var(--color-text-primary)' : 'var(--color-muted-foreground)' }}>
-                    {selecionado ? selecionado.label : placeholder}
+                <span className={selecionado || textoLivre ? '' : 'truncate'} style={{ color: selecionado || textoLivre ? 'var(--color-text-primary)' : 'var(--color-muted-foreground)' }}>
+                    {selecionado ? selecionado.label : (textoLivre || placeholder)}
                 </span>
                 <Icon name={open ? 'ChevronUp' : 'ChevronDown'} size={14} color="var(--color-muted-foreground)" />
             </button>
@@ -55,8 +59,14 @@ export default function SearchableSelect({ value, onChange, options = [], placeh
                             className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors" style={{ color: 'var(--color-muted-foreground)' }}>
                             {placeholder}
                         </button>
+                        {mostrarUsarTexto && (
+                            <button type="button" onClick={() => { onChange(busca.trim()); setOpen(false); }}
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors font-medium" style={{ color: 'var(--color-primary)' }}>
+                                Usar "{busca.trim()}"
+                            </button>
+                        )}
                         {filtradas.length === 0 ? (
-                            <p className="px-3 py-3 text-xs text-center" style={{ color: 'var(--color-muted-foreground)' }}>{emptyLabel}</p>
+                            !mostrarUsarTexto && <p className="px-3 py-3 text-xs text-center" style={{ color: 'var(--color-muted-foreground)' }}>{emptyLabel}</p>
                         ) : (
                             filtradas.map(o => (
                                 <button key={o.value} type="button" onClick={() => { onChange(o.value); setOpen(false); }}

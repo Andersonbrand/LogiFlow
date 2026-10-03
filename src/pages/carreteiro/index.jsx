@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { setIntervalVisivel } from 'utils/pollingVisivel';
 import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import NavigationBar from 'components/ui/NavigationBar';
 import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
@@ -317,7 +318,7 @@ export default function CarreteiroDashboard() {
         // atualizado pelo admin apareça mesmo se o Realtime falhar (o Realtime
         // acima + o reload ao focar a aba já cobrem o caso comum).
         // Atualiza AMBAS as fontes: carretas_romaneios e romaneios (admin).
-        const pollInterval = setInterval(async () => {
+        const stopPoll = setIntervalVisivel(async () => {
             if (!user?.id) return;
             try {
                 const [roms, romsAdmin] = await Promise.all([
@@ -328,8 +329,8 @@ export default function CarreteiroDashboard() {
                 setRomaneiosFerragem((roms || []).filter(r => r.tipo_carga === 'ferragem'));
                 setRomaneiosPrincipais(romsAdmin || []);
             } catch { /* silencioso */ }
-        }, 4 * 60 * 1000);
-        return () => { unsubViagens(); unsubChk(); unsubCarreg(); unsubRomaneios(); unsubPontos(); unsubRomCar(); clearInterval(pollInterval); };
+        }, 5 * 60 * 1000); // só com a aba visível
+        return () => { unsubViagens(); unsubChk(); unsubCarreg(); unsubRomaneios(); unsubPontos(); unsubRomCar(); stopPoll(); };
     }, [load]);
     useRecarregarAoVoltar(load);
 

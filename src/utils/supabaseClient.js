@@ -109,35 +109,50 @@ if (typeof document !== 'undefined') {
 // Uso: const unsub = subscribeTabela('romaneios', load)
 // Retorna função para cancelar a assinatura (use no cleanup do useEffect)
 //
-// Debounce: se vários eventos chegarem em rajada (ex: alguém salvando vários
-// itens em sequência rápida), sem isso cada um dispararia uma recarga
-// completa da página separada. Aqui, cada evento novo reinicia um pequeno
-// atraso (900ms) e só o ÚLTIMO da rajada de fato chama o callback — uma
-// recarga só, não N.
-export function subscribeTabela(tabela, callback, debounceMs = 900) {
+// Canal compartilhado: várias telas/hooks que assinam a MESMA tabela (com o mesmo
+// filtro) usam UM só canal Realtime — antes cada chamada abria um canal novo
+// (ex.: 4 hooks de configuração = 4 canais em "app_settings"). Cada assinante mantém
+// o próprio debounce e o canal só é removido quando o último assinante sai.
+//
+// Debounce (padrão 2,5 s): eventos em rajada (ex: salvar vários itens em sequência)
+// viram UMA recarga — só o último evento chama o callback.
+//
+// filtro (opcional): filtro do Realtime no servidor, ex.: `user_id=eq.${id}` —
+// evita receber (e recarregar por) eventos de outros usuários.
+const _canaisRealtime = new Map(); // chave -> { channel, ouvintes }
+
+export function subscribeTabela(tabela, callback, debounceMs = 2500, filtro = null) {
     let timer = null;
-    const dispararComDebounce = (payload) => {
+    const disparar = (payload) => {
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => callback(payload), debounceMs);
     };
 
-    const channel = supabase
-        .channel(`realtime:${tabela}:${Date.now()}`)
-        .on('postgres_changes',
-            { event: '*', schema: 'public', table: tabela },
-            (payload) => {
-                console.log(`🔔 Realtime [${tabela}]:`, payload.eventType);
-                dispararComDebounce(payload);
-            }
-        )
-        .subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-                console.log(`✅ Realtime inscrito: ${tabela}`);
-            }
-            if (status === 'CHANNEL_ERROR') {
-                console.warn(`⚠️ Realtime erro: ${tabela} — tentando reconectar`);
-            }
-        });
+    const chave = `${tabela}|${filtro || ''}`;
+    let entrada = _canaisRealtime.get(chave);
+    if (!entrada) {
+        const ouvintes = new Set();
+        const cfg = { event: '*', schema: 'public', table: tabela, ...(filtro ? { filter: filtro } : {}) };
+        const channel = supabase
+            .channel(`realtime:${chave}:${Date.now()}`)
+            .on('postgres_changes', cfg, (payload) => { ouvintes.forEach(fn => fn(payload)); })
+            .subscribe((status) => {
+                if (status === 'CHANNEL_ERROR') {
+                    console.warn(`⚠️ Realtime erro: ${tabela} — tentando reconectar`);
+                }
+            });
+        entrada = { channel, ouvintes };
+        _canaisRealtime.set(chave, entrada);
+    }
+    entrada.ouvintes.add(disparar);
 
-    return () => { if (timer) clearTimeout(timer); supabase.removeChannel(channel); };
+    const minhaEntrada = entrada;
+    return () => {
+        if (timer) clearTimeout(timer);
+        minhaEntrada.ouvintes.delete(disparar);
+        if (minhaEntrada.ouvintes.size === 0) {
+            supabase.removeChannel(minhaEntrada.channel);
+            if (_canaisRealtime.get(chave) === minhaEntrada) _canaisRealtime.delete(chave);
+        }
+    };
 }

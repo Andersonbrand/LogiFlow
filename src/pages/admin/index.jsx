@@ -6,7 +6,7 @@ import Icon from 'components/AppIcon';
 import Toast from 'components/ui/Toast';
 import { useToast } from 'utils/useToast';
 import { useAuth } from 'utils/AuthContext';
-import { fetchAllUsers, updateUserProfile, fetchMaintenanceAlerts, resolveMaintenanceAlert, createDriverUser, fetchDriverProfiles, deleteDriverUser } from 'utils/userService';
+import { fetchAllUsers, updateUserProfile, createDriverUser, fetchDriverProfiles, deleteDriverUser } from 'utils/userService';
 import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
 import { fetchRomaneiosResumo, aprovarRomaneio, reprovarRomaneio } from 'utils/romaneioService';
 import { fetchBonificacoesConsolidadas } from 'utils/bonificacaoService';
@@ -42,7 +42,6 @@ export default function AdminPanel() {
     const navigate = useNavigate();
     const { toast, showToast } = useToast();
     const [users, setUsers]         = useState([]);
-    const [alerts, setAlerts]       = useState([]);
     const [modalReprovar, setModalReprovar] = useState({ open: false, romaneio: null, motivo: '' });
     const [romaneios, setRomaneios] = useState([]);
     const [bonifs, setBonifs]       = useState([]);
@@ -90,13 +89,11 @@ export default function AdminPanel() {
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const [u, a, rom] = await Promise.all([
+            const [u, rom] = await Promise.all([
                 fetchAllUsers(),
-                fetchMaintenanceAlerts(),
                 fetchRomaneiosResumo(),
             ]);
             setUsers(u || []);
-            setAlerts(a || []);
             setRomaneios((rom || []).filter(r => !r.aprovado && r.status !== 'Cancelado' && r.status_aprovacao !== 'reprovado'));
         } catch (err) {
             showToast('Erro ao carregar dados: ' + err.message, 'error');
@@ -106,7 +103,7 @@ export default function AdminPanel() {
     }, [loadBonifs]); // eslint-disable-line
 
     // Recarrega só as bonificações quando o filtro de período muda (sem
-    // precisar recarregar usuários/romaneios/alertas de novo).
+    // precisar recarregar usuários/romaneios de novo).
     useEffect(() => { loadBonifs(); }, [bonifFiltroMes, bonifPeriodoCustom, bonifDataIni, bonifDataFim]); // eslint-disable-line
 
     // ✅ FIX: useEffect e useRecarregarAoVoltar no nível raiz do componente
@@ -247,21 +244,10 @@ export default function AdminPanel() {
         }
     };
 
-    const handleResolveAlert = async (id) => {
-        try {
-            await resolveMaintenanceAlert(id);
-            setAlerts(prev => prev.filter(a => a.id !== id));
-            showToast('Alerta resolvido!', 'success');
-        } catch (err) {
-            showToast('Erro: ' + err.message, 'error');
-        }
-    };
-
     const TABS = [
         { id: 'usuarios',    label: 'Usuários',    icon: 'Users' },
         { id: 'motoristas',  label: 'Motoristas',  icon: 'Truck' },
         { id: 'aprovacoes',  label: 'Aprovações',  icon: 'CheckSquare', badge: romaneios.length || null },
-        { id: 'alertas',     label: 'Alertas',     icon: 'AlertTriangle', badge: alerts.length || null },
         { id: 'bonificacoes',label: 'Bonificações',icon: 'Award' },
         { id: 'corredores',  label: 'Corredores',  icon: 'Map' },
         { id: 'backup',      label: 'Backup',      icon: 'Archive' },
@@ -471,40 +457,6 @@ export default function AdminPanel() {
                     )}
 
                     {/* ── ABA ALERTAS ──────────────────────────────────────── */}
-                    {tab === 'alertas' && (
-                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-2">
-                                <Icon name="AlertTriangle" size={18} color="#D97706" />
-                                <h2 className="text-base font-semibold text-slate-800">Alertas de Manutenção</h2>
-                                <span className="ml-auto text-xs text-slate-400">{alerts.length} alertas</span>
-                            </div>
-                            {alerts.length === 0 ? (
-                                <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
-                                    <Icon name="CheckCircle2" size={36} color="#86EFAC" />
-                                    <p className="text-sm">Nenhum alerta ativo</p>
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-slate-100">
-                                    {alerts.map(a => (
-                                        <div key={a.id} className="flex items-start gap-4 p-4 hover:bg-slate-50">
-                                            <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                <Icon name="AlertTriangle" size={16} color="#D97706" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-slate-800">{a.vehicles?.placa} — {a.tipo}</p>
-                                                <p className="text-xs text-slate-500 mt-0.5">{a.mensagem}</p>
-                                            </div>
-                                            <button onClick={() => handleResolveAlert(a.id)}
-                                                className="flex-shrink-0 text-xs font-medium text-green-600 hover:text-green-800 underline">
-                                                Resolver
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
                     {/* ── ABA BONIFICAÇÕES ─────────────────────────────────── */}
                     {tab === 'bonificacoes' && (
                         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">

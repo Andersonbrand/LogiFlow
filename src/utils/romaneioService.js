@@ -25,8 +25,42 @@ export async function sincronizarStatusVeiculo(vehicleId, placa, statusRomaneio)
 }
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
-export async function fetchRomaneios() {
-    const { data, error } = await supabase
+// ─── Filtro de período aplicado NO SERVIDOR ─────────────────────────────────
+// A data de referência do romaneio é a SAÍDA; se ainda não tem saída (ex.: Aguardando),
+// vale a data de criação. Romaneios que ainda estão na estrada (Carregando / Em Trânsito)
+// aparecem sempre, mesmo que tenham saído no mês anterior.
+// periodo = { inicio: ISO, fim: ISO (exclusivo) } — sem periodo, traz tudo (limite 200).
+export const STATUS_SEMPRE_VISIVEIS = ['Carregando', 'Em Trânsito'];
+
+export function periodoDoMes(mes /* 'YYYY-MM' */) {
+    if (!mes) return null;
+    const [y, m] = mes.split('-').map(Number);
+    return { inicio: new Date(y, m - 1, 1).toISOString(), fim: new Date(y, m, 1).toISOString() };
+}
+
+export function periodoDeDatas(ini /* 'YYYY-MM-DD' */, fim /* 'YYYY-MM-DD' */) {
+    if (!ini && !fim) return null;
+    const out = {};
+    if (ini) out.inicio = new Date(`${ini}T00:00:00`).toISOString();
+    if (fim) { const d = new Date(`${fim}T00:00:00`); d.setDate(d.getDate() + 1); out.fim = d.toISOString(); }
+    return out;
+}
+
+function aplicarFiltroPeriodo(q, periodo) {
+    if (!periodo || (!periodo.inicio && !periodo.fim)) return q;
+    const porSaida = [], porCriacao = [];
+    if (periodo.inicio) { porSaida.push(`saida.gte.${periodo.inicio}`); porCriacao.push(`created_at.gte.${periodo.inicio}`); }
+    if (periodo.fim)    { porSaida.push(`saida.lt.${periodo.fim}`);     porCriacao.push(`created_at.lt.${periodo.fim}`); }
+    const abertos = STATUS_SEMPRE_VISIVEIS.map(x => `"${x}"`).join(',');
+    return q.or([
+        `and(${porSaida.join(',')})`,
+        `and(saida.is.null,${porCriacao.join(',')})`,
+        `status.in.(${abertos})`,
+    ].join(','));
+}
+
+export async function fetchRomaneios(periodo = null) {
+    let q = supabase
         .from('romaneios')
         .select(`
             id, numero, motorista, motorista_id, placa, destino, status,
@@ -42,9 +76,9 @@ export async function fetchRomaneios() {
                 is_telha_zinco, comprimento_telha, metros_totais, peso_unit,
                 materials(id, nome, unidade, peso, categoria_frete, percentual_frete, is_telha_zinco, peso_base_metro))
         `)
-        .eq('is_rascunho', false)
-        .order('created_at', { ascending: false })
-        .limit(200);
+        .eq('is_rascunho', false);
+    q = aplicarFiltroPeriodo(q, periodo);
+    const { data, error } = await q.order('created_at', { ascending: false }).limit(200);
     if (error) { console.error('[romaneioService] fetchRomaneios error:', error); throw error; }
     console.log('[romaneioService] fetchRomaneios retornou:', (data||[]).length, 'registros');
     return (data || []).map(addMargem);
@@ -56,8 +90,8 @@ export async function fetchRomaneios() {
 // aninhadas) e várias páginas nunca chegam a usar esse dado — buscar só o
 // necessário reduz bastante o custo de cada consulta, principalmente porque
 // essas páginas recarregam via Realtime toda vez que qualquer romaneio muda.
-export async function fetchRomaneiosResumo() {
-    const { data, error } = await supabase
+export async function fetchRomaneiosResumo(periodo = null) {
+    let q = supabase
         .from('romaneios')
         .select(`
             id, numero, motorista, motorista_id, placa, destino, status,
@@ -69,9 +103,9 @@ export async function fetchRomaneiosResumo() {
             valor_frete, valor_frete_calculado,
             valor_total_carga, created_at, rota_config
         `)
-        .eq('is_rascunho', false)
-        .order('created_at', { ascending: false })
-        .limit(200);
+        .eq('is_rascunho', false);
+    q = aplicarFiltroPeriodo(q, periodo);
+    const { data, error } = await q.order('created_at', { ascending: false }).limit(200);
     if (error) { console.error('[romaneioService] fetchRomaneiosResumo error:', error); throw error; }
     console.log('[romaneioService] fetchRomaneiosResumo retornou:', (data||[]).length, 'registros');
     return (data || []).map(addMargem);
