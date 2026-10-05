@@ -1,0 +1,127 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONFIGURAÇÃO GLOBAL MOBILE — LogiFlow
+   Faixas (iguais a src/config/mobileDevices.js):
+     xxs ≤339  · xs 340–374 · sm 375–413 · md 414–479 · lg 480–767 · tablet ≥768
+
+   COMO USAR
+   • Telas inteiras: coloque a classe  m-screen  no elemento raiz da página.
+     Tudo abaixo (.m-screen …) só vale dentro dela, então outras telas
+     não mudam.
+   • Utilitários opcionais:  m-card · m-fluid-value · m-modal-overlay ·
+     m-modal-panel · m-bottom-bar
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Variáveis por faixa de aparelho ─────────────────────────────────────── */
+:root {
+    --m-safe-top:    env(safe-area-inset-top, 0px);
+    --m-safe-right:  env(safe-area-inset-right, 0px);
+    --m-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --m-safe-left:   env(safe-area-inset-left, 0px);
+    --m-gap:         0.75rem;   /* espaço entre cards */
+    --m-card-pad:    1rem;      /* respiro interno de cards e modais */
+    --m-modal-gap:   1rem;      /* margem do modal até a borda da tela */
+}
+@media (max-width: 339px) {
+    :root { --m-gap: 0.5rem;   --m-card-pad: 0.75rem;  --m-modal-gap: 0.375rem; }
+}
+@media (min-width: 340px) and (max-width: 374px) {
+    :root { --m-gap: 0.625rem; --m-card-pad: 0.875rem; --m-modal-gap: 0.5rem; }
+}
+@media (min-width: 375px) and (max-width: 479px) {
+    :root { --m-modal-gap: 0.75rem; }
+}
+
+/* ── Raiz da tela ────────────────────────────────────────────────────────── */
+.m-screen {
+    max-width: 100vw;
+    overflow-x: clip;                 /* nada vaza para os lados */
+    overflow-wrap: anywhere;          /* NF, placa e e-mail longos quebram em vez de estourar o card */
+}
+@supports (height: 100dvh) {
+    .m-screen.min-h-screen { min-height: 100dvh; }  /* barra do navegador no celular não cria rolagem extra */
+}
+
+/* ── Filhos de grid/flex podem ENCOLHER (causa nº 1 de card estourando) ──── */
+/* Por padrão um item de grid/flex não encolhe abaixo do conteúdo; um texto
+   comprido ou um campo de data então empurra o card para fora da tela. */
+.m-screen .grid > *,
+.m-screen [class*="grid-cols"] > * { min-width: 0; }
+/* (fora: botões, ícones, imagens e itens com largura fixa — esses mantêm o tamanho) */
+.m-screen .flex > :not(button):not(svg):not(img):not(.flex-shrink-0):not(.shrink-0):not([class^="w-"]):not([class*=" w-"]) { min-width: 0; }
+
+/* ── Campos ──────────────────────────────────────────────────────────────── */
+.m-screen input,
+.m-screen select,
+.m-screen textarea { max-width: 100%; min-width: 0; }
+.m-screen input[type="date"],
+.m-screen input[type="time"],
+.m-screen input[type="datetime-local"],
+.m-screen input[type="month"] {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+}
+/* iOS: campo de data tem largura própria e estoura a coluna sem isto */
+@supports (-webkit-touch-callout: none) {
+    .m-screen input[type="date"],
+    .m-screen input[type="time"],
+    .m-screen input[type="datetime-local"],
+    .m-screen input[type="month"] { -webkit-appearance: none; appearance: none; }
+    .m-screen input[type="date"]::-webkit-date-and-time-value,
+    .m-screen input[type="time"]::-webkit-date-and-time-value,
+    .m-screen input[type="datetime-local"]::-webkit-date-and-time-value { text-align: left; min-height: 1.4em; }
+}
+
+/* ── Grades de formulário (qualquer grid que tenha <label>) ───────────────
+   Colunas lado a lado só enquanto cabem; abaixo disso viram 1 coluna. */
+@media (max-width: 479px) {
+    .m-screen .grid.grid-cols-3:has(label) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 399px) {
+    /* data/hora precisam de ~150px: duas colunas não cabem em telas de 360–390 */
+    .m-screen .grid:is(.grid-cols-2, .grid-cols-3):has(input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"]) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+@media (max-width: 339px) {
+    .m-screen .grid:is(.grid-cols-2, .grid-cols-3):has(label) { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── Respiro menor nas telas pequenas (cards e modais) ───────────────────── */
+@media (max-width: 374px) {
+    .m-screen .p-5 { padding: var(--m-card-pad); }
+    .m-screen .px-5 { padding-left: var(--m-card-pad); padding-right: var(--m-card-pad); }
+    .m-screen .gap-x-4 { column-gap: var(--m-gap); }
+}
+@media (max-width: 339px) {
+    .m-screen .p-4 { padding: var(--m-card-pad); }
+    .m-screen .px-4 { padding-left: var(--m-card-pad); padding-right: var(--m-card-pad); }
+}
+
+/* ── Tabelas: rolam por dentro do próprio quadro, sem arrastar a página ──── */
+.m-screen .overflow-x-auto { overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+
+/* ── Utilitários ─────────────────────────────────────────────────────────── */
+/* Card padrão */
+.m-card {
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: 0.75rem;
+    padding: var(--m-card-pad);
+    min-width: 0;
+}
+/* Números grandes (valores em R$, KM): encolhem com a tela em vez de quebrar */
+.m-screen .m-fluid-value { font-size: clamp(0.95rem, 4.8vw, 1.25rem); line-height: 1.2; overflow-wrap: anywhere; }
+@media (min-width: 480px) { .m-screen .m-fluid-value { font-size: 1.25rem; } }
+
+/* Modal: respeita barra do navegador (dvh), teclado e margem por faixa */
+.m-screen .m-modal-overlay { padding: var(--m-modal-gap); }
+.m-screen .m-modal-panel {
+    max-height: calc(100vh - (var(--m-modal-gap) * 2));
+    max-height: calc(100dvh - (var(--m-modal-gap) * 2));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* Barra fixa no rodapé: não fica sob a barra de gestos do iPhone */
+.m-bottom-bar { padding-bottom: max(0.75rem, var(--m-safe-bottom)); }

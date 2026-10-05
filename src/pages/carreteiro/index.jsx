@@ -39,6 +39,7 @@ import * as XLSX from 'xlsx';
 import PrettySelect from 'components/ui/PrettySelect';
 import ChecklistItemsField from 'components/ui/ChecklistItemsField';
 import MultiFotoField from 'components/ui/MultiFotoField';
+import useDeviceProfile from 'utils/useDeviceProfile';
 import CidadesAdicionaisField, { parseParadas } from 'components/ui/CidadesAdicionaisField';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -69,9 +70,9 @@ function Field({ label, children, required }) {
 
 function ModalOverlay({ children, onClose }) {
     return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 m-modal-overlay"
             style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-y-auto m-modal-panel">
                 {children}
             </div>
         </div>
@@ -333,6 +334,7 @@ export default function CarreteiroDashboard() {
         return () => { unsubViagens(); unsubChk(); unsubCarreg(); unsubRomaneios(); unsubPontos(); unsubRomCar(); stopPoll(); };
     }, [load]);
     useRecarregarAoVoltar(load);
+    useDeviceProfile(); // publica a faixa do aparelho (data-tier) para o CSS mobile global
 
     // Bônus por carregamentos (nova fonte)
     const carregamentosComBonus = useMemo(() =>
@@ -607,7 +609,7 @@ export default function CarreteiroDashboard() {
     }, [tab]); // eslint-disable-line
 
     return (
-        <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
+        <div className="min-h-screen m-screen" style={{ backgroundColor: 'var(--color-background)' }}>
             <NavigationBar />
             <main className="main-content">
                 <div className="max-w-[1920px] mx-auto">
@@ -741,7 +743,7 @@ export default function CarreteiroDashboard() {
                                                 <Icon name={k.i} size={14} color={k.c} />
                                             </div>
                                         </div>
-                                        <p className="text-lg sm:text-xl font-bold font-data" style={{ color: k.c }}>{k.v}</p>
+                                        <p className="text-lg sm:text-xl font-bold font-data m-fluid-value" style={{ color: k.c }}>{k.v}</p>
                                     </div>
                                 ))}
                             </div>

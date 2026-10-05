@@ -8,6 +8,7 @@ module.exports = {
     theme: {
         screens: {
             // Bootstrap 5 standard breakpoints (mobile-first)
+            'xxs': '360px',   // Celulares Android padrão (360px) e maiores — ver src/config/mobileDevices.js
             'xs':  '480px',   // Celular paisagem / muito pequeno
             'sm':  '576px',   // SM — telefones paisagem, tablets menores
             'md':  '768px',   // MD — tablets retrato
