@@ -150,6 +150,7 @@ export default function CarreteiroDashboard() {
     const [formRegistro, setFormRegistro] = useState(emptyRegistro());
     const [paradasRegistro, setParadasRegistro] = useState([]); // cidades adicionais além do destino, quando a viagem passa por mais de uma
     const [modalPonto, setModalPonto] = useState(false);
+    const [pontoDetalhe, setPontoDetalhe] = useState(null); // resumo mobile → abre modal com todos os dados do registro
     const [editandoPontoId, setEditandoPontoId] = useState(null);
     const [formPonto, setFormPonto] = useState({
         tipo_local: 'Fábrica', local: '', veiculo_id: '',
@@ -362,19 +363,44 @@ export default function CarreteiroDashboard() {
         bonusExtras.reduce((s, e) => s + Number(e.valor || 0), 0)
     , [bonusExtras]);
 
+    // ── Faixa de datas do filtro de período (padrão: mês atual) ─────────────
+    // Aplicada a TODAS as abas (viagens lançadas pelo admin e pelo motorista,
+    // registros, pontos de parada, abastecimentos e checklists).
+    const ymd = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+    const faixaPeriodo = useMemo(() => {
+        if (periodoCustom?.inicio && periodoCustom?.fim) return { inicio: periodoCustom.inicio, fim: periodoCustom.fim };
+        const hoje = new Date();
+        if (period === 'mes') return { inicio: ymd(new Date(hoje.getFullYear(), hoje.getMonth(), 1)), fim: null };
+        const cut = new Date(); cut.setDate(cut.getDate() - period);
+        return { inicio: ymd(cut), fim: null };
+    }, [period, periodoCustom]);
+    const dentroDoPeriodo = useCallback((data) => {
+        if (!data) return true; // sem data: não esconde o registro
+        const str = String(data);
+        // timestamps (ex.: created_at em UTC) são convertidos para o dia local do motorista
+        const d = str.includes('T') ? ymd(new Date(str)) : str.slice(0, 10);
+        return d >= faixaPeriodo.inicio && (!faixaPeriodo.fim || d <= faixaPeriodo.fim);
+    }, [faixaPeriodo]); // eslint-disable-line
+
     // ── Filtro por placa (motoristas com mais de um veículo) ────────────────
     const registrosFiltrados = useMemo(() =>
-        filtroPlaca ? registros.filter(r => r.veiculo_id === filtroPlaca) : registros
-    , [registros, filtroPlaca]);
+        registros.filter(r => dentroDoPeriodo(r.data_carregamento) && (!filtroPlaca || r.veiculo_id === filtroPlaca))
+    , [registros, filtroPlaca, dentroDoPeriodo]);
     const romaneiosFerragemFiltrados = useMemo(() =>
-        filtroPlaca ? romaneiosFerragem.filter(r => r.veiculo_id === filtroPlaca) : romaneiosFerragem
-    , [romaneiosFerragem, filtroPlaca]);
+        romaneiosFerragem.filter(r => dentroDoPeriodo(r.data_saida) && (!filtroPlaca || r.veiculo_id === filtroPlaca))
+    , [romaneiosFerragem, filtroPlaca, dentroDoPeriodo]);
+    const romaneiosCarreteiroFiltrados = useMemo(() =>
+        romaneiosCarreteiro.filter(r => dentroDoPeriodo(r.data_saida))
+    , [romaneiosCarreteiro, dentroDoPeriodo]);
+    const pontosParadaFiltrados = useMemo(() =>
+        pontosParada.filter(p => dentroDoPeriodo(p.data_saida))
+    , [pontosParada, dentroDoPeriodo]);
     const abastFiltrados = useMemo(() =>
-        filtroPlaca ? abast.filter(a => a.veiculo_id === filtroPlaca) : abast
-    , [abast, filtroPlaca]);
+        abast.filter(a => dentroDoPeriodo(a.data_abastecimento) && (!filtroPlaca || a.veiculo_id === filtroPlaca))
+    , [abast, filtroPlaca, dentroDoPeriodo]);
     const checklistsFiltrados = useMemo(() =>
-        filtroPlaca ? checklists.filter(c => c.veiculo_id === filtroPlaca) : checklists
-    , [checklists, filtroPlaca]);
+        checklists.filter(c => dentroDoPeriodo(c.created_at) && (!filtroPlaca || c.veiculo_id === filtroPlaca))
+    , [checklists, filtroPlaca, dentroDoPeriodo]);
     // Placas do próprio motorista, extraídas dos registros (não a frota toda) —
     // relevante para motoristas que dirigem mais de um veículo
     const minhasPlacas = useMemo(() => {
@@ -600,6 +626,28 @@ export default function CarreteiroDashboard() {
         { id: 'abastecimentos',label: 'Abastecimentos',    icon: 'Fuel' },
         { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck' },
     ];
+
+    const abrirEditarPonto = (p) => {
+        setEditandoPontoId(p.id);
+        setFormPonto({
+            tipo_local: p.tipo_local || 'Fábrica', local: p.local || '',
+            veiculo_id: p.veiculo_id || '',
+            data_saida: p.data_saida || '',
+            horario_saida: p.horario_saida || '', km_saida: p.km_saida ?? '',
+            tipo_local_chegada: p.tipo_local_chegada || 'Fábrica', local_chegada: p.local_chegada || '',
+            data_chegada: p.data_chegada || '',
+            horario_chegada: p.horario_chegada || '', km_chegada: p.km_chegada ?? '',
+            cupom_fiscal: p.cupom_fiscal || '', observacoes: p.observacoes || '',
+            horarios_extras: p.horarios_extras || [],
+        });
+        setModalPonto(true);
+    };
+    const excluirPonto = async (p) => {
+        const ok = await confirm({ title: 'Excluir registro?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try { await deletePontoParada(p.id); showToast('Registro excluído.', 'success'); setPontoDetalhe(null); load(); }
+        catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
 
     const tabAtual = TABS.find(t => t.id === tab);
     const { setPageTabs } = usePageTabs();
@@ -964,7 +1012,7 @@ export default function CarreteiroDashboard() {
                                                 </p>
                                             </div>
 
-                                            {romaneiosCarreteiro.length === 0 ? (
+                                            {romaneiosCarreteiroFiltrados.length === 0 ? (
                                                 <div className="bg-white rounded-xl border p-10 flex flex-col items-center justify-center gap-3"
                                                     style={{ borderColor: 'var(--color-border)' }}>
                                                     <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
@@ -975,7 +1023,7 @@ export default function CarreteiroDashboard() {
                                                         Quando o admin lançar um romaneio para você, ele aparecerá aqui.
                                                     </p>
                                                 </div>
-                                            ) : romaneiosCarreteiro.map(r => {
+                                            ) : romaneiosCarreteiroFiltrados.map(r => {
                                                 const STATUS_ROM = {
                                                     'Aguardando':        { bg: '#FEF9C3', text: '#B45309', icon: 'Clock' },
                                                     'Carregando':        { bg: '#FEF3C7', text: '#D97706', icon: 'Package' },
@@ -1103,7 +1151,7 @@ export default function CarreteiroDashboard() {
                                                 </Button>
                                             </div>
 
-                                            {pontosParada.length === 0 ? (
+                                            {pontosParadaFiltrados.length === 0 ? (
                                                 <div className="bg-white rounded-xl border p-10 flex flex-col items-center justify-center gap-3"
                                                     style={{ borderColor: 'var(--color-border)' }}>
                                                     <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
@@ -1115,8 +1163,39 @@ export default function CarreteiroDashboard() {
                                                     </p>
                                                 </div>
                                             ) : (
-                                                /* Tabela estilo planilha — horizontal scroll em mobile */
-                                                <div className="rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
+                                                <>
+                                                {/* Mobile: resumo compacto — toque no card para ver todos os dados */}
+                                                <div className="md:hidden rounded-xl border overflow-hidden shadow-sm bg-white" style={{ borderColor: 'var(--color-border)' }}>
+                                                    {pontosParadaFiltrados.map((p, idx) => {
+                                                        const rodado = p.km_saida != null && p.km_chegada != null ? Number(p.km_chegada) - Number(p.km_saida) : null;
+                                                        return (
+                                                            <button key={p.id} type="button" onClick={() => setPontoDetalhe(p)}
+                                                                className="w-full text-left px-3 py-2.5 flex items-center gap-2 active:bg-blue-50"
+                                                                style={{ borderTop: idx === 0 ? 'none' : '1px solid var(--color-border)' }}>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>
+                                                                        {p.local || '—'}{p.local_chegada ? ` → ${p.local_chegada}` : ''}
+                                                                    </p>
+                                                                    <p className="text-xs font-data truncate" style={{ color: 'var(--color-muted-foreground)' }}>
+                                                                        {p.data_saida ? FMT_DATE(p.data_saida) : '—'}{p.horario_saida ? ` · ${String(p.horario_saida).slice(0, 5)}` : ''}
+                                                                        {p.veiculo?.placa ? ` · ${p.veiculo.placa}` : ''}
+                                                                    </p>
+                                                                </div>
+                                                                {rodado != null && rodado >= 0 && (
+                                                                    <span className="text-xs font-data font-semibold flex-shrink-0 px-2 py-0.5 rounded-full" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>
+                                                                        {rodado.toLocaleString('pt-BR')} km
+                                                                    </span>
+                                                                )}
+                                                                <Icon name="ChevronRight" size={16} color="var(--color-muted-foreground)" />
+                                                            </button>
+                                                        );
+                                                    })}
+                                                    <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
+                                                        {pontosParadaFiltrados.length} registro{pontosParadaFiltrados.length !== 1 ? 's' : ''}
+                                                    </div>
+                                                </div>
+                                                {/* Desktop/tablet: tabela estilo planilha */}
+                                                <div className="hidden md:block rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
                                                     <div className="overflow-x-auto">
                                                         <table className="w-full text-xs" style={{ minWidth: 700 }}>
                                                             <thead>
@@ -1127,7 +1206,7 @@ export default function CarreteiroDashboard() {
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
-                                                                {pontosParada.map((p, idx) => {
+                                                                {pontosParadaFiltrados.map((p, idx) => {
                                                                     const TIPO_COLOR = {
                                                                         'Fábrica': '#EFF6FF', 'Empresa': '#FEF3C7', 'Estoque': '#FEF9C3',
                                                                         'Entrega': '#D1FAE5', 'Posto': '#EDE9FE',
@@ -1253,9 +1332,10 @@ export default function CarreteiroDashboard() {
                                                         </table>
                                                     </div>
                                                     <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
-                                                        {pontosParada.length} registro{pontosParada.length !== 1 ? 's' : ''}
+                                                        {pontosParadaFiltrados.length} registro{pontosParadaFiltrados.length !== 1 ? 's' : ''}
                                                     </div>
                                                 </div>
+                                                </>
                                             )}
                                         </div>
                                     )}
@@ -2085,6 +2165,64 @@ export default function CarreteiroDashboard() {
                     </div>
                 </ModalOverlay>
             )}
+
+            {pontoDetalhe && (() => {
+                const p = pontoDetalhe;
+                const rodado = p.km_saida != null && p.km_chegada != null ? Number(p.km_chegada) - Number(p.km_saida) : null;
+                const Item = ({ label, children }) => (
+                    <div className="min-w-0">
+                        <p className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>{label}</p>
+                        <p className="text-sm font-semibold break-words" style={{ color: 'var(--color-text-primary)' }}>{children || '—'}</p>
+                    </div>
+                );
+                return (
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 m-modal-overlay"
+                        style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }} onClick={() => setPontoDetalhe(null)}>
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                            <ModalHeader title="Ponto de parada" icon="MapPin" onClose={() => setPontoDetalhe(null)} />
+                            <div className="p-4 overflow-y-auto flex flex-col gap-4">
+                                {/* Saída | Chegada lado a lado, aproveitando a largura da tela */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="rounded-xl border p-3 flex flex-col gap-2.5" style={{ borderColor: 'var(--color-border)', backgroundColor: '#EFF6FF' }}>
+                                        <p className="text-xs font-bold" style={{ color: '#1D4ED8' }}>SAÍDA</p>
+                                        <Item label="Local">{p.local}{p.tipo_local ? ` (${p.tipo_local})` : ''}</Item>
+                                        <Item label="Data / hora">{p.data_saida ? FMT_DATE(p.data_saida) : ''}{p.horario_saida ? ` · ${p.horario_saida}` : ''}</Item>
+                                        <Item label="KM">{p.km_saida != null ? Number(p.km_saida).toLocaleString('pt-BR') : ''}</Item>
+                                    </div>
+                                    <div className="rounded-xl border p-3 flex flex-col gap-2.5" style={{ borderColor: 'var(--color-border)', backgroundColor: '#ECFDF5' }}>
+                                        <p className="text-xs font-bold" style={{ color: '#059669' }}>CHEGADA</p>
+                                        <Item label="Local">{p.local_chegada}{p.local_chegada && p.tipo_local_chegada ? ` (${p.tipo_local_chegada})` : ''}</Item>
+                                        <Item label="Data / hora">{p.data_chegada ? FMT_DATE(p.data_chegada) : ''}{p.horario_chegada ? ` · ${p.horario_chegada}` : ''}</Item>
+                                        <Item label="KM">{p.km_chegada != null ? Number(p.km_chegada).toLocaleString('pt-BR') : ''}</Item>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <Item label="Placa">{p.veiculo?.placa}</Item>
+                                    <Item label="KM rodados">{rodado != null && rodado >= 0 ? `${rodado.toLocaleString('pt-BR')} km` : ''}</Item>
+                                    <Item label="Cupom">{p.cupom_fiscal}</Item>
+                                </div>
+                                {p.observacoes && <Item label="Observações">{p.observacoes}</Item>}
+                                {p.horarios_extras?.length > 0 && (
+                                    <div className="rounded-xl border overflow-hidden" style={{ borderColor: '#E9D5FF' }}>
+                                        <p className="px-3 py-1.5 text-xs font-bold" style={{ backgroundColor: '#FAF5FF', color: '#6D28D9' }}>Horários extras</p>
+                                        {p.horarios_extras.map((ex, i) => (
+                                            <div key={i} className="px-3 py-2 border-t text-xs grid grid-cols-2 gap-2" style={{ borderColor: '#E9D5FF' }}>
+                                                <div><strong>{ex.local || `Extra #${i + 1}`}</strong><br />{ex.data_saida ? FMT_DATE(ex.data_saida) : '—'} {ex.horario_saida || ''} · {ex.km_saida != null ? Number(ex.km_saida).toLocaleString('pt-BR') : '—'} km</div>
+                                                <div><strong>{ex.local_chegada || '—'}</strong><br />{ex.data_chegada ? FMT_DATE(ex.data_chegada) : '—'} {ex.horario_chegada || ''} · {ex.km_chegada != null ? Number(ex.km_chegada).toLocaleString('pt-BR') : '—'} km</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex gap-2 justify-end px-4 py-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                                <button onClick={() => excluirPonto(p)} className="px-3 py-2 rounded-lg border text-sm font-medium text-red-600 hover:bg-red-50" style={{ borderColor: '#FECACA' }}>Excluir</button>
+                                <button onClick={() => { setPontoDetalhe(null); abrirEditarPonto(p); }} className="px-3 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Editar</button>
+                                <button onClick={() => setPontoDetalhe(null)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ backgroundColor: 'var(--color-primary)' }}>Fechar</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {modalPonto && (
                 <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"

@@ -132,7 +132,7 @@ export default function MotoristaDashboard() {
             const [roms, a, c, ve, p, cfg, itensCheck] = await Promise.all([
                 romQuery.then(r => r.data || []),
                 fetchAbastecimentos({ motoristaId: user.id, dataInicio: dateStr, ...(dateFimStr ? { dataFim: dateFimStr } : {}) }),
-                fetchChecklists({ motoristaId: user.id }),
+                fetchChecklists({ motoristaId: user.id, dataInicio: dateStr, ...(dateFimStr ? { dataFim: dateFimStr } : {}) }),
                 fetchCaminhoesPlacas(),
                 fetchPostos().catch(() => []),
                 fetchConfigAbastecimento().catch(() => ({ preco_diesel: 0, preco_arla: 0 })),

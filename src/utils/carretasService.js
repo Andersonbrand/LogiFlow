@@ -1933,6 +1933,18 @@ export async function assinarEnvioAco(id, assinaturaTexto) {
     return data;
 }
 
+// Remove a assinatura digital do envio (desmarcar o checkbox no modal de visualização).
+export async function desassinarEnvioAco(id) {
+    const { data, error } = await supabase
+        .from('carretas_envios_aco')
+        .update({ assinatura_admin: null, assinatura_admin_at: null })
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
 export async function excluirEnvioAco(id) {
     const { error } = await supabase.from('carretas_envios_aco').delete().eq('id', id);
     if (error) throw error;

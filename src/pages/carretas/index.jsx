@@ -58,7 +58,7 @@ import {
     pagarBoletoCarreta, pagarParcelaCartaoCarreta,
     revogarBoletoCarreta, revogarParcelaCartaoCarreta,
     fetchVeiculosProprios, fetchMotoristasProprios, fetchCarreteirosPropriosOnly,
-    fetchEnviosAco, registrarEnvioAco, atualizarEnvioAco, assinarEnvioAco, excluirEnvioAco,
+    fetchEnviosAco, registrarEnvioAco, atualizarEnvioAco, assinarEnvioAco, desassinarEnvioAco, excluirEnvioAco,
     updateAbastecimento,
 } from 'utils/carretasService';
 import {
@@ -7455,7 +7455,7 @@ function TabDistribuicaoAco() {
 
     const abrirNovo = (motoristaId = '') => {
         setErroForm('');
-        setFormModal({ id: null, motoristaId, placa: placaSugerida(motoristaId), observacoes: '', pedidos: [PEDIDO_ACO_VAZIO()], destinoAntigo: '' });
+        setFormModal({ id: null, motoristaId, placa: placaSugerida(motoristaId), observacoes: '', pedidos: [PEDIDO_ACO_VAZIO()], destinoAntigo: '', assinar: !!profile?.assinatura_digital, assinaturaAtual: '' });
     };
     const abrirEditar = (e) => {
         setErroForm('');
@@ -7465,6 +7465,7 @@ function TabDistribuicaoAco() {
             id: e.id, motoristaId: e.motorista_id || '', motoristaNome: e.motorista?.name || '', placa: e.placa || '', observacoes: e.observacoes || '',
             pedidos: ped.length ? ped.map(p => ({ cliente: p.cliente || '', numero_pedido: p.numero_pedido || '', cidade: p.cidade || '', data_entrega: p.data_entrega || '' })) : [PEDIDO_ACO_VAZIO()],
             destinoAntigo: ped.length ? '' : (e.destino || ''),
+            assinar: !!e.assinatura_admin, assinaturaAtual: e.assinatura_admin || '',
         });
     };
     const setCampo = (campo, valor) => setFormModal(f => ({ ...f, [campo]: valor }));
@@ -7489,7 +7490,8 @@ function TabDistribuicaoAco() {
             observacoes: f.observacoes.trim() || null,
             pedidos,
             destino: resumoPedidosAco(pedidos),
-            assinaturaAdmin: profile?.assinatura_digital || null,
+            // Marcado: mantém a assinatura já existente (se houver) ou assina com a do usuário; desmarcado: remove.
+            assinaturaAdmin: f.assinar ? (f.assinaturaAtual || profile?.assinatura_digital || null) : null,
         };
         setSalvando(true);
         try {
@@ -7515,14 +7517,29 @@ function TabDistribuicaoAco() {
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 
+    const isAdminAco = profile?.role === 'admin';
+    const [assinandoAco, setAssinandoAco] = useState(false);
+    const aplicarAssinatura = (atualizado) => {
+        setViewEnvio(v => v ? { ...v, assinatura_admin: atualizado.assinatura_admin, assinatura_admin_at: atualizado.assinatura_admin_at } : v);
+        setEnvios(es => es.map(x => x.id === atualizado.id ? { ...x, assinatura_admin: atualizado.assinatura_admin, assinatura_admin_at: atualizado.assinatura_admin_at } : x));
+    };
     const assinar = async (e) => {
         if (!profile?.assinatura_digital) return;
+        setAssinandoAco(true);
         try {
-            const atualizado = await assinarEnvioAco(e.id, profile.assinatura_digital);
-            setViewEnvio(v => v ? { ...v, assinatura_admin: atualizado.assinatura_admin, assinatura_admin_at: atualizado.assinatura_admin_at } : v);
+            aplicarAssinatura(await assinarEnvioAco(e.id, profile.assinatura_digital));
             showToast('Envio assinado digitalmente!', 'success');
-            load();
         } catch (err) { showToast('Erro ao assinar: ' + err.message, 'error'); }
+        finally { setAssinandoAco(false); }
+    };
+    const desassinar = async (e) => {
+        if (!isAdminAco) return;
+        setAssinandoAco(true);
+        try {
+            aplicarAssinatura(await desassinarEnvioAco(e.id));
+            showToast('Assinatura removida.', 'success');
+        } catch (err) { showToast('Erro ao remover assinatura: ' + err.message, 'error'); }
+        finally { setAssinandoAco(false); }
     };
 
     const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white';
@@ -7691,9 +7708,22 @@ function TabDistribuicaoAco() {
                                 <textarea value={formModal.observacoes} onChange={e => setCampo('observacoes', e.target.value)} rows={2} className={inputCls} style={inputStyle} />
                             </div>
 
-                            {!profile?.assinatura_digital && (
-                                <p className="text-xs" style={{ color: '#B45309' }}>
-                                    Você ainda não tem assinatura digital cadastrada (Admin → Configurações): o comprovante sairá sem a assinatura do responsável.
+                            {profile?.assinatura_digital || formModal.assinaturaAtual ? (
+                                <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer"
+                                    style={formModal.assinar ? { backgroundColor: '#F5F3FF', border: '1px solid #C4B5FD' } : { backgroundColor: 'var(--color-muted)', border: '1px solid var(--color-border)' }}>
+                                    <input type="checkbox" checked={!!formModal.assinar} onChange={e => setCampo('assinar', e.target.checked)} className="w-4 h-4" />
+                                    <Icon name={formModal.assinar ? 'BadgeCheck' : 'PenTool'} size={14} color={formModal.assinar ? '#7C3AED' : 'var(--color-muted-foreground)'} />
+                                    <span className="text-xs font-medium" style={{ color: formModal.assinar ? '#7C3AED' : 'var(--color-text-secondary)' }}>
+                                        {formModal.assinar
+                                            ? <><strong>Transporte (admin):</strong> {formModal.assinaturaAtual || profile?.assinatura_digital}</>
+                                            : `Assinar como Transporte (admin) (${profile?.assinatura_digital || formModal.assinaturaAtual})`}
+                                        {!formModal.assinar && formModal.assinaturaAtual && ' — desmarcado: a assinatura será removida ao salvar'}
+                                    </span>
+                                </label>
+                            ) : (
+                                <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-muted-foreground)' }}>
+                                    <Icon name="Info" size={12} />
+                                    Você ainda não tem uma assinatura digital cadastrada. Cadastre em Admin &gt; Configurações.
                                 </p>
                             )}
                             {erroForm && <p className="text-sm font-medium text-red-600">{erroForm}</p>}
@@ -7725,8 +7755,6 @@ function TabDistribuicaoAco() {
                                     <div><p className="text-[11px] uppercase text-slate-500">Motorista</p><p className="font-semibold">{viewEnvio.motorista?.name || '—'}</p></div>
                                     <div><p className="text-[11px] uppercase text-slate-500">Placa</p><p className="font-semibold font-data">{viewEnvio.placa || '—'}</p></div>
                                     <div><p className="text-[11px] uppercase text-slate-500">Data do envio</p><p className="font-semibold">{fmtDataAco(viewEnvio.data_envio)}</p></div>
-                                    <div><p className="text-[11px] uppercase text-slate-500">Assinatura do admin</p>
-                                        <p className="font-semibold">{viewEnvio.assinatura_admin ? `✓ ${viewEnvio.assinatura_admin}` : 'Não assinado'}</p></div>
                                 </div>
                                 {ped.length > 0 ? (
                                     <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
@@ -7741,9 +7769,33 @@ function TabDistribuicaoAco() {
                                     <p className="text-sm"><span className="text-[11px] uppercase text-slate-500 block">Destino (registro antigo)</span>{viewEnvio.destino || '—'}</p>
                                 )}
                                 {viewEnvio.observacoes && <p><span className="text-[11px] uppercase text-slate-500 block">Observações</span>{viewEnvio.observacoes}</p>}
-                                {!viewEnvio.assinatura_admin && (profile?.assinatura_digital
-                                    ? <button onClick={() => assinar(viewEnvio)} className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-green-600 text-green-700 hover:bg-green-50">Assinar digitalmente como {profile.assinatura_digital}</button>
-                                    : <p className="text-xs" style={{ color: '#B45309' }}>Cadastre sua assinatura digital em Admin → Configurações para assinar este envio.</p>)}
+                                {(profile?.role === 'admin' || profile?.role === 'operador') && (viewEnvio.assinatura_admin ? (
+                                    <label className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg ${isAdminAco ? 'cursor-pointer' : ''}`}
+                                        style={{ backgroundColor: '#F5F3FF', border: '1px solid #C4B5FD' }}
+                                        title={isAdminAco ? 'Desmarque para remover a assinatura' : undefined}>
+                                        <input type="checkbox" checked readOnly={!isAdminAco} disabled={!isAdminAco || assinandoAco}
+                                            onChange={() => isAdminAco && desassinar(viewEnvio)} className="w-4 h-4" />
+                                        <Icon name="BadgeCheck" size={14} color="#7C3AED" />
+                                        <span className="text-xs font-medium" style={{ color: '#7C3AED' }}>
+                                            <strong>Transporte (admin):</strong> {viewEnvio.assinatura_admin}
+                                            {viewEnvio.assinatura_admin_at && ` em ${new Date(viewEnvio.assinatura_admin_at).toLocaleDateString('pt-BR')}`}
+                                            {isAdminAco && ' — desmarque para remover'}
+                                        </span>
+                                    </label>
+                                ) : profile?.assinatura_digital ? (
+                                    <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer" style={{ backgroundColor: 'var(--color-muted)', border: '1px solid var(--color-border)' }}>
+                                        <input type="checkbox" checked={false} disabled={assinandoAco} onChange={() => assinar(viewEnvio)} className="w-4 h-4" />
+                                        <Icon name="PenTool" size={14} color="var(--color-muted-foreground)" />
+                                        <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                                            {assinandoAco ? 'Assinando...' : `Assinar como Transporte (admin) (${profile.assinatura_digital})`}
+                                        </span>
+                                    </label>
+                                ) : (
+                                    <p className="text-xs flex items-center gap-1.5" style={{ color: 'var(--color-muted-foreground)' }}>
+                                        <Icon name="Info" size={12} />
+                                        Você ainda não tem uma assinatura digital cadastrada. Cadastre em Admin &gt; Configurações.
+                                    </p>
+                                ))}
                             </div>
                             <div className="flex flex-wrap gap-2 justify-end px-5 py-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
                                 <button onClick={() => excluir(viewEnvio.id)} className="px-3 py-2 rounded-lg border text-sm font-medium text-red-600 hover:bg-red-50" style={{ borderColor: '#FECACA' }}>Excluir</button>
