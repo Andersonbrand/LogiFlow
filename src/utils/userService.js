@@ -50,10 +50,19 @@ export async function upsertUserProfile(userId, profile) {
 }
 
 // Sprint 4 — Notifications
+// Início do mês corrente (00:00 do dia 1, horário local) em ISO.
+// Notificações anteriores a isso "vencem" e deixam de aparecer.
+export function inicioDoMesAtualISO() {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0).toISOString();
+}
+
 export async function fetchNotifications(userId) {
     const { data, error } = await supabase
         .from('notifications').select('*, romaneios(numero)')
-        .eq('user_id', userId).order('created_at', { ascending: false }).limit(50);
+        .eq('user_id', userId)
+        .gte('created_at', inicioDoMesAtualISO())
+        .order('created_at', { ascending: false }).limit(50);
     if (error) return [];
     return data;
 }
@@ -65,6 +74,18 @@ export async function markNotificationRead(id) {
 export async function markAllNotificationsRead(userId) {
     await supabase.from('notifications').update({ lida: true })
         .eq('user_id', userId).eq('lida', false);
+}
+
+// Limpa (exclui) todas as notificações do usuário
+export async function clearAllNotifications(userId) {
+    const { error } = await supabase.from('notifications').delete().eq('user_id', userId);
+    if (error) throw error;
+}
+
+// Remove uma notificação específica do usuário
+export async function deleteNotification(id) {
+    const { error } = await supabase.from('notifications').delete().eq('id', id);
+    if (error) throw error;
 }
 
 // Sprint 2 — Maintenance alerts

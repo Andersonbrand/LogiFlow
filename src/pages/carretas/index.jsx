@@ -7633,12 +7633,13 @@ function TabDistribuicaoAco() {
                 </div>
             )}
             <Toast toast={toast} />
-            {ConfirmDialog}
+            {/* display: contents evita que o space-y-5 aplique margin-top no overlay do diálogo */}
+            <div style={{ display: 'contents' }}>{ConfirmDialog}</div>
 
 
             {/* ── Formulário (novo / edição) ── */}
             {formModal && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)', marginTop: 0 }}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col">
                         <div className="px-5 pt-5 pb-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
                             <h3 className="font-heading font-bold text-base" style={{ color: 'var(--color-text-primary)' }}>
@@ -7743,7 +7744,7 @@ function TabDistribuicaoAco() {
             {viewEnvio && (() => {
                 const ped = pedidosDoEnvioAco(viewEnvio);
                 return (
-                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
+                    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)', marginTop: 0 }}
                         onClick={() => setViewEnvio(null)}>
                         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
                             <div className="px-5 pt-5 pb-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--color-border)' }}>

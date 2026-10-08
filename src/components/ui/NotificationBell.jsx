@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Icon from 'components/AppIcon';
-import { fetchNotifications, markNotificationRead, markAllNotificationsRead } from 'utils/userService';
+import { fetchNotifications, markNotificationRead, markAllNotificationsRead, clearAllNotifications, deleteNotification, inicioDoMesAtualISO } from 'utils/userService';
 import { useAuth } from 'utils/AuthContext';
 import { subscribeTabela } from 'utils/supabaseClient';
 import { setIntervalVisivel } from 'utils/pollingVisivel';
@@ -12,8 +12,11 @@ export default function NotificationBell() {
     const [open, setOpen]       = useState(false);
     const ref                   = useRef();
     const ultimaCargaRef        = useRef(0);
+    const mesRef                = useRef(inicioDoMesAtualISO());
 
-    const unread = notifs.filter(n => !n.lida).length;
+    // Só exibe notificações do mês corrente; ao virar o mês as antigas somem sozinhas
+    const visiveis = notifs.filter(n => new Date(n.created_at) >= new Date(mesRef.current));
+    const unread = visiveis.filter(n => !n.lida).length;
 
     const load = useCallback(async () => {
         if (!user) return;
@@ -21,6 +24,7 @@ export default function NotificationBell() {
         try {
             const data = await fetchNotifications(user.id);
             setNotifs(data || []);
+            mesRef.current = inicioDoMesAtualISO();
         } catch {
             // silently fail — não interrompe o uso do app
         }
@@ -66,6 +70,21 @@ export default function NotificationBell() {
         try {
             await markAllNotificationsRead(user.id);
             setNotifs(prev => prev.map(n => ({ ...n, lida: true })));
+        } catch {}
+    };
+
+    const handleClearAll = async () => {
+        try {
+            await clearAllNotifications(user.id);
+            setNotifs([]);
+        } catch {}
+    };
+
+    const handleDelete = async (e, id) => {
+        e.stopPropagation();
+        try {
+            await deleteNotification(id);
+            setNotifs(prev => prev.filter(n => n.id !== id));
         } catch {}
     };
 
@@ -151,28 +170,41 @@ export default function NotificationBell() {
                                 </span>
                             )}
                         </div>
-                        {unread > 0 && (
-                            <button
-                                onClick={handleMarkAll}
-                                className="text-xs font-caption hover:underline flex items-center gap-1"
-                                style={{ color: 'var(--color-primary)' }}
-                            >
-                                <Icon name="CheckCheck" size={12} color="currentColor" />
-                                Marcar todas
-                            </button>
-                        )}
+                        <div className="flex items-center gap-3">
+                            {unread > 0 && (
+                                <button
+                                    onClick={handleMarkAll}
+                                    className="text-xs font-caption hover:underline flex items-center gap-1"
+                                    style={{ color: 'var(--color-primary)' }}
+                                >
+                                    <Icon name="CheckCheck" size={12} color="currentColor" />
+                                    Marcar todas
+                                </button>
+                            )}
+                            {visiveis.length > 0 && (
+                                <button
+                                    onClick={handleClearAll}
+                                    className="text-xs font-caption hover:underline flex items-center gap-1"
+                                    style={{ color: '#DC2626' }}
+                                    title="Excluir todas as notificações"
+                                >
+                                    <Icon name="Trash2" size={12} color="currentColor" />
+                                    Limpar
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     {/* List */}
                     <div className="max-h-80 overflow-y-auto divide-y" style={{ borderColor: 'var(--color-border)' }}>
-                        {notifs.length === 0 ? (
+                        {visiveis.length === 0 ? (
                             <div className="py-10 text-center flex flex-col items-center gap-2">
                                 <Icon name="BellOff" size={28} color="var(--color-muted-foreground)" />
                                 <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
                                     Nenhuma notificação
                                 </p>
                             </div>
-                        ) : notifs.map(n => {
+                        ) : visiveis.map(n => {
                             const cfg = TIPO_CONFIG[n.tipo] || TIPO_CONFIG.system;
                             return (
                                 <div
@@ -199,16 +231,25 @@ export default function NotificationBell() {
                                     {!n.lida && (
                                         <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />
                                     )}
+                                    <button
+                                        type="button"
+                                        onClick={(e) => handleDelete(e, n.id)}
+                                        title="Excluir notificação"
+                                        aria-label="Excluir notificação"
+                                        className="flex-shrink-0 p-1 rounded hover:bg-slate-200 transition-colors"
+                                    >
+                                        <Icon name="X" size={12} color="var(--color-muted-foreground)" />
+                                    </button>
                                 </div>
                             );
                         })}
                     </div>
 
                     {/* Footer */}
-                    {notifs.length > 0 && (
+                    {visiveis.length > 0 && (
                         <div className="px-4 py-2.5 border-t text-center" style={{ borderColor: 'var(--color-border)', backgroundColor: '#FAFAFA' }}>
                             <span className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>
-                                {notifs.length} notificação{notifs.length !== 1 ? 'ões' : ''} no histórico
+                                {visiveis.length} notificaç{visiveis.length !== 1 ? 'ões' : 'ão'} neste mês
                             </span>
                         </div>
                     )}

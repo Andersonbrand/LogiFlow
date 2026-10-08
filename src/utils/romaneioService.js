@@ -383,7 +383,7 @@ export async function updateRomaneio(id, romaneio, itens) {
     // Também guarda a diária anterior — usada logo abaixo para decidir se
     // `diaria_criada_em` precisa ser (re)gravada nesta edição.
     const { data: romAntes } = await supabase.from('romaneios')
-        .select('vehicle_id, placa, custo_motorista, diaria_criada_em').eq('id', id).single();
+        .select('vehicle_id, placa, custo_motorista, diaria_criada_em, status_aprovacao').eq('id', id).single();
 
     // ── 0. TRAVA DE SEGURANÇA — nunca apagar pedidos/itens que já existem no
     // banco por causa de um formulário que chegou vazio por engano ──────────
@@ -484,7 +484,12 @@ export async function updateRomaneio(id, romaneio, itens) {
         diariaCriadaEm = romAntes?.diaria_criada_em || new Date().toISOString(); // mantém a data já gravada
     }
 
-    const { error } = await supabase.from('romaneios').update(await ensurePlaca(buildPayload(romaneio, diariaCriadaEm))).eq('id', id);
+    // Romaneio reprovado que foi editado ("Editar e reenviar"): volta para a fila de
+    // aprovação do admin. Sem isso ele continuava 'reprovado' e nunca aparecia como pendente.
+    const reenviar = romAntes?.status_aprovacao === 'reprovado'
+        ? { aprovado: false, status_aprovacao: 'pendente', aprovado_por: null, aprovado_em: null, motivo_reprovacao: null }
+        : {};
+    const { error } = await supabase.from('romaneios').update({ ...(await ensurePlaca(buildPayload(romaneio, diariaCriadaEm))), ...reenviar }).eq('id', id);
     if (error) throw error;
 
     // Placa/veículo confirmado (ou trocado) neste romaneio → sincroniza status automaticamente
