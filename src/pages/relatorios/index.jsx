@@ -67,6 +67,9 @@ function ChartCard({ title, children, height = 220 }) {
     );
 }
 
+function mesAtualLocal() { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; }
+function dataLocalISO(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+
 function fmt(n) { return Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtBRL(n) { return 'R$ ' + fmt(n); }
 function fmtKg(n) { return Number(n || 0).toLocaleString('pt-BR') + ' kg'; }
@@ -79,7 +82,9 @@ export default function Relatorios() {
     const [abastecimentosCaminhao, setAbastecimentosCaminhao] = useState([]);
     const [dadosMargemCaminhao, setDadosMargemCaminhao] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [periodo, setPeriodo] = useState('30');
+    // Período padrão = mês (atual). Só muda quando o usuário escolhe outro mês ou um atalho (7d/30d/90d/1 ano).
+    const [periodo, setPeriodo] = useState('mes'); // 'mes' | '7' | '30' | '90' | '365'
+    const [mesRef, setMesRef] = useState(() => mesAtualLocal());
     const [dreMesInicio, setDreMesInicio] = useState(() => new Date().toISOString().slice(0, 7));
     const [dreMesFim, setDreMesFim] = useState(() => new Date().toISOString().slice(0, 7));
     const [tab, setTab] = useState('operacional');
@@ -123,8 +128,35 @@ export default function Relatorios() {
             .catch(err => showToast('Erro ao atualizar: ' + err.message, 'error'));
     }, [tab, empresaFiltro, mesFiltro]); // eslint-disable-line
 
-    const cutoff = useMemo(() => { const d = new Date(); d.setDate(d.getDate() - Number(periodo)); return d; }, [periodo]);
-    const romFiltrados = useMemo(() => romaneios.filter(r => r.saida && new Date(r.saida) >= cutoff), [romaneios, cutoff]);
+    // ─── Período do cabeçalho (vale para Operacional, Financeiro e Frota) ───
+    // mês: do dia 1 ao último dia do mês escolhido | atalhos: últimos N dias até hoje
+    const { periodoIni, periodoFim, diasPeriodo, periodoLabel } = useMemo(() => {
+        if (periodo === 'mes') {
+            const [ano, mes] = mesRef.split('-').map(Number);
+            const ultimoDia = new Date(ano, mes, 0).getDate();
+            const hoje = new Date();
+            const eMesAtual = hoje.getFullYear() === ano && hoje.getMonth() + 1 === mes;
+            const eFuturo = new Date(ano, mes - 1, 1) > hoje;
+            return {
+                periodoIni: `${mesRef}-01`,
+                periodoFim: `${mesRef}-${String(ultimoDia).padStart(2, '0')}`,
+                diasPeriodo: eFuturo ? 1 : (eMesAtual ? hoje.getDate() : ultimoDia),
+                periodoLabel: new Date(ano, mes - 1, 15).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
+            };
+        }
+        const d = new Date(); d.setDate(d.getDate() - Number(periodo));
+        return { periodoIni: dataLocalISO(d), periodoFim: null, diasPeriodo: Number(periodo), periodoLabel: `Últimos ${periodo} dias` };
+    }, [periodo, mesRef]);
+
+    // Mantém o DRE alinhado ao mês escolhido no cabeçalho (ele ainda pode ser ajustado à parte)
+    useEffect(() => {
+        if (periodo === 'mes') { setDreMesInicio(mesRef); setDreMesFim(mesRef); }
+    }, [periodo, mesRef]);
+
+    const romFiltrados = useMemo(() => romaneios.filter(r => {
+        const dia = r.saida?.slice(0, 10);
+        return dia && dia >= periodoIni && (!periodoFim || dia <= periodoFim);
+    }), [romaneios, periodoIni, periodoFim]);
     const romFinalizados = romFiltrados.filter(r => r.status === 'Finalizado');
 
     // Custo real de combustível (diesel + Arla) por mês, a partir dos registros
@@ -162,7 +194,7 @@ export default function Relatorios() {
     const totalViagens = romFiltrados.length;
     const finalizados = romFinalizados.length;
     const pesoTotal = romFinalizados.reduce((s, r) => s + (r.peso_total || 0), 0);
-    const mediaDia = (totalViagens / Math.max(Number(periodo), 1)).toFixed(1);
+    const mediaDia = (totalViagens / Math.max(diasPeriodo, 1)).toFixed(1);
 
     // Daily romaneios chart
     const porDia = useMemo(() => {
@@ -171,9 +203,10 @@ export default function Relatorios() {
             const d = r.saida?.slice(0, 10);
             if (d) map[d] = (map[d] || 0) + 1;
         });
-        return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).slice(-14)
+        const dias = Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
+        return (periodo === 'mes' ? dias : dias.slice(-14))
             .map(([date, count]) => ({ date: date.slice(5), count }));
-    }, [romFiltrados]);
+    }, [romFiltrados, periodo]);
 
     // Status pie
     const porStatus = useMemo(() => {
@@ -191,10 +224,9 @@ export default function Relatorios() {
     }, [romFiltrados]);
 
     // ─── Financeiro KPIs ──────────────────────────────────────
-    const cutoffISO = cutoff.toISOString().slice(0, 10);
     const custoCombustivelRealPeriodo = useMemo(
-        () => somaCustoCombustivelReal(cutoffISO, null),
-        [custoCombustivelRealPorMes, cutoffISO] // eslint-disable-line
+        () => somaCustoCombustivelReal(periodoIni, periodoFim),
+        [custoCombustivelRealPorMes, periodoIni, periodoFim] // eslint-disable-line
     );
     const receitaTotal = romFinalizados.reduce((s, r) => s + (r.valor_frete || 0), 0);
     const custoTotal = custoCombustivelRealPeriodo + romFinalizados.reduce((s, r) =>
@@ -242,34 +274,32 @@ export default function Relatorios() {
     // Abate pela data de VENCIMENTO de cada boleto/parcela, não pela data de
     // emissão da NF — uma despesa a prazo pode ter parcelas vencendo em meses
     // diferentes do lançamento original.
-    const despesasCutoffISO = useMemo(() => {
-        const d = new Date(); d.setDate(d.getDate() - Number(periodo));
-        return d.toISOString().slice(0, 10);
-    }, [periodo]);
+    const despesasCutoffISO = periodoIni;
+    const despesasFimISO = periodoFim || '9999-12-31';
 
     const despesasFiltradas = useMemo(() => {
-        return despesasCaminhoes.filter(d => despesaTemVencimentoNoPeriodo(d, despesasCutoffISO, '9999-12-31'));
-    }, [despesasCaminhoes, despesasCutoffISO]);
+        return despesasCaminhoes.filter(d => despesaTemVencimentoNoPeriodo(d, despesasCutoffISO, despesasFimISO));
+    }, [despesasCaminhoes, despesasCutoffISO, despesasFimISO]);
 
-    const totalDespesasCaminhoes = useMemo(() => somarDespesasPorVencimento(despesasCaminhoes, despesasCutoffISO, '9999-12-31'), [despesasCaminhoes, despesasCutoffISO]);
+    const totalDespesasCaminhoes = useMemo(() => somarDespesasPorVencimento(despesasCaminhoes, despesasCutoffISO, despesasFimISO), [despesasCaminhoes, despesasCutoffISO, despesasFimISO]);
 
     const despesasPorCategoria = useMemo(() => {
-        const map = agruparDespesasPorCategoriaVencimento(despesasCaminhoes, despesasCutoffISO, '9999-12-31');
+        const map = agruparDespesasPorCategoriaVencimento(despesasCaminhoes, despesasCutoffISO, despesasFimISO);
         return Object.entries(map).sort(([,a],[,b]) => b - a).map(([name, value]) => ({ name, value }));
-    }, [despesasCaminhoes, despesasCutoffISO]);
+    }, [despesasCaminhoes, despesasCutoffISO, despesasFimISO]);
 
     const despesasPorMes = useMemo(() => {
         const map = {};
         despesasCaminhoes.forEach(d => {
             expandirDespesaParcelas(d).forEach(item => {
-                if (!item.vencimento || item.vencimento < despesasCutoffISO) return;
+                if (!item.vencimento || item.vencimento < despesasCutoffISO || item.vencimento > despesasFimISO) return;
                 const m = item.vencimento.slice(0, 7);
                 if (!map[m]) map[m] = { mes: m.slice(5), total: 0 };
                 map[m].total += item.valor;
             });
         });
         return Object.values(map).sort((a, b) => a.mes.localeCompare(b.mes));
-    }, [despesasCaminhoes, despesasCutoffISO]);
+    }, [despesasCaminhoes, despesasCutoffISO, despesasFimISO]);
 
     // ─── DRE Mensal Caminhões ─────────────────────────────────
     const custoRodagemStats = useMemo(() => {
@@ -405,7 +435,18 @@ export default function Relatorios() {
     const disponiveis = vehicles.filter(v => v.status === 'Disponível').length;
     const emTransito = vehicles.filter(v => v.status === 'Em Trânsito').length;
     const manutencao = vehicles.filter(v => v.status === 'Manutenção').length;
-    const utilizacaoMedia = frota > 0 ? vehicles.reduce((s, v) => s + (v.utilizacao || 0), 0) / frota : 0;
+    // Utilização no período selecionado: média da carga (peso do romaneio ÷ capacidade do veículo)
+    // nas viagens do período, por veículo. Sem viagens no período = 0%.
+    const utilizacaoPorVeiculo = useMemo(() => vehicles.map(v => {
+        const cap = Number(v.capacidade_peso || v.capacidadePeso || 0);
+        const viagens = romFiltrados.filter(r => (r.vehicle_id && r.vehicle_id === v.id) || (r.placa && r.placa === v.placa));
+        let utilizacao = 0;
+        if (viagens.length > 0 && cap > 0) {
+            utilizacao = Math.round(viagens.reduce((s, r) => s + Math.min(100, (Number(r.peso_total || 0) / cap) * 100), 0) / viagens.length);
+        }
+        return { placa: v.placa, utilizacao, viagens: viagens.length };
+    }), [vehicles, romFiltrados]);
+    const utilizacaoMedia = frota > 0 ? utilizacaoPorVeiculo.reduce((s, v) => s + v.utilizacao, 0) / frota : 0;
 
     const frotaStatus = [
         { name: 'Disponível', value: disponiveis },
@@ -413,13 +454,13 @@ export default function Relatorios() {
         { name: 'Manutenção', value: manutencao },
     ].filter(s => s.value > 0);
 
-    const utilizacaoVeiculos = vehicles.map(v => ({ placa: v.placa, utilizacao: v.utilizacao || 0 }))
+    const utilizacaoVeiculos = utilizacaoPorVeiculo.map(v => ({ placa: v.placa, utilizacao: v.utilizacao }))
         .sort((a, b) => b.utilizacao - a.utilizacao);
 
     // ─── Export financeiro Excel ────────────────────────────
     const exportConsolidadoExcel = () => {
         try {
-            exportRelatorioConsolidado(romaneios, periodo);
+            exportRelatorioConsolidado(romFiltrados, periodoLabel);
             showToast('Relatório consolidado exportado!');
         } catch (e) {
             showToast('Erro ao exportar: ' + e.message, 'error');
@@ -433,8 +474,9 @@ export default function Relatorios() {
         );
         if (romBonif.length === 0) { showToast('Nenhum romaneio aprovado no período', 'error'); return; }
         try {
-            const di = periodo?.inicio ? new Date(periodo.inicio).toLocaleDateString('pt-BR') : '';
-            const df = periodo?.fim    ? new Date(periodo.fim).toLocaleDateString('pt-BR')    : '';
+            const fmtDia = iso => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR') : '';
+            const di = fmtDia(periodoIni);
+            const df = fmtDia(periodoFim || dataLocalISO(new Date()));
             exportRelatorioBonificacoes(romBonif, di, df);
             showToast('Relatório de bonificações exportado!', 'success');
         } catch(e) {
@@ -548,6 +590,15 @@ export default function Relatorios() {
                             <p className="text-sm text-slate-500 mt-0.5">Visão financeira e operacional da sua frota</p>
                         </div>
                         <div className="flex gap-2 flex-wrap">
+                            <button onClick={() => setPeriodo('mes')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${periodo === 'mes' ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}>
+                                Mês
+                            </button>
+                            {periodo === 'mes' && (
+                                <input type="month" value={mesRef}
+                                    onChange={e => { if (e.target.value) setMesRef(e.target.value); }}
+                                    className="px-2 py-1 rounded-lg text-xs border border-slate-200 bg-white text-slate-700" />
+                            )}
                             {['7','30','90','365'].map(d => (
                                 <button key={d} onClick={() => setPeriodo(d)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${periodo === d ? 'bg-slate-800 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}>
@@ -574,14 +625,14 @@ export default function Relatorios() {
                     {tab === 'operacional' && (
                         <div className="flex flex-col gap-6">
                             <div className="grid grid-cols-2 tab:grid-cols-4 gap-4">
-                                <KpiCard label="Total de Viagens" value={totalViagens} icon="FileText" color="#1E3A5F" sub={`Últimos ${periodo} dias`} />
+                                <KpiCard label="Total de Viagens" value={totalViagens} icon="FileText" color="#1E3A5F" sub={periodoLabel} />
                                 <KpiCard label="Finalizadas" value={finalizados} icon="CheckCircle2" color="#059669" sub={`${totalViagens > 0 ? Math.round(finalizados/totalViagens*100) : 0}% do total`} />
                                 <KpiCard label="Peso Transportado" value={fmtKg(pesoTotal)} icon="Weight" color="#D97706" sub="Entregas finalizadas" />
                                 <KpiCard label="Média / Dia" value={mediaDia} icon="TrendingUp" color="#7C3AED" sub="Viagens por dia" />
                             </div>
 
                             <div className="grid grid-cols-1 tab:grid-cols-2 gap-5">
-                                <ChartCard title="Romaneios por Dia (últimos 14 dias)" height={220}>
+                                <ChartCard title={periodo === 'mes' ? `Romaneios por Dia (${periodoLabel})` : 'Romaneios por Dia (últimos 14 dias)'} height={220}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={porDia}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
@@ -1079,11 +1130,11 @@ export default function Relatorios() {
                                 <KpiCard label="Total de Veículos" value={frota} icon="Truck" color="#1E3A5F" />
                                 <KpiCard label="Disponíveis" value={disponiveis} icon="CheckCircle2" color="#059669" sub={frota > 0 ? `${Math.round(disponiveis/frota*100)}% da frota` : ''} />
                                 <KpiCard label="Em Trânsito" value={emTransito} icon="Navigation" color="#D97706" />
-                                <KpiCard label="Utilização Média" value={`${utilizacaoMedia.toFixed(0)}%`} icon="Activity" color={utilizacaoMedia > 80 ? '#DC2626' : '#059669'} sub={manutencao > 0 ? `${manutencao} em manutenção` : undefined} />
+                                <KpiCard label="Utilização Média" value={`${utilizacaoMedia.toFixed(0)}%`} icon="Activity" color={utilizacaoMedia > 80 ? '#DC2626' : '#059669'} sub={`${periodoLabel}${manutencao > 0 ? ` · ${manutencao} em manutenção` : ''}`} />
                             </div>
 
                             <div className="grid grid-cols-1 tab:grid-cols-2 gap-5">
-                                <ChartCard title="Utilização por Veículo (%)" height={Math.max(200, vehicles.length * 35)}>
+                                <ChartCard title={`Utilização por Veículo (%) — ${periodoLabel}`} height={Math.max(200, vehicles.length * 35)}>
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={utilizacaoVeiculos} layout="vertical">
                                             <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />

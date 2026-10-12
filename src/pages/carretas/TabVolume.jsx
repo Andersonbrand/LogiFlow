@@ -601,8 +601,20 @@ export default function TabVolume({ isAdmin }) {
             if (modal?.mode !== 'edit' && (!form.quantidade || isNaN(form.quantidade))) { showToast('Informe a quantidade de sacos (necessária para calcular o frete).', 'error'); return; }
         } else if (!form.quantidade || isNaN(form.quantidade)) {
             showToast('Informe a quantidade.', 'error'); return;
-        } else if (isCaminhaoAvulsoCheck && !form.placa_caminhao_avulso.trim()) {
-            showToast('Informe a placa do caminhão.', 'error'); return;
+        } else {
+            // Frota (não-Estoque): todos os campos do registro são obrigatórios
+            // (só Observações e Cidades adicionais continuam opcionais).
+            if (!form.empresa_origem) { showToast('Informe o fornecedor / origem.', 'error'); return; }
+            if (isCaminhaoAvulsoCheck) {
+                if (!form.placa_caminhao_avulso.trim()) { showToast('Informe a placa do caminhão.', 'error'); return; }
+            } else if (!form.veiculo_id) { showToast('Selecione o veículo (placa).', 'error'); return; }
+            if (!form.motorista_id) { showToast('Selecione o motorista.', 'error'); return; }
+            if (!String(form.numero_pedido || '').trim()) { showToast('Informe o nº do pedido.', 'error'); return; }
+            if (!String(form.numero_nota_fiscal || '').trim()) { showToast('Informe a nota fiscal.', 'error'); return; }
+            if (!form.destino) { showToast('Informe o destino.', 'error'); return; }
+            if (!form.empresa_id) { showToast('Selecione a empresa (frete).', 'error'); return; }
+            if (!form.tipo_calculo_frete) { showToast('Selecione o tipo de cálculo do frete.', 'error'); return; }
+            if (form.valor_base_frete === '' || form.valor_base_frete == null || isNaN(form.valor_base_frete)) { showToast('Informe o valor base do frete.', 'error'); return; }
         }
 
         const empresaOrigem = isEstoque
@@ -687,6 +699,16 @@ export default function TabVolume({ isAdmin }) {
         if (!formTerceiro.tipo) { showToast('Selecione o tipo de carregamento.', 'error'); return; }
         if (!formTerceiro.data_carregamento) { showToast('Informe a data.', 'error'); return; }
         if (!formTerceiro.quantidade || isNaN(formTerceiro.quantidade)) { showToast('Informe a quantidade.', 'error'); return; }
+        // Terceiros: todos os campos do registro são obrigatórios (só Observações e Cidades adicionais são opcionais).
+        if (!formTerceiro.empresa_origem) { showToast('Informe o fornecedor / origem.', 'error'); return; }
+        if (!formTerceiro.motorista_id) { showToast('Selecione o motorista terceirizado.', 'error'); return; }
+        if (!formTerceiro.veiculo_id) { showToast('Selecione a placa do veículo terceirizado.', 'error'); return; }
+        if (!formTerceiro.empresa_id) { showToast('Selecione a empresa (frete).', 'error'); return; }
+        if (!formTerceiro.tipo_calculo_frete) { showToast('Selecione o tipo de cálculo do frete.', 'error'); return; }
+        if (formTerceiro.valor_base_frete === '' || formTerceiro.valor_base_frete == null || isNaN(formTerceiro.valor_base_frete)) { showToast('Informe o valor base do frete.', 'error'); return; }
+        if (!formTerceiro.destino) { showToast('Informe o destino.', 'error'); return; }
+        if (!String(formTerceiro.numero_pedido || '').trim()) { showToast('Informe o nº do pedido.', 'error'); return; }
+        if (!String(formTerceiro.numero_nota_fiscal || '').trim()) { showToast('Informe a nota fiscal.', 'error'); return; }
         const empresaOrigem = formTerceiro.empresa_origem ? `${formTerceiro.tipo}|${formTerceiro.empresa_origem}` : formTerceiro.tipo;
         const payload = {
             empresa_origem: empresaOrigem,
@@ -785,6 +807,12 @@ export default function TabVolume({ isAdmin }) {
         if (!formRetira.data_carregamento) { showToast('Informe a data.', 'error'); return; }
         if (!formRetira.quantidade || isNaN(formRetira.quantidade)) { showToast('Informe a quantidade.', 'error'); return; }
         if (!formRetira.tipo) { showToast('Selecione o tipo de carregamento (FOB/CIF).', 'error'); return; }
+        // Retira (clientes): todos os campos do registro são obrigatórios (só Observações é opcional).
+        if (!formRetira.empresa_origem) { showToast('Informe o cliente / origem.', 'error'); return; }
+        if (!formRetira.veiculo_id) { showToast('Selecione o veículo terceirizado.', 'error'); return; }
+        if (!String(formRetira.nome_cliente || '').trim()) { showToast('Informe o nome do cliente.', 'error'); return; }
+        if (!String(formRetira.numero_nota_fiscal || '').trim()) { showToast('Informe a nota fiscal.', 'error'); return; }
+        if (!String(formRetira.numero_pedido || '').trim()) { showToast('Informe o nº do pedido.', 'error'); return; }
         const empresaOrigem = formRetira.empresa_origem ? `${formRetira.tipo}|${formRetira.empresa_origem}` : formRetira.tipo;
         const payload = {
             empresa_origem: empresaOrigem,
@@ -1140,7 +1168,7 @@ export default function TabVolume({ isAdmin }) {
                                         <input type="number" min="0" value={form.quantidade} onChange={e => setForm(f => ({ ...f, quantidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 1200" />
                                     </Field>
                                 </div>
-                                <Field label="Fornecedor / Origem">
+                                <Field label="Fornecedor / Origem" required>
                                     <OrigemDropdown value={form.empresa_origem} onChange={v => setForm(f => ({ ...f, empresa_origem: v }))} fornecedores={fornecedores} />
                                 </Field>
                                 {/* Origem do carregamento: frota de carretas (padrão) ou, raramente,
@@ -1179,14 +1207,14 @@ export default function TabVolume({ isAdmin }) {
                                             </PrettySelect>
                                         </Field>
                                     ) : (
-                                        <Field label="Veículo (placa)">
+                                        <Field label="Veículo (placa)" required>
                                             <PrettySelect value={form.veiculo_id} onChange={e => setForm(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                                 <option value="">Selecione...</option>
                                                 {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
                                             </PrettySelect>
                                         </Field>
                                     )}
-                                    <Field label="Motorista">
+                                    <Field label="Motorista" required>
                                         <PrettySelect value={form.motorista_id} onChange={e => setForm(f => ({ ...f, motorista_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                             <option value="">Selecione...</option>
                                             {(form.origem_frota === 'caminhao' ? motoristasCaminhoes : motoristasProprios).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -1194,14 +1222,14 @@ export default function TabVolume({ isAdmin }) {
                                     </Field>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <Field label="Nº Pedido">
+                                    <Field label="Nº Pedido" required>
                                         <input value={form.numero_pedido} onChange={e => setForm(f => ({ ...f, numero_pedido: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 123456" />
                                     </Field>
-                                    <Field label="Nota Fiscal">
+                                    <Field label="Nota Fiscal" required>
                                         <input value={form.numero_nota_fiscal} onChange={e => setForm(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
                                     </Field>
                                 </div>
-                                <Field label="Destino">
+                                <Field label="Destino" required>
                                     <DestinoSelect
                                         value={form.destino}
                                         onChange={v => setForm(f => ({ ...f, destino: v }))}
@@ -1216,7 +1244,7 @@ export default function TabVolume({ isAdmin }) {
                                     onChange={setParadasForm}
                                     label="Cidades adicionais desta viagem"
                                 />
-                                <Field label="Empresa (frete)">
+                                <Field label="Empresa (frete)" required>
                                     <PrettySelect value={form.empresa_id} onChange={e => setForm(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                         <option value="">Selecione...</option>
                                         {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
@@ -1226,7 +1254,7 @@ export default function TabVolume({ isAdmin }) {
                                 <div className="col-span-full p-4 rounded-xl border" style={{ borderColor: '#C4B5FD', backgroundColor: '#FAF5FF' }}>
                                     <p className="text-xs font-semibold text-purple-700 mb-3">💰 Cálculo de Frete</p>
                                     <div className="grid grid-cols-2 gap-3">
-                                        <Field label="Tipo de cálculo">
+                                        <Field label="Tipo de cálculo" required>
                                             <PrettySelect value={form.tipo_calculo_frete} onChange={e => setForm(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
                                                 {TIPOS_CALCULO_FRETE.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                                             </PrettySelect>
@@ -1234,7 +1262,7 @@ export default function TabVolume({ isAdmin }) {
                                         <Field label={
                                             form.tipo_calculo_frete === 'percentual' ? 'Percentual (%)' :
                                             form.tipo_calculo_frete === 'por_km' ? 'Preço diesel (R$/L)' : 'Valor base (R$)'
-                                        }>
+                                        } required>
                                             <input type="number" step="0.01" value={form.valor_base_frete} onChange={e => setForm(f => ({ ...f, valor_base_frete: e.target.value }))} className={inputCls} style={inputStyle} placeholder="0,00" />
                                         </Field>
                                     </div>
@@ -1327,47 +1355,47 @@ export default function TabVolume({ isAdmin }) {
                                 <input type="number" min="0" value={formTerceiro.quantidade} onChange={e => setFormTerceiro(f => ({ ...f, quantidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 1200" />
                             </Field>
                         </div>
-                        <Field label="Motorista Terceirizado">
+                        <Field label="Motorista Terceirizado" required>
                             <ComboSelect
                                 value={formTerceiro.motorista_id}
                                 onChange={v => setFormTerceiro(f => ({ ...f, motorista_id: v }))}
                                 options={motoristasTerceiros.map(m => ({ value: m.id, label: m.name }))}
-                                placeholder="Selecione o motorista (opcional)..."
+                                placeholder="Selecione o motorista..."
                                 emptyLabel="Nenhum motorista encontrado"
                             />
                             {motoristasTerceiros.length === 0 && (
                                 <p className="text-xs mt-1 text-amber-600">⚠ Nenhum motorista com flag "terceirizado" cadastrado em Configurações.</p>
                             )}
                         </Field>
-                        <Field label="Placa do Veículo Terceirizado">
+                        <Field label="Placa do Veículo Terceirizado" required>
                             <ComboSelect
                                 value={formTerceiro.veiculo_id}
                                 onChange={v => setFormTerceiro(f => ({ ...f, veiculo_id: v }))}
                                 options={veiculosTerceiros.map(v => ({ value: v.id, label: v.placa, sub: v.modelo || '' }))}
-                                placeholder="Selecione a placa (opcional)..."
+                                placeholder="Selecione a placa..."
                                 emptyLabel="Nenhum veículo encontrado"
                             />
                             {veiculosTerceiros.length === 0 && (
                                 <p className="text-xs mt-1 text-amber-600">⚠ Nenhum veículo com flag "terceirizado" cadastrado em Veículos.</p>
                             )}
                         </Field>
-                        <Field label="Empresa (frete)">
+                        <Field label="Empresa (frete)" required>
                             <PrettySelect value={formTerceiro.empresa_id} onChange={e => setFormTerceiro(f => ({ ...f, empresa_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                <option value="">Selecione a empresa (opcional)...</option>
+                                <option value="">Selecione a empresa...</option>
                                 {empresas.map(e => <option key={e.id} value={e.id}>{e.nome}</option>)}
                             </PrettySelect>
                         </Field>
                         <div className="grid grid-cols-2 gap-3">
-                            <Field label="Tipo de Cálculo do Frete">
+                            <Field label="Tipo de Cálculo do Frete" required>
                                 <PrettySelect value={formTerceiro.tipo_calculo_frete} onChange={e => setFormTerceiro(f => ({ ...f, tipo_calculo_frete: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    <option value="">Sem cálculo de frete</option>
+                                    <option value="">Selecione...</option>
                                     {TIPOS_CALCULO_FRETE.map(t => (
                                         <option key={t.value} value={t.value}>{t.label}</option>
                                     ))}
                                 </PrettySelect>
                             </Field>
-                            <Field label={formTerceiro.tipo_calculo_frete === 'por_saco' ? 'R$ por saco' : formTerceiro.tipo_calculo_frete === 'por_tonelada' ? 'R$ por tonelada' : formTerceiro.tipo_calculo_frete === 'percentual' ? '% do valor' : formTerceiro.tipo_calculo_frete === 'por_carga' ? 'Valor fixo (R$)' : 'Valor base'}>
-                                <input type="number" min="0" step="0.01" value={formTerceiro.valor_base_frete} onChange={e => setFormTerceiro(f => ({ ...f, valor_base_frete: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 9,52" disabled={!formTerceiro.tipo_calculo_frete} />
+                            <Field label={formTerceiro.tipo_calculo_frete === 'por_saco' ? 'R$ por saco' : formTerceiro.tipo_calculo_frete === 'por_tonelada' ? 'R$ por tonelada' : formTerceiro.tipo_calculo_frete === 'percentual' ? '% do valor' : formTerceiro.tipo_calculo_frete === 'por_carga' ? 'Valor fixo (R$)' : 'Valor base'} required>
+                                <input type="number" min="0" step="0.01" value={formTerceiro.valor_base_frete} onChange={e => setFormTerceiro(f => ({ ...f, valor_base_frete: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 9,52" />
                             </Field>
                         </div>
                         {formTerceiro.tipo_calculo_frete && formTerceiro.valor_base_frete && formTerceiro.quantidade && (
@@ -1375,10 +1403,10 @@ export default function TabVolume({ isAdmin }) {
                                 💰 Frete calculado: {Number(calcularFrete(formTerceiro.tipo_calculo_frete, formTerceiro.quantidade, formTerceiro.valor_base_frete, null)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                             </div>
                         )}
-                        <Field label="Fornecedor / Origem">
+                        <Field label="Fornecedor / Origem" required>
                             <OrigemDropdown value={formTerceiro.empresa_origem} onChange={v => setFormTerceiro(f => ({ ...f, empresa_origem: v }))} fornecedores={fornecedores} />
                         </Field>
-                        <Field label="Destino">
+                        <Field label="Destino" required>
                             <DestinoSelect
                                 value={formTerceiro.destino}
                                 onChange={v => setFormTerceiro(f => ({ ...f, destino: v }))}
@@ -1394,10 +1422,10 @@ export default function TabVolume({ isAdmin }) {
                             label="Cidades adicionais desta viagem"
                         />
                         <div className="grid grid-cols-2 gap-3">
-                            <Field label="Nº Pedido">
+                            <Field label="Nº Pedido" required>
                                 <input value={formTerceiro.numero_pedido} onChange={e => setFormTerceiro(f => ({ ...f, numero_pedido: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 123456" />
                             </Field>
-                            <Field label="Nota Fiscal">
+                            <Field label="Nota Fiscal" required>
                                 <input value={formTerceiro.numero_nota_fiscal} onChange={e => setFormTerceiro(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
                             </Field>
                         </div>
@@ -1435,18 +1463,18 @@ export default function TabVolume({ isAdmin }) {
                                 <input type="number" min="0" value={formRetira.quantidade} onChange={e => setFormRetira(f => ({ ...f, quantidade: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 800" />
                             </Field>
                         </div>
-                        <Field label="Cliente / Origem">
+                        <Field label="Cliente / Origem" required>
                             <OrigemDropdown value={formRetira.empresa_origem} onChange={v => setFormRetira(f => ({ ...f, empresa_origem: v }))} fornecedores={fornecedores} />
                         </Field>
                         {/* Veículos e Motoristas — apenas frota própria (não terceiros) */}
                         <div className="grid grid-cols-2 gap-3">
-                            <Field label="Veículo Terceirizado">
+                            <Field label="Veículo Terceirizado" required>
                                 <PrettySelect value={formRetira.veiculo_id} onChange={e => setFormRetira(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
                                     <option value="">Selecione...</option>
                                     {veiculosTerceiros.map(v => <option key={v.id} value={v.id}>{v.placa}{v.modelo ? ` — ${v.modelo}` : ''}</option>)}
                                 </PrettySelect>
                             </Field>
-                            <Field label="Nome do Cliente">
+                            <Field label="Nome do Cliente" required>
                                 <input
                                     value={formRetira.nome_cliente || ''}
                                     onChange={e => setFormRetira(f => ({ ...f, nome_cliente: e.target.value }))}
@@ -1459,11 +1487,11 @@ export default function TabVolume({ isAdmin }) {
                             <Field label="Pedido de Venda">
                                 <input value={formRetira.pedido_venda} onChange={e => setFormRetira(f => ({ ...f, pedido_venda: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: PV-00123" />
                             </Field>
-                            <Field label="Nota Fiscal">
+                            <Field label="Nota Fiscal" required>
                                 <input value={formRetira.numero_nota_fiscal} onChange={e => setFormRetira(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
                             </Field>
                         </div>
-                        <Field label="Nº Pedido">
+                        <Field label="Nº Pedido" required>
                             <input value={formRetira.numero_pedido} onChange={e => setFormRetira(f => ({ ...f, numero_pedido: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 123456" />
                         </Field>
                         <Field label="Observações">

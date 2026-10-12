@@ -124,9 +124,17 @@ export default function MotoristaDashboard() {
                     aprovado, aprovado_em, peso_total, saida, created_at,
                     romaneio_itens(id, quantidade, peso_total, material_id,
                         materials(id, nome, unidade, peso, categoria_frete))`)
-                .or(`motorista_id.eq.${user.id},motorista.ilike."${profile.name}"`)
-                .gte('created_at', dateStr);
-            if (dateFimStr) romQuery = romQuery.lte('created_at', dateFimStr + 'T23:59:59');
+                .or(`motorista_id.eq.${user.id},motorista.ilike."${profile.name}"`);
+            // Filtro de período pela DATA DE SAÍDA do romaneio (igual ao painel admin).
+            // Só quando o romaneio não tem saída cadastrada é que cai na data de criação.
+            // Antes filtrava só por created_at: romaneio criado em 30/09 com saída em 08/10
+            // não aparecia no mês de outubro para o motorista.
+            const iniISO = new Date(`${dateStr}T00:00:00`).toISOString();
+            let fimISO = null;
+            if (dateFimStr) { const d = new Date(`${dateFimStr}T00:00:00`); d.setDate(d.getDate() + 1); fimISO = d.toISOString(); }
+            const porSaida = [`saida.gte.${iniISO}`], porCriacao = [`created_at.gte.${iniISO}`];
+            if (fimISO) { porSaida.push(`saida.lt.${fimISO}`); porCriacao.push(`created_at.lt.${fimISO}`); }
+            romQuery = romQuery.or(`and(${porSaida.join(',')}),and(saida.is.null,${porCriacao.join(',')})`);
             romQuery = romQuery.order('created_at', { ascending: false });
 
             const [roms, a, c, ve, p, cfg, itensCheck] = await Promise.all([
