@@ -48,7 +48,25 @@ export function AuthProvider({ children }) {
             initialized.current = true;
         });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        // ATENÇÃO: este callback NÃO pode ser async nem chamar o Supabase
+        // diretamente. O supabase-js executa os callbacks DENTRO do lock de
+        // autenticação; qualquer query aqui precisa do mesmo lock (getSession)
+        // e fica esperando por ele → deadlock até estourar 5s, quando o SDK
+        // "rouba" o lock e a requisição presa falha com
+        // "AbortError: Lock broken by another request with the 'steal' option".
+        // Como SIGNED_IN é emitido toda vez que a aba volta a ficar visível,
+        // isso acontecia de forma intermitente (principalmente em PCs com
+        // várias abas/janelas abertas). Solução: callback síncrono e a busca
+        // do perfil adiada com setTimeout(0), já fora do lock.
+        const carregarPerfil = (u) => {
+            setTimeout(async () => {
+                const p = await getOrCreateProfile(u);
+                // ignora resposta atrasada de um usuário que já saiu/trocou
+                if (userIdRef.current === u.id) setProfile(p);
+            }, 0);
+        };
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             // Ignora eventos antes da inicialização terminar
             if (!initialized.current) return;
 
@@ -64,10 +82,7 @@ export function AuthProvider({ children }) {
             if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
                 setUser(u);
                 userIdRef.current = u?.id ?? null;
-                if (u) {
-                    const p = await getOrCreateProfile(u);
-                    setProfile(p);
-                }
+                if (u) carregarPerfil(u);
                 return;
             }
 
@@ -76,7 +91,7 @@ export function AuthProvider({ children }) {
             if ((u?.id ?? null) !== userIdRef.current) {
                 setUser(u);
                 userIdRef.current = u?.id ?? null;
-                setProfile(u ? await getOrCreateProfile(u) : null);
+                if (u) carregarPerfil(u); else setProfile(null);
             }
         });
 

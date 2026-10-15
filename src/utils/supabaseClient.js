@@ -61,11 +61,30 @@ async function fetchComTimeout(url, options = {}, jaTentouRetry = false) {
 const _url = supabaseUrl  || 'https://placeholder.supabase.co';
 const _key = supabaseAnonKey || 'placeholder-key';
 
+// ─── Lock de autenticação sem "roubo" ──────────────────────────────────────
+// Padrão do supabase-js: navigator.locks compartilhado entre TODAS as abas.
+// Se quem segura o lock demora >5s (aba em segundo plano congelada pelo
+// Chrome/"Economia de memória", notebook que dormiu, PC lento, várias abas
+// abertas), o SDK ROUBA o lock ("steal") e a requisição de quem o segurava
+// falha com "AbortError: Lock broken by another request with the 'steal'
+// option" — erro que aparecia nas telas só em alguns computadores.
+// Aqui serializamos as operações de auth DENTRO da aba (fila simples, sem
+// timeout e sem roubo). Entre abas o próprio servidor tolera a corrida de
+// refresh (janela de reuso do refresh token), então não há perda de sessão.
+let _filaAuth = Promise.resolve();
+function lockPorAba(_nome, _timeout, fn) {
+    const exec = _filaAuth.then(() => fn());
+    // a fila segue mesmo se a operação falhar
+    _filaAuth = exec.then(() => undefined, () => undefined);
+    return exec;
+}
+
 export const supabase = createClient(_url, _key, {
     auth: {
         persistSession:     true,
         autoRefreshToken:   true,
         detectSessionInUrl: true,
+        lock:               lockPorAba,
     },
     global: {
         fetch: fetchComTimeout,
@@ -80,27 +99,16 @@ export const supabase = createClient(_url, _key, {
 });
 
 // ─── Ciclo de vida ligado à visibilidade da aba ────────────────────────────
-// Padrão recomendado pela própria documentação do Supabase para apps no
-// navegador: https://supabase.com/docs/reference/javascript/auth-startautorefresh
-// O timer de renovação automática do token (autoRefreshToken) continua rodando
-// mesmo com a aba em segundo plano — mas navegadores throttlam/suspendem
-// timers e WebSockets de abas ocultas (e mais ainda se o notebook dorme).
-// Isso pode deixar o timer de refresh "atrasado": quando a aba volta a ficar
-// visível, o token já pode estar vencido e o SDK não percebe isso na hora,
-// fazendo toda query subsequente falhar silenciosamente — sintoma de tela
-// "hibernada"/carregando para sempre, que só um F5 (recriando o cliente do
-// zero) resolvia. Parar o timer com a aba oculta e reiniciá-lo (forçando uma
-// renovação) ao voltar evita esse descompasso.
+// O próprio supabase-js já para/reinicia o auto-refresh do token e recupera a
+// sessão quando a aba volta a ficar visível (GoTrueClient._onVisibilityChanged).
+// Antes este arquivo chamava startAutoRefresh()/stopAutoRefresh() por conta
+// própria, duplicando esse trabalho e disputando o lock de autenticação no
+// exato momento em que as telas também recarregam dados (useRecarregarAoVoltar).
+// Aqui fica apenas a reconexão do Realtime, que o SDK não faz sozinho.
 if (typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
-            supabase.auth.startAutoRefresh();
-            // Realtime também suspende o WebSocket em aba oculta — reconectar
-            // explicitamente evita canais "mortos" que nunca mais reportam
-            // mudança nenhuma até um refresh manual da página.
             try { supabase.realtime.connect(); } catch { /* no-op */ }
-        } else {
-            supabase.auth.stopAutoRefresh();
         }
     });
 }
