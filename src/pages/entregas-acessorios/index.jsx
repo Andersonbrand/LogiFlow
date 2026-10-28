@@ -1,176 +1,21 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
-import { createPortal } from 'react-dom';
-import NavigationBar from 'components/ui/NavigationBar';
-import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
-import Button from 'components/ui/Button';
-import Icon from 'components/AppIcon';
-import Toast from 'components/ui/Toast';
-import { useToast } from 'utils/useToast';
-import { useConfirm } from 'components/ui/ConfirmDialog';
-import { useAuth } from 'utils/AuthContext';
-import PeriodRangeFilter, { usePeriodRangeFilter } from 'components/ui/PeriodRangeFilter';
-import { fetchMotoristasProprios, fetchVeiculosProprios } from 'utils/carretasService';
-import { fetchVehicles } from 'utils/vehicleService';
-import PrettySelect from 'components/ui/PrettySelect';
-import {
-    fetchEntregasAcessorios, createEntregaAcessorio, updateEntregaAcessorio, deleteEntregaAcessorio,
-    fetchItensAcessorios, createItemAcessorio, updateItemAcessorio, deleteItemAcessorio,
-} from 'utils/entregasAcessoriosService';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+
+import { useAuth } from 'context/AuthContext';
+import { useToast } from 'hooks/useToast';
+import { useConfirm, usePeriodRangeFilter, NavigationBar, BreadcrumbTrail, AppIcon as Icon, Button, PeriodRangeFilter, Toast } from 'components';
+import { fetchEntregasAcessorios, fetchItensAcessorios, createEntregaAcessorio, updateEntregaAcessorio, deleteEntregaAcessorio, createItemAcessorio, updateItemAcessorio, deleteItemAcessorio } from 'services/entregasAcessoriosService';
+import { fetchMotoristasProprios, fetchVeiculosProprios } from 'services/carretas';
+import { fetchVehicles } from 'services/vehicleService';
+import { useRecarregarAoVoltar } from 'hooks/useRecarregarAoVoltar';
+
+import SearchSelect from './components/SearchSelect';
+import SearchInput from './components/SearchInput';
+import Modal from './components/Modal';
+import ModalItens from './components/ModalItens';
 
 const FMT_DATE = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
-const inputCls = "w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500";
-const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
-
-// ─── Componentes locais reutilizáveis (mesmo padrão das outras páginas) ───────
-function ModalOverlay({ children, onClose, sm }) {
-    return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4"
-            style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
-            <div className={`bg-white rounded-2xl shadow-2xl flex flex-col ${sm ? 'w-full max-w-md' : 'w-full max-w-lg'}`}
-                style={{ maxHeight: 'calc(100vh - 32px)' }}>
-                {children}
-            </div>
-        </div>
-    );
-}
-
-function ModalHeader({ title, icon, onClose }) {
-    return (
-        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-            <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                    <Icon name={icon} size={18} color="#1D4ED8" />
-                </div>
-                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>{title}</h2>
-            </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-                <Icon name="X" size={18} color="var(--color-muted-foreground)" />
-            </button>
-        </div>
-    );
-}
-
-function Field({ label, children, required }) {
-    return (
-        <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-            </label>
-            {children}
-        </div>
-    );
-}
-
-function SearchInput({ value, onChange, placeholder = 'Buscar...', width = '240px' }) {
-    return (
-        <div className="relative flex-shrink-0" style={{ minWidth: width }}>
-            <Icon name="Search" size={13} color="var(--color-muted-foreground)"
-                style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-            <input
-                type="text"
-                value={value}
-                onChange={e => onChange(e.target.value)}
-                placeholder={placeholder}
-                className="w-full pl-7 pr-7 py-2 rounded-lg border text-xs outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-background)', color: 'var(--color-text-primary)' }}
-            />
-            {value && (
-                <button onClick={() => onChange('')}
-                    style={{ position: 'absolute', right: '7px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted-foreground)', fontSize: '13px', lineHeight: 1 }}>✕</button>
-            )}
-        </div>
-    );
-}
 
 const FORM_VAZIO = { motorista_id: '', placa: '', item: '', quantidade: '1', data_entrega: new Date().toISOString().split('T')[0], observacoes: '' };
-
-// ─── Dropdown pesquisável (substitui <PrettySelect>/<datalist> nativos, que exigiam
-//     rolar a lista inteira pra achar um item) ────────────────────────────────
-function SearchSelect({ value, onChange, options, placeholder = 'Selecione...', freeText = false, emptyLabel = 'Nenhum resultado', allowClear = false, clearLabel = 'Todos' }) {
-    const [open, setOpen] = useState(false);
-    const [q, setQ] = useState('');
-    const [coords, setCoords] = useState(null);
-    const ref = useRef();
-    const inputRef = useRef();
-    const panelRef = useRef();
-
-    const updateCoords = useCallback(() => {
-        if (!inputRef.current) return;
-        const r = inputRef.current.getBoundingClientRect();
-        setCoords({ top: r.bottom + 4, left: r.left, width: r.width });
-    }, []);
-
-    useEffect(() => {
-        const handler = e => {
-            if (ref.current && ref.current.contains(e.target)) return;
-            if (panelRef.current && panelRef.current.contains(e.target)) return;
-            setOpen(false);
-        };
-        document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
-    }, []);
-
-    useEffect(() => {
-        if (!open) return;
-        updateCoords();
-        // Captura scroll de qualquer ancestral (inclusive o corpo do modal) para
-        // manter o painel colado no campo, já que ele é renderizado via portal.
-        window.addEventListener('scroll', updateCoords, true);
-        window.addEventListener('resize', updateCoords);
-        return () => {
-            window.removeEventListener('scroll', updateCoords, true);
-            window.removeEventListener('resize', updateCoords);
-        };
-    }, [open, updateCoords]);
-
-    const selected = options.find(o => o.value === value);
-    const displayValue = open ? q : (selected?.label || (freeText ? value : ''));
-    const filtered = options.filter(o => o.label.toLowerCase().includes((open ? q : '').toLowerCase()));
-
-    return (
-        <div ref={ref} className="relative">
-            <div className="relative">
-                <input
-                    ref={inputRef}
-                    value={displayValue}
-                    onChange={e => { setQ(e.target.value); setOpen(true); if (freeText) onChange(e.target.value); }}
-                    onFocus={() => setOpen(true) || setQ('')}
-                    placeholder={placeholder}
-                    className={inputCls + ' pr-8 cursor-pointer'}
-                    style={inputStyle}
-                />
-                <Icon name="ChevronDown" size={14} color="var(--color-muted-foreground)"
-                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-            </div>
-            {open && coords && createPortal(
-                <div ref={panelRef} className="fixed z-[300] bg-white rounded-xl border shadow-lg overflow-hidden"
-                    style={{ borderColor: 'var(--color-border)', top: coords.top, left: coords.left, width: coords.width }}>
-                    <div className="max-h-52 overflow-y-auto">
-                        {allowClear && (
-                            <button type="button" onClick={() => { onChange(''); setQ(''); setOpen(false); }}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors font-medium"
-                                style={{ color: 'var(--color-muted-foreground)' }}>
-                                {clearLabel}
-                            </button>
-                        )}
-                        {filtered.length === 0 ? (
-                            <div className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{emptyLabel}</div>
-                        ) : filtered.map(o => (
-                            <button key={o.value} type="button"
-                                onClick={() => { onChange(o.value); setQ(''); setOpen(false); }}
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors"
-                                style={{ color: 'var(--color-text-primary)' }}>
-                                {o.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>,
-                document.body
-            )}
-        </div>
-    );
-}
 
 export default function EntregasAcessorios() {
     const { profile, isAdmin } = useAuth();
@@ -544,107 +389,32 @@ export default function EntregasAcessorios() {
             </main>
 
             {modal && (
-                <ModalOverlay onClose={() => setModal(null)} sm>
-                    <ModalHeader title={modal.mode === 'create' ? 'Nova Entrega' : 'Editar Entrega'} icon="Package" onClose={() => setModal(null)} />
-                    <div className="p-5 overflow-y-auto flex-1 space-y-4">
-                        <Field label="Motorista" required>
-                            <SearchSelect
-                                value={form.motorista_id}
-                                onChange={v => setForm(f => ({ ...f, motorista_id: v }))}
-                                options={motoristas.map(m => ({ value: m.id, label: m.name }))}
-                                placeholder="Selecione o motorista..."
-                                emptyLabel="Nenhum motorista encontrado"
-                            />
-                        </Field>
-                        <Field label="Placa" required>
-                            <SearchSelect
-                                value={form.placa}
-                                onChange={v => setForm(f => ({ ...f, placa: v.toUpperCase() }))}
-                                options={placasSugeridas.map(p => ({ value: p, label: p }))}
-                                placeholder="Ex: ABC1D23"
-                                freeText
-                                emptyLabel="Nenhuma placa cadastrada com esse texto — pode digitar mesmo assim"
-                            />
-                        </Field>
-                        <div className="grid grid-cols-2 gap-3">
-                            <Field label="Item" required>
-                                <SearchSelect
-                                    value={form.item}
-                                    onChange={v => setForm(f => ({ ...f, item: v }))}
-                                    options={itensDisponiveis.map(i => ({ value: i, label: i }))}
-                                    placeholder="Selecione o item..."
-                                    emptyLabel="Nenhum item encontrado — gerencie em “Gerenciar itens”"
-                                />
-                            </Field>
-                            <Field label="Quantidade" required>
-                                <input type="number" min="1" value={form.quantidade} onChange={e => setForm(f => ({ ...f, quantidade: e.target.value }))} className={inputCls} style={inputStyle} />
-                            </Field>
-                        </div>
-                        <Field label="Data da entrega" required>
-                            <input type="date" value={form.data_entrega} onChange={e => setForm(f => ({ ...f, data_entrega: e.target.value }))} className={inputCls} style={inputStyle} />
-                        </Field>
-                        <Field label="Observações">
-                            <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
-                        </Field>
-                    </div>
-                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                        <button onClick={() => setModal(null)} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button onClick={salvar} size="sm" iconName={saving ? 'Loader' : 'Check'} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</Button>
-                    </div>
-                </ModalOverlay>
+                <Modal
+                    form={form}
+                    itensDisponiveis={itensDisponiveis}
+                    modal={modal}
+                    motoristas={motoristas}
+                    placasSugeridas={placasSugeridas}
+                    salvar={salvar}
+                    saving={saving}
+                    setForm={setForm}
+                    setModal={setModal}
+                />
             )}
 
             {modalItens && (
-                <ModalOverlay onClose={() => { setModalItens(false); setEditandoItem(null); setNovoItemNome(''); }} sm>
-                    <ModalHeader title="Gerenciar Itens" icon="ListTodo" onClose={() => { setModalItens(false); setEditandoItem(null); setNovoItemNome(''); }} />
-                    <div className="p-5 overflow-y-auto flex-1 space-y-4">
-                        <div className="flex gap-2">
-                            <input value={novoItemNome} onChange={e => setNovoItemNome(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && criarItem()}
-                                placeholder="Nome do novo item (ex: Cinta)"
-                                className={inputCls} style={inputStyle} />
-                            <Button onClick={criarItem} size="sm" iconName="Plus" disabled={savingItem || !novoItemNome.trim()}>Adicionar</Button>
-                        </div>
-                        {itensCatalogo.length === 0 ? (
-                            <p className="text-xs text-center py-6" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum item cadastrado ainda.</p>
-                        ) : (
-                            <div className="rounded-lg border divide-y" style={{ borderColor: 'var(--color-border)' }}>
-                                {itensCatalogo.map(item => (
-                                    <div key={item.id} className="flex items-center gap-2 px-3 py-2">
-                                        {editandoItem?.id === item.id ? (
-                                            <>
-                                                <input value={editandoItem.nome}
-                                                    onChange={e => setEditandoItem(ed => ({ ...ed, nome: e.target.value }))}
-                                                    onKeyDown={e => e.key === 'Enter' && salvarEdicaoItem()}
-                                                    className={inputCls + ' py-1.5'} style={inputStyle} autoFocus />
-                                                <button onClick={salvarEdicaoItem} disabled={savingItem} className="p-1.5 rounded hover:bg-green-50 flex-shrink-0">
-                                                    <Icon name="Check" size={16} color="#059669" />
-                                                </button>
-                                                <button onClick={() => setEditandoItem(null)} className="p-1.5 rounded hover:bg-gray-100 flex-shrink-0">
-                                                    <Icon name="X" size={16} color="var(--color-muted-foreground)" />
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <span className="flex-1 text-sm" style={{ color: 'var(--color-text-primary)' }}>{item.nome}</span>
-                                                <button onClick={() => setEditandoItem({ id: item.id, nome: item.nome })} className="p-1.5 rounded hover:bg-blue-50 flex-shrink-0">
-                                                    <Icon name="Pencil" size={16} color="#1D4ED8" />
-                                                </button>
-                                                <button onClick={() => excluirItem(item)} className="p-1.5 rounded hover:bg-red-50 flex-shrink-0">
-                                                    <Icon name="Trash2" size={16} color="#DC2626" />
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex gap-3 p-5 justify-end border-t flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                        <button onClick={() => { setModalItens(false); setEditandoItem(null); setNovoItemNome(''); }}
-                            className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Fechar</button>
-                    </div>
-                </ModalOverlay>
+                <ModalItens
+                    criarItem={criarItem}
+                    editandoItem={editandoItem}
+                    excluirItem={excluirItem}
+                    itensCatalogo={itensCatalogo}
+                    novoItemNome={novoItemNome}
+                    salvarEdicaoItem={salvarEdicaoItem}
+                    savingItem={savingItem}
+                    setEditandoItem={setEditandoItem}
+                    setModalItens={setModalItens}
+                    setNovoItemNome={setNovoItemNome}
+                />
             )}
 
             <Toast toast={toast} />

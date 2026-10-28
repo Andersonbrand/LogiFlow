@@ -1,29 +1,19 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+
 import { useNavigate } from 'react-router-dom';
-import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
-import NavigationBar from 'components/ui/NavigationBar';
-import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
-import Button from 'components/ui/Button';
-import Icon from 'components/AppIcon';
-import Toast from 'components/ui/Toast';
-import { useToast } from 'utils/useToast';
-import { useAuth } from 'utils/AuthContext';
-import { fetchRomaneios, createRomaneio, deleteRomaneio } from 'utils/romaneioService';
-import { fetchVehicles } from 'utils/vehicleService';
-import { calcularGruposConsolidacao, getCorredorDaCidade, getLabelCorredor, getIconeCorredor, carregarCorredores, getAllCorredores } from 'utils/rotaGeo';
-import PrettySelect from 'components/ui/PrettySelect';
+
+import { useAuth } from 'context/AuthContext';
+import { useToast } from 'hooks/useToast';
+import { carregarCorredores, getAllCorredores, calcularGruposConsolidacao, getCorredorDaCidade, getLabelCorredor } from 'utils/rotaGeo';
+import { fetchRomaneios, createRomaneio, deleteRomaneio } from 'services/romaneio';
+import { fetchVehicles } from 'services/vehicleService';
+import { useRecarregarAoVoltar } from 'hooks/useRecarregarAoVoltar';
+import { NavigationBar, BreadcrumbTrail, AppIcon as Icon, Button, PrettySelect, Toast } from 'components';
+
+import { COR_CORREDOR } from './utils/constants';
+import TabCorredores from './components/TabCorredores';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-const COR_CORREDOR = {
-    norte:       { bg: '#EFF6FF', border: '#93C5FD', text: '#1D4ED8', icon: 'ArrowUp' },
-    nordeste:    { bg: '#F0FDF4', border: '#86EFAC', text: '#15803D', icon: 'ArrowUpRight' },
-    leste_norte: { bg: '#FFF7ED', border: '#FDC974', text: '#B45309', icon: 'ArrowRight' },
-    leste_sul:   { bg: '#FEF9C3', border: '#FDE047', text: '#92400E', icon: 'ArrowRight' },
-    sul:         { bg: '#FEF2F2', border: '#FCA5A5', text: '#B91C1C', icon: 'ArrowDown' },
-    oeste:       { bg: '#F5F3FF', border: '#C4B5FD', text: '#7C3AED', icon: 'ArrowLeft' },
-    sul_proximo: { bg: '#FFF1F2', border: '#FDA4AF', text: '#BE123C', icon: 'ArrowDown' },
-};
 
 export default function Consolidacao() {
     const navigate = useNavigate();
@@ -452,93 +442,14 @@ export default function Consolidacao() {
 
                     {/* ── ABA CORREDORES ── visível para operadores (só leitura) e admin */}
                     {abaAtiva === 'corredores' && (
-                        <div className="flex flex-col gap-5">
-                            <div className="flex items-center justify-between flex-wrap gap-3">
-                                <div>
-                                    <h2 className="font-semibold text-slate-800 flex items-center gap-2">
-                                        <Icon name="Map" size={17} color="var(--color-primary)" />
-                                        Corredores de Rota Cadastrados
-                                    </h2>
-                                    <p className="text-xs text-slate-500 mt-0.5">
-                                        Base: <strong>Guanambi, BA</strong> — cidades agrupadas por direção de rota
-                                    </p>
-                                </div>
-                                {isAdmin() && (
-                                    <Button variant="default" iconName="Pencil" iconSize={14}
-                                        onClick={() => navigate('/admin')}>
-                                        Editar no Painel Admin
-                                    </Button>
-                                )}
-                            </div>
-
-                            {loading ? (
-                                <div className="flex justify-center py-12">
-                                    <div className="animate-spin h-7 w-7 rounded-full border-4 border-slate-200" style={{ borderTopColor: 'var(--color-primary)' }} />
-                                </div>
-                            ) : corredoresLista.length === 0 ? (
-                                <div className="text-center py-12 text-slate-400">
-                                    <Icon name="MapPin" size={36} color="#CBD5E1" />
-                                    <p className="mt-2 text-sm">Nenhum corredor cadastrado</p>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {corredoresLista.map(corredor => {
-                                        const cor = COR_CORREDOR[corredor.nome] || { bg: '#F8FAFC', border: '#CBD5E1', text: '#475569', icon: 'MapPin' };
-                                        const isExp = expandidos[corredor.nome];
-                                        const cidades = corredor.cidades || [];
-                                        return (
-                                            <div key={corredor.nome}
-                                                className="bg-white rounded-xl border shadow-sm overflow-hidden"
-                                                style={{ borderColor: 'var(--color-border)' }}>
-                                                <div className="flex items-center gap-3 px-4 py-3 border-b"
-                                                    style={{ backgroundColor: cor.bg, borderColor: cor.border }}>
-                                                    <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                                                        style={{ backgroundColor: cor.border }}>
-                                                        <Icon name={corredor.icone || cor.icon} size={15} color={cor.text} />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-semibold" style={{ color: cor.text }}>{corredor.label}</p>
-                                                    </div>
-                                                    <span className="text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0"
-                                                        style={{ backgroundColor: cor.border, color: cor.text }}>
-                                                        {cidades.length} {cidades.length === 1 ? 'cidade' : 'cidades'}
-                                                    </span>
-                                                </div>
-                                                <div className="px-4 py-3">
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {(isExp ? cidades : cidades.slice(0, 12)).map((cidade, i) => (
-                                                            <span key={i}
-                                                                className="inline-block px-2 py-0.5 rounded-full text-xs border capitalize"
-                                                                style={{ backgroundColor: cor.bg, borderColor: cor.border, color: cor.text }}>
-                                                                {cidade}
-                                                            </span>
-                                                        ))}
-                                                        {cidades.length === 0 && (
-                                                            <span className="text-xs text-slate-400 italic">Sem cidades cadastradas</span>
-                                                        )}
-                                                    </div>
-                                                    {cidades.length > 12 && (
-                                                        <button
-                                                            onClick={() => setExpandidos(p => ({ ...p, [corredor.nome]: !p[corredor.nome] }))}
-                                                            className="mt-2 text-xs font-medium flex items-center gap-1 transition-colors hover:opacity-70"
-                                                            style={{ color: cor.text }}>
-                                                            <Icon name={isExp ? 'ChevronUp' : 'ChevronDown'} size={13} color="currentColor" />
-                                                            {isExp ? 'Mostrar menos' : `Ver todas as ${cidades.length} cidades`}
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-
-                            {!isAdmin() && (
-                                <p className="text-xs text-center mt-2" style={{ color: 'var(--color-muted-foreground)' }}>
-                                    Para solicitar alterações nos corredores, entre em contato com o administrador do sistema.
-                                </p>
-                            )}
-                        </div>
+                        <TabCorredores
+                    corredoresLista={corredoresLista}
+                    expandidos={expandidos}
+                    isAdmin={isAdmin}
+                    loading={loading}
+                    navigate={navigate}
+                    setExpandidos={setExpandidos}
+                />
                     )}
                 </div>
             </main>

@@ -1,12 +1,10 @@
 import React, { useState, useMemo, useRef } from 'react';
-import Icon from 'components/AppIcon';
-import Button from 'components/ui/Button';
-import { useToast } from 'utils/useToast';
-import Toast from 'components/ui/Toast';
+import { useToast } from 'hooks/useToast';
 import {
     BACKUP_MODULES, BACKUP_BUCKETS, exportBackup, nomeArquivoBackup, baixarBlob,
     lerArquivoBackup, importarBackup,
-} from 'utils/backupService';
+} from 'services/backup';
+import { AppIcon as Icon, Button, Toast } from 'components';
 
 // Buckets recebem uma chave prefixada dentro do mesmo Set de seleção,
 // pra não colidir com nomes de tabela: "bucket:cnh-documents"

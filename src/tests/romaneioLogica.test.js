@@ -6,8 +6,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { sincronizarStatusVeiculo } from '../utils/romaneioService';
-import { supabase } from '../utils/supabaseClient';
+import { sincronizarStatusVeiculo } from '../services/romaneio';
+import { supabase } from '../services/supabaseClient';
 
 // ─── addMargem (lógica interna) — testada via comportamento observável ─────────
 

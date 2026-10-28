@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import Icon from 'components/AppIcon';
-import { fetchBonusConfig, saveBonusConfig, BONUS_CONFIG_DEFAULT } from 'utils/settingsService';
-import { fetchAllUsers, updateUserProfile } from 'utils/userService';
-import PrettySelect from 'components/ui/PrettySelect';
+import { fetchBonusConfig, saveBonusConfig, BONUS_CONFIG_DEFAULT } from 'services/settingsService';
+import { fetchAllUsers, updateUserProfile } from 'services/userService';
+import { AppIcon as Icon, PrettySelect } from 'components';
 
 const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -11,6 +10,9 @@ export default function ConfiguracoesPanel({ showToast, profile }) {
     const [salvando, setSalvando] = useState(false);
     const [bonusBaixo, setBonusBaixo] = useState(String(BONUS_CONFIG_DEFAULT.bonusBaixo));
     const [bonusAlto, setBonusAlto]   = useState(String(BONUS_CONFIG_DEFAULT.bonusAlto));
+    const [modoBonus, setModoBonus]   = useState('fixo'); // 'fixo' | 'km'
+    const [faixasKm, setFaixasKm]     = useState(BONUS_CONFIG_DEFAULT.faixasKm.map(f => ({ ateKm: String(f.ateKm), valor: String(f.valor) })));
+    const [valorAcimaKm, setValorAcimaKm] = useState(String(BONUS_CONFIG_DEFAULT.valorAcimaKm));
 
     // ── Assinaturas digitais (todos os usuários) ────────────────────────────
     const [usuarios, setUsuarios]           = useState([]);
@@ -66,6 +68,9 @@ export default function ConfiguracoesPanel({ showToast, profile }) {
                 const cfg = await fetchBonusConfig();
                 setBonusBaixo(String(cfg.bonusBaixo));
                 setBonusAlto(String(cfg.bonusAlto));
+                setModoBonus(cfg.modo);
+                setFaixasKm(cfg.faixasKm.map(f => ({ ateKm: String(f.ateKm), valor: String(f.valor) })));
+                setValorAcimaKm(String(cfg.valorAcimaKm));
             } catch (e) { showToast('Erro ao carregar configurações: ' + e.message, 'error'); }
             finally { setLoading(false); }
         })();
@@ -75,9 +80,19 @@ export default function ConfiguracoesPanel({ showToast, profile }) {
         const b = Number(String(bonusBaixo).replace(',', '.'));
         const a = Number(String(bonusAlto).replace(',', '.'));
         if (isNaN(b) || b < 0 || isNaN(a) || a < 0) { showToast('Digite valores válidos (maiores ou iguais a zero)', 'error'); return; }
+        const num = v => Number(String(v).replace(',', '.'));
+        const faixas = faixasKm.map(f => ({ ateKm: num(f.ateKm), valor: num(f.valor) }));
+        const acima = num(valorAcimaKm);
+        if (modoBonus === 'km') {
+            if (faixas.length === 0) { showToast('Cadastre ao menos uma faixa de km', 'error'); return; }
+            if (faixas.some(f => isNaN(f.ateKm) || f.ateKm <= 0 || isNaN(f.valor) || f.valor < 0) || isNaN(acima) || acima < 0) {
+                showToast('Confira as faixas: km maior que zero e valores maiores ou iguais a zero', 'error'); return;
+            }
+            if (new Set(faixas.map(f => f.ateKm)).size !== faixas.length) { showToast('Há duas faixas com o mesmo limite de km', 'error'); return; }
+        }
         setSalvando(true);
         try {
-            await saveBonusConfig({ bonusBaixo: b, bonusAlto: a }, profile?.id || null);
+            await saveBonusConfig({ bonusBaixo: b, bonusAlto: a, modo: modoBonus, faixasKm: faixas.filter(f => !isNaN(f.ateKm) && !isNaN(f.valor)), valorAcimaKm: isNaN(acima) ? 0 : acima }, profile?.id || null);
             showToast('Configurações de bônus salvas! Já valem para todos os usuários.', 'success');
         } catch (e) { showToast('Erro ao salvar: ' + e.message, 'error'); }
         finally { setSalvando(false); }
@@ -104,6 +119,61 @@ export default function ConfiguracoesPanel({ showToast, profile }) {
                     </div>
                 </div>
                 <div className="p-6 space-y-5">
+                    <div>
+                        <label className="text-sm font-medium text-slate-700 block mb-1.5">Como o bônus é calculado</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {[
+                                { v: 'fixo', t: 'Valor fixo por destino', d: 'Dois valores: cidades de rodízio/estoque e demais cidades.' },
+                                { v: 'km',   t: 'Por KM rodado',          d: 'Valor por faixa de distância, usando o km da tabela de Fretes da Frota.' },
+                            ].map(op => (
+                                <button key={op.v} type="button" onClick={() => setModoBonus(op.v)}
+                                    className="text-left p-3 rounded-lg border transition-colors"
+                                    style={modoBonus === op.v ? { backgroundColor: '#EFF6FF', borderColor: '#93C5FD' } : { borderColor: '#CBD5E1' }}>
+                                    <p className="text-sm font-semibold" style={{ color: modoBonus === op.v ? '#1D4ED8' : '#334155' }}>{op.t}</p>
+                                    <p className="text-xs text-slate-500 mt-0.5">{op.d}</p>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {modoBonus === 'km' && (
+                        <div className="space-y-3">
+                            <p className="text-xs text-slate-500">
+                                Cada destino usa o km cadastrado em Carretas → Fretes → Frota própria. Destino sem km cadastrado cai nos valores fixos abaixo.
+                            </p>
+                            {faixasKm.map((f, i) => (
+                                <div key={i} className="flex items-end gap-2 flex-wrap">
+                                    <div className="w-36">
+                                        <label className="text-xs text-slate-500 block mb-1">{i === 0 ? 'Até (km)' : 'Acima da anterior, até (km)'}</label>
+                                        <input value={f.ateKm} inputMode="decimal" className={inputCls} style={{ borderColor: '#CBD5E1' }}
+                                            onChange={e => setFaixasKm(l => l.map((x, j) => j === i ? { ...x, ateKm: e.target.value } : x))} />
+                                    </div>
+                                    <div className="w-36">
+                                        <label className="text-xs text-slate-500 block mb-1">Bônus (R$)</label>
+                                        <input value={f.valor} inputMode="decimal" className={inputCls} style={{ borderColor: '#CBD5E1' }}
+                                            onChange={e => setFaixasKm(l => l.map((x, j) => j === i ? { ...x, valor: e.target.value } : x))} />
+                                    </div>
+                                    <button type="button" onClick={() => setFaixasKm(l => l.filter((_, j) => j !== i))} disabled={faixasKm.length <= 1}
+                                        className="p-2.5 rounded-lg hover:bg-red-50 disabled:opacity-30" title="Remover faixa">
+                                        <Icon name="Trash2" size={15} color="#DC2626" />
+                                    </button>
+                                </div>
+                            ))}
+                            <button type="button" onClick={() => setFaixasKm(l => [...l, { ateKm: '', valor: '' }])}
+                                className="text-xs font-medium flex items-center gap-1 text-blue-700 hover:underline">
+                                <Icon name="Plus" size={13} color="#1D4ED8" /> Adicionar faixa
+                            </button>
+                            <div className="w-48">
+                                <label className="text-xs text-slate-500 block mb-1">Acima da última faixa (R$)</label>
+                                <input value={valorAcimaKm} onChange={e => setValorAcimaKm(e.target.value)} inputMode="decimal"
+                                    className={inputCls} style={{ borderColor: '#CBD5E1' }} />
+                            </div>
+                        </div>
+                    )}
+
+                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                        {modoBonus === 'km' ? 'Valores fixos (reserva para destinos sem km)' : 'Valores fixos'}
+                    </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="text-sm font-medium text-slate-700 block mb-1.5">
@@ -129,10 +199,20 @@ export default function ConfiguracoesPanel({ showToast, profile }) {
                         </div>
                     </div>
 
+                    {modoBonus === 'km' && (
+                        <div className="rounded-lg p-3 text-xs" style={{ backgroundColor: '#EFF6FF', color: '#1E40AF' }}>
+                            Pré-visualização: {[...faixasKm].map(f => ({ k: Number(String(f.ateKm).replace(',', '.')), v: Number(String(f.valor).replace(',', '.')) })).filter(f => !isNaN(f.k)).sort((a, b) => a.k - b.k).map((f, i, arr) => (
+                                <span key={i}>{i === 0 ? 'até' : `de ${arr[i - 1].k} a`} <strong>{f.k} km</strong> = <strong>{BRL(f.v || 0)}</strong>; </span>
+                            ))}
+                            acima disso = <strong>{BRL(Number(String(valorAcimaKm).replace(',', '.')) || 0)}</strong>.
+                        </div>
+                    )}
+                    {modoBonus === 'fixo' && (
                     <div className="rounded-lg p-3 text-xs" style={{ backgroundColor: '#EFF6FF', color: '#1E40AF' }}>
                         Pré-visualização: uma viagem para uma cidade de rodízio/estoque gera <strong>{BRL(Number(String(bonusBaixo).replace(',', '.')) || 0)}</strong> de
                         bônus; para as demais cidades, <strong>{BRL(Number(String(bonusAlto).replace(',', '.')) || 0)}</strong>.
                     </div>
+                    )}
 
                     <button onClick={salvar} disabled={salvando}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-60">

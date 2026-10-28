@@ -5,10 +5,39 @@
     "moduleResolution": "bundler",
     "baseUrl": "./src",
     "paths": {
-      "components/*": ["components/*"],
-      "pages/*": ["pages/*"],
-      "utils/*": ["utils/*"],
-      "styles/*": ["styles/*"]
+      "assets/*": [
+            "assets/*"
+      ],
+      "components/*": [
+            "components/*"
+      ],
+      "config/*": [
+            "config/*"
+      ],
+      "constants/*": [
+            "constants/*"
+      ],
+      "context/*": [
+            "context/*"
+      ],
+      "hooks/*": [
+            "hooks/*"
+      ],
+      "pages/*": [
+            "pages/*"
+      ],
+      "routes/*": [
+            "routes/*"
+      ],
+      "services/*": [
+            "services/*"
+      ],
+      "styles/*": [
+            "styles/*"
+      ],
+      "utils/*": [
+            "utils/*"
+      ]
     },
     "allowJs": true,
     "checkJs": false,

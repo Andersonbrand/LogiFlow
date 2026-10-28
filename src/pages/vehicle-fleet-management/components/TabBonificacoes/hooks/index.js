@@ -1,0 +1,1 @@
+export { useBonificacoesCaminhao } from './useBonificacoesCaminhao';

@@ -3,7 +3,7 @@
 import '@testing-library/jest-dom';
 
 // Mock do cliente Supabase para não depender de banco real nos testes
-vi.mock('../utils/supabaseClient', () => ({
+vi.mock('../services/supabaseClient', () => ({
     supabase: {
         from: vi.fn(() => ({
             select: vi.fn().mockReturnThis(),

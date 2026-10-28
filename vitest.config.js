@@ -12,8 +12,8 @@ export default defineConfig({
         coverage: {
             provider: 'v8',
             reporter: ['text', 'html'],
-            include: ['src/utils/**', 'src/pages/**', 'src/components/**'],
-            exclude: ['src/tests/**', 'src/utils/supabaseClient.js'],
+            include: ['src/services/**', 'src/utils/**', 'src/pages/**', 'src/components/**'],
+            exclude: ['src/tests/**', 'src/services/supabaseClient.js'],
         },
     },
 });

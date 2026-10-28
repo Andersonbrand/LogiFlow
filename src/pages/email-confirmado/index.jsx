@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from 'utils/supabaseClient';
-import Icon from 'components/AppIcon';
+import { exchangeCodeForSession, verifyOtp, getSession } from 'services/authService';
+import { AppIcon as Icon } from 'components';
+import paths from 'constants/paths';
 
 /**
  * Página de confirmação de e-mail.
@@ -44,7 +45,7 @@ export default function EmailConfirmado() {
 
                 // Segundo link ou troca completa via code
                 if (code) {
-                    const { error } = await supabase.auth.exchangeCodeForSession(code);
+                    const { error } = await exchangeCodeForSession(code);
                     if (error) throw error;
                     setStatus('success');
                     setMessage('E-mail alterado com sucesso!');
@@ -54,7 +55,7 @@ export default function EmailConfirmado() {
 
                 // Confirmação via token_hash (signup, email change, recovery)
                 if (tokenHash && type) {
-                    const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
+                    const { error } = await verifyOtp({ token_hash: tokenHash, type });
                     if (error) throw error;
 
                     if (type === 'email_change') {
@@ -67,7 +68,7 @@ export default function EmailConfirmado() {
                         setSubMessage('Seu e-mail foi verificado. Você já pode acessar o sistema.');
                     } else if (type === 'recovery') {
                         // Redireciona para redefinir senha
-                        navigate('/reset-password');
+                        navigate(paths.ResetPassword);
                         return;
                     } else {
                         setStatus('success');
@@ -80,7 +81,7 @@ export default function EmailConfirmado() {
                 // Hash fragment (#access_token=...) — fluxo implícito
                 const hash = window.location.hash;
                 if (hash.includes('access_token')) {
-                    const { data: { session }, error } = await supabase.auth.getSession();
+                    const { data: { session }, error } = await getSession();
                     if (error) throw error;
                     if (session) {
                         setStatus('success');

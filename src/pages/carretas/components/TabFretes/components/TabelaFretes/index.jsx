@@ -1,0 +1,569 @@
+import React, { useState, useCallback, useEffect } from 'react';
+import { createFrete, updateFrete, deleteFrete, fetchFretesPorTipo, insertFretes } from 'services/carretas';
+import { normalizarCidadeBA } from 'utils/cidadeUtils';
+import { useRecarregarAoVoltar } from 'hooks/useRecarregarAoVoltar';
+import { useToast } from 'hooks/useToast';
+import { useConfirm, useCollapsible, AppIcon as Icon, CollapseChevron, Button, Toast } from 'components';
+import { inputCls, inputStyle } from '../../utils/constants';
+import { BRL } from '../../utils/helpers';
+
+// ─── Dados iniciais — Frota Própria (Tabela_Frete.pdf — coluna "Frete por saco") ──
+const FROTA_INICIAL = [
+    { cidade: 'Urandi',                             km: 616,  frete_por_saco: 5.62 },
+    { cidade: 'Pindai',                             km: 680,  frete_por_saco: 6.10 },
+    { cidade: 'Pilões',                             km: 712,  frete_por_saco: 6.34 },
+    { cidade: 'Candiba',                            km: 736,  frete_por_saco: 6.52 },
+    { cidade: 'Mutans',                             km: 804,  frete_por_saco: 7.02 },
+    { cidade: 'Morrinhos',                          km: 806,  frete_por_saco: 7.04 },
+    { cidade: 'Matina',                             km: 834,  frete_por_saco: 7.25 },
+    { cidade: 'Caetité',                            km: 826,  frete_por_saco: 7.19 },
+    { cidade: 'Tanque Novo',                        km: 964,  frete_por_saco: 8.22 },
+    { cidade: 'Igaporã',                            km: 904,  frete_por_saco: 7.77 },
+    { cidade: 'Riacho de Santana (Por Matina)',     km: 912,  frete_por_saco: 7.83 },
+    { cidade: 'Palmas de M. Alto',                  km: 834,  frete_por_saco: 7.25 },
+    { cidade: 'Sebastião Laranjeiras',              km: 944,  frete_por_saco: 8.07 },
+    { cidade: 'Julião',                             km: 940,  frete_por_saco: 8.04 },
+    { cidade: 'Iuiú',                               km: 948,  frete_por_saco: 8.10 },
+    { cidade: 'Malhada',                            km: 966,  frete_por_saco: 8.24 },
+    { cidade: 'Carinhanha',                         km: 972,  frete_por_saco: 8.28 },
+    { cidade: 'Agrovila 14,15,16, Marrequeiro',    km: 1120, frete_por_saco: 9.39 },
+    { cidade: 'Agrovila 2, 4, 6, 8, 10, 11',       km: 1180, frete_por_saco: 9.84 },
+    { cidade: 'Serra do Ramalho',                   km: 1186, frete_por_saco: 9.89 },
+    { cidade: 'Cocôs (Por Feira da Mata)',          km: 1160, frete_por_saco: 10.11 },
+    { cidade: 'Feira da Mata',                      km: 1050, frete_por_saco: 9.24 },
+    { cidade: 'Malhada de Pedra',                   km: 1014, frete_por_saco: 8.28 },
+    { cidade: 'Guajeru',                            km: 1062, frete_por_saco: 8.96 },
+    { cidade: 'Rio do Antonio',                     km: 990,  frete_por_saco: 8.42 },
+    { cidade: 'Brumado',                            km: 1030, frete_por_saco: 8.72 },
+    { cidade: 'Aracatu',                            km: 1096, frete_por_saco: 9.47 },
+    { cidade: 'Dom Basilio',                        km: 1136, frete_por_saco: 9.15 },
+    { cidade: 'Livramento',                         km: 1162, frete_por_saco: 9.71 },
+    { cidade: 'Rio de Contas',                      km: 1186, frete_por_saco: 9.89 },
+    { cidade: 'Arapiranga, Rio de Contas',          km: 1230, frete_por_saco: 10.22 },
+    { cidade: 'Marcolino Moura, Rio de Contas',     km: 1224, frete_por_saco: 10.25 },
+    { cidade: 'Jussiape',                           km: 1270, frete_por_saco: 10.52 },
+    { cidade: 'Caraguataí, Jussiape',               km: 1294, frete_por_saco: 10.70 },
+    { cidade: 'Botuporã',                           km: 1004, frete_por_saco: 8.52 },
+    { cidade: 'Caturama',                           km: 1064, frete_por_saco: 8.97 },
+    { cidade: 'Paramirim',                          km: 1088, frete_por_saco: 9.15 },
+    { cidade: 'Caraibas de Paramirim',              km: 1134, frete_por_saco: 9.50 },
+    { cidade: 'Erico Cardoso',                      km: 1122, frete_por_saco: 9.41 },
+    { cidade: 'Rio do Pires',                       km: 1128, frete_por_saco: 9.45 },
+    { cidade: 'Ibipitanga',                         km: 1202, frete_por_saco: 10.01 },
+    { cidade: 'Macaubas',                           km: 1166, frete_por_saco: 9.74 },
+    { cidade: 'Boquira',                            km: 1212, frete_por_saco: 10.08 },
+    { cidade: 'Lagoa Real',                         km: 942,  frete_por_saco: 8.06 },
+    { cidade: 'Ibitira',                            km: 922,  frete_por_saco: 7.91 },
+    { cidade: 'Ibiassucê',                          km: 918,  frete_por_saco: 7.88 },
+    { cidade: 'Caculé',                             km: 970,  frete_por_saco: 8.27 },
+    { cidade: 'Bom Jesus da Lapa (Por Matina)',     km: 1046, frete_por_saco: 8.84 },
+    { cidade: 'Sitio do Mato',                      km: 1184, frete_por_saco: 9.87 },
+    { cidade: 'Paratinga',                          km: 1232, frete_por_saco: 10.23 },
+    { cidade: 'Santa Maria da Vitória',             km: 1274, frete_por_saco: 10.55 },
+    { cidade: 'Oliveira dos Brejinhos',             km: 1324, frete_por_saco: 10.92 },
+    { cidade: 'Novo Horizonte',                     km: 1572, frete_por_saco: 12.78 },
+    { cidade: 'Boninal',                            km: 1630, frete_por_saco: 13.21 },
+    { cidade: 'Seabra',                             km: 1594, frete_por_saco: 12.94 },
+    { cidade: 'Ibitiara',                           km: 1320, frete_por_saco: 10.89 },
+    { cidade: 'Ibotirama',                          km: 1362, frete_por_saco: 11.21 },
+    { cidade: 'Morpará',                            km: 1538, frete_por_saco: 12.53 },
+    { cidade: 'Coribe',                             km: 1402, frete_por_saco: 11.51 },
+    { cidade: 'Vila Mariana',                       km: 1132, frete_por_saco: 9.48 },
+    { cidade: 'Presidente Jânio Quadros',           km: 1168, frete_por_saco: 9.75 },
+    { cidade: 'Maetinga',                           km: 1214, frete_por_saco: 10.10 },
+    { cidade: 'Condeúba',                           km: 1100, frete_por_saco: 9.24 },
+    { cidade: 'Sussuarana',                         km: 1130, frete_por_saco: 9.47 },
+    { cidade: 'Tanhaçu',                            km: 1168, frete_por_saco: 9.75 },
+    { cidade: 'Ituaçu',                             km: 1220, frete_por_saco: 10.14 },
+    { cidade: 'Barra da Estiva',                    km: 1268, frete_por_saco: 10.50 },
+    { cidade: 'Barreiras',                          km: 1808, frete_por_saco: 14.55 },
+    { cidade: 'Tauape (entrada de Urandi)',          km: 698,  frete_por_saco: 6.28 },
+    { cidade: 'Licinio de Almeida (entr. Urandi)',  km: 670,  frete_por_saco: 6.10 },
+    { cidade: 'Jacaraci (entrada de Urandi)',        km: 694,  frete_por_saco: 6.26 },
+    { cidade: 'Mortugaba (entrada de Urandi)',       km: 742,  frete_por_saco: 6.58 },
+];
+
+// ─── Dados iniciais — Terceiros (FRETE_TERCEIROS_2026.pdf — coluna "Frete por Saco") ─
+const TERCEIROS_INICIAL = [
+    { cidade: 'Urandi',                             km: 616,  frete_por_saco: 5.18 },
+    { cidade: 'Pindai',                             km: 680,  frete_por_saco: 5.65 },
+    { cidade: 'Pilões',                             km: 712,  frete_por_saco: 5.88 },
+    { cidade: 'Candiba',                            km: 736,  frete_por_saco: 6.06 },
+    { cidade: 'Guanambi',                           km: 748,  frete_por_saco: 6.14 },
+    { cidade: 'Mutans',                             km: 804,  frete_por_saco: 6.55 },
+    { cidade: 'Morrinhos',                          km: 806,  frete_por_saco: 6.57 },
+    { cidade: 'Matina',                             km: 834,  frete_por_saco: 6.77 },
+    { cidade: 'Caetité',                            km: 826,  frete_por_saco: 6.71 },
+    { cidade: 'Tanque Novo',                        km: 964,  frete_por_saco: 7.72 },
+    { cidade: 'Igaporã',                            km: 904,  frete_por_saco: 7.28 },
+    { cidade: 'Riacho de Santana (Por Matina)',     km: 912,  frete_por_saco: 7.34 },
+    { cidade: 'Palmas de M. Alto',                  km: 834,  frete_por_saco: 6.77 },
+    { cidade: 'Sebastião Laranjeiras',              km: 944,  frete_por_saco: 7.57 },
+    { cidade: 'Julião',                             km: 940,  frete_por_saco: 7.54 },
+    { cidade: 'Iuiú',                               km: 948,  frete_por_saco: 7.60 },
+    { cidade: 'Malhada',                            km: 966,  frete_por_saco: 7.73 },
+    { cidade: 'Carinhanha',                         km: 972,  frete_por_saco: 7.77 },
+    { cidade: 'Serra do Ramalho',                   km: 1186, frete_por_saco: 9.33 },
+    { cidade: 'Cocôs (por Feira da Mata)',           km: 1160, frete_por_saco: 9.55 },
+    { cidade: 'Feira da Mata',                      km: null, frete_por_saco: 8.70 },
+    { cidade: 'Malhada de Pedra',                   km: 1014, frete_por_saco: 7.77 },
+    { cidade: 'Guajeru',                            km: 1062, frete_por_saco: 8.43 },
+    { cidade: 'Rio do Antonio',                     km: 990,  frete_por_saco: 7.90 },
+    { cidade: 'Brumado',                            km: 1030, frete_por_saco: 8.20 },
+    { cidade: 'Aracatu',                            km: 1096, frete_por_saco: 8.92 },
+    { cidade: 'Dom Basilio',                        km: 1136, frete_por_saco: 8.62 },
+    { cidade: 'Livramento',                         km: 1162, frete_por_saco: 9.16 },
+    { cidade: 'Rio de Contas',                      km: 1186, frete_por_saco: 9.33 },
+    { cidade: 'Arapiranga, Rio de Contas',          km: 1230, frete_por_saco: 9.65 },
+    { cidade: 'Marcolino Moura, Rio de Contas',     km: 1224, frete_por_saco: 9.68 },
+    { cidade: 'Jussiape',                           km: 1270, frete_por_saco: 9.94 },
+    { cidade: 'Caraguataí, Jussiape',               km: 1294, frete_por_saco: 10.12 },
+    { cidade: 'Botuporã',                           km: 1004, frete_por_saco: 8.01 },
+    { cidade: 'Caturama',                           km: 1064, frete_por_saco: 8.44 },
+    { cidade: 'Paramirim',                          km: 1088, frete_por_saco: 8.62 },
+    { cidade: 'Caraibas de Paramirim',              km: 1134, frete_por_saco: 8.95 },
+    { cidade: 'Erico Cardoso',                      km: 1122, frete_por_saco: 8.87 },
+    { cidade: 'Rio do Pires',                       km: 1128, frete_por_saco: 8.91 },
+    { cidade: 'Ibipitanga',                         km: 1202, frete_por_saco: 9.45 },
+    { cidade: 'Macaubas',                           km: 1166, frete_por_saco: 9.19 },
+    { cidade: 'Boquira',                            km: 1212, frete_por_saco: 9.52 },
+    { cidade: 'Lagoa Real',                         km: 942,  frete_por_saco: 7.56 },
+    { cidade: 'Ibitira',                            km: 922,  frete_por_saco: 7.41 },
+    { cidade: 'Ibiassucê',                          km: 918,  frete_por_saco: 7.38 },
+    { cidade: 'Caculé',                             km: 970,  frete_por_saco: 7.76 },
+    { cidade: 'Bom Jesus da Lapa (Por Matina)',     km: 1046, frete_por_saco: 8.31 },
+    { cidade: 'Sitio do Mato',                      km: 1184, frete_por_saco: 9.32 },
+    { cidade: 'Paratinga',                          km: 1232, frete_por_saco: 9.67 },
+    { cidade: 'Santa Maria da Vitória',             km: 1274, frete_por_saco: 9.97 },
+    { cidade: 'Ibotirama',                          km: 1362, frete_por_saco: 10.61 },
+    { cidade: 'Presidente Jânio Quadros',           km: 1168, frete_por_saco: 9.20 },
+    { cidade: 'Maetinga',                           km: 1214, frete_por_saco: 9.53 },
+    { cidade: 'Condeúba',                           km: 1100, frete_por_saco: 8.71 },
+    { cidade: 'Sussuarana',                         km: 1130, frete_por_saco: 8.92 },
+    { cidade: 'Tanhaçu',                            km: 1168, frete_por_saco: 9.20 },
+    { cidade: 'Ituaçu',                             km: 1220, frete_por_saco: 9.58 },
+    { cidade: 'Barra da Estiva',                    km: 1268, frete_por_saco: 9.93 },
+    { cidade: 'Barreiras',                          km: 1808, frete_por_saco: 13.86 },
+];
+
+// ─── Dados iniciais — Frete Estoque (chave interna 'liz', planilha "Tabela_Frete_Liz.xlsx", colunas KM-MOC
+// e Frete por saco — CPII e CPV têm os mesmos valores de KM/frete, então uma
+// lista só cobre os dois) ─────────────────────────────────────────────────────
+const LIZ_INICIAL = [
+    { cidade: 'Urandi', km: 132, frete_por_saco: 1.01 },
+    { cidade: 'Pindai', km: 68, frete_por_saco: 0.54 },
+    { cidade: 'Pilões', km: 38, frete_por_saco: 0.42 },
+    { cidade: 'Candiba', km: 60, frete_por_saco: 0.46 },
+    { cidade: 'Mutans', km: 56, frete_por_saco: 0.43 },
+    { cidade: 'Morrinhos', km: 58, frete_por_saco: 0.45 },
+    { cidade: 'Matina', km: 86, frete_por_saco: 0.66 },
+    { cidade: 'Caetité', km: 78, frete_por_saco: 0.6 },
+    { cidade: 'Tanque Novo', km: 216, frete_por_saco: 1.66 },
+    { cidade: 'Igaporã', km: 156, frete_por_saco: 1.2 },
+    { cidade: 'Riacho de Santana (Por Matina)', km: 164, frete_por_saco: 1.26 },
+    { cidade: 'Palmas de M. Alto', km: 86, frete_por_saco: 0.66 },
+    { cidade: 'Sebastião Laranjeiras', km: 196, frete_por_saco: 1.51 },
+    { cidade: 'Julião', km: 192, frete_por_saco: 1.48 },
+    { cidade: 'Iuiú', km: 200, frete_por_saco: 1.54 },
+    { cidade: 'Malhada', km: 218, frete_por_saco: 1.68 },
+    { cidade: 'Carinhanha', km: 224, frete_por_saco: 1.72 },
+    { cidade: 'Agrovilia 14,15,16, Marrequeiro', km: 372, frete_por_saco: 2.86 },
+    { cidade: 'Agrovila 2,8,9,10,11', km: 432, frete_por_saco: 3.32 },
+    { cidade: 'Serra do Ramalho', km: 438, frete_por_saco: 3.37 },
+    { cidade: 'Cocôs (por Feira da Mata)', km: 412, frete_por_saco: 3.17 },
+    { cidade: 'Feira da Mata', km: 346, frete_por_saco: 2.66 },
+    { cidade: 'Malhada de Pedra', km: 266, frete_por_saco: 2.04 },
+    { cidade: 'Guajeru', km: 314, frete_por_saco: 2.41 },
+    { cidade: 'Rio do Antonio', km: 242, frete_por_saco: 1.86 },
+    { cidade: 'Brumado', km: 282, frete_por_saco: 2.17 },
+    { cidade: 'Aracatu', km: 348, frete_por_saco: 2.67 },
+    { cidade: 'Dom Basilio', km: 388, frete_por_saco: 2.98 },
+    { cidade: 'Livramento', km: 414, frete_por_saco: 3.18 },
+    { cidade: 'Rio de contas', km: 438, frete_por_saco: 3.37 },
+    { cidade: 'Arapiranga, Rio de Contas', km: 482, frete_por_saco: 3.7 },
+    { cidade: 'Marcolino Moura, Rio de Contas', km: 476, frete_por_saco: 3.66 },
+    { cidade: 'Jussiape', km: 522, frete_por_saco: 4.01 },
+    { cidade: 'Caraguataí, Jussiape', km: 546, frete_por_saco: 4.2 },
+    { cidade: 'Botuporã', km: 256, frete_por_saco: 1.97 },
+    { cidade: 'Caturama', km: 316, frete_por_saco: 2.43 },
+    { cidade: 'Paramirim', km: 340, frete_por_saco: 2.61 },
+    { cidade: 'Caraibas de Paramirim', km: 386, frete_por_saco: 2.97 },
+    { cidade: 'Erico Cardoso', km: 374, frete_por_saco: 2.87 },
+    { cidade: 'Rio do Pires', km: 380, frete_por_saco: 2.92 },
+    { cidade: 'Ibipitanga', km: 454, frete_por_saco: 3.49 },
+    { cidade: 'Macaubas', km: 418, frete_por_saco: 3.21 },
+    { cidade: 'Boquira', km: 464, frete_por_saco: 3.57 },
+    { cidade: 'Lagoa Real', km: 194, frete_por_saco: 1.49 },
+    { cidade: 'Ibitira', km: 174, frete_por_saco: 1.34 },
+    { cidade: 'Ibiassucê', km: 170, frete_por_saco: 1.31 },
+    { cidade: 'Caculé', km: 222, frete_por_saco: 1.31 },
+    { cidade: 'Bom Jesus da Lapa (Por Matina)', km: 298, frete_por_saco: 2.29 },
+    { cidade: 'Sitio do Mato', km: 436, frete_por_saco: 3.35 },
+    { cidade: 'Paratinga', km: 484, frete_por_saco: 3.72 },
+    { cidade: 'Santa Maria da Vitória', km: 526, frete_por_saco: 4.04 },
+    { cidade: 'Oliveira dos Brejinhos (frete c/ antecedência)', km: 576, frete_por_saco: 4.43 },
+    { cidade: 'Novo Horizonte (frete c/ antecedência)', km: 824, frete_por_saco: 6.33 },
+    { cidade: 'Boninal (frete c/ antecedência)', km: 882, frete_por_saco: 6.78 },
+    { cidade: 'Seabra (frete c/ antecedência)', km: 846, frete_por_saco: 6.5 },
+    { cidade: 'Ibitiara (frete c/ antecedência)', km: 572, frete_por_saco: 4.4 },
+    { cidade: 'Ibotirama (frete c/ antecedência)', km: 614, frete_por_saco: 4.72 },
+    { cidade: 'Morpará (frete c/ antecedência)', km: 790, frete_por_saco: 6.07 },
+    { cidade: 'Coribe (frete c/ antecedência)', km: 654, frete_por_saco: 5.03 },
+    { cidade: 'Vila Mariana (frete c/ antecedência)', km: 384, frete_por_saco: 2.95 },
+    { cidade: 'Presidente Jânio Quadros', km: 420, frete_por_saco: 3.23 },
+    { cidade: 'Maetinga (frete c/ antecedência)', km: 466, frete_por_saco: 3.58 },
+    { cidade: 'Condeúba', km: 352, frete_por_saco: 2.71 },
+    { cidade: 'Sussuarana', km: 382, frete_por_saco: 2.94 },
+    { cidade: 'Tanhaçu', km: 420, frete_por_saco: 3.23 },
+    { cidade: 'Ituaçu', km: 472, frete_por_saco: 3.63 },
+    { cidade: 'Barra da Estiva', km: 520, frete_por_saco: 4.0 },
+    { cidade: 'Barreiras', km: 1060, frete_por_saco: 8.15 },
+];
+
+// ─── Hook para buscar/salvar fretes no Supabase ───────────────────────────────
+function useFretes(tipo) {
+    const [rows, setRows] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [erroCarga, setErroCarga] = useState(null);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        setErroCarga(null);
+        try {
+            const { data, error } = await fetchFretesPorTipo(tipo);
+            if (error) throw error;
+            // Se não há dados, semear com os valores iniciais
+            if (!data || data.length === 0) {
+                const seed = tipo === 'frota' ? FROTA_INICIAL : tipo === 'liz' ? LIZ_INICIAL : TERCEIROS_INICIAL;
+                const { data: inserted, error: insErr } = await insertFretes(seed.map(r => ({ ...r, cidade: normalizarCidadeBA(r.cidade), tipo })));
+                if (insErr) throw insErr;
+                setRows(inserted || []);
+            } else {
+                setRows(data);
+            }
+        } catch (e) {
+            console.error('Erro ao carregar fretes:', e);
+            setErroCarga(e?.message || 'erro desconhecido');
+            // Fallback local se tabela não existir ainda
+            const seed = tipo === 'frota' ? FROTA_INICIAL : tipo === 'liz' ? LIZ_INICIAL : TERCEIROS_INICIAL;
+            setRows(seed.map((r, i) => ({ ...r, id: `local_${i}`, tipo })));
+        } finally {
+            setLoading(false);
+        }
+    }, [tipo]);
+
+    useEffect(() => { load(); }, [load]);
+    useRecarregarAoVoltar(load);
+
+    return { rows, setRows, loading, erroCarga, reload: load };
+}
+
+// ─── Tabela de fretes (reutilizada para frota e terceiros) ────────────────────
+export default function TabelaFretes({ tipo, label, icon = 'Truck', cor, captacaoValor = 0, custoConfig = { custoMedioProduto: 0, custoOperacional: 0 } }) {
+    const { rows, setRows, loading, erroCarga, reload } = useFretes(tipo);
+    const { toast, showToast } = useToast();
+    const { confirm, ConfirmDialog } = useConfirm();
+    const [busca, setBusca] = useState('');
+    const [editId, setEditId] = useState(null);
+    const [editData, setEditData] = useState({});
+    const [saving, setSaving] = useState(false);
+    const [addMode, setAddMode] = useState(false);
+    const [newRow, setNewRow] = useState({ cidade: '', km: '', frete_por_saco: '', valor_venda: '' });
+    const custoTotalUnitario = Number(custoConfig.custoMedioProduto || 0) + Number(custoConfig.custoOperacional || 0);
+
+    const filtered = rows.filter(r => r.cidade?.toLowerCase().includes(busca.toLowerCase()));
+    const { open: filteredOpen, toggle: toggleFiltered } = useCollapsible(false);
+
+    const startEdit = row => { setEditId(row.id); setEditData({ cidade: row.cidade, km: row.km ?? '', frete_por_saco: row.frete_por_saco ?? '', valor_venda: row.valor_venda ?? '' }); };
+    const cancelEdit = () => { setEditId(null); setEditData({}); };
+
+    const saveEdit = async () => {
+        if (!editData.cidade?.trim()) { showToast('Informe o nome da cidade.', 'error'); return; }
+        if (!editData.frete_por_saco || isNaN(editData.frete_por_saco)) { showToast('Informe o frete por saco.', 'error'); return; }
+        setSaving(true);
+        try {
+            const isLocal = String(editId).startsWith('local_');
+            const payload = {
+                cidade: normalizarCidadeBA(editData.cidade),
+                km: editData.km ? Number(editData.km) : null,
+                frete_por_saco: Number(editData.frete_por_saco),
+                valor_venda: editData.valor_venda !== '' && editData.valor_venda != null ? Number(editData.valor_venda) : null,
+                tipo,
+            };
+            if (isLocal) {
+                const { data, error } = await createFrete(payload);
+                if (error) throw error;
+                setRows(prev => prev.map(r => r.id === editId ? data : r));
+            } else {
+                const { error } = await updateFrete(editId, payload);
+                if (error) throw error;
+                setRows(prev => prev.map(r => r.id === editId ? { ...r, ...payload } : r));
+            }
+            showToast('Frete atualizado!', 'success');
+            setEditId(null);
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSaving(false); }
+    };
+
+    const deleteRow = async row => {
+        const ok = await confirm({ title: 'Excluir cidade?', message: `Remover "${row.cidade}" da tabela de fretes?`, confirmLabel: 'Excluir', variant: 'danger' });
+        if (!ok) return;
+        try {
+            const isLocal = String(row.id).startsWith('local_');
+            if (!isLocal) {
+                const { error } = await deleteFrete(row.id);
+                if (error) throw error;
+            }
+            setRows(prev => prev.filter(r => r.id !== row.id));
+            showToast('Cidade removida.', 'success');
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+    };
+
+    const saveNew = async () => {
+        if (!newRow.cidade?.trim()) { showToast('Informe o nome da cidade.', 'error'); return; }
+        if (!newRow.frete_por_saco || isNaN(newRow.frete_por_saco)) { showToast('Informe o frete por saco.', 'error'); return; }
+        setSaving(true);
+        try {
+            const payload = {
+                cidade: normalizarCidadeBA(newRow.cidade),
+                km: newRow.km ? Number(newRow.km) : null,
+                frete_por_saco: Number(newRow.frete_por_saco),
+                valor_venda: newRow.valor_venda !== '' && newRow.valor_venda != null ? Number(newRow.valor_venda) : null,
+                tipo,
+            };
+            const { data, error } = await createFrete(payload);
+            if (error) throw error;
+            setRows(prev => [...prev, data].sort((a, b) => a.cidade.localeCompare(b.cidade)));
+            setNewRow({ cidade: '', km: '', frete_por_saco: '', valor_venda: '' });
+            setAddMode(false);
+            showToast('Cidade adicionada!', 'success');
+        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
+        finally { setSaving(false); }
+    };
+
+    if (loading) return (
+        <div className="flex justify-center py-16">
+            <div className="animate-spin h-7 w-7 rounded-full border-4" style={{ borderColor: cor, borderTopColor: 'transparent' }} />
+        </div>
+    );
+
+    return (
+        <div className="flex flex-col gap-4">
+            {erroCarga && (
+                <div className="rounded-xl border px-4 py-3 text-sm" style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA', color: '#991B1B' }}>
+                    <strong>Esta tabela NÃO está salva no banco</strong> — os valores abaixo são só a lista inicial em memória
+                    e não aparecem em outras telas (ex.: Carregamento no Estoque). Erro: {erroCarga}
+                </div>
+            )}
+            {/* Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                    <div className="relative">
+                        <Icon name="Search" size={14} color="var(--color-muted-foreground)" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} />
+                        <input
+                            value={busca} onChange={e => setBusca(e.target.value)}
+                            placeholder="Buscar cidade..."
+                            className="pl-8 pr-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                            style={{ borderColor: 'var(--color-border)', width: 220 }}
+                        />
+                    </div>
+                </div>
+                <button type="button" onClick={toggleFiltered} className="flex items-center gap-2 hover:opacity-70 transition-opacity">
+                    <Icon name={icon} size={15} color={cor} />
+                    <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                        {label}
+                    </h3>
+                    <span className="text-xs px-2 py-1 rounded-full font-semibold" style={{ backgroundColor: cor + '20', color: cor }}>
+                        {filtered.length} cidades
+                    </span>
+                    <CollapseChevron open={filteredOpen} color="var(--color-muted-foreground)" />
+                </button>
+                <Button size="sm" iconName="Plus" onClick={() => { setAddMode(true); setEditId(null); }}>
+                    Adicionar Cidade
+                </Button>
+            </div>
+
+            {/* Tabela */}
+            {filteredOpen && (
+            <div className="bg-white rounded-xl border shadow-sm overflow-x-auto" style={{ borderColor: 'var(--color-border)' }}>
+                <table className={`w-full text-sm ${tipo === 'frota' ? 'min-w-[980px]' : 'min-w-[500px]'}`}>
+                    <thead className="text-xs border-b" style={{ backgroundColor: cor + '15', borderColor: 'var(--color-border)' }}>
+                        <tr>
+                            <th className="px-4 py-3 text-left font-semibold" style={{ color: cor }}>Cidade / Destino</th>
+                            <th className="px-4 py-3 text-right font-semibold w-24" style={{ color: cor }}>KM</th>
+                            <th className="px-4 py-3 text-right font-semibold w-36" style={{ color: cor }}>Frete por Saco</th>
+                            {tipo === 'frota' && <th className="px-4 py-3 text-right font-semibold w-28" style={{ color: cor }}>Captação</th>}
+                            {tipo === 'frota' && <th className="px-4 py-3 text-right font-semibold w-40" style={{ color: cor }}>Distribuição</th>}
+                            {tipo === 'frota' && <th className="px-4 py-3 text-right font-semibold w-32" style={{ color: cor }}>Preço de Venda</th>}
+                            {tipo === 'frota' && <th className="px-4 py-3 text-right font-semibold w-40" style={{ color: cor }}>Margem de Venda</th>}
+                            <th className="px-4 py-3 text-center font-semibold w-24" style={{ color: cor }}>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {/* Linha de adicionar nova cidade */}
+                        {addMode && (
+                            <tr className="border-b" style={{ borderColor: cor + '40', backgroundColor: cor + '08' }}>
+                                <td className="px-3 py-2">
+                                    <input autoFocus value={newRow.cidade} onChange={e => setNewRow(r => ({ ...r, cidade: e.target.value }))}
+                                        className={inputCls} style={inputStyle} placeholder="Nome da cidade..." />
+                                </td>
+                                <td className="px-3 py-2">
+                                    <input type="number" value={newRow.km} onChange={e => setNewRow(r => ({ ...r, km: e.target.value }))}
+                                        className={inputCls} style={{ ...inputStyle, textAlign: 'right' }} placeholder="—" />
+                                </td>
+                                <td className="px-3 py-2">
+                                    <input type="number" step="0.01" value={newRow.frete_por_saco} onChange={e => setNewRow(r => ({ ...r, frete_por_saco: e.target.value }))}
+                                        className={inputCls} style={{ ...inputStyle, textAlign: 'right' }} placeholder="0,00" />
+                                </td>
+                                {tipo === 'frota' && <td className="px-3 py-2 text-right text-xs" style={{ color: 'var(--color-muted-foreground)' }}>—</td>}
+                                {tipo === 'frota' && <td className="px-3 py-2 text-right text-xs" style={{ color: 'var(--color-muted-foreground)' }}>—</td>}
+                                {tipo === 'frota' && (
+                                    <td className="px-3 py-2">
+                                        <input type="number" step="0.01" value={newRow.valor_venda} onChange={e => setNewRow(r => ({ ...r, valor_venda: e.target.value }))}
+                                            className={inputCls} style={{ ...inputStyle, textAlign: 'right' }} placeholder="0,00" />
+                                    </td>
+                                )}
+                                {tipo === 'frota' && <td className="px-3 py-2 text-right text-xs" style={{ color: 'var(--color-muted-foreground)' }}>—</td>}
+                                <td className="px-3 py-2">
+                                    <div className="flex items-center justify-center gap-1">
+                                        <button onClick={saveNew} disabled={saving} title="Salvar" className="p-1.5 rounded-lg hover:bg-green-100 transition-colors">
+                                            <Icon name="Check" size={14} color="#059669" />
+                                        </button>
+                                        <button onClick={() => { setAddMode(false); setNewRow({ cidade: '', km: '', frete_por_saco: '' }); }} title="Cancelar" className="p-1.5 rounded-lg hover:bg-red-100 transition-colors">
+                                            <Icon name="X" size={14} color="#DC2626" />
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        )}
+
+                        {filtered.length === 0 && !addMode ? (
+                            <tr><td colSpan={tipo === 'frota' ? 8 : 4} className="text-center py-10 text-sm" style={{ color: 'var(--color-muted-foreground)' }}>
+                                {busca ? `Nenhuma cidade encontrada para "${busca}"` : 'Nenhuma cidade cadastrada.'}
+                            </td></tr>
+                        ) : filtered.map((row, i) => (
+                            <tr key={row.id} className="border-t hover:bg-gray-50 transition-colors"
+                                style={{ borderColor: 'var(--color-border)', backgroundColor: editId === row.id ? cor + '06' : i % 2 === 0 ? '#fff' : '#F8FAFC' }}>
+                                {editId === row.id ? (
+                                    <>
+                                        <td className="px-3 py-2">
+                                            <input autoFocus value={editData.cidade} onChange={e => setEditData(d => ({ ...d, cidade: e.target.value }))}
+                                                className={inputCls} style={inputStyle} />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <input type="number" value={editData.km} onChange={e => setEditData(d => ({ ...d, km: e.target.value }))}
+                                                className={inputCls} style={{ ...inputStyle, textAlign: 'right' }} placeholder="—" />
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <input type="number" step="0.01" value={editData.frete_por_saco} onChange={e => setEditData(d => ({ ...d, frete_por_saco: e.target.value }))}
+                                                className={inputCls} style={{ ...inputStyle, textAlign: 'right' }} />
+                                        </td>
+                                        {tipo === 'frota' && (
+                                            <td className="px-3 py-2 text-right text-xs font-mono" style={{ color: '#1D4ED8' }}>{BRL(captacaoValor)}</td>
+                                        )}
+                                        {tipo === 'frota' && (
+                                            <td className="px-3 py-2 text-right text-xs font-mono font-semibold" style={{ color: '#059669' }}>
+                                                {BRL(Math.max(0, Number(editData.frete_por_saco || 0) - Number(captacaoValor || 0)))}
+                                            </td>
+                                        )}
+                                        {tipo === 'frota' && (
+                                            <td className="px-3 py-2">
+                                                <input type="number" step="0.01" value={editData.valor_venda} onChange={e => setEditData(d => ({ ...d, valor_venda: e.target.value }))}
+                                                    className={inputCls} style={{ ...inputStyle, textAlign: 'right' }} placeholder="0,00" />
+                                            </td>
+                                        )}
+                                        {tipo === 'frota' && (() => {
+                                            const venda = Number(editData.valor_venda || 0);
+                                            const custoTotalComFrete = custoTotalUnitario + Number(editData.frete_por_saco || 0);
+                                            const margemReais = venda - custoTotalComFrete;
+                                            const margemPct = venda > 0 ? (margemReais / venda) * 100 : 0;
+                                            const positivo = margemReais >= 0;
+                                            return (
+                                                <td className="px-3 py-2 text-right text-xs font-mono font-semibold" style={{ color: venda > 0 ? (positivo ? '#059669' : '#DC2626') : 'var(--color-muted-foreground)' }}>
+                                                    {venda > 0 ? <>{BRL(margemReais)} <span className="opacity-70">({margemPct.toFixed(0)}%)</span></> : '—'}
+                                                </td>
+                                            );
+                                        })()}
+                                        <td className="px-3 py-2">
+                                            <div className="flex items-center justify-center gap-1">
+                                                <button onClick={saveEdit} disabled={saving} title="Salvar" className="p-1.5 rounded-lg hover:bg-green-100 transition-colors">
+                                                    <Icon name="Check" size={14} color="#059669" />
+                                                </button>
+                                                <button onClick={cancelEdit} title="Cancelar" className="p-1.5 rounded-lg hover:bg-gray-200 transition-colors">
+                                                    <Icon name="X" size={14} color="#6B7280" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </>
+                                ) : (
+                                    <>
+                                        <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text-primary)' }}>{row.cidade}</td>
+                                        <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
+                                            {row.km ? row.km.toLocaleString('pt-BR') + ' km' : '—'}
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-mono font-semibold" style={{ color: cor }}>
+                                            {BRL(row.frete_por_saco)}<span className="text-xs font-normal ml-1" style={{ color: 'var(--color-muted-foreground)' }}>/saco</span>
+                                        </td>
+                                        {tipo === 'frota' && (
+                                            <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: '#1D4ED8' }}>
+                                                {BRL(Math.min(Number(row.frete_por_saco) || 0, Number(captacaoValor) || 0))}
+                                            </td>
+                                        )}
+                                        {tipo === 'frota' && (() => {
+                                            const total = Number(row.frete_por_saco) || 0;
+                                            const distrib = Math.max(0, total - (Number(captacaoValor) || 0));
+                                            const pct = total > 0 ? (distrib / total) * 100 : 0;
+                                            return (
+                                                <td className="px-4 py-3 text-right">
+                                                    <span className="font-mono font-semibold text-xs" style={{ color: '#059669' }}>{BRL(distrib)}</span>
+                                                    <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                                                        {pct.toFixed(0)}%
+                                                    </span>
+                                                </td>
+                                            );
+                                        })()}
+                                        {tipo === 'frota' && (
+                                            <td className="px-4 py-3 text-right font-mono text-xs" style={{ color: 'var(--color-text-primary)' }}>
+                                                {row.valor_venda ? BRL(row.valor_venda) : '—'}
+                                            </td>
+                                        )}
+                                        {tipo === 'frota' && (() => {
+                                            const venda = Number(row.valor_venda) || 0;
+                                            if (venda <= 0) return <td className="px-4 py-3 text-right text-xs" style={{ color: 'var(--color-muted-foreground)' }}>—</td>;
+                                            const custoTotalComFrete = custoTotalUnitario + (Number(row.frete_por_saco) || 0);
+                                            const margemReais = venda - custoTotalComFrete;
+                                            const margemPct = (margemReais / venda) * 100;
+                                            const positivo = margemReais >= 0;
+                                            return (
+                                                <td className="px-4 py-3 text-right">
+                                                    <span className="font-mono font-semibold text-xs" style={{ color: positivo ? '#059669' : '#DC2626' }}>{BRL(margemReais)}</span>
+                                                    <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: positivo ? '#D1FAE5' : '#FEE2E2', color: positivo ? '#065F46' : '#991B1B' }}>
+                                                        {margemPct.toFixed(0)}%
+                                                    </span>
+                                                </td>
+                                            );
+                                        })()}
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center justify-center gap-1">
+                                                <button onClick={() => startEdit(row)} title="Editar" className="p-1.5 rounded-lg hover:bg-blue-100 transition-colors">
+                                                    <Icon name="Pencil" size={16} color="#2563EB" />
+                                                </button>
+                                                <button onClick={() => deleteRow(row)} title="Excluir" className="p-1.5 rounded-lg hover:bg-red-100 transition-colors">
+                                                    <Icon name="Trash2" size={16} color="#DC2626" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </>
+                                )}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            )}
+
+            <Toast toast={toast} />
+            {ConfirmDialog}
+        </div>
+    );
+}

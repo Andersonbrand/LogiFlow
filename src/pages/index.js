@@ -1,0 +1,20 @@
+// Barrel de páginas — cada pasta em pages/ é uma tela (index.jsx) com seus componentes, hooks e utilitários locais.
+export { default as Login } from './login';
+export { default as MainDashboard } from './main-dashboard';
+export { default as MaterialCatalog } from './material-catalog';
+export { default as VehicleFleet } from './vehicle-fleet-management';
+export { default as Romaneios } from './romaneios';
+export { default as Relatorios } from './relatorios';
+export { default as AdminPanel } from './admin';
+export { default as Consolidacao } from './consolidacao';
+export { default as MotoristaDashboard } from './motorista';
+export { default as ResetPassword } from './reset-password';
+export { default as CarretasPage } from './carretas';
+export { default as CarreteiroDashboard } from './carreteiro';
+export { default as MecanicoPage } from './mecanico';
+export { default as PerfilUsuario } from './perfil-usuario';
+export { default as EmailConfirmado } from './email-confirmado';
+export { default as DespesasCaminhoes } from './despesas-caminhoes';
+export { default as DespesasAdmTransporte } from './despesas-adm-transporte';
+export { default as EntregasAcessorios } from './entregas-acessorios';
+export { default as NotFound } from './not-found';

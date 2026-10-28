@@ -1,20 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, fetchMaterialCategories } from 'utils/materialService';
-import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
-import { exportMaterialsToExcel, parseMaterialsFromFile } from 'utils/excelUtils';
-import { useAuth } from 'utils/AuthContext';
-import AccessDeniedModal from 'components/ui/AccessDeniedModal';
-import NavigationBar from 'components/ui/NavigationBar';
-import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
-import QuickActionPanel from 'components/ui/QuickActionPanel';
-import Icon from 'components/AppIcon';
-import Button from 'components/ui/Button';
+
+import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, fetchMaterialCategories, insertMaterialsLote } from 'services/materialService';
+import { useRecarregarAoVoltar } from 'hooks/useRecarregarAoVoltar';
+import { exportMaterialsToExcel, parseMaterialsFromFile } from 'utils/excel';
+import { useAuth } from 'context/AuthContext';
+import { AccessDeniedModal, NavigationBar, BreadcrumbTrail, QuickActionPanel, AppIcon as Icon, Button } from 'components';
 
 import MaterialTable from './components/MaterialTable';
 import MaterialCardMobile from './components/MaterialCardMobile';
 import FilterPanel from './components/FilterPanel';
 import MaterialFormModal, { CATEGORIAS_PRODUTO_FALLBACK } from './components/MaterialFormModal';
-import DeleteConfirmDialog from './components/DeleteConfirmDialog.jsx';
+import DeleteConfirmDialog from './components/DeleteConfirmDialog/index.jsx';
 import BulkActionsBar from './components/BulkActionsBar';
 
 
@@ -172,8 +168,7 @@ export default function MaterialCatalog() {
             for (let i = 0; i < parsed.length; i += BATCH) {
                 const lote = parsed.slice(i, i + BATCH).map(({ id, ...m }) => m);
                 try {
-                    const { data, error } = await import('./../../utils/supabaseClient')
-                        .then(({ supabase }) => supabase.from('materials').insert(lote).select());
+                    const { data, error } = await insertMaterialsLote(lote);
                     if (error) { errors += lote.length; console.error('Erro lote:', error.message); }
                     else created += (data?.length || lote.length);
                 } catch (e) { errors += lote.length; }

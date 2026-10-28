@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from 'utils/supabaseClient';
-import Icon from 'components/AppIcon';
+import { onAuthStateChange, getSession, updatePassword } from 'services/authService';
+import { AppIcon as Icon } from 'components';
+import paths from 'constants/paths';
 
 function PasswordStrength({ password }) {
     if (!password) return null;
@@ -55,7 +56,7 @@ export default function ResetPassword() {
         // nunca recebe nada, o link aparece como "inválido/expirado" mesmo
         // sendo válido, e o usuário não conseguia trocar a senha de forma
         // alguma por esse fluxo.
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+        const { data: { subscription } } = onAuthStateChange((event) => {
             if (event === 'PASSWORD_RECOVERY') {
                 jaTratado = true;
                 setValidSession(true);
@@ -68,7 +69,7 @@ export default function ResetPassword() {
         // confirmamos direto pela sessão + pelo hash da URL (garante que não é
         // apenas uma sessão normal de alguém já logado navegando pra essa rota).
         const hashDeRecuperacao = window.location.hash.includes('type=recovery');
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        getSession().then(({ data: { session } }) => {
             if (!jaTratado && hashDeRecuperacao && session) {
                 jaTratado = true;
                 setValidSession(true);
@@ -90,7 +91,7 @@ export default function ResetPassword() {
 
         setLoading(true);
         try {
-            const { error: err } = await supabase.auth.updateUser({ password });
+            const { error: err } = await updatePassword(password);
             if (err) throw err;
             setDone(true);
             setTimeout(() => navigate('/'), 3000);
@@ -133,7 +134,7 @@ export default function ResetPassword() {
                         <Icon name="RefreshCw" size={14} color="#fff" />
                         Solicitar novo link
                     </button>
-                    <button onClick={() => navigate('/login')}
+                    <button onClick={() => navigate(paths.Login)}
                         className="mt-3 text-sm text-slate-400 hover:text-slate-600 flex items-center gap-1.5 transition-colors">
                         <Icon name="ArrowLeft" size={12} color="currentColor" />
                         Voltar para o login

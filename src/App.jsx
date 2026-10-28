@@ -1,6 +1,8 @@
 import React from "react";
-import Routes from "./Routes";
-import ErrorBoundary from "components/ErrorBoundary";
+
+import { ErrorBoundary } from 'components';
+
+import Routes from "./routes/routes";
 
 // Tela de erro quando as variáveis de ambiente não estão configuradas no Vercel
 function MissingEnvScreen() {

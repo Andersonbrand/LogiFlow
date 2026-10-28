@@ -13,7 +13,7 @@ import {
     getCategoriaConfig,
     fmtPct,
     FRETE_PERCENTUAL,
-} from '../utils/freteConfig';
+} from '../config/freteConfig';
 
 // ─── detectarCategoriaFrete ────────────────────────────────────────────────────
 

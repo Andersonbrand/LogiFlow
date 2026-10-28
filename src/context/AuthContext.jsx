@@ -1,0 +1,176 @@
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { supabase } from '../services/supabaseClient';
+
+const AuthContext = createContext({});
+
+async function getOrCreateProfile(user) {
+    if (!user) return null;
+    try {
+        const { data } = await supabase
+            .from('user_profiles').select('*').eq('id', user.id).single();
+        if (data) return data;
+        const name = user.user_metadata?.name || user.email?.split('@')[0] || 'Usuário';
+        const { data: created } = await supabase
+            .from('user_profiles')
+            .upsert({ id: user.id, name, email: user.email, role: 'operador' }, { onConflict: 'id' })
+            .select().single();
+        return created || { id: user.id, name, email: user.email, role: 'operador' };
+    } catch {
+        return { id: user.id, name: user.email, role: 'operador' };
+    }
+}
+
+export function AuthProvider({ children }) {
+    const [user, setUser]       = useState(null);
+    const [profile, setProfile] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const initialized = useRef(false);
+    // O listener de onAuthStateChange é registrado uma única vez (deps [])
+    // e por isso nunca "vê" o valor atualizado do state `user` — ele ficava
+    // sempre com o valor inicial (null) dentro do closure. Isso fazia a
+    // comparação abaixo (linha "Outros eventos") achar que o usuário
+    // sempre mudou, disparando getOrCreateProfile em praticamente todo
+    // evento — inclusive USER_UPDATED, gerado ao trocar a senha. Uma ref
+    // sempre reflete o valor atual, sem esse problema.
+    const userIdRef = useRef(null);
+
+    useEffect(() => {
+        // Inicialização — roda apenas uma vez
+        supabase.auth.getSession().then(async ({ data: { session } }) => {
+            const u = session?.user ?? null;
+            setUser(u);
+            userIdRef.current = u?.id ?? null;
+            if (u) {
+                const p = await getOrCreateProfile(u);
+                setProfile(p);
+            }
+            setLoading(false);
+            initialized.current = true;
+        });
+
+        // ATENÇÃO: este callback NÃO pode ser async nem chamar o Supabase
+        // diretamente. O supabase-js executa os callbacks DENTRO do lock de
+        // autenticação; qualquer query aqui precisa do mesmo lock (getSession)
+        // e fica esperando por ele → deadlock até estourar 5s, quando o SDK
+        // "rouba" o lock e a requisição presa falha com
+        // "AbortError: Lock broken by another request with the 'steal' option".
+        // Como SIGNED_IN é emitido toda vez que a aba volta a ficar visível,
+        // isso acontecia de forma intermitente (principalmente em PCs com
+        // várias abas/janelas abertas). Solução: callback síncrono e a busca
+        // do perfil adiada com setTimeout(0), já fora do lock.
+        const carregarPerfil = (u) => {
+            setTimeout(async () => {
+                const p = await getOrCreateProfile(u);
+                // ignora resposta atrasada de um usuário que já saiu/trocou
+                if (userIdRef.current === u.id) setProfile(p);
+            }, 0);
+        };
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            // Ignora eventos antes da inicialização terminar
+            if (!initialized.current) return;
+
+            const u = session?.user ?? null;
+
+            if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !u)) {
+                setUser(null);
+                userIdRef.current = null;
+                setProfile(null);
+                return;
+            }
+
+            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                setUser(u);
+                userIdRef.current = u?.id ?? null;
+                if (u) carregarPerfil(u);
+                return;
+            }
+
+            // Outros eventos (ex.: USER_UPDATED após trocar a senha) —
+            // só busca o perfil de novo se o usuário realmente mudou.
+            if ((u?.id ?? null) !== userIdRef.current) {
+                setUser(u);
+                userIdRef.current = u?.id ?? null;
+                if (u) carregarPerfil(u); else setProfile(null);
+            }
+        });
+
+        return () => {
+            subscription.unsubscribe();
+        };
+    }, []); // eslint-disable-line
+
+    const signIn = async (email, password) => {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        return data;
+    };
+
+    const signUp = async (email, password, name) => {
+        const { data, error } = await supabase.auth.signUp({
+            email, password,
+            options: {
+                data: { name },
+                emailRedirectTo: `${window.location.origin}/`,
+            }
+        });
+        if (error) throw error;
+        if (data.user && data.session) {
+            await supabase.from('user_profiles')
+                .upsert({ id: data.user.id, name: name || email.split('@')[0], role: 'operador' }, { onConflict: 'id' });
+        }
+        return data;
+    };
+
+    const sendPasswordReset = async (email) => {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) throw error;
+    };
+
+    const signOut = async () => {
+        await supabase.auth.signOut();
+        setUser(null);
+        setProfile(null);
+    };
+
+    const isAdmin      = () => profile?.role === 'admin';
+    const isOperador   = () => profile?.role === 'operador';
+    // Motoristas terceirizados NÃO têm acesso ao sistema — apenas para controle interno
+    const isTerceiro   = () => profile?.is_terceiro === true;
+    const isMotorista  = () => profile?.role === 'motorista' && !isTerceiro();
+    // Trata role legado 'carreteiro' e novo padrão 'motorista' + tipo_veiculo='carreta'
+    const isCarreteiro = () =>
+        (profile?.role === 'carreteiro' ||
+        (profile?.role === 'motorista' && profile?.tipo_veiculo === 'carreta')) &&
+        !isTerceiro();
+    const hasRole = (...roles) => roles.includes(profile?.role);
+
+    const can = {
+        aprovarRomaneio:    () => isAdmin(),
+        excluirRomaneio:    () => isAdmin(),
+        exportarRomaneio:   (r) => isAdmin() || r?.aprovado === true,
+        editarRomaneio:     () => isAdmin() || isOperador(),
+        criarRomaneio:      () => isAdmin() || isOperador(),
+        verTodosRomaneios:  () => isAdmin() || isOperador(),
+        verMeusRomaneios:   () => isMotorista(),
+        gerenciarUsuarios:  () => isAdmin(),
+        gerenciarVeiculos:  () => isAdmin(),
+        gerenciarMateriais: () => isAdmin() || isOperador(),
+        verFinanceiro:      () => isAdmin(),
+        verBonificacoes:    () => isAdmin() || isMotorista() || isCarreteiro(),
+    };
+
+    return (
+        <AuthContext.Provider value={{
+            user, profile, loading,
+            signIn, signUp, signOut, sendPasswordReset,
+            isAdmin, isOperador, isMotorista, isCarreteiro, isTerceiro, hasRole, can,
+        }}>
+            {children}
+        </AuthContext.Provider>
+    );
+}
+
+export const useAuth = () => useContext(AuthContext);

@@ -1,0 +1,45 @@
+import {
+    CATEGORIAS_DESPESA_CAMINHOES, fetchCategoriasDespesaCaminhoes, createCategoriaDespesaCaminhoes,
+    renameCategoriaDespesaCaminhoes, deleteCategoriaDespesaCaminhoes, fetchDespesasCaminhoes,
+    createDespesaCaminhao, updateDespesaCaminhao, deleteDespesaCaminhao, fetchDespesaCaminhaoPorId,
+    salvarBoletosDespesaCaminhao, pagarBoletoCaminhao, revogarBoletoCaminhao,
+    pagarParcelaCartaoCaminhao, revogarParcelaCartaoCaminhao,
+} from 'services/despesas/caminhoesDespesas';
+
+// Configuração da tela de despesas de CAMINHÕES para o módulo compartilhado components/Despesas.
+export const despesasCaminhoesConfig = {
+    icone: 'Receipt',
+    comVeiculo: true,
+    tabela: 'caminhoes_despesas',
+    origemBoletos: 'caminhoes',
+    categoriasPadrao: CATEGORIAS_DESPESA_CAMINHOES,
+    categoriaPadrao: 'Pneus',
+    servico: {
+        fetchCategorias: fetchCategoriasDespesaCaminhoes,
+        createCategoria: createCategoriaDespesaCaminhoes,
+        renameCategoria: renameCategoriaDespesaCaminhoes,
+        deleteCategoria: deleteCategoriaDespesaCaminhoes,
+        fetchDespesas: fetchDespesasCaminhoes,
+        createDespesa: createDespesaCaminhao,
+        updateDespesa: updateDespesaCaminhao,
+        deleteDespesa: deleteDespesaCaminhao,
+        fetchDespesaPorId: fetchDespesaCaminhaoPorId,
+        salvarBoletos: salvarBoletosDespesaCaminhao,
+        pagarBoleto: pagarBoletoCaminhao,
+        revogarBoleto: revogarBoletoCaminhao,
+        pagarParcelaCartao: pagarParcelaCartaoCaminhao,
+        revogarParcelaCartao: revogarParcelaCartaoCaminhao,
+    },
+    textos: {
+        titulo: 'Despesas — Caminhões',
+        subtitulo: 'Controle financeiro de despesas da frota de caminhões',
+        placeholderBusca: 'NF, nº boleto, fornecedor, placa...',
+        nenhumaDespesa: 'Nenhuma despesa registrada',
+        tituloNovaDespesa: 'Nova Despesa',
+        placeholderFornecedor: 'Ex: Auto Peças Silva Ltda',
+        placeholderDescricao: 'Ex: 4 pneus traseiros Bridgestone',
+        placeholderDescricaoNf: 'Ex: NF de peças',
+        arquivoExcel: 'despesas_caminhoes',
+        abaExcel: 'Despesas',
+    },
+};

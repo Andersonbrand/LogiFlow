@@ -1,53 +1,35 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
-import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    PieChart, Pie, Cell, Legend, LineChart, Line, AreaChart, Area
-} from 'recharts';
-import NavigationBar from 'components/ui/NavigationBar';
-import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
-import Button from 'components/ui/Button';
-import Icon from 'components/AppIcon';
-import Toast from 'components/ui/Toast';
-import { fetchRomaneios } from 'utils/romaneioService';
-import { fetchDespesasCaminhoes } from 'utils/caminhoesDespesasService';
-import { fetchVehicles } from 'utils/vehicleService';
-import { fetchMaterials } from 'utils/materialService';
-import { fetchDiarias, fetchMotoristasCaminhao, fetchAbastecimentos } from 'utils/carretasService';
-import { fetchDadosMargemFrete, encontrarCustoDestino, calcularCustoDestino } from 'utils/custosFrotaService';
-import { somarDespesasPorVencimento, agruparDespesasPorCategoriaVencimento, despesaTemVencimentoNoPeriodo, expandirDespesaParcelas } from 'utils/despesasParcelasUtils';
-import { useToast } from 'utils/useToast';
-import { exportRomaneiosToExcel, exportRelatorioConsolidado, exportRelatorioBonificacoes } from 'utils/excelUtils';
-import { EMPRESAS } from 'pages/romaneios/components/RomaneioFormModal';
-import * as XLSX from 'xlsx';
+import React, {    } from 'react';
 
-const COLORS = ['#1E3A5F', '#4A6741', '#D97706', '#059669', '#DC2626', '#7C3AED', '#0891B2'];
+import * as XLSX from 'xlsx';
+import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Bar } from 'recharts';
+
+import { useToast } from 'hooks/useToast';
+import { } from 'services/romaneio';
+import { } from 'services/vehicleService';
+import { } from 'services/despesas/caminhoesDespesas';
+import {   } from 'services/carretas';
+import {   } from 'services/custosFrotaService';
+import { } from 'hooks/useRecarregarAoVoltar';
+import {    } from 'utils/despesasParcelasUtils';
+import { exportRelatorioConsolidado, exportRelatorioBonificacoes, exportRomaneiosToExcel } from 'utils/excel';
+import { NavigationBar, BreadcrumbTrail, AppIcon as Icon, Button, Toast } from 'components';
+import { EMPRESAS } from 'pages/romaneios/components/RomaneioFormModal';
+
+import TabOperacional from './components/TabOperacional';
+import TabFinanceiro from './components/TabFinanceiro';
+import TabFinanceiroPainel from './components/TabFinanceiroPainel';
+import KpiCard from './components/KpiCard';
+import { fmtBRL,  dataLocalISO } from './utils/helpers';
+import ChartCard from './components/ChartCard';
+import TabFrota from './components/TabFrota';
+import { useRelatoriosDados, useRelatoriosPeriodo, useRelatoriosPeriodoDre, useRelatoriosOperacional, useRelatoriosFinanceiro, useRelatoriosDespesas, useRelatoriosDre, useRelatoriosFrota } from './hooks';
+
 const TABS = [
     { id: 'operacional', label: 'Operacional', icon: 'BarChart2' },
     { id: 'financeiro',  label: 'Financeiro',  icon: 'DollarSign' },
     { id: 'frota',       label: 'Frota',        icon: 'Truck' },
     { id: 'empresas',    label: 'Por Empresa',  icon: 'Building2' },
 ];
-
-function KpiCard({ label, value, sub, icon, color = '#1E3A5F', trend }) {
-    return (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-3 sm:p-5 flex items-start gap-3 sm:gap-4">
-            <div className="flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ backgroundColor: color + '18' }}>
-                <Icon name={icon} size={18} color={color} />
-            </div>
-            <div className="flex-1 min-w-0">
-                <p className="text-xs font-caption text-slate-500 mb-0.5 leading-tight">{label}</p>
-                <p className="text-lg sm:text-2xl font-bold font-data text-slate-800 leading-tight break-words">{value}</p>
-                {sub && <p className="text-xs text-slate-400 mt-0.5 leading-tight">{sub}</p>}
-                {trend !== undefined && (
-                    <p className={`text-xs font-medium mt-1 ${trend >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                        {trend >= 0 ? '▲' : '▼'} {Math.abs(trend).toFixed(1)}%
-                    </p>
-                )}
-            </div>
-        </div>
-    );
-}
 
 function SectionTitle({ title, subtitle }) {
     return (
@@ -58,404 +40,21 @@ function SectionTitle({ title, subtitle }) {
     );
 }
 
-function ChartCard({ title, children, height = 220 }) {
-    return (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-            <p className="text-sm font-semibold text-slate-700 mb-4">{title}</p>
-            <div style={{ height }}>{children}</div>
-        </div>
-    );
-}
-
-function mesAtualLocal() { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; }
-function dataLocalISO(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
-
-function fmt(n) { return Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-function fmtBRL(n) { return 'R$ ' + fmt(n); }
-function fmtKg(n) { return Number(n || 0).toLocaleString('pt-BR') + ' kg'; }
-
 export default function Relatorios() {
-    const [romaneios, setRomaneios] = useState([]);
-    const [vehicles, setVehicles] = useState([]);
-    const [despesasCaminhoes, setDespesasCaminhoes] = useState([]);
-    const [diariasAvulsasCaminhao, setDiariasAvulsasCaminhao] = useState([]);
-    const [abastecimentosCaminhao, setAbastecimentosCaminhao] = useState([]);
-    const [dadosMargemCaminhao, setDadosMargemCaminhao] = useState(null);
-    const [loading, setLoading] = useState(true);
-    // Período padrão = mês (atual). Só muda quando o usuário escolhe outro mês ou um atalho (7d/30d/90d/1 ano).
-    const [periodo, setPeriodo] = useState('mes'); // 'mes' | '7' | '30' | '90' | '365'
-    const [mesRef, setMesRef] = useState(() => mesAtualLocal());
-    const [dreMesInicio, setDreMesInicio] = useState(() => new Date().toISOString().slice(0, 7));
-    const [dreMesFim, setDreMesFim] = useState(() => new Date().toISOString().slice(0, 7));
-    const [tab, setTab] = useState('operacional');
-    const [empresaFiltro, setEmpresaFiltro] = useState('Comercial Araguaia');
-    const [mesFiltro, setMesFiltro] = useState(() => new Date().toISOString().slice(0, 7)); // YYYY-MM
     const { toast, showToast } = useToast();
+    const { romaneios, vehicles, despesasCaminhoes, diariasAvulsasCaminhao, abastecimentosCaminhao, dadosMargemCaminhao, loading, periodo, setPeriodo, mesRef, setMesRef, dreMesInicio, setDreMesInicio, dreMesFim, setDreMesFim, tab, setTab, empresaFiltro, setEmpresaFiltro, mesFiltro, setMesFiltro } = useRelatoriosDados({ showToast });     const { periodoIni, periodoFim, diasPeriodo, periodoLabel, romFiltrados, romFinalizados, custoCombustivelRealPorMes, somaCustoCombustivelReal } = useRelatoriosPeriodo({ abastecimentosCaminhao, mesRef, periodo, romaneios, setDreMesFim, setDreMesInicio });
 
-    const load = useCallback(async () => {
-        try {
-            setLoading(true);
-            const [rom, veh, desp, motorCaminhao] = await Promise.all([
-                fetchRomaneios(), fetchVehicles(), fetchDespesasCaminhoes(), fetchMotoristasCaminhao(),
-            ]);
-            setRomaneios(rom); setVehicles(veh); setDespesasCaminhoes(desp);
-            fetchDadosMargemFrete('caminhao').then(setDadosMargemCaminhao).catch(() => setDadosMargemCaminhao(null));
-            // Busca diárias avulsas lançadas por motoristas de caminhão
-            // (excluindo carreteiros para não duplicar a DRE)
-            const idsCaminhao = (motorCaminhao || []).map(m => m.id);
-            const diavs = idsCaminhao.length > 0
-                ? await fetchDiarias({ motoristasIds: idsCaminhao })
-                : [];
-            setDiariasAvulsasCaminhao(diavs);
-            // Custo real de combustível: vem dos registros de abastecimento feitos
-            // por cada motorista de caminhão (cadastro de motorista), não da previsão
-            // de consumo lançada dentro do romaneio.
-            const todosAbast = await fetchAbastecimentos();
-            const idsCaminhaoSet = new Set(idsCaminhao);
-            setAbastecimentosCaminhao((todosAbast || []).filter(a => idsCaminhaoSet.has(a.motorista_id)));
-        } catch (err) { showToast('Erro: ' + err.message, 'error'); }
-        finally { setLoading(false); }
-    }, []); // eslint-disable-line
+    const { dreInicioISO, dreFimISO, romFinalizadosDre } = useRelatoriosPeriodoDre({ dreMesFim, dreMesInicio, romaneios });
 
-    useEffect(() => { load(); }, [load]);
-    useRecarregarAoVoltar(load);
+    const { totalViagens, finalizados, pesoTotal, mediaDia, porDia, porStatus, topDestinos } = useRelatoriosOperacional({ diasPeriodo, periodo, romFiltrados, romFinalizados });
 
-    // Recarrega romaneios ao trocar empresa ou mês na aba Por Empresa
-    useEffect(() => {
-        if (tab !== 'empresas') return;
-        fetchRomaneios()
-            .then(setRomaneios)
-            .catch(err => showToast('Erro ao atualizar: ' + err.message, 'error'));
-    }, [tab, empresaFiltro, mesFiltro]); // eslint-disable-line
+    const { receitaTotal, custoTotal, margemLucro, ticketMedio, custosBreakdown, financeiroPorMes, topRotas } = useRelatoriosFinanceiro({ custoCombustivelRealPorMes, finalizados, periodoFim, periodoIni, romFinalizados, somaCustoCombustivelReal });
 
-    // ─── Período do cabeçalho (vale para Operacional, Financeiro e Frota) ───
-    // mês: do dia 1 ao último dia do mês escolhido | atalhos: últimos N dias até hoje
-    const { periodoIni, periodoFim, diasPeriodo, periodoLabel } = useMemo(() => {
-        if (periodo === 'mes') {
-            const [ano, mes] = mesRef.split('-').map(Number);
-            const ultimoDia = new Date(ano, mes, 0).getDate();
-            const hoje = new Date();
-            const eMesAtual = hoje.getFullYear() === ano && hoje.getMonth() + 1 === mes;
-            const eFuturo = new Date(ano, mes - 1, 1) > hoje;
-            return {
-                periodoIni: `${mesRef}-01`,
-                periodoFim: `${mesRef}-${String(ultimoDia).padStart(2, '0')}`,
-                diasPeriodo: eFuturo ? 1 : (eMesAtual ? hoje.getDate() : ultimoDia),
-                periodoLabel: new Date(ano, mes - 1, 15).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }),
-            };
-        }
-        const d = new Date(); d.setDate(d.getDate() - Number(periodo));
-        return { periodoIni: dataLocalISO(d), periodoFim: null, diasPeriodo: Number(periodo), periodoLabel: `Últimos ${periodo} dias` };
-    }, [periodo, mesRef]);
+    const { despesasFiltradas, totalDespesasCaminhoes, despesasPorCategoria, despesasPorMes } = useRelatoriosDespesas({ despesasCaminhoes, periodoFim, periodoIni });
 
-    // Mantém o DRE alinhado ao mês escolhido no cabeçalho (ele ainda pode ser ajustado à parte)
-    useEffect(() => {
-        if (periodo === 'mes') { setDreMesInicio(mesRef); setDreMesFim(mesRef); }
-    }, [periodo, mesRef]);
+    const { dreMensal, dreTotais } = useRelatoriosDre({ abastecimentosCaminhao, dadosMargemCaminhao, despesasCaminhoes, diariasAvulsasCaminhao, dreFimISO, dreInicioISO, romFinalizados, romFinalizadosDre });
 
-    const romFiltrados = useMemo(() => romaneios.filter(r => {
-        const dia = r.saida?.slice(0, 10);
-        return dia && dia >= periodoIni && (!periodoFim || dia <= periodoFim);
-    }), [romaneios, periodoIni, periodoFim]);
-    const romFinalizados = romFiltrados.filter(r => r.status === 'Finalizado');
-
-    // Custo real de combustível (diesel + Arla) por mês, a partir dos registros
-    // de abastecimento lançados por cada motorista de caminhão — esse é o custo
-    // efetivo, diferente da previsão de consumo lançada dentro do romaneio.
-    const custoCombustivelRealPorMes = useMemo(() => {
-        const map = {};
-        abastecimentosCaminhao.forEach(a => {
-            const dia = (a.data_abastecimento || '').slice(0, 10);
-            if (!dia) return;
-            const m = dia.slice(0, 7);
-            map[m] = (map[m] || 0) + Number(a.valor_total || 0);
-        });
-        return map;
-    }, [abastecimentosCaminhao]);
-    const somaCustoCombustivelReal = (dataInicioISO, dataFimISO) => Object.entries(custoCombustivelRealPorMes)
-        .reduce((s, [m, v]) => {
-            const dia = `${m}-01`;
-            if (dataInicioISO && dia.slice(0, 7) < dataInicioISO.slice(0, 7)) return s;
-            if (dataFimISO && dia.slice(0, 7) > dataFimISO.slice(0, 7)) return s;
-            return s + v;
-        }, 0);
-
-    // ─── Período mensal do DRE de Caminhões (independente do filtro "Operacional") ───
-    const dreInicioISO = `${dreMesInicio}-01`;
-    const dreFimISO = useMemo(() => {
-        const [ano, mes] = dreMesFim.split('-').map(Number);
-        return new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
-    }, [dreMesFim]);
-    const romFinalizadosDre = useMemo(() =>
-        romaneios.filter(r => r.status === 'Finalizado' && r.saida && r.saida.slice(0, 10) >= dreInicioISO && r.saida.slice(0, 10) <= dreFimISO),
-        [romaneios, dreInicioISO, dreFimISO]);
-
-    // ─── Operacional KPIs ──────────────────────────────────────
-    const totalViagens = romFiltrados.length;
-    const finalizados = romFinalizados.length;
-    const pesoTotal = romFinalizados.reduce((s, r) => s + (r.peso_total || 0), 0);
-    const mediaDia = (totalViagens / Math.max(diasPeriodo, 1)).toFixed(1);
-
-    // Daily romaneios chart
-    const porDia = useMemo(() => {
-        const map = {};
-        romFiltrados.forEach(r => {
-            const d = r.saida?.slice(0, 10);
-            if (d) map[d] = (map[d] || 0) + 1;
-        });
-        const dias = Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
-        return (periodo === 'mes' ? dias : dias.slice(-14))
-            .map(([date, count]) => ({ date: date.slice(5), count }));
-    }, [romFiltrados, periodo]);
-
-    // Status pie
-    const porStatus = useMemo(() => {
-        const map = {};
-        romFiltrados.forEach(r => { map[r.status] = (map[r.status] || 0) + 1; });
-        return Object.entries(map).map(([name, value]) => ({ name, value }));
-    }, [romFiltrados]);
-
-    // Top destinos
-    const topDestinos = useMemo(() => {
-        const map = {};
-        romFiltrados.forEach(r => { if (r.destino) map[r.destino] = (map[r.destino] || 0) + 1; });
-        return Object.entries(map).sort(([, a], [, b]) => b - a).slice(0, 6)
-            .map(([destino, count]) => ({ destino: destino.split(',')[0].trim(), count }));
-    }, [romFiltrados]);
-
-    // ─── Financeiro KPIs ──────────────────────────────────────
-    const custoCombustivelRealPeriodo = useMemo(
-        () => somaCustoCombustivelReal(periodoIni, periodoFim),
-        [custoCombustivelRealPorMes, periodoIni, periodoFim] // eslint-disable-line
-    );
-    const receitaTotal = romFinalizados.reduce((s, r) => s + (r.valor_frete || 0), 0);
-    const custoTotal = custoCombustivelRealPeriodo + romFinalizados.reduce((s, r) =>
-        s + (r.custo_pedagio || 0) + (r.custo_motorista || 0), 0);
-    const margemLucro = receitaTotal > 0 ? ((receitaTotal - custoTotal) / receitaTotal * 100) : 0;
-    const ticketMedio = finalizados > 0 ? receitaTotal / finalizados : 0;
-
-    // Custo por componente — combustível vem dos abastecimentos reais, não da
-    // previsão lançada dentro do romaneio.
-    const custosBreakdown = useMemo(() => [
-        { name: 'Combustível', value: custoCombustivelRealPeriodo },
-        { name: 'Pedágio',     value: romFinalizados.reduce((s, r) => s + (r.custo_pedagio || 0), 0) },
-        { name: 'Motorista',   value: romFinalizados.reduce((s, r) => s + (r.custo_motorista || 0), 0) },
-    ].filter(c => c.value > 0), [romFinalizados, custoCombustivelRealPeriodo]);
-
-    // Receita vs Custo por mês
-    const financeiroPorMes = useMemo(() => {
-        const map = {};
-        romFinalizados.forEach(r => {
-            const m = r.saida?.slice(0, 7);
-            if (!m) return;
-            if (!map[m]) map[m] = { mes: m.slice(5), receita: 0, custo: 0 };
-            map[m].receita += r.valor_frete || 0;
-            map[m].custo += (r.custo_pedagio || 0) + (r.custo_motorista || 0);
-        });
-        // Soma o custo real de combustível de cada mês (dos abastecimentos)
-        Object.keys(map).forEach(m => { map[m].custo += (custoCombustivelRealPorMes[m] || 0); });
-        return Object.values(map).sort((a, b) => a.mes.localeCompare(b.mes));
-    }, [romFinalizados, custoCombustivelRealPorMes]);
-
-    // Top rotas por receita
-    const topRotas = useMemo(() => {
-        const map = {};
-        romFinalizados.forEach(r => {
-            if (!r.destino) return;
-            const key = r.destino.split(',')[0].trim();
-            if (!map[key]) map[key] = { destino: key, receita: 0, viagens: 0 };
-            map[key].receita += r.valor_frete || 0;
-            map[key].viagens += 1;
-        });
-        return Object.values(map).sort((a, b) => b.receita - a.receita).slice(0, 6);
-    }, [romFinalizados]);
-
-    // ─── Despesas Caminhões KPIs ─────────────────────────────
-    // Abate pela data de VENCIMENTO de cada boleto/parcela, não pela data de
-    // emissão da NF — uma despesa a prazo pode ter parcelas vencendo em meses
-    // diferentes do lançamento original.
-    const despesasCutoffISO = periodoIni;
-    const despesasFimISO = periodoFim || '9999-12-31';
-
-    const despesasFiltradas = useMemo(() => {
-        return despesasCaminhoes.filter(d => despesaTemVencimentoNoPeriodo(d, despesasCutoffISO, despesasFimISO));
-    }, [despesasCaminhoes, despesasCutoffISO, despesasFimISO]);
-
-    const totalDespesasCaminhoes = useMemo(() => somarDespesasPorVencimento(despesasCaminhoes, despesasCutoffISO, despesasFimISO), [despesasCaminhoes, despesasCutoffISO, despesasFimISO]);
-
-    const despesasPorCategoria = useMemo(() => {
-        const map = agruparDespesasPorCategoriaVencimento(despesasCaminhoes, despesasCutoffISO, despesasFimISO);
-        return Object.entries(map).sort(([,a],[,b]) => b - a).map(([name, value]) => ({ name, value }));
-    }, [despesasCaminhoes, despesasCutoffISO, despesasFimISO]);
-
-    const despesasPorMes = useMemo(() => {
-        const map = {};
-        despesasCaminhoes.forEach(d => {
-            expandirDespesaParcelas(d).forEach(item => {
-                if (!item.vencimento || item.vencimento < despesasCutoffISO || item.vencimento > despesasFimISO) return;
-                const m = item.vencimento.slice(0, 7);
-                if (!map[m]) map[m] = { mes: m.slice(5), total: 0 };
-                map[m].total += item.valor;
-            });
-        });
-        return Object.values(map).sort((a, b) => a.mes.localeCompare(b.mes));
-    }, [despesasCaminhoes, despesasCutoffISO, despesasFimISO]);
-
-    // ─── DRE Mensal Caminhões ─────────────────────────────────
-    const custoRodagemStats = useMemo(() => {
-        if (!dadosMargemCaminhao) return { comMatch: 0, semMatch: 0 };
-        let comMatch = 0, semMatch = 0;
-        romFinalizados.forEach(r => {
-            if (encontrarCustoDestino(r.destino, dadosMargemCaminhao.destinos)) comMatch++; else semMatch++;
-        });
-        return { comMatch, semMatch };
-    }, [romFinalizados, dadosMargemCaminhao]);
-
-    const dreMensal = useMemo(() => {
-        // Consolida receitas dos romaneios finalizados por mês
-        const map = {};
-
-        romFinalizadosDre.forEach(r => {
-            const m = r.saida?.slice(0, 7);
-            if (!m) return;
-            if (!map[m]) map[m] = {
-                mes: m, mesLabel: m.slice(5),
-                receita: 0,
-                custoCombustivel: 0,
-                custoPedagio: 0,
-                custoMotorista: 0,
-                despesasCaminhoes: 0,
-                custoRodagem: 0,
-                viagens: 0,
-            };
-            map[m].receita          += r.valor_frete          || 0;
-            map[m].custoPedagio     += r.custo_pedagio         || 0;
-            map[m].custoMotorista   += r.custo_motorista       || 0;
-            map[m].viagens++;
-
-            // Custo de rodagem estimado — casa o destino do romaneio com a
-            // tabela de custos por destino cadastrada para caminhões.
-            // Usa o Valor Estimado (preço de venda com margem), não o Custo
-            // Total puro — mesmo critério usado no DRE de Carretas.
-            if (dadosMargemCaminhao) {
-                const destino = encontrarCustoDestino(r.destino, dadosMargemCaminhao.destinos);
-                if (destino) {
-                    const { valorEstimado } = calcularCustoDestino(destino, dadosMargemCaminhao.custoPorKm, dadosMargemCaminhao.custoPorDia, dadosMargemCaminhao.margemPadrao);
-                    map[m].custoRodagem += valorEstimado;
-                }
-            }
-        });
-
-        // Soma diárias avulsas de motoristas de caminhão por mês (lançadas manualmente),
-        // restritas ao período do DRE selecionado
-        diariasAvulsasCaminhao.forEach(d => {
-            const dia = d.data_inicio?.slice(0, 10);
-            if (!dia || dia < dreInicioISO || dia > dreFimISO) return;
-            const m = dia.slice(0, 7);
-            if (!map[m]) map[m] = {
-                mes: m, mesLabel: m.slice(5),
-                receita: 0, custoCombustivel: 0, custoPedagio: 0,
-                custoMotorista: 0, despesasCaminhoes: 0, custoRodagem: 0, viagens: 0,
-            };
-            map[m].custoMotorista += Number(d.valor_total || 0);
-        });
-
-        // Custo real de combustível (diesel + Arla) por mês, a partir dos registros
-        // de abastecimento lançados por cada motorista de caminhão — restrito ao
-        // período do DRE selecionado. Este é o custo efetivo; a previsão de consumo
-        // lançada dentro do romaneio continua disponível apenas para análise por viagem.
-        abastecimentosCaminhao.forEach(a => {
-            const dia = (a.data_abastecimento || '').slice(0, 10);
-            if (!dia || dia < dreInicioISO || dia > dreFimISO) return;
-            const m = dia.slice(0, 7);
-            if (!map[m]) map[m] = {
-                mes: m, mesLabel: m.slice(5),
-                receita: 0, custoCombustivel: 0, custoPedagio: 0,
-                custoMotorista: 0, despesasCaminhoes: 0, custoRodagem: 0, viagens: 0,
-            };
-            map[m].custoCombustivel += Number(a.valor_total || 0);
-        });
-
-        // Soma despesas de caminhões (manutenção, pneus, etc.) por mês —
-        // pela data de VENCIMENTO de cada boleto/parcela, não pela emissão da NF,
-        // e restrita ao período do DRE selecionado (cada boleto cai no seu próprio mês)
-        despesasCaminhoes.forEach(d => {
-            expandirDespesaParcelas(d).forEach(item => {
-                const venc = item.vencimento;
-                if (!venc || venc < dreInicioISO || venc > dreFimISO) return;
-                const m = venc.slice(0, 7);
-                if (!map[m]) map[m] = {
-                    mes: m, mesLabel: m.slice(5),
-                    receita: 0,
-                    custoCombustivel: 0,
-                    custoPedagio: 0,
-                    custoMotorista: 0,
-                    despesasCaminhoes: 0,
-                    custoRodagem: 0,
-                    viagens: 0,
-                };
-                map[m].despesasCaminhoes += item.valor;
-            });
-        });
-
-        return Object.values(map)
-            .sort((a, b) => a.mes.localeCompare(b.mes))
-            .map(m => {
-                const custoOperacional = m.custoCombustivel + m.custoPedagio + m.custoMotorista;
-                const totalDespesas    = custoOperacional + m.despesasCaminhoes + m.custoRodagem;
-                const margemBruta      = m.receita - custoOperacional;
-                const resultadoLiquido = m.receita - totalDespesas;
-                const margemPct        = m.receita > 0 ? (resultadoLiquido / m.receita) * 100 : 0;
-                return { ...m, custoOperacional, totalDespesas, margemBruta, resultadoLiquido, margemPct };
-            });
-    }, [romFinalizadosDre, despesasCaminhoes, diariasAvulsasCaminhao, abastecimentosCaminhao, dadosMargemCaminhao, dreInicioISO, dreFimISO]);
-
-    // Totais consolidados da DRE
-    const dreTotais = useMemo(() => {
-        const t = dreMensal.reduce((acc, m) => ({
-            receita:          acc.receita          + m.receita,
-            custoCombustivel: acc.custoCombustivel + m.custoCombustivel,
-            custoPedagio:     acc.custoPedagio     + m.custoPedagio,
-            custoMotorista:   acc.custoMotorista   + m.custoMotorista,
-            despesasCaminhoes:acc.despesasCaminhoes+ m.despesasCaminhoes,
-            custoRodagem:     acc.custoRodagem      + m.custoRodagem,
-            totalDespesas:    acc.totalDespesas    + m.totalDespesas,
-            margemBruta:      acc.margemBruta      + m.margemBruta,
-            resultadoLiquido: acc.resultadoLiquido + m.resultadoLiquido,
-            viagens:          acc.viagens          + m.viagens,
-        }), { receita:0, custoCombustivel:0, custoPedagio:0, custoMotorista:0, despesasCaminhoes:0, custoRodagem:0, totalDespesas:0, margemBruta:0, resultadoLiquido:0, viagens:0 });
-        t.margemPct = t.receita > 0 ? (t.resultadoLiquido / t.receita) * 100 : 0;
-        t.custoRodagemComMatch = custoRodagemStats.comMatch;
-        t.custoRodagemSemMatch = custoRodagemStats.semMatch;
-        return t;
-    }, [dreMensal, custoRodagemStats]);
-
-    // ─── Frota KPIs ──────────────────────────────────────────
-    const frota = vehicles.length;
-    const disponiveis = vehicles.filter(v => v.status === 'Disponível').length;
-    const emTransito = vehicles.filter(v => v.status === 'Em Trânsito').length;
-    const manutencao = vehicles.filter(v => v.status === 'Manutenção').length;
-    // Utilização no período selecionado: média da carga (peso do romaneio ÷ capacidade do veículo)
-    // nas viagens do período, por veículo. Sem viagens no período = 0%.
-    const utilizacaoPorVeiculo = useMemo(() => vehicles.map(v => {
-        const cap = Number(v.capacidade_peso || v.capacidadePeso || 0);
-        const viagens = romFiltrados.filter(r => (r.vehicle_id && r.vehicle_id === v.id) || (r.placa && r.placa === v.placa));
-        let utilizacao = 0;
-        if (viagens.length > 0 && cap > 0) {
-            utilizacao = Math.round(viagens.reduce((s, r) => s + Math.min(100, (Number(r.peso_total || 0) / cap) * 100), 0) / viagens.length);
-        }
-        return { placa: v.placa, utilizacao, viagens: viagens.length };
-    }), [vehicles, romFiltrados]);
-    const utilizacaoMedia = frota > 0 ? utilizacaoPorVeiculo.reduce((s, v) => s + v.utilizacao, 0) / frota : 0;
-
-    const frotaStatus = [
-        { name: 'Disponível', value: disponiveis },
-        { name: 'Em Trânsito', value: emTransito },
-        { name: 'Manutenção', value: manutencao },
-    ].filter(s => s.value > 0);
-
-    const utilizacaoVeiculos = utilizacaoPorVeiculo.map(v => ({ placa: v.placa, utilizacao: v.utilizacao }))
-        .sort((a, b) => b.utilizacao - a.utilizacao);
+    const { frota, disponiveis, emTransito, manutencao, utilizacaoMedia, frotaStatus, utilizacaoVeiculos } = useRelatoriosFrota({ romFiltrados, vehicles });
 
     // ─── Export financeiro Excel ────────────────────────────
     const exportConsolidadoExcel = () => {
@@ -488,7 +87,7 @@ export default function Relatorios() {
         if (romFinalizados.length === 0) { showToast('Nenhum romaneio finalizado no período', 'error'); return; }
 
         const n = v => Number(v) || 0;
-        const brl = v => n(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        
 
         const wb = XLSX.utils.book_new();
 
@@ -623,265 +222,39 @@ export default function Relatorios() {
 
                     {/* ── TAB: OPERACIONAL ── */}
                     {tab === 'operacional' && (
-                        <div className="flex flex-col gap-6">
-                            <div className="grid grid-cols-2 tab:grid-cols-4 gap-4">
-                                <KpiCard label="Total de Viagens" value={totalViagens} icon="FileText" color="#1E3A5F" sub={periodoLabel} />
-                                <KpiCard label="Finalizadas" value={finalizados} icon="CheckCircle2" color="#059669" sub={`${totalViagens > 0 ? Math.round(finalizados/totalViagens*100) : 0}% do total`} />
-                                <KpiCard label="Peso Transportado" value={fmtKg(pesoTotal)} icon="Weight" color="#D97706" sub="Entregas finalizadas" />
-                                <KpiCard label="Média / Dia" value={mediaDia} icon="TrendingUp" color="#7C3AED" sub="Viagens por dia" />
-                            </div>
-
-                            <div className="grid grid-cols-1 tab:grid-cols-2 gap-5">
-                                <ChartCard title={periodo === 'mes' ? `Romaneios por Dia (${periodoLabel})` : 'Romaneios por Dia (últimos 14 dias)'} height={220}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={porDia}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                                            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                                            <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                                            <Tooltip />
-                                            <Bar dataKey="count" name="Romaneios" fill="#1E3A5F" radius={[4,4,0,0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </ChartCard>
-
-                                <ChartCard title="Status dos Romaneios" height={220}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            {porStatus.filter(d => d.value > 0).length > 0 && (
-                                                <Pie data={porStatus.filter(d => d.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`}>
-                                                    {porStatus.filter(d => d.value > 0).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                                                </Pie>
-                                            )}
-                                            <Tooltip />
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                </ChartCard>
-                            </div>
-
-                            <ChartCard title="Top Destinos (por número de viagens)" height={220}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={topDestinos} layout="vertical">
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                                        <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                                        <YAxis dataKey="destino" type="category" tick={{ fontSize: 11 }} width={120} />
-                                        <Tooltip />
-                                        <Bar dataKey="count" name="Viagens" fill="#4A6741" radius={[0,4,4,0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </ChartCard>
-                        </div>
+                        <TabOperacional
+                    finalizados={finalizados}
+                    mediaDia={mediaDia}
+                    periodo={periodo}
+                    periodoLabel={periodoLabel}
+                    pesoTotal={pesoTotal}
+                    porDia={porDia}
+                    porStatus={porStatus}
+                    topDestinos={topDestinos}
+                    totalViagens={totalViagens}
+                />
                     )}
 
                     {/* ── TAB: FINANCEIRO ── */}
                     {tab === 'financeiro' && (
-                        <div className="flex flex-col gap-6">
-                            <div className="flex flex-wrap gap-2 justify-end">
-                                <button onClick={exportFinanceiroExcel}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors hover:bg-slate-50 whitespace-nowrap"
-                                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
-                                    <Icon name="FileSpreadsheet" size={13} color="currentColor" />
-                                    <span className="hidden xs:inline sm:inline">Financeiro Excel</span>
-                                    <span className="xs:hidden sm:hidden">Fin.</span>
-                                </button>
-                                <button onClick={exportBonificacoesExcel}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors hover:bg-slate-50 whitespace-nowrap"
-                                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
-                                    <Icon name="Award" size={13} color="currentColor" />
-                                    <span className="hidden sm:inline">Bonificações</span>
-                                    <span className="sm:hidden">Bonif.</span>
-                                </button>
-                                <button onClick={exportConsolidadoExcel}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap"
-                                    style={{ backgroundColor: 'var(--color-primary)', color: 'white' }}>
-                                    <Icon name="Download" size={13} color="white" />
-                                    <span className="hidden sm:inline">Rel. Consolidado</span>
-                                    <span className="sm:hidden">Consolidado</span>
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-2 tab:grid-cols-4 gap-4">
-                                <KpiCard label="Receita Total" value={fmtBRL(receitaTotal)} icon="TrendingUp" color="#059669" sub="Fretes cobrados" />
-                                <KpiCard label="Custo Total" value={fmtBRL(custoTotal)} icon="TrendingDown" color="#DC2626" sub="Operacional" />
-                                <KpiCard label="Margem de Lucro" value={`${margemLucro.toFixed(1)}%`} icon="Percent" color={margemLucro >= 20 ? '#059669' : '#D97706'} sub={fmtBRL(receitaTotal - custoTotal) + ' líquido'} />
-                                <KpiCard label="Ticket Médio" value={fmtBRL(ticketMedio)} icon="Receipt" color="#7C3AED" sub="Por viagem finalizada" />
-                            </div>
-
-                            {financeiroPorMes.length > 0 ? (
-                                <ChartCard title="Receita vs Custo por Mês" height={240}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={financeiroPorMes}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                                            <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-                                            <YAxis tick={{ fontSize: 11 }} tickFormatter={v => 'R$' + (v/1000).toFixed(0) + 'k'} />
-                                            <Tooltip formatter={(v) => fmtBRL(v)} />
-                                            <Legend />
-                                            <Bar dataKey="receita" name="Receita" fill="#059669" radius={[4,4,0,0]} />
-                                            <Bar dataKey="custo" name="Custo" fill="#DC2626" radius={[4,4,0,0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </ChartCard>
-                            ) : (
-                                <div className="bg-white rounded-xl border border-slate-200 p-10 flex flex-col items-center justify-center gap-2">
-                                    <Icon name="DollarSign" size={40} color="#CBD5E1" />
-                                    <p className="text-sm font-medium text-slate-400">Nenhum dado financeiro no período</p>
-                                    <p className="text-xs text-center text-slate-400">Cadastre valores de frete e custos nos romaneios finalizados</p>
-                                </div>
-                            )}
-
-                            <div className="grid grid-cols-1 tab:grid-cols-2 gap-5">
-                                {custosBreakdown.length > 0 && (
-                                    <ChartCard title="Composição dos Custos" height={200}>
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <PieChart>
-                                                {custosBreakdown.length > 0 && custosBreakdown.some(d => d.value > 0) && (
-                                                <Pie data={custosBreakdown.filter(d => d.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75}
-                                                    label={({ name, percent }) => `${name} ${(percent*100).toFixed(0)}%`}>
-                                                    {custosBreakdown.filter(d => d.value > 0).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                                                </Pie>
-                                                )}
-                                                <Tooltip formatter={v => fmtBRL(v)} />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    </ChartCard>
-                                )}
-
-                                {topRotas.length > 0 && (
-                                    <ChartCard title="Top Rotas por Receita" height={200}>
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={topRotas} layout="vertical">
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                                                <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => 'R$'+(v/1000).toFixed(0)+'k'} />
-                                                <YAxis dataKey="destino" type="category" tick={{ fontSize: 10 }} width={100} />
-                                                <Tooltip formatter={v => fmtBRL(v)} />
-                                                <Bar dataKey="receita" name="Receita" fill="#1E3A5F" radius={[0,4,4,0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </ChartCard>
-                                )}
-                            </div>
-
-                            {/* Tabela detalhada */}
-                            {romFinalizados.length > 0 && (
-                                <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                    <div className="px-5 py-4 border-b border-slate-100">
-                                        <p className="text-sm font-semibold text-slate-700">Detalhe por Romaneio</p>
-                                    </div>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-slate-50">
-                                                <tr>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Romaneio</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden tab:table-cell">Destino</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Frete</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Custo</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Margem</th>
-                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden tab:table-cell">%</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {romFinalizados.slice(0, 20).map((r, i) => {
-                                                    const custo = (r.custo_combustivel||0)+(r.custo_pedagio||0)+(r.custo_motorista||0);
-                                                    const margem = (r.valor_frete||0) - custo;
-                                                    const pct = r.valor_frete > 0 ? margem/r.valor_frete*100 : 0;
-                                                    return (
-                                                        <tr key={r.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                                            <td className="px-3 py-2.5">
-                                                                <p className="font-data font-medium text-blue-700 text-xs whitespace-nowrap">{r.numero}</p>
-                                                                <p className="text-slate-400 text-xs sm:hidden">{r.destino}</p>
-                                                            </td>
-                                                            <td className="px-4 py-2.5 text-slate-600 text-xs hidden tab:table-cell">{r.destino}</td>
-                                                            <td className="px-4 py-2.5 font-data text-green-700 text-xs">{fmtBRL(r.valor_frete)}</td>
-                                                            <td className="px-4 py-2.5 font-data text-red-600 text-xs hidden md:table-cell">{fmtBRL(custo)}</td>
-                                                            <td className="px-4 py-2.5 font-data font-semibold text-xs" style={{ color: margem >= 0 ? '#059669' : '#DC2626' }}>{fmtBRL(margem)}</td>
-                                                            <td className="px-4 py-2.5 hidden tab:table-cell">
-                                                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pct >= 20 ? 'bg-green-100 text-green-700' : pct >= 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                                                                    {pct.toFixed(1)}%
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        <TabFinanceiro
+                    custoTotal={custoTotal}
+                    custosBreakdown={custosBreakdown}
+                    exportBonificacoesExcel={exportBonificacoesExcel}
+                    exportConsolidadoExcel={exportConsolidadoExcel}
+                    exportFinanceiroExcel={exportFinanceiroExcel}
+                    financeiroPorMes={financeiroPorMes}
+                    margemLucro={margemLucro}
+                    receitaTotal={receitaTotal}
+                    romFinalizados={romFinalizados}
+                    ticketMedio={ticketMedio}
+                    topRotas={topRotas}
+                />
                     )}
 
                     {/* ── TAB: DESPESAS CAMINHÕES (dentro de Financeiro) ── */}
                     {tab === 'financeiro' && (
-                        <div className="flex flex-col gap-6 mt-2">
-                            <div className="flex items-center gap-2 pb-1 border-b border-slate-200">
-                                <Icon name="Truck" size={16} color="#1E3A5F" />
-                                <p className="text-sm font-semibold text-slate-700">Despesas de Caminhões</p>
-                                <span className="ml-auto text-xs text-slate-400">{despesasFiltradas.length} registros no período</span>
-                            </div>
-
-                            <div className="grid grid-cols-2 tab:grid-cols-3 gap-4">
-                                <KpiCard label="Total de Despesas" value={fmtBRL(totalDespesasCaminhoes)} icon="Receipt" color="#DC2626" sub="Caminhões no período" />
-                                <KpiCard label="Categorias" value={despesasPorCategoria.length} icon="Tag" color="#7C3AED" sub="Tipos de despesa" />
-                                <KpiCard label="Média por Despesa" value={despesasFiltradas.length > 0 ? fmtBRL(totalDespesasCaminhoes / despesasFiltradas.length) : 'R$ 0,00'} icon="Calculator" color="#D97706" sub="Custo médio por registro" />
-                            </div>
-
-                            {despesasPorMes.length > 0 && (
-                                <ChartCard title="Despesas por Mês" height={220}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={despesasPorMes}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                                            <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-                                            <YAxis tick={{ fontSize: 11 }} tickFormatter={v => 'R$' + (v/1000).toFixed(0) + 'k'} />
-                                            <Tooltip formatter={(v) => fmtBRL(v)} />
-                                            <Bar dataKey="total" name="Despesas" fill="#DC2626" radius={[4,4,0,0]} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </ChartCard>
-                            )}
-
-                            {despesasPorCategoria.length > 0 && (
-                                <div className="grid grid-cols-1 tab:grid-cols-2 gap-5">
-                                    <ChartCard title="Despesas por Categoria" height={200}>
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <PieChart>
-                                                <Pie data={despesasPorCategoria.filter(d => d.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75}
-                                                    label={({ name, percent }) => `${name.length > 10 ? name.slice(0,10)+'…' : name} ${(percent*100).toFixed(0)}%`}>
-                                                    {despesasPorCategoria.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                                                </Pie>
-                                                <Tooltip formatter={v => fmtBRL(v)} />
-                                            </PieChart>
-                                        </ResponsiveContainer>
-                                    </ChartCard>
-
-                                    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                        <div className="px-4 py-3 border-b border-slate-100">
-                                            <p className="text-sm font-semibold text-slate-700">Top Categorias</p>
-                                        </div>
-                                        <div className="divide-y divide-slate-50">
-                                            {despesasPorCategoria.slice(0, 6).map((c, i) => (
-                                                <div key={i} className="px-4 py-2.5 flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                                                        <span className="text-xs text-slate-700">{c.name}</span>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-xs font-semibold text-slate-800">{fmtBRL(c.value)}</p>
-                                                        <p className="text-xs text-slate-400">{totalDespesasCaminhoes > 0 ? ((c.value/totalDespesasCaminhoes)*100).toFixed(1) : 0}%</p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {despesasFiltradas.length === 0 && (
-                                <div className="bg-white rounded-xl border border-slate-200 p-10 flex flex-col items-center justify-center gap-2">
-                                    <Icon name="Truck" size={40} color="#CBD5E1" />
-                                    <p className="text-sm font-medium text-slate-400">Nenhuma despesa de caminhão no período</p>
-                                    <p className="text-xs text-center text-slate-400">Cadastre despesas no módulo de Despesas Caminhões</p>
-                                </div>
-                            )}
-                        </div>
+                        <TabFinanceiroPainel despesasFiltradas={despesasFiltradas} despesasPorCategoria={despesasPorCategoria} despesasPorMes={despesasPorMes} totalDespesasCaminhoes={totalDespesasCaminhoes} />
                     )}
 
                     {/* ── Seletor de período do DRE de Caminhões ── */}
@@ -1125,94 +498,17 @@ export default function Relatorios() {
 
                     {/* ── TAB: FROTA ── */}
                     {tab === 'frota' && (
-                        <div className="flex flex-col gap-6">
-                            <div className="grid grid-cols-2 tab:grid-cols-4 gap-4">
-                                <KpiCard label="Total de Veículos" value={frota} icon="Truck" color="#1E3A5F" />
-                                <KpiCard label="Disponíveis" value={disponiveis} icon="CheckCircle2" color="#059669" sub={frota > 0 ? `${Math.round(disponiveis/frota*100)}% da frota` : ''} />
-                                <KpiCard label="Em Trânsito" value={emTransito} icon="Navigation" color="#D97706" />
-                                <KpiCard label="Utilização Média" value={`${utilizacaoMedia.toFixed(0)}%`} icon="Activity" color={utilizacaoMedia > 80 ? '#DC2626' : '#059669'} sub={`${periodoLabel}${manutencao > 0 ? ` · ${manutencao} em manutenção` : ''}`} />
-                            </div>
-
-                            <div className="grid grid-cols-1 tab:grid-cols-2 gap-5">
-                                <ChartCard title={`Utilização por Veículo (%) — ${periodoLabel}`} height={Math.max(200, vehicles.length * 35)}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={utilizacaoVeiculos} layout="vertical">
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                                            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={v => v + '%'} />
-                                            <YAxis dataKey="placa" type="category" tick={{ fontSize: 11 }} width={80} />
-                                            <Tooltip formatter={v => v + '%'} />
-                                            <Bar dataKey="utilizacao" name="Utilização" radius={[0,4,4,0]}
-                                                fill="#1E3A5F"
-                                                label={{ position: 'right', fontSize: 10, formatter: v => v + '%' }} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                </ChartCard>
-
-                                <ChartCard title="Status da Frota" height={220}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            {frotaStatus.filter(d => d.value > 0).length > 0 && (
-                                                <Pie data={frotaStatus.filter(d => d.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}
-                                                    label={({ name, value }) => `${name}: ${value}`}>
-                                                    {frotaStatus.filter(d => d.value > 0).map((_, i) => <Cell key={i} fill={['#059669','#D97706','#DC2626'][i]} />)}
-                                                </Pie>
-                                            )}
-                                            <Tooltip />
-                                            <Legend />
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                </ChartCard>
-                            </div>
-
-                            {/* Tabela de veículos */}
-                            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                <div className="px-5 py-4 border-b border-slate-100">
-                                    <p className="text-sm font-semibold text-slate-700">Detalhe da Frota</p>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-slate-50">
-                                            <tr>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Placa</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden tab:table-cell">Tipo</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden md:table-cell">Cap. Peso</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden lg:table-cell">Cap. Volume</th>
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide hidden tab:table-cell">Utilização</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {vehicles.map((v, i) => (
-                                                <tr key={v.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                                    <td className="px-4 py-2.5">
-                                                        <p className="font-data font-bold text-slate-800 text-xs">{v.placa}</p>
-                                                        <p className="text-xs text-slate-400 sm:hidden">{v.tipo}</p>
-                                                    </td>
-                                                    <td className="px-4 py-2.5 text-slate-600 text-xs hidden tab:table-cell">{v.tipo}</td>
-                                                    <td className="px-4 py-2.5">
-                                                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${
-                                                            v.status === 'Disponível' ? 'bg-green-100 text-green-700' :
-                                                            v.status === 'Em Trânsito' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                                                            {v.status}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-2.5 font-data text-xs hidden md:table-cell">{(v.capacidadePeso||0).toLocaleString('pt-BR')} kg</td>
-                                                    <td className="px-4 py-2.5 font-data text-xs hidden lg:table-cell">{(v.capacidadeVolume||0).toLocaleString('pt-BR')} m³</td>
-                                                    <td className="px-4 py-2.5 hidden tab:table-cell">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="flex-1 bg-slate-100 rounded-full h-1.5">
-                                                                <div className="h-1.5 rounded-full" style={{ width: `${v.utilizacao||0}%`, backgroundColor: (v.utilizacao||0) > 90 ? '#DC2626' : '#059669' }} />
-                                                            </div>
-                                                            <span className="text-xs font-data">{v.utilizacao||0}%</span>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
+                        <TabFrota
+                    disponiveis={disponiveis}
+                    emTransito={emTransito}
+                    frota={frota}
+                    frotaStatus={frotaStatus}
+                    manutencao={manutencao}
+                    periodoLabel={periodoLabel}
+                    utilizacaoMedia={utilizacaoMedia}
+                    utilizacaoVeiculos={utilizacaoVeiculos}
+                    vehicles={vehicles}
+                />
                     )}
                     {/* ── TAB: POR EMPRESA ── */}
                     {tab === 'empresas' && (() => {

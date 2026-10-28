@@ -1,60 +1,27 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
-import NavigationBar from 'components/ui/NavigationBar';
-import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
-import Button from 'components/ui/Button';
-import Icon from 'components/AppIcon';
-import Toast from 'components/ui/Toast';
-import { useToast } from 'utils/useToast';
-import { useAuth } from 'utils/AuthContext';
-import { usePageTabs } from 'utils/PageTabsContext';
-import { useConfirm } from 'components/ui/ConfirmDialog';
-import { supabase, subscribeTabela } from 'utils/supabaseClient';
-import { calcularBonificacao } from 'utils/bonificacaoService';
-import {
-    fetchAbastecimentos, createAbastecimento, updateAbastecimento, deleteAbastecimento,
-    fetchChecklists, createChecklist, updateChecklist, deleteChecklist,
-    fetchPostos,
-    fetchConfigAbastecimento,
-    CHECKLIST_ITENS, fetchChecklistItens, itemIsOk, itemObsOf, itemLabelOf, contarItensOk,
-} from 'utils/carretasService';
-import { fetchCaminhoesPlacas } from 'utils/vehicleService';
-import * as XLSX from 'xlsx';
-import PrettySelect from 'components/ui/PrettySelect';
-import ChecklistItemsField from 'components/ui/ChecklistItemsField';
-import MultiFotoField from 'components/ui/MultiFotoField';
-import useDeviceProfile from 'utils/useDeviceProfile';
-import { usePagination, PaginationBar } from 'components/ui/Pagination';
+import React, { useState,  useEffect, } from 'react';
 
-const BRL = v => Number(v||0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const FMT = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
-const inputCls = 'w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
-const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
 
-const PERIOD_OPTIONS = [
-    { label: 'Mês atual', days: 'mes' },
-    { label: '30 dias', days: 30 },
-    { label: '90 dias', days: 90 },
-    { label: '6 meses', days: 180 },
-];
-const STATUS_ROM = {
-    'Aguardando':  { bg: '#FEF9C3', text: '#B45309' },
-    'Carregando':  { bg: '#DBEAFE', text: '#1D4ED8' },
-    'Em Trânsito': { bg: '#D1FAE5', text: '#065F46' },
-    'Finalizado':  { bg: '#F3F4F6', text: '#374151' },
-    'Cancelado':   { bg: '#FEE2E2', text: '#991B1B' },
-};
+import { useAuth } from 'context/AuthContext';
+import { useToast } from 'hooks/useToast';
+import { useConfirm,  NavigationBar, AppIcon as Icon, BreadcrumbTrail, Toast } from 'components';
+import { } from 'services/romaneio';
+import {           } from 'services/carretas';
+import { } from 'services/vehicleService';
+import { } from 'services/supabaseClient';
+import { useRecarregarAoVoltar } from 'hooks/useRecarregarAoVoltar';
+import useDeviceProfile from 'hooks/useDeviceProfile';
+import { } from 'services/bonificacaoService';
+import { usePageTabs } from 'context/PageTabsContext';
 
-function Field({ label, children, required }) {
-    return (
-        <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-            </label>
-            {children}
-        </div>
-    );
-}
+import { PERIOD_OPTIONS } from './utils/constants';
+import { BRL } from './utils/helpers';
+import TabViagens from './components/TabViagens';
+import TabAbastecimentos from './components/TabAbastecimentos';
+import TabChecklist from './components/TabChecklist';
+import TabBonificacoes from './components/TabBonificacoes';
+import ModalAbast from './components/ModalAbast';
+import ModalCheck from './components/ModalCheck';
+import { useMotoristaDados, useMotoristaAbastecimento, useMotoristaChecklist, useExportMotorista } from './hooks';
 
 export default function MotoristaDashboard() {
     const { user, profile } = useAuth();
@@ -69,329 +36,41 @@ export default function MotoristaDashboard() {
     // Valores digitados/selecionados nos campos de data, ainda não confirmados pelo botão "Buscar viagens".
     // Fica separado de `periodoCustom` de propósito: só deve disparar busca no banco quando o usuário
     // escolher as duas datas E clicar em "Buscar viagens" — nunca ao selecionar só a data inicial.
-    const [periodoCustomInput, setPeriodoCustomInput] = useState(null); // { inicio, fim } | null
-    const [loading, setLoading]       = useState(true);
-
-    const [romaneios, setRomaneios]   = useState([]);
-    const [abast, setAbast]           = useState([]);
-    const [checklists, setChecklists] = useState([]);
-    const [veiculos, setVeiculos]     = useState([]); // caminhões da página de Veículos (item 7)
-    const [postos, setPostos]         = useState([]);
-    const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
+    const [periodoCustomInput, setPeriodoCustomInput] = useState(null); const { loading, romaneios, abast, checklists, veiculos, postos, configAbast, checklistItens, load, bonificacoes, bonificacoesComValor, bonificacoesPag, bonusExtras, totais } = useMotoristaDados({ period, periodoCustom, profile, showToast, user });
+    
+    
+    
+     
+    
     const [filtroPlaca, setFiltroPlaca] = useState('');
 
-    const [modalAbast, setModalAbast] = useState(false);
-    const [modalCheck, setModalCheck] = useState(false);
-    const [checklistItens, setChecklistItens] = useState([]);
-    const [editingAbastId, setEditingAbastId] = useState(null);
-    const [editingCheckId, setEditingCheckId] = useState(null);
-
-    const emptyAbast = () => ({
-        veiculo_caminhao_id: '', posto_id: '',
-        data_abastecimento: new Date().toISOString().split('T')[0],
-        horario: '', litros_diesel: '', valor_diesel: '',
-        litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '',
-    });
-    const emptyCheck = () => ({
-        veiculo_caminhao_id: '', odometro: '', itens: {}, problemas: '', necessidades: '',
-        observacoes_livres: '', foto_url: '', fotos_urls: [],
-    });
-    const [formAbast, setFormAbast] = useState(emptyAbast());
-    const [formCheck, setFormCheck] = useState(emptyCheck());
-    const [savingAbast, setSavingAbast] = useState(false);
-    const [savingCheck, setSavingCheck] = useState(false);
-    const [progressoFotosCheck, setProgressoFotosCheck] = useState(null); // { atual, total } | null
-
-    // ── Load ─────────────────────────────────────────────────────────────────
-    const load = useCallback(async () => {
-        if (!user?.id || !profile?.name) return;
-        setLoading(true);
-        try {
-            let dateStr, dateFimStr = null;
-            if (periodoCustom?.inicio && periodoCustom?.fim) {
-                dateStr = periodoCustom.inicio;
-                dateFimStr = periodoCustom.fim;
-            } else if (period === 'mes') {
-                const hoje = new Date();
-                dateStr = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
-            } else {
-                const cut = new Date(); cut.setDate(cut.getDate() - period);
-                dateStr = cut.toISOString().split('T')[0];
-            }
-
-            let romQuery = supabase.from('romaneios')
-                .select(`id, numero, motorista, motorista_id, placa, destino, status,
-                    aprovado, aprovado_em, peso_total, saida, created_at,
-                    romaneio_itens(id, quantidade, peso_total, material_id,
-                        materials(id, nome, unidade, peso, categoria_frete))`)
-                .or(`motorista_id.eq.${user.id},motorista.ilike."${profile.name}"`);
-            // Filtro de período pela DATA DE SAÍDA do romaneio (igual ao painel admin).
-            // Só quando o romaneio não tem saída cadastrada é que cai na data de criação.
-            // Antes filtrava só por created_at: romaneio criado em 30/09 com saída em 08/10
-            // não aparecia no mês de outubro para o motorista.
-            const iniISO = new Date(`${dateStr}T00:00:00`).toISOString();
-            let fimISO = null;
-            if (dateFimStr) { const d = new Date(`${dateFimStr}T00:00:00`); d.setDate(d.getDate() + 1); fimISO = d.toISOString(); }
-            const porSaida = [`saida.gte.${iniISO}`], porCriacao = [`created_at.gte.${iniISO}`];
-            if (fimISO) { porSaida.push(`saida.lt.${fimISO}`); porCriacao.push(`created_at.lt.${fimISO}`); }
-            romQuery = romQuery.or(`and(${porSaida.join(',')}),and(saida.is.null,${porCriacao.join(',')})`);
-            romQuery = romQuery.order('created_at', { ascending: false });
-
-            const [roms, a, c, ve, p, cfg, itensCheck] = await Promise.all([
-                romQuery.then(r => r.data || []),
-                fetchAbastecimentos({ motoristaId: user.id, dataInicio: dateStr, ...(dateFimStr ? { dataFim: dateFimStr } : {}) }),
-                fetchChecklists({ motoristaId: user.id, dataInicio: dateStr, ...(dateFimStr ? { dataFim: dateFimStr } : {}) }),
-                fetchCaminhoesPlacas(),
-                fetchPostos().catch(() => []),
-                fetchConfigAbastecimento().catch(() => ({ preco_diesel: 0, preco_arla: 0 })),
-                fetchChecklistItens(true).catch(() => []),
-            ]);
-
-            setRomaneios(roms);
-            setAbast(a); setChecklists(c);
-            setVeiculos(ve); setPostos(p);
-            setConfigAbast(cfg || { preco_diesel: 0, preco_arla: 0 });
-            setChecklistItens(itensCheck);
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-        finally { setLoading(false); }
-    }, [user?.id, profile?.name, period, periodoCustom]); // eslint-disable-line
-
-    useEffect(() => {
-        load();
-        // Realtime: atualiza automaticamente quando admin excluir romaneio, checklist ou abastecimento
-        const unsubRom   = subscribeTabela('romaneios', load);
-        const unsubCheck = subscribeTabela('carretas_checklists', load);
-        const unsubAbast = subscribeTabela('carretas_abastecimentos', load);
-        return () => { unsubRom(); unsubCheck(); unsubAbast(); };
-    }, [load]); // eslint-disable-line
+    const { modalAbast, setModalAbast, editingAbastId, setEditingAbastId, emptyAbast, formAbast, setFormAbast, savingAbast, getPreco, handlePostoChange, handleLitros, handleAbast, abrirEdicaoAbast, excluirAbast } = useMotoristaAbastecimento({ abast, configAbast, confirm, load, postos, showToast, user, veiculos });
+    const { modalCheck, setModalCheck, editingCheckId, setEditingCheckId, emptyCheck, formCheck, setFormCheck, savingCheck, progressoFotosCheck, handleCheck, abrirEdicaoCheck, excluirCheck } = useMotoristaChecklist({ checklists, confirm, load, showToast, user, veiculos });
+    
+    
+    
+    
+    
+    
+    
+    
+    
+       // eslint-disable-line
     useRecarregarAoVoltar(load);
-    useDeviceProfile(); // publica a faixa do aparelho (data-tier) para o CSS mobile global
-
-    // ── Computed ─────────────────────────────────────────────────────────────
-    const bonificacoes = useMemo(() =>
-        romaneios.map(r => ({ ...r, bonif: calcularBonificacao(r) }))
-    , [romaneios]);
-
-    const bonificacoesComValor = useMemo(() =>
-        bonificacoes.filter(r => r.bonif?.valorTotal > 0)
-    , [bonificacoes]);
-    const bonificacoesPag = usePagination(bonificacoesComValor, 10, [bonificacoesComValor.length, period, periodoCustom]);
-
-    const totais = useMemo(() => ({
-        viagens:      romaneios.length,
-        finalizadas:  romaneios.filter(r => r.status === 'Finalizado').length,
-        emTransito:   romaneios.filter(r => r.status === 'Em Trânsito').length,
-        totalBonus:   bonificacoes.reduce((s, r) => s + (r.bonif?.valorTotal || 0), 0),
-        litrosDiesel: abast.reduce((s, a) => s + Number(a.litros_diesel || 0), 0),
-        gastoTotal:   abast.reduce((s, a) => s + Number(a.valor_total || 0), 0),
-    }), [romaneios, bonificacoes, abast]);
-
-    // ── Preços: posto tem prioridade, senão usa config global do admin ────────
-    const getPreco = useCallback((postoId, tipo) => {
-        const posto = postos.find(p => p.id === postoId);
-        if (tipo === 'diesel') return Number(posto?.preco_diesel || configAbast?.preco_diesel || 0);
-        if (tipo === 'arla')   return Number(posto?.preco_arla   || configAbast?.preco_arla   || 0);
-        return 0;
-    }, [postos, configAbast]);
-
-    const handlePostoChange = (postoId) => {
-        const precoDiesel = getPreco(postoId, 'diesel');
-        const precoArla   = getPreco(postoId, 'arla');
-        setFormAbast(f => ({
-            ...f, posto_id: postoId,
-            valor_diesel: precoDiesel && f.litros_diesel
-                ? (Number(f.litros_diesel) * precoDiesel).toFixed(2) : f.valor_diesel,
-            valor_arla: precoArla && f.litros_arla
-                ? (Number(f.litros_arla) * precoArla).toFixed(2) : f.valor_arla,
-        }));
-    };
-
-    const handleLitros = (campo, valor) => {
-        const precoDiesel = getPreco(formAbast.posto_id, 'diesel');
-        const precoArla   = getPreco(formAbast.posto_id, 'arla');
-        setFormAbast(f => {
-            const n = { ...f, [campo]: valor };
-            if (campo === 'litros_diesel' && precoDiesel)
-                n.valor_diesel = valor ? (Number(valor) * precoDiesel).toFixed(2) : '';
-            if (campo === 'litros_arla' && precoArla)
-                n.valor_arla = valor ? (Number(valor) * precoArla).toFixed(2) : '';
-            return n;
-        });
-    };
-
-    // ── Handlers ─────────────────────────────────────────────────────────────
-    const handleAbast = async () => {
-        if (!formAbast.veiculo_caminhao_id || !formAbast.data_abastecimento) {
-            showToast('Veículo e data são obrigatórios', 'error'); return;
-        }
-        if (!formAbast.cupom_fiscal?.trim()) {
-            showToast('Informe o N° do cupom fiscal', 'error'); return;
-        }
-        if (!formAbast.posto_id) {
-            showToast('Selecione o posto de abastecimento', 'error'); return;
-        }
-        setSavingAbast(true);
-        try {
-            const caminhao = veiculos.find(v => String(v.id) === String(formAbast.veiculo_caminhao_id));
-            const abastOriginal = editingAbastId ? abast.find(a => a.id === editingAbastId) : null;
-            const payload = {
-                ...formAbast, motorista_id: user.id,
-                // Campo deixado em branco (ex: só abasteceu Diesel, sem Arla)
-                // chegava como string vazia '' e o Postgres rejeita isso numa
-                // coluna numeric — precisa virar 0.
-                litros_diesel: Number(formAbast.litros_diesel || 0),
-                valor_diesel: Number(formAbast.valor_diesel || 0),
-                litros_arla: Number(formAbast.litros_arla || 0),
-                valor_arla: Number(formAbast.valor_arla || 0),
-                veiculo_caminhao_placa: caminhao?.placa || abastOriginal?.veiculo_caminhao_placa || null,
-                veiculo_caminhao_modelo: caminhao?.modelo || abastOriginal?.veiculo_caminhao_modelo || null,
-            };
-            if (!payload.posto_id) delete payload.posto_id;
-            const posto = postos.find(p => p.id === formAbast.posto_id);
-            if (posto) payload.posto = posto.nome;
-            if (editingAbastId) {
-                await updateAbastecimento(editingAbastId, payload);
-                showToast('Abastecimento atualizado!', 'success');
-            } else {
-                await createAbastecimento(payload);
-                showToast('Abastecimento registrado!', 'success');
-            }
-            setModalAbast(false); setFormAbast(emptyAbast()); setEditingAbastId(null); load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-        finally { setSavingAbast(false); }
-    };
-
-    const abrirEdicaoAbast = (a) => {
-        setEditingAbastId(a.id);
-        setFormAbast({
-            veiculo_caminhao_id: a.veiculo_caminhao_id != null ? String(a.veiculo_caminhao_id) : '',
-            posto_id: a.posto_id || '',
-            data_abastecimento: a.data_abastecimento || new Date().toISOString().split('T')[0],
-            horario: a.horario || '',
-            litros_diesel: a.litros_diesel ?? '', valor_diesel: a.valor_diesel ?? '',
-            litros_arla: a.litros_arla ?? '', valor_arla: a.valor_arla ?? '',
-            cupom_fiscal: a.cupom_fiscal || '', observacoes: a.observacoes || '',
-        });
-        setModalAbast(true);
-    };
-
-    const excluirAbast = async (a) => {
-        const ok = await confirm({
-            title: 'Excluir abastecimento',
-            message: `Excluir o abastecimento de ${a.veiculo?.placa || a.veiculo_caminhao_placa || 'veículo'} em ${a.data_abastecimento ? new Date(a.data_abastecimento + 'T00:00:00').toLocaleDateString('pt-BR') : ''}?`,
-            confirmText: 'Excluir', variant: 'danger',
-        });
-        if (!ok) return;
-        try {
-            await deleteAbastecimento(a.id);
-            showToast('Abastecimento excluído', 'success');
-            load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-    };
-
-    const handleCheck = async () => {
-        if (!formCheck.veiculo_caminhao_id) { showToast('Selecione o veículo', 'error'); return; }
-        if (formCheck.odometro === '' || formCheck.odometro == null) { showToast('Informe o odômetro do veículo', 'error'); return; }
-        const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
-        setSavingCheck(true);
-        try {
-            const caminhao = veiculos.find(v => String(v.id) === String(formCheck.veiculo_caminhao_id));
-            const checkOriginal = editingCheckId ? checklists.find(c => c.id === editingCheckId) : null;
-            const payload = {
-                ...formCheck, foto_url: formCheck.fotos_urls[0] || '', motorista_id: user.id,
-                odometro: formCheck.odometro !== '' && formCheck.odometro != null ? Number(formCheck.odometro) : null,
-                veiculo_caminhao_placa: caminhao?.placa || checkOriginal?.veiculo_caminhao_placa || null,
-                veiculo_caminhao_modelo: caminhao?.modelo || checkOriginal?.veiculo_caminhao_modelo || null,
-            };
-            let salvo;
-            const onProgressoFotos = (atual, total) => setProgressoFotosCheck(total > 0 ? { atual, total } : null);
-            if (editingCheckId) {
-                salvo = await updateChecklist(editingCheckId, payload, onProgressoFotos);
-                showToast('Checklist atualizado!', 'success');
-            } else {
-                payload.semana_ref = semana.toISOString().split('T')[0];
-                salvo = await createChecklist(payload, onProgressoFotos);
-                showToast('Checklist enviado!', 'success');
-            }
-            if (salvo?._fotosFalhas) {
-                setTimeout(() => showToast(`Atenção: ${salvo._fotosFalhas} foto(s) não foram enviadas. Edite o checklist para tentar novamente.`, 'error'), 1400);
-            }
-            setModalCheck(false); setFormCheck(emptyCheck()); setEditingCheckId(null); load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-        finally { setSavingCheck(false); setProgressoFotosCheck(null); }
-    };
-
-    const abrirEdicaoCheck = (c) => {
-        setEditingCheckId(c.id);
-        setFormCheck({
-            veiculo_caminhao_id: c.veiculo_caminhao_id != null ? String(c.veiculo_caminhao_id) : '',
-            odometro: c.odometro != null ? String(c.odometro) : '',
-            itens: c.itens || {},
-            problemas: c.problemas || '', necessidades: c.necessidades || '',
-            observacoes_livres: c.observacoes_livres || '', foto_url: c.foto_url || '',
-            fotos_urls: (c.fotos_urls && c.fotos_urls.length) ? c.fotos_urls : (c.foto_url ? [c.foto_url] : []),
-        });
-        setModalCheck(true);
-    };
-
-    const excluirCheck = async (c) => {
-        const ok = await confirm({
-            title: 'Excluir checklist',
-            message: `Excluir o checklist de ${c.veiculo?.placa || c.veiculo_caminhao_placa || 'veículo'}?`,
-            confirmText: 'Excluir', variant: 'danger',
-        });
-        if (!ok) return;
-        try {
-            await deleteChecklist(c.id);
-            showToast('Checklist excluído', 'success');
-            load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-    };
-
-    const exportar = () => {
-        if (!bonificacoes.length) { showToast('Nenhum dado para exportar', 'error'); return; }
-        const rows = bonificacoes.map(r => ({
-            'Romaneio': r.numero || '', 'Destino': r.destino || '', 'Status': r.status || '',
-            'Data': r.saida ? new Date(r.saida).toLocaleDateString('pt-BR') : '',
-            'Aprovado': r.aprovado ? 'Sim' : 'Não',
-            'Ton. Ferragem': r.bonif?.toneladasFerragem || 0,
-            'Bônus (R$)': r.bonif?.valorTotal || 0,
-        }));
-
-        // Linha de somatório ao final da própria listagem
-        const totTon    = bonificacoes.reduce((s, r) => s + Number(r.bonif?.toneladasFerragem || 0), 0);
-        const totBonus  = bonificacoes.reduce((s, r) => s + Number(r.bonif?.valorTotal || 0), 0);
-        rows.push({
-            'Romaneio': 'TOTAL', 'Destino': '', 'Status': '', 'Data': '',
-            'Aprovado': `${bonificacoes.length} romaneio(ns)`,
-            'Ton. Ferragem': totTon.toFixed(3),
-            'Bônus (R$)': totBonus.toFixed(2),
-        });
-
-        const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [12,20,12,12,10,14,14].map(w => ({ wch: w }));
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Romaneios');
-
-        // Aba adicional só com o resumo/soma dos bônus
-        const aprovados   = bonificacoes.filter(r => r.aprovado);
-        const totBonusApr = aprovados.reduce((s, r) => s + Number(r.bonif?.valorTotal || 0), 0);
-        const wsResumo = XLSX.utils.json_to_sheet([
-            { 'Indicador': 'Motorista',                       'Valor': profile?.name || '' },
-            { 'Indicador': 'Data da exportação',               'Valor': new Date().toLocaleDateString('pt-BR') },
-            { 'Indicador': 'Total de romaneios',                'Valor': bonificacoes.length },
-            { 'Indicador': 'Romaneios aprovados',               'Valor': aprovados.length },
-            { 'Indicador': 'Total de toneladas (ferragem)',     'Valor': totTon.toFixed(3) },
-            { 'Indicador': 'SOMA TOTAL DE BÔNUS (R$)',          'Valor': totBonus.toFixed(2) },
-            { 'Indicador': 'Soma de bônus já aprovados (R$)',   'Valor': totBonusApr.toFixed(2) },
-        ]);
-        wsResumo['!cols'] = [{ wch: 34 }, { wch: 20 }];
-        XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo (Soma)');
-
-        XLSX.writeFile(wb, `romaneios_${profile?.name||'motorista'}_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.xlsx`);
-        showToast('Exportado!', 'success');
-    };
-
+    useDeviceProfile(); 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    const { exportar } = useExportMotorista({ bonificacoes, profile, showToast });
     // ── Tabs ─────────────────────────────────────────────────────────────────
     const TABS = [
         { id: 'viagens',        label: 'Meus Romaneios', icon: 'FileText' },
@@ -549,240 +228,49 @@ export default function MotoristaDashboard() {
                                 <>
                                     {/* Meus Romaneios */}
                                     {tab === 'viagens' && (
-                                        <div className="flex flex-col gap-2">
-                                            {romaneios.length === 0
-                                                ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="FileText" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</span></div>
-                                                : romaneios.map(r => {
-                                                    const sc = STATUS_ROM[r.status] || STATUS_ROM['Finalizado'];
-                                                    return (
-                                                        <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                            <div className="flex items-start justify-between mb-2">
-                                                                <span className="font-data font-bold text-blue-700">{r.numero}</span>
-                                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: sc.bg, color: sc.text }}>{r.status}</span>
-                                                            </div>
-                                                            <p className="text-sm mb-2" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
-                                                            <div className="flex items-center justify-between text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                <div className="flex items-center gap-3">
-                                                                    {r.saida && <span>{new Date(r.saida).toLocaleDateString('pt-BR')}</span>}
-                                                                    <span className="font-data">{Number(r.peso_total||0).toLocaleString('pt-BR')} kg</span>
-                                                                </div>
-                                                                {r.aprovado
-                                                                    ? <span className="flex items-center gap-1 text-green-600 font-medium"><Icon name="CheckCircle2" size={12} color="#059669" />Aprovado</span>
-                                                                    : <span className="flex items-center gap-1 text-amber-600"><Icon name="Clock" size={12} color="#D97706" />Pendente</span>
-                                                                }
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })
-                                            }
-                                        </div>
+                                        <TabViagens romaneios={romaneios} />
                                     )}
 
                                     {/* Abastecimentos */}
                                     {tab === 'abastecimentos' && (
-                                        <div className="flex flex-col gap-3">
-                                            {veiculos.length > 0 && (
-                                                <PrettySelect value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
-                                                    className="px-3 py-2 rounded-lg border text-sm self-start" style={inputStyle}>
-                                                    <option value="">Todas as placas</option>
-                                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                                </PrettySelect>
-                                            )}
-                                            <div className="grid grid-cols-2 gap-3 mb-2">
-                                                {[
-                                                    { l: 'Diesel (L)', v: totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 }), c: '#1D4ED8', bg: '#EFF6FF', i: 'Fuel' },
-                                                    { l: 'Total Gasto', v: BRL(totais.gastoTotal), c: '#7C3AED', bg: '#EDE9FE', i: 'Receipt' },
-                                                ].map(k => (
-                                                    <div key={k.l} className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <div className="rounded-lg flex items-center justify-center" style={{ width: 26, height: 26, backgroundColor: k.bg }}><Icon name={k.i} size={13} color={k.c} /></div>
-                                                            <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{k.l}</span>
-                                                        </div>
-                                                        <p className="text-base font-bold font-data" style={{ color: k.c }}>{k.v}</p>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            {abast.filter(a => !filtroPlaca || String(a.veiculo_caminhao_id) === filtroPlaca).length === 0
-                                                ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Fuel" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento no período</span></div>
-                                                : abast.filter(a => !filtroPlaca || String(a.veiculo_caminhao_id) === filtroPlaca).map(a => (
-                                                    <div key={a.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                        <div className="flex items-start justify-between mb-2 gap-2">
-                                                            <div>
-                                                                <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{a.posto || postos.find(p => p.id === a.posto_id)?.nome || '—'}</p>
-                                                                <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{FMT(a.data_abastecimento)}{a.horario ? ` · ${a.horario}` : ''} · {a.veiculo?.placa || a.veiculo_caminhao_placa || '—'}</p>
-                                                            </div>
-                                                            <div className="flex items-center gap-1 flex-shrink-0">
-                                                                <p className="text-base font-bold font-data text-purple-600">{BRL(a.valor_total)}</p>
-                                                                <button onClick={() => abrirEdicaoAbast(a)} className="p-1.5 rounded-lg hover:bg-gray-100" title="Editar">
-                                                                    <Icon name="Pencil" size={14} color="var(--color-muted-foreground)" />
-                                                                </button>
-                                                                <button onClick={() => excluirAbast(a)} className="p-1.5 rounded-lg hover:bg-red-50" title="Excluir">
-                                                                    <Icon name="Trash2" size={14} color="#DC2626" />
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        <div className="grid grid-cols-2 gap-2 text-xs">
-                                                            {Number(a.litros_diesel||0) > 0 && (
-                                                                <div className="flex items-center gap-1.5 p-2 rounded-lg bg-blue-50">
-                                                                    <span className="text-blue-700">🛢️ {Number(a.litros_diesel).toLocaleString('pt-BR',{maximumFractionDigits:1})}L · {BRL(a.valor_diesel)}</span>
-                                                                </div>
-                                                            )}
-                                                            {Number(a.litros_arla||0) > 0 && (
-                                                                <div className="flex items-center gap-1.5 p-2 rounded-lg bg-emerald-50">
-                                                                    <span className="text-emerald-700">💧 {Number(a.litros_arla).toLocaleString('pt-BR',{maximumFractionDigits:1})}L · {BRL(a.valor_arla)}</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            }
-                                        </div>
+                                        <TabAbastecimentos
+                    abast={abast}
+                    abrirEdicaoAbast={abrirEdicaoAbast}
+                    excluirAbast={excluirAbast}
+                    filtroPlaca={filtroPlaca}
+                    postos={postos}
+                    setFiltroPlaca={setFiltroPlaca}
+                    totais={totais}
+                    veiculos={veiculos}
+                />
                                     )}
 
                                     {/* Checklist */}
                                     {tab === 'checklist' && (
-                                        <div className="flex flex-col gap-4">
-                                            {veiculos.length > 0 && (
-                                                <PrettySelect value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
-                                                    className="px-3 py-2 rounded-lg border text-sm self-start" style={inputStyle}>
-                                                    <option value="">Todas as placas</option>
-                                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                                </PrettySelect>
-                                            )}
-                                            {checklists.filter(c => !filtroPlaca || String(c.veiculo_caminhao_id) === filtroPlaca).length === 0
-                                                ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="ClipboardCheck" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum checklist enviado</span></div>
-                                                : checklists.filter(c => !filtroPlaca || String(c.veiculo_caminhao_id) === filtroPlaca).map(c => {
-                                                    const itens = c.itens || {};
-                                                    const entradas = Object.entries(itens);
-                                                    const ok = contarItensOk(itens);
-                                                    const total = entradas.length || checklistItens.length || CHECKLIST_ITENS.length;
-                                                    const reprovados = entradas.filter(([, v]) => !itemIsOk(v));
-                                                    const fotos = (c.fotos_urls && c.fotos_urls.length) ? c.fotos_urls : (c.foto_url ? [c.foto_url] : []);
-                                                    return (
-                                                        <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                            <div className="flex items-center justify-between mb-2">
-                                                                <div>
-                                                                    <p className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.veiculo?.placa || c.veiculo_caminhao_placa || '—'}</p>
-                                                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Semana de {c.semana_ref ? FMT(c.semana_ref) : '—'}</p>
-                                                                </div>
-                                                                <div className="flex items-center gap-1">
-                                                                    {c.aprovado
-                                                                        ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"><Icon name="CheckCircle2" size={11} />Aprovado</span>
-                                                                        : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Icon name="Clock" size={11} />Pendente</span>
-                                                                    }
-                                                                    <button onClick={() => abrirEdicaoCheck(c)} className="p-1.5 rounded-lg hover:bg-gray-100" title="Editar">
-                                                                        <Icon name="Pencil" size={14} color="var(--color-muted-foreground)" />
-                                                                    </button>
-                                                                    <button onClick={() => excluirCheck(c)} className="p-1.5 rounded-lg hover:bg-red-50" title="Excluir">
-                                                                        <Icon name="Trash2" size={14} color="#DC2626" />
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                            <div className="flex items-center justify-between text-xs mb-1">
-                                                                <span style={{ color: 'var(--color-muted-foreground)' }}>Itens OK</span>
-                                                                <span className="font-medium">{ok}/{total}</span>
-                                                            </div>
-                                                            <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                                                                <div className="h-full rounded-full" style={{ width: `${total ? (ok / total) * 100 : 0}%`, backgroundColor: ok === total ? '#059669' : '#D97706' }} />
-                                                            </div>
-                                                            {reprovados.length > 0 && (
-                                                                <div className="mt-2 space-y-1">
-                                                                    {reprovados.map(([id, v]) => (
-                                                                        <p key={id} className="text-xs px-2 py-1 rounded bg-red-50 text-red-700">
-                                                                            <Icon name="X" size={10} className="inline mr-1" />{itemLabelOf(v, id)}{itemObsOf(v) && ` — ${itemObsOf(v)}`}
-                                                                        </p>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                            {fotos.length > 0 && (
-                                                                <div className="flex flex-wrap gap-1.5 mt-2">
-                                                                    {fotos.map((f, i) => <img key={i} src={f} alt="" className="w-12 h-12 rounded-md border object-cover" style={{ borderColor: 'var(--color-border)' }} />)}
-                                                                </div>
-                                                            )}
-                                                            {c.obs_manutencao && (
-                                                                <p className="text-xs mt-2 p-2 rounded-lg bg-orange-50 text-orange-700 border border-orange-100">🔧 {c.obs_manutencao}</p>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })
-                                            }
-                                        </div>
+                                        <TabChecklist
+                    abrirEdicaoCheck={abrirEdicaoCheck}
+                    checklistItens={checklistItens}
+                    checklists={checklists}
+                    excluirCheck={excluirCheck}
+                    filtroPlaca={filtroPlaca}
+                    setFiltroPlaca={setFiltroPlaca}
+                    veiculos={veiculos}
+                />
                                     )}
 
                                     {/* Bonificações */}
                                     {tab === 'bonificacoes' && (
-                                        <div className="flex flex-col gap-4">
-                                            <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                                                    <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Filtrar por período específico</h3>
-                                                    {(periodoCustom || periodoCustomInput) && (
-                                                        <button onClick={() => { setPeriodoCustom(null); setPeriodoCustomInput(null); }}
-                                                            className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--color-primary)' }}>
-                                                            <Icon name="X" size={12} /> Limpar filtro
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <div className="flex items-end gap-2 flex-wrap">
-                                                    <div>
-                                                        <label className="block text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>De</label>
-                                                        <input type="date" value={periodoCustomInput?.inicio || ''}
-                                                            onChange={e => setPeriodoCustomInput(pc => ({ inicio: e.target.value, fim: pc?.fim || '' }))}
-                                                            className="h-10 px-3 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }} />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Até</label>
-                                                        <input type="date" value={periodoCustomInput?.fim || ''}
-                                                            onChange={e => setPeriodoCustomInput(pc => ({ inicio: pc?.inicio || '', fim: e.target.value }))}
-                                                            className="h-10 px-3 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }} />
-                                                    </div>
-                                                    <Button size="sm" iconName="Search" disabled={!periodoCustomInput?.inicio || !periodoCustomInput?.fim}
-                                                        onClick={() => setPeriodoCustom(periodoCustomInput)}>
-                                                        Buscar viagens
-                                                    </Button>
-                                                </div>
-                                                {periodoCustom?.inicio && periodoCustom?.fim && (
-                                                    <p className="text-xs mt-2" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                        <Icon name="Info" size={11} className="inline mr-1" />
-                                                        Os cards abaixo mostram os valores de {new Date(periodoCustom.inicio + 'T00:00:00').toLocaleDateString('pt-BR')} até {new Date(periodoCustom.fim + 'T00:00:00').toLocaleDateString('pt-BR')}, em vez do filtro de "{PERIOD_OPTIONS.find(p=>p.days===period)?.label || (typeof period === 'number' ? period + ' dias' : period)}" da barra lateral.
-                                                    </p>
-                                                )}
-                                            </div>
-                                            <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: 'var(--color-text-primary)' }}>Resumo do Período</h3>
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    <div>
-                                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Total Bônus</p>
-                                                        <p className="text-2xl font-bold font-data text-purple-600">{BRL(totais.totalBonus)}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Finalizados</p>
-                                                        <p className="text-2xl font-bold font-data" style={{ color: 'var(--color-text-primary)' }}>{totais.finalizadas}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div className="flex flex-col gap-2">
-                                                {bonificacoesComValor.length === 0
-                                                    ? <div className="bg-white rounded-xl border p-6 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="DollarSign" size={24} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma bonificação no período</span></div>
-                                                    : bonificacoesPag.pageItems.map(r => (
-                                                        <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                            <div className="flex items-start justify-between mb-2">
-                                                                <div>
-                                                                    <span className="font-data font-bold text-blue-700 text-sm">{r.numero}</span>
-                                                                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{r.destino || '—'}</p>
-                                                                </div>
-                                                                <p className="font-data font-bold text-purple-600">{BRL(r.bonif?.valorTotal)}</p>
-                                                            </div>
-                                                            <div className="flex gap-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                {r.bonif?.toneladasFerragem > 0 && <span>{r.bonif.toneladasFerragem.toFixed(3)} t · {BRL(r.bonif.valorFerragem)}</span>}
-                                                                {r.bonif?.temCimento && <span>Cimento: {BRL(r.bonif.valorCimento)}</span>}
-                                                            </div>
-                                                        </div>
-                                                    ))
-                                                }
-                                            </div>
-                                            <PaginationBar page={bonificacoesPag.page} setPage={bonificacoesPag.setPage} totalPages={bonificacoesPag.totalPages}
-                                                totalItems={bonificacoesPag.totalItems} pageSize={bonificacoesPag.pageSize} itemLabel="bonificação" itemLabelPlural="bonificações" className="rounded-xl border bg-white" />
-                                        </div>
+                                        <TabBonificacoes
+                    bonificacoesComValor={bonificacoesComValor}
+                    bonificacoesPag={bonificacoesPag}
+                    bonusExtras={bonusExtras}
+                    period={period}
+                    periodoCustom={periodoCustom}
+                    periodoCustomInput={periodoCustomInput}
+                    setPeriodoCustom={setPeriodoCustom}
+                    setPeriodoCustomInput={setPeriodoCustomInput}
+                    totais={totais}
+                />
                                     )}
                                 </>
                             )}
@@ -793,192 +281,39 @@ export default function MotoristaDashboard() {
 
             {/* Modal Abastecimento */}
             {modalAbast && (
-                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
-                   >
-                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '92dvh' }}>
-                        <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
-                        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-50">
-                                    <Icon name="Fuel" size={18} color="#059669" />
-                                </div>
-                                <h2 className="font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>{editingAbastId ? 'Editar Abastecimento' : 'Registrar Abastecimento'}</h2>
-                            </div>
-                            <button onClick={() => { setModalAbast(false); setEditingAbastId(null); }} className="p-1.5 rounded-lg hover:bg-gray-100">
-                                <Icon name="X" size={18} color="var(--color-muted-foreground)" />
-                            </button>
-                        </div>
-                        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
-                            <Field label="Veículo" required>
-                                <PrettySelect value={formAbast.veiculo_caminhao_id} onChange={e => setFormAbast(f => ({ ...f, veiculo_caminhao_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione...</option>
-                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </PrettySelect>
-                            </Field>
-                            <Field label="Data" required>
-                                <input type="date" value={formAbast.data_abastecimento} onChange={e => setFormAbast(f => ({ ...f, data_abastecimento: e.target.value }))} className={inputCls} style={inputStyle} />
-                            </Field>
-                            <Field label="Horário">
-                                <input type="time" value={formAbast.horario} onChange={e => setFormAbast(f => ({ ...f, horario: e.target.value }))} className={inputCls} style={inputStyle} />
-                            </Field>
-                            <Field label="N° do Cupom Fiscal" required>
-                                <input
-                                    type="text"
-                                    value={formAbast.cupom_fiscal}
-                                    onChange={e => setFormAbast(f => ({ ...f, cupom_fiscal: e.target.value }))}
-                                    className={inputCls}
-                                    style={inputStyle}
-                                    placeholder="Ex: 000123456"
-                                    maxLength={50}
-                                />
-                            </Field>
-                            <Field label="Posto" required>
-                                <PrettySelect value={formAbast.posto_id} onChange={e => handlePostoChange(e.target.value)} className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione o posto...</option>
-                                    {postos.map(p => (
-                                        <option key={p.id} value={p.id}>
-                                            {p.nome}{p.cidade ? ` — ${p.cidade}` : ''}
-                                        </option>
-                                    ))}
-                                </PrettySelect>
-                                {/* Mostra preço efetivo (posto ou config global) */}
-                                <div className="flex gap-3 mt-1 text-xs">
-                                    {precoDieselEfetivo > 0 && (
-                                        <span className="text-blue-600 font-medium">
-                                            🛢️ R${precoDieselEfetivo.toFixed(3)}/L
-                                            {!postos.find(p => p.id === formAbast.posto_id)?.preco_diesel && configAbast?.preco_diesel > 0 && (
-                                                <span className="text-gray-400 ml-1">(padrão)</span>
-                                            )}
-                                        </span>
-                                    )}
-                                    {precoArlaEfetivo > 0 && (
-                                        <span className="text-emerald-600 font-medium">
-                                            💧 R${precoArlaEfetivo.toFixed(3)}/L
-                                            {!postos.find(p => p.id === formAbast.posto_id)?.preco_arla && configAbast?.preco_arla > 0 && (
-                                                <span className="text-gray-400 ml-1">(padrão)</span>
-                                            )}
-                                        </span>
-                                    )}
-                                </div>
-                            </Field>
-                            <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
-                                <p className="text-xs font-semibold text-blue-700 mb-2">🛢️ Diesel</p>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Field label="Litros">
-                                        <input type="number" step="0.01" value={formAbast.litros_diesel} onChange={e => handleLitros('litros_diesel', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" />
-                                    </Field>
-                                    <Field label="Valor calculado">
-                                        <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0F9FF', color: '#1D4ED8' }}>
-                                            {formAbast.valor_diesel
-                                                ? Number(formAbast.valor_diesel).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                                                : 'R$ 0,00'}
-                                        </div>
-                                    </Field>
-                                </div>
-                            </div>
-                            <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
-                                <p className="text-xs font-semibold text-emerald-700 mb-2">💧 ARLA 32</p>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Field label="Litros">
-                                        <input type="number" step="0.01" value={formAbast.litros_arla} onChange={e => handleLitros('litros_arla', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" />
-                                    </Field>
-                                    <Field label="Valor calculado">
-                                        <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0FDF4', color: '#059669' }}>
-                                            {formAbast.valor_arla
-                                                ? Number(formAbast.valor_arla).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                                                : 'R$ 0,00'}
-                                        </div>
-                                    </Field>
-                                </div>
-                            </div>
-                            <div className="sm:col-span-2 p-2 rounded-lg text-sm font-bold flex items-center justify-between" style={{ backgroundColor: '#7C3AED', color: 'white' }}>
-                                <span>Total do abastecimento:</span>
-                                <span>{(Number(formAbast.valor_diesel || 0) + Number(formAbast.valor_arla || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                            </div>
-                            <div className="sm:col-span-2">
-                                <Field label="Observações">
-                                    <textarea value={formAbast.observacoes} onChange={e => setFormAbast(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
-                                </Field>
-                            </div>
-                        </div>
-                        <div className="flex gap-3 p-5 border-t flex-shrink-0 justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => { setModalAbast(false); setEditingAbastId(null); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <button onClick={handleAbast} disabled={savingAbast} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed" style={{ backgroundColor: 'var(--color-primary)' }}>
-                                {savingAbast ? <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Icon name="Check" size={15} color="white" />}
-                                {savingAbast ? 'Salvando...' : (editingAbastId ? 'Salvar alterações' : 'Salvar')}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <ModalAbast
+                    configAbast={configAbast}
+                    editingAbastId={editingAbastId}
+                    formAbast={formAbast}
+                    handleAbast={handleAbast}
+                    handleLitros={handleLitros}
+                    handlePostoChange={handlePostoChange}
+                    postos={postos}
+                    precoArlaEfetivo={precoArlaEfetivo}
+                    precoDieselEfetivo={precoDieselEfetivo}
+                    savingAbast={savingAbast}
+                    setEditingAbastId={setEditingAbastId}
+                    setFormAbast={setFormAbast}
+                    setModalAbast={setModalAbast}
+                    veiculos={veiculos}
+                />
             )}
 
             {/* Modal Checklist */}
             {modalCheck && (
-                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
-                   >
-                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '95dvh' }}>
-                        <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
-                        {/* Header fixo no topo */}
-                        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-blue-50">
-                                    <Icon name="ClipboardCheck" size={18} color="#1D4ED8" />
-                                </div>
-                                <h2 className="font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>{editingCheckId ? 'Editar Checklist' : 'Checklist Semanal'}</h2>
-                            </div>
-                            <button onClick={() => { setModalCheck(false); setEditingCheckId(null); }} className="p-1.5 rounded-lg hover:bg-gray-100">
-                                <Icon name="X" size={18} color="var(--color-muted-foreground)" />
-                            </button>
-                        </div>
-                        <div className="p-5 space-y-4 overflow-y-auto flex-1">
-                            <Field label="Veículo" required>
-                                <PrettySelect value={formCheck.veiculo_caminhao_id} onChange={e => setFormCheck(f => ({ ...f, veiculo_caminhao_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione...</option>
-                                    {veiculos.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </PrettySelect>
-                            </Field>
-                            <Field label="Odômetro (km)" required>
-                                <input type="number" inputMode="decimal" min="0" value={formCheck.odometro}
-                                    onChange={e => setFormCheck(f => ({ ...f, odometro: e.target.value }))}
-                                    placeholder="Ex: 152340" className={inputCls} style={inputStyle} />
-                            </Field>
-
-                            {/* Fotos — logo no topo, destaque visual, antes dos campos de texto */}
-                            <div className="rounded-xl border-2 border-dashed p-4"
-                                style={{ borderColor: formCheck.fotos_urls.length ? '#059669' : '#93C5FD', backgroundColor: formCheck.fotos_urls.length ? '#F0FDF4' : '#EFF6FF' }}>
-                                <p className="text-xs font-semibold mb-3 flex items-center gap-1.5"
-                                    style={{ color: formCheck.fotos_urls.length ? '#065F46' : '#1D4ED8' }}>
-                                    <Icon name="Camera" size={14} color={formCheck.fotos_urls.length ? '#059669' : '#1D4ED8'} />
-                                    {formCheck.fotos_urls.length ? `✅ ${formCheck.fotos_urls.length} foto(s) anexada(s)` : '📷 Fotos do problema (opcional)'}
-                                </p>
-                                <MultiFotoField fotos={formCheck.fotos_urls} onChange={fotos_urls => setFormCheck(f => ({ ...f, fotos_urls }))} showToast={showToast} max={8} />
-                            </div>
-
-                            <div>
-                                <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>Itens verificados</p>
-                                <ChecklistItemsField itens={checklistItens} value={formCheck.itens} onChange={itens => setFormCheck(f => ({ ...f, itens }))} />
-                            </div>
-                            <Field label="Problemas identificados">
-                                <textarea value={formCheck.problemas} onChange={e => setFormCheck(f => ({ ...f, problemas: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Descreva problemas..." />
-                            </Field>
-                            <Field label="Necessidades / peças">
-                                <textarea value={formCheck.necessidades} onChange={e => setFormCheck(f => ({ ...f, necessidades: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Pneus, peças, etc..." />
-                            </Field>
-                            <Field label="Observações livres">
-                                <textarea value={formCheck.observacoes_livres} onChange={e => setFormCheck(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
-                            </Field>
-                        </div>
-                        <div className="flex gap-3 p-5 border-t flex-shrink-0 justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => { setModalCheck(false); setEditingCheckId(null); }} className="px-4 py-2 rounded-lg border text-sm font-medium hover:bg-gray-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <button onClick={handleCheck} disabled={savingCheck} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-60 disabled:cursor-not-allowed" style={{ backgroundColor: 'var(--color-primary)' }}>
-                                {savingCheck ? <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" /> : <Icon name="Send" size={15} color="white" />}
-                                {savingCheck ? (progressoFotosCheck ? `Enviando foto ${progressoFotosCheck.atual}/${progressoFotosCheck.total}...` : 'Enviando...') : (editingCheckId ? 'Salvar alterações' : 'Enviar')}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <ModalCheck
+                    checklistItens={checklistItens}
+                    editingCheckId={editingCheckId}
+                    formCheck={formCheck}
+                    handleCheck={handleCheck}
+                    progressoFotosCheck={progressoFotosCheck}
+                    savingCheck={savingCheck}
+                    setEditingCheckId={setEditingCheckId}
+                    setFormCheck={setFormCheck}
+                    setModalCheck={setModalCheck}
+                    showToast={showToast}
+                    veiculos={veiculos}
+                />
             )}
 
             <Toast toast={toast} />

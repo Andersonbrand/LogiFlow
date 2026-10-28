@@ -1,19 +1,16 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { setIntervalVisivel } from 'utils/pollingVisivel';
-import { fetchRomaneiosResumo, periodoDoMes } from "utils/romaneioService";
-import { fetchVehicles } from "utils/vehicleService";
-import { fetchMaintenanceAlerts, resolveMaintenanceAlert, createMaintenanceAlert } from "utils/userService";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "utils/AuthContext";
-import { subscribeTabela } from "utils/supabaseClient";
-import { useRecarregarAoVoltar } from "utils/useRecarregarAoVoltar";
 
-import NavigationBar from "components/ui/NavigationBar";
-import BreadcrumbTrail from "components/ui/BreadcrumbTrail";
-import Button from "components/ui/Button";
-import Icon from "components/AppIcon";
-import Toast from "components/ui/Toast";
-import { useToast } from "utils/useToast";
+import { useNavigate } from "react-router-dom";
+
+import { setIntervalVisivel } from 'utils/pollingVisivel';
+import { fetchRomaneiosResumo, periodoDoMes } from "services/romaneio";
+import { fetchVehicles } from "services/vehicleService";
+import { fetchMaintenanceAlerts, resolveMaintenanceAlert, createMaintenanceAlert } from "services/userService";
+import { useAuth } from "context/AuthContext";
+import { subscribeTabela } from "services/supabaseClient";
+import { useRecarregarAoVoltar } from "hooks/useRecarregarAoVoltar";
+import { useToast } from "hooks/useToast";
+import { NavigationBar, BreadcrumbTrail, Button, AppIcon as Icon, Toast } from 'components';
 
 import RomaneiosTable from "./components/RomaneiosTable";
 import AISuggestionsPanel from "./components/AISuggestionsP";

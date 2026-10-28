@@ -3,7 +3,7 @@
  * Os corredores agora são carregados do Supabase (editáveis pelo admin).
  * Fallback para CORREDORES_PADRAO se banco indisponível.
  */
-import { fetchCorredores, CORREDORES_PADRAO } from './corredoresService';
+import { fetchCorredores, CORREDORES_PADRAO } from '../services/corredoresService';
 
 // Cache local de corredores carregados
 let _corredores = null;

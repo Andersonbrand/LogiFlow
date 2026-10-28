@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
-import NavigationBar from 'components/ui/NavigationBar';
-import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
-import Icon from 'components/AppIcon';
-import { useAuth } from 'utils/AuthContext';
-import { supabase } from 'utils/supabaseClient';
-import { updateUserProfile } from 'utils/userService';
+import { useAuth } from 'context/AuthContext';
+import { getSession, updatePassword } from 'services/authService';
+import { updateUserProfile } from 'services/userService';
+import { NavigationBar, BreadcrumbTrail, AppIcon as Icon } from 'components';
 
 const inputCls = 'w-full px-3 py-2.5 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', backgroundColor: 'var(--color-card)' };
@@ -116,12 +114,12 @@ export default function PerfilUsuario() {
         setSavingSenha(true);
         setFeedbackSenha({ status: 'info', message: 'Alterando senha...' });
         try {
-            const { data: sessionData } = await withTimeout(supabase.auth.getSession());
+            const { data: sessionData } = await withTimeout(getSession());
             if (!sessionData?.session) {
                 throw new Error('Sessão expirada. Faça logout e login novamente.');
             }
             const { error } = await withTimeout(
-                supabase.auth.updateUser({ password: novaSenha })
+                updatePassword(novaSenha)
             );
             if (error) throw error;
             setFeedbackSenha({ status: 'success', message: 'Senha alterada com sucesso! Use a nova senha no próximo login.' });

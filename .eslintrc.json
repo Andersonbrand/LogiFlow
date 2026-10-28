@@ -1,57 +1,20 @@
 {
     "root": true,
-    "extends": [
-        "next/core-web-vitals",
-        "eslint:recommended",
-        "plugin:@typescript-eslint/recommended",
-        "plugin:prettier/recommended"
-    ],
-    "parser": "@typescript-eslint/parser",
-    "plugins": [
-        "@typescript-eslint",
-        "prettier"
-    ],
+    "env": { "browser": true, "es2022": true, "node": true },
+    "parserOptions": { "ecmaVersion": 2022, "sourceType": "module", "ecmaFeatures": { "jsx": true } },
+    "plugins": ["react", "react-hooks"],
+    "settings": { "react": { "version": "18" } },
     "rules": {
-        "prettier/prettier": [
-            "error",
-            {
-                "endOfLine": "auto",
-                "singleQuote": true,
-                "semi": true,
-                "tabWidth": 2,
-                "printWidth": 100,
-                "trailingComma": "es5"
-            }
-        ],
-        "@typescript-eslint/no-unused-vars": [
-            "warn",
-            {
-                "argsIgnorePattern": "^_",
-                "varsIgnorePattern": "^_",
-                "caughtErrorsIgnorePattern": "^_"
-            }
-        ],
-        "@typescript-eslint/no-explicit-any": "warn",
-        "no-console": [
-            "warn",
-            {
-                "allow": [
-                    "warn",
-                    "error",
-                    "info"
-                ]
-            }
-        ]
+        "no-undef": "error",
+        "react/jsx-no-undef": "error",
+        "react/jsx-uses-vars": "error",
+        "react/jsx-uses-react": "error",
+        "react-hooks/rules-of-hooks": "error",
+        "react-hooks/exhaustive-deps": "off",
+        "no-unused-vars": ["warn", { "args": "none", "varsIgnorePattern": "^_", "caughtErrors": "none" }]
     },
-    "ignorePatterns": [
-        "node_modules/",
-        ".next/",
-        "out/",
-        "public/"
+    "overrides": [
+        { "files": ["src/tests/**"], "globals": { "vi": "readonly", "describe": "readonly", "it": "readonly", "expect": "readonly", "beforeEach": "readonly", "afterEach": "readonly", "beforeAll": "readonly", "afterAll": "readonly", "test": "readonly" } }
     ],
-    "env": {
-        "browser": true,
-        "node": true,
-        "es6": true
-    }
+    "ignorePatterns": ["node_modules/", "dist/", "supabase/"]
 }

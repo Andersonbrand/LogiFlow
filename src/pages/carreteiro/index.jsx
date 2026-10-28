@@ -1,49 +1,34 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { setIntervalVisivel } from 'utils/pollingVisivel';
-import { useRecarregarAoVoltar } from 'utils/useRecarregarAoVoltar';
-import NavigationBar from 'components/ui/NavigationBar';
-import BreadcrumbTrail from 'components/ui/BreadcrumbTrail';
-import Button from 'components/ui/Button';
-import Icon from 'components/AppIcon';
-import { EditButton, DeleteButton, ActionButtonsGroup } from 'components/ActionButtons';
-import Toast from 'components/ui/Toast';
-import { useToast } from 'utils/useToast';
-import { useAuth } from 'utils/AuthContext';
-import { usePageTabs } from 'utils/PageTabsContext';
-import { usePagination, PaginationBar } from 'components/ui/Pagination';
-import {
-    fetchViagens, fetchCarretasVeiculos, fetchVeiculosProprios,
-    fetchAbastecimentos, createAbastecimento, updateAbastecimento, deleteAbastecimento,
-    fetchChecklists, createChecklist, updateChecklist, deleteChecklist,
-    fetchRegistrosViagem, createRegistroViagem, updateRegistroViagem, deleteRegistroViagem,
-    fetchConfigAbastecimento,
-    fetchPostos,
-    fetchNotificacoesCarreteiro, marcarNotificacaoLida,
-    calcularBonusCarreteiro, BONUS_BAIXO, BONUS_ALTO, CIDADES_BONUS_BAIXO,
-    CHECKLIST_ITENS, fetchChecklistItens, itemIsOk, itemObsOf, itemLabelOf, contarItensOk,
-    fetchCarregamentos, fetchBonificacoesExtras,
-    fetchPontosParada, createPontoParada, updatePontoParada, deletePontoParada,
-    fetchRomaneiosCarreteiro,
-    fetchRomaneios,
-    createRomaneioFerragem,
-    updateRomaneio, deleteRomaneio,
-    fetchEmpresas,
-    fetchFretesCidades,
-    fetchLocaisParada,
-} from 'utils/carretasService';
-import { useConfirm } from 'components/ui/ConfirmDialog';
-import { useBonusConfig } from 'utils/settingsService';
-import { supabase, subscribeTabela } from 'utils/supabaseClient';
-import { fetchRomaneiosPorMotorista } from 'utils/romaneioService';
-import * as XLSX from 'xlsx';
-import PrettySelect from 'components/ui/PrettySelect';
-import ChecklistItemsField from 'components/ui/ChecklistItemsField';
-import MultiFotoField from 'components/ui/MultiFotoField';
-import useDeviceProfile from 'utils/useDeviceProfile';
-import CidadesAdicionaisField, { parseParadas } from 'components/ui/CidadesAdicionaisField';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 
-const BRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const FMT_DATE = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+import * as XLSX from 'xlsx';
+
+import { useAuth } from 'context/AuthContext';
+import { useToast } from 'hooks/useToast';
+import { useConfirm, NavigationBar, AppIcon as Icon, BreadcrumbTrail, Toast, ModalHeader } from 'components';
+import { useBonusConfig } from 'services/settingsService';
+import {                           marcarNotificacaoLida } from 'services/carretas';
+import { } from 'services/romaneio';
+import {  } from 'services/supabaseClient';
+import { } from 'utils/pollingVisivel';
+import { useRecarregarAoVoltar } from 'hooks/useRecarregarAoVoltar';
+import useDeviceProfile from 'hooks/useDeviceProfile';
+import { usePageTabs } from 'context/PageTabsContext';
+
+import { FMT_DATE, BRL } from './utils/helpers';
+import { PERIOD_OPTIONS } from './utils/constants';
+import TabViagens from './components/TabViagens';
+import TabRomaneios from './components/TabRomaneios';
+import TabPontos from './components/TabPontos';
+import TabBonificacoes from './components/TabBonificacoes';
+import TabRegistros from './components/TabRegistros';
+import TabAbastecimentos from './components/TabAbastecimentos';
+import TabChecklist from './components/TabChecklist';
+import ModalAbast from './components/ModalAbast';
+import ModalCheck from './components/ModalCheck';
+import ModalRegistro from './components/ModalRegistro';
+import ModalFerragem from './components/ModalFerragem';
+import ModalPonto from './components/ModalPonto';
+import { useCarreteiroDados, useCarreteiroBonus, useCarreteiroFiltros, useRegistrosCarreteiro, usePontosCarreteiro, useFerragemCarreteiro, useAbastecimentoCarreteiro, useChecklistCarreteiro } from './hooks';
 
 const STATUS_COLORS = {
     'Agendado':            { bg: '#EFF6FF', text: '#1D4ED8' },
@@ -53,54 +38,6 @@ const STATUS_COLORS = {
     'Entrega finalizada':  { bg: '#F0FDF4', text: '#15803D' },
     'Cancelado':           { bg: '#F3F4F6', text: '#6B7280' },
 };
-
-const inputCls = "w-full px-3 py-2 rounded-lg border text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500";
-const inputStyle = { borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' };
-
-function Field({ label, children, required }) {
-    return (
-        <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                {label}{required && <span className="text-red-500 ml-0.5">*</span>}
-            </label>
-            {children}
-        </div>
-    );
-}
-
-function ModalOverlay({ children, onClose }) {
-    return (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 m-modal-overlay"
-            style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-y-auto m-modal-panel">
-                {children}
-            </div>
-        </div>
-    );
-}
-
-function ModalHeader({ title, icon, onClose }) {
-    return (
-        <div className="flex items-center justify-between p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
-            <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                    <Icon name={icon} size={18} color="#1D4ED8" />
-                </div>
-                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>{title}</h2>
-            </div>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-                <Icon name="X" size={18} color="var(--color-muted-foreground)" />
-            </button>
-        </div>
-    );
-}
-
-const PERIOD_OPTIONS = [
-    { label: 'Mês atual', days: 'mes' },
-    { label: '30 dias', days: 30 },
-    { label: '90 dias', days: 90 },
-    { label: '6 meses', days: 180 },
-];
 
 export default function CarreteiroDashboard() {
     const { user, profile } = useAuth();
@@ -115,51 +52,35 @@ export default function CarreteiroDashboard() {
     // Valores digitados/selecionados nos campos de data, ainda não confirmados pelo botão "Buscar viagens".
     // Fica separado de `periodoCustom` de propósito: só deve disparar busca no banco quando o usuário
     // escolher as duas datas E clicar em "Buscar viagens" — nunca ao selecionar só a data inicial.
-    const [periodoCustomInput, setPeriodoCustomInput] = useState(null); // { inicio, fim } | null
-    const [viagens, setViagens]   = useState([]);
-    const [carregamentos, setCarregamentos] = useState([]);
-    const [romaneiosPrincipais, setRomaneiosPrincipais] = useState([]);
-    const romaneiosPrincipaisPag = usePagination(romaneiosPrincipais, 10, [romaneiosPrincipais.length, period, periodoCustom]);
-    const [bonusExtras, setBonusExtras]     = useState([]);
-    const [abast, setAbast]       = useState([]);
-    const [checklists, setChecklists] = useState([]);
-    const [veiculos, setVeiculos] = useState([]);
+    const [periodoCustomInput, setPeriodoCustomInput] = useState(null); const { viagens, carregamentos, romaneiosPrincipais, romaneiosPrincipaisPag, bonusExtras, abast, checklists, veiculos, postos, empresas, cidadesFrete, locaisFabrica, locaisOutro, loading, configAbast, registros, notificacoes, setNotificacoes, pontosParada, romaneiosCarreteiro, romaneiosFerragem, setRomaneiosFerragem, romsAbertos, checklistItens, load } = useCarreteiroDados({ period, periodoCustom, profile, showToast, user });
+    
+    
+    
+    
+    
+    
+    
     const veiculosProprios = useMemo(() => veiculos.filter(v => !v.is_terceiro), [veiculos]); // frota própria — exclui terceirizados dos selects
-    const [filtroPlaca, setFiltroPlaca] = useState(''); // filtra registros/abastecimentos/checklist por placa, quando o motorista dirige mais de um veículo
-    const [postos, setPostos]     = useState([]);
-    const [empresas, setEmpresas] = useState([]);
-    const [cidadesFrete, setCidadesFrete]   = useState([]);
-    const [locaisFabrica, setLocaisFabrica] = useState([]);
-    const [locaisOutro, setLocaisOutro]     = useState([]);
-    const [loading, setLoading]   = useState(true);
-    const [configAbast, setConfigAbast] = useState({ preco_diesel: 0, preco_arla: 0 });
-    const [registros, setRegistros] = useState([]);
-    const [notificacoes, setNotificacoes] = useState([]);
-    const [pontosParada, setPontosParada] = useState([]);
-    const [romaneiosCarreteiro, setRomaneiosCarreteiro] = useState([]);
-    const [romaneiosFerragem, setRomaneiosFerragem] = useState([]);
-    const [modalRegistro, setModalRegistro] = useState(false);
-    const [editandoRegistroId, setEditandoRegistroId] = useState(null);
-    const [salvandoRegistro, setSalvandoRegistro] = useState(false);
-    const emptyRegistro = () => ({
-        data_carregamento: new Date().toISOString().split('T')[0],
-        numero_nota_fiscal: '', veiculo_id: '', destino: '', data_descarga: '', observacoes: '',
-        local_carregamento: '', // '' = viagem normal (fábrica) | 'Estoque' = carregamento no estoque
-        tipo_cimento: '',       // só usado quando local_carregamento === 'Estoque': 'Montes Claros' | 'Liz' | 'Ambas'
-    });
-    const [formRegistro, setFormRegistro] = useState(emptyRegistro());
-    const [paradasRegistro, setParadasRegistro] = useState([]); // cidades adicionais além do destino, quando a viagem passa por mais de uma
-    const [modalPonto, setModalPonto] = useState(false);
-    const [pontoDetalhe, setPontoDetalhe] = useState(null); // resumo mobile → abre modal com todos os dados do registro
-    const [editandoPontoId, setEditandoPontoId] = useState(null);
-    const [formPonto, setFormPonto] = useState({
-        tipo_local: 'Fábrica', local: '', veiculo_id: '',
-        data_saida: new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '',
-        tipo_local_chegada: 'Fábrica', local_chegada: '',
-        data_chegada: '', horario_chegada: '', km_chegada: '',
-        cupom_fiscal: '', observacoes: '',
-        horarios_extras: [],
-    });
+    const [filtroPlaca, setFiltroPlaca] = useState(''); 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    const { modalRegistro, setModalRegistro, editandoRegistroId, setEditandoRegistroId, salvandoRegistro, setSalvandoRegistro, emptyRegistro, formRegistro, setFormRegistro, paradasRegistro, setParadasRegistro, handleDeleteRegistro, handleEditRegistro } = useRegistrosCarreteiro({ confirm, load, showToast });
+    
+    
+    
+    
+     const { modalPonto, setModalPonto, pontoDetalhe, setPontoDetalhe, editandoPontoId, setEditandoPontoId, formPonto, setFormPonto, abrirEditarPonto, excluirPonto } = usePontosCarreteiro({ confirm, load, showToast });
+     
+    
     // Lista de destinos disponíveis para cada tipo de local, evitando texto livre
     // e reaproveitando os cadastros já existentes no LogiFlow.
     const destinosParaTipo = useCallback((tipo) => {
@@ -172,438 +93,48 @@ export default function CarreteiroDashboard() {
             default: return [];
         }
     }, [empresas, locaisFabrica, cidadesFrete, postos, locaisOutro]);
-    // Modal romaneio de ferragens (registrado pelo motorista)
-    const [modalFerragem, setModalFerragem] = useState(false);
-    const [editandoFerragemId, setEditandoFerragemId] = useState(null); // null = criar, string = editar
-    const [formFerragem, setFormFerragem] = useState({
-        numero_romaneio: '', numero_nf: '', veiculo_id: '',
-        data_saida: new Date().toISOString().split('T')[0],
-        destino: '', toneladas: '', empresa: '', observacoes: '',
-    });
-    const [romsAbertos, setRomsAbertos] = useState([]); // ROMs do admin para vincular
-    const [paradasFerragem, setParadasFerragem] = useState([]); // cidades adicionais além do destino
-    const [salvandoFerragem, setSalvandoFerragem] = useState(false);
-    const [modalAbast, setModalAbast]   = useState(false);
-    const [modalCheck, setModalCheck]   = useState(false);
-    const [editandoAbastId, setEditandoAbastId] = useState(null);
-    const [editandoCheckId, setEditandoCheckId] = useState(null);
-    const [salvandoAbast, setSalvandoAbast] = useState(false);
-    const [salvandoCheck, setSalvandoCheck] = useState(false);
-    const [progressoFotosCheck, setProgressoFotosCheck] = useState(null); // { atual, total } | null
-    const [formAbast, setFormAbast]     = useState({ veiculo_id: '', data_abastecimento: new Date().toISOString().split('T')[0], horario: '', posto_id: '', posto: '', litros_diesel: '', valor_diesel: '', litros_arla: '', valor_arla: '', cupom_fiscal: '', observacoes: '' });
-    const [formCheck, setFormCheck]     = useState({ veiculo_id: '', odometro: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] });
-    const [checklistItens, setChecklistItens] = useState([]);
-
-    const load = useCallback(async () => {
-        if (!user?.id) return;
-        setLoading(true);
-        try {
-            let dateStr, dateFimStr = null;
-            if (periodoCustom?.inicio && periodoCustom?.fim) {
-                dateStr = periodoCustom.inicio;
-                dateFimStr = periodoCustom.fim;
-            } else if (period === 'mes') {
-                const hoje = new Date();
-                dateStr = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
-            } else {
-                const cut = new Date();
-                cut.setDate(cut.getDate() - period);
-                dateStr = cut.toISOString().split('T')[0];
-            }
-            const fimParam = dateFimStr ? { dataFim: dateFimStr } : {};
-            const [v, a, c, ve, cfg, p, emps, cidades, fabricas, outros, itensCheck] = await Promise.all([
-                fetchViagens({ motoristaId: user.id, dataInicio: dateStr, ...fimParam }),
-                fetchAbastecimentos({ motoristaId: user.id, dataInicio: dateStr, ...fimParam }),
-                fetchChecklists({ motoristaId: user.id }),
-                fetchVeiculosProprios(),
-                fetchConfigAbastecimento(),
-                fetchPostos().catch(() => []),
-                fetchEmpresas().catch(() => []),
-                fetchFretesCidades().catch(() => []),
-                fetchLocaisParada('Fábrica').catch(() => []),
-                fetchLocaisParada('Outro').catch(() => []),
-                fetchChecklistItens(true).catch(() => []),
-            ]);
-            setViagens(v); setAbast(a); setChecklists(c); setVeiculos(ve);
-            setPostos(p);
-            setEmpresas(emps || []);
-            setCidadesFrete(cidades || []);
-            setLocaisFabrica(fabricas || []);
-            setLocaisOutro(outros || []);
-            setConfigAbast(cfg || { preco_diesel: 0, preco_arla: 0 });
-            setChecklistItens(itensCheck || []);
-
-            // Carregamentos do motorista (nova fonte de dados para viagens e bônus)
-            try {
-                const [carreg, extras] = await Promise.all([
-                    fetchCarregamentos({ motoristaId: user.id, dataInicio: dateStr, ...fimParam, is_terceiro: false }),
-                    fetchBonificacoesExtras({ motorista_id: user.id, dataInicio: dateStr, ...fimParam }),
-                ]);
-                setCarregamentos(carreg || []);
-                setBonusExtras(extras || []);
-            } catch { setCarregamentos([]); setBonusExtras([]); }
-
-            // Romaneios do sistema principal atribuídos a este motorista
-            try {
-                // Tenta pelo serviço primeiro
-                const roms = await fetchRomaneiosPorMotorista(user.id, profile?.name);
-                setRomaneiosPrincipais(dateFimStr ? (roms || []).filter(r => (r.created_at || r.saida || '') <= dateFimStr + 'T23:59:59') : (roms || []));
-            } catch (eRom) {
-                console.warn('[Carreteiro] fetchRomaneiosPorMotorista falhou, tentando query direta:', eRom?.message);
-                // Fallback: query direta ao supabase
-                try {
-                    // Monta filtro: por nome E por UUID
-                    const partes = [];
-                    if (user?.id) partes.push('motorista_id.eq.' + user.id);
-                    if (profile?.name) partes.push('motorista.ilike."' + profile.name + '"');
-                    if (partes.length === 0) { setRomaneiosPrincipais([]); }
-                    else {
-                        let romQuery = supabase
-                            .from('romaneios')
-                            .select('id, numero, motorista, motorista_id, placa, destino, status, saida, valor_frete, valor_frete_calculado, created_at, romaneio_pedidos(id, numero_pedido)')
-                            .or(partes.join(','))
-                            .gte('created_at', dateStr);
-                        if (dateFimStr) romQuery = romQuery.lte('created_at', dateFimStr + 'T23:59:59');
-                        const { data: romsDir, error: errDir } = await romQuery.order('created_at', { ascending: false });
-                        if (errDir) { console.error('[Carreteiro] Query direta erro:', errDir); setRomaneiosPrincipais([]); }
-                        else { console.log('[Carreteiro] Romaneios OK:', romsDir?.length); setRomaneiosPrincipais(romsDir || []); }
-                    }
-                } catch (e2) { console.error('[Carreteiro] Fallback falhou:', e2); setRomaneiosPrincipais([]); }
-            }
-
-            // Carrega registros de viagem do motorista
-            try {
-                const regs = await fetchRegistrosViagem(user.id);
-                setRegistros(regs || []);
-            } catch { setRegistros([]); }
-            // Carrega notificações do carreteiro
-            try {
-                const notifs = await fetchNotificacoesCarreteiro(user.id);
-                setNotificacoes(notifs || []);
-            } catch { setNotificacoes([]); }
-            // Carrega pontos de parada
-            try {
-                const pontos = await fetchPontosParada(user.id);
-                setPontosParada(pontos || []);
-            } catch { setPontosParada([]); }
-            // Carrega romaneios do admin vinculados a este motorista
-            try {
-                const [roms, romsAdminAbertos] = await Promise.all([
-                    fetchRomaneiosCarreteiro(user.id),
-                    fetchRomaneios({ status: 'Aguardando' }).catch(() => []),
-                ]);
-                setRomaneiosCarreteiro((roms || []).filter(r =>
-                    r.tipo_carga !== 'ferragem' && !r.lancado_por_motorista
-                ));
-                setRomaneiosFerragem((roms || []).filter(r =>
-                    r.tipo_carga === 'ferragem' || r.lancado_por_motorista
-                ));
-                // ROMs do admin disponíveis para vincular (sem motorista ainda ou do próprio motorista)
-                setRomsAbertos((romsAdminAbertos || []).filter(r =>
-                    !r.motorista_id || r.motorista_id === user.id
-                ));
-            } catch { setRomaneiosCarreteiro([]); setRomaneiosFerragem([]); }
-        } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
-        finally { setLoading(false); }
-    }, [user?.id, period, periodoCustom, profile?.name]); // eslint-disable-line
-
-    useEffect(() => {
-        load();
-        // Realtime: atualiza automaticamente quando admin excluir viagem ou checklist
-        const unsubViagens   = subscribeTabela('carretas_registros_viagem', load);
-        const unsubChk       = subscribeTabela('carretas_checklists', load);
-        const unsubCarreg    = subscribeTabela('carretas_carregamentos', load);
-        const unsubRomaneios = subscribeTabela('romaneios', load);
-        const unsubPontos    = subscribeTabela('carretas_pontos_parada', load);
-        const unsubRomCar    = subscribeTabela('carretas_romaneios', load);
-        // Polling bem espaçado como fallback — garante que status de romaneios
-        // atualizado pelo admin apareça mesmo se o Realtime falhar (o Realtime
-        // acima + o reload ao focar a aba já cobrem o caso comum).
-        // Atualiza AMBAS as fontes: carretas_romaneios e romaneios (admin).
-        const stopPoll = setIntervalVisivel(async () => {
-            if (!user?.id) return;
-            try {
-                const [roms, romsAdmin] = await Promise.all([
-                    fetchRomaneiosCarreteiro(user.id),
-                    fetchRomaneiosPorMotorista(user.id, profile?.name).catch(() => []),
-                ]);
-                setRomaneiosCarreteiro((roms || []).filter(r => r.tipo_carga !== 'ferragem'));
-                setRomaneiosFerragem((roms || []).filter(r => r.tipo_carga === 'ferragem'));
-                setRomaneiosPrincipais(romsAdmin || []);
-            } catch { /* silencioso */ }
-        }, 5 * 60 * 1000); // só com a aba visível
-        return () => { unsubViagens(); unsubChk(); unsubCarreg(); unsubRomaneios(); unsubPontos(); unsubRomCar(); stopPoll(); };
-    }, [load]);
+    const { modalFerragem, setModalFerragem, editandoFerragemId, setEditandoFerragemId, formFerragem, setFormFerragem, paradasFerragem, setParadasFerragem, salvandoFerragem, setSalvandoFerragem } = useFerragemCarreteiro({  });
+     
+      
+    const { modalAbast, setModalAbast, editandoAbastId, setEditandoAbastId, salvandoAbast, formAbast, setFormAbast, getPrecoCarreteiro, handlePostoChangeCarreteiro, handleLitrosCarreteiro, handleAbast, handleEditAbast, handleDeleteAbast } = useAbastecimentoCarreteiro({ configAbast, confirm, load, postos, showToast, user });
+    const { modalCheck, setModalCheck, editandoCheckId, setEditandoCheckId, salvandoCheck, progressoFotosCheck, formCheck, setFormCheck, handleCheck, handleEditCheck, handleDeleteChecklist } = useChecklistCarreteiro({ confirm, load, showToast, user });
+    
+    
+    
+    
+     
+    
+    
+     
     useRecarregarAoVoltar(load);
-    useDeviceProfile(); // publica a faixa do aparelho (data-tier) para o CSS mobile global
-
-    // Bônus por carregamentos (nova fonte)
-    const carregamentosComBonus = useMemo(() =>
-        carregamentos.map(c => {
-            const isCIF = (c.empresa_origem || '').toUpperCase().replace(/\|.*/, '').trim().startsWith('CIF');
-            return { ...c, bonus: isCIF ? 0 : calcularBonusCarreteiro(c.destino, bonusConfig) };
-        })
-    , [carregamentos]);
-    const carregamentosComBonusPag = usePagination(carregamentosComBonus, 10, [carregamentosComBonus.length, period, periodoCustom]);
-    const bonusExtrasPag = usePagination(bonusExtras, 10, [bonusExtras.length, period, periodoCustom]);
-
-    // Manter compatibilidade com viagens para checklist e registros
-    const viagensComBonus = useMemo(() =>
-        viagens.map(v => ({
-            ...v,
-            bonus: v.status === 'Entrega finalizada' ? calcularBonusCarreteiro(v.destino, bonusConfig) : 0,
-        }))
-    , [viagens]);
-
-    const totalBonusViagens = useMemo(() =>
-        carregamentosComBonus.reduce((s, c) => s + c.bonus, 0)
-    , [carregamentosComBonus]);
-
-    const totalBonusExtras = useMemo(() =>
-        bonusExtras.reduce((s, e) => s + Number(e.valor || 0), 0)
-    , [bonusExtras]);
-
-    // ── Faixa de datas do filtro de período (padrão: mês atual) ─────────────
-    // Aplicada a TODAS as abas (viagens lançadas pelo admin e pelo motorista,
-    // registros, pontos de parada, abastecimentos e checklists).
-    const ymd = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-    const faixaPeriodo = useMemo(() => {
-        if (periodoCustom?.inicio && periodoCustom?.fim) return { inicio: periodoCustom.inicio, fim: periodoCustom.fim };
-        const hoje = new Date();
-        if (period === 'mes') return { inicio: ymd(new Date(hoje.getFullYear(), hoje.getMonth(), 1)), fim: null };
-        const cut = new Date(); cut.setDate(cut.getDate() - period);
-        return { inicio: ymd(cut), fim: null };
-    }, [period, periodoCustom]);
-    const dentroDoPeriodo = useCallback((data) => {
-        if (!data) return true; // sem data: não esconde o registro
-        const str = String(data);
-        // timestamps (ex.: created_at em UTC) são convertidos para o dia local do motorista
-        const d = str.includes('T') ? ymd(new Date(str)) : str.slice(0, 10);
-        return d >= faixaPeriodo.inicio && (!faixaPeriodo.fim || d <= faixaPeriodo.fim);
-    }, [faixaPeriodo]); // eslint-disable-line
-
-    // ── Filtro por placa (motoristas com mais de um veículo) ────────────────
-    const registrosFiltrados = useMemo(() =>
-        registros.filter(r => dentroDoPeriodo(r.data_carregamento) && (!filtroPlaca || r.veiculo_id === filtroPlaca))
-    , [registros, filtroPlaca, dentroDoPeriodo]);
-    const romaneiosFerragemFiltrados = useMemo(() =>
-        romaneiosFerragem.filter(r => dentroDoPeriodo(r.data_saida) && (!filtroPlaca || r.veiculo_id === filtroPlaca))
-    , [romaneiosFerragem, filtroPlaca, dentroDoPeriodo]);
-    const romaneiosCarreteiroFiltrados = useMemo(() =>
-        romaneiosCarreteiro.filter(r => dentroDoPeriodo(r.data_saida))
-    , [romaneiosCarreteiro, dentroDoPeriodo]);
-    const pontosParadaFiltrados = useMemo(() =>
-        pontosParada.filter(p => dentroDoPeriodo(p.data_saida))
-    , [pontosParada, dentroDoPeriodo]);
-    const abastFiltrados = useMemo(() =>
-        abast.filter(a => dentroDoPeriodo(a.data_abastecimento) && (!filtroPlaca || a.veiculo_id === filtroPlaca))
-    , [abast, filtroPlaca, dentroDoPeriodo]);
-    const checklistsFiltrados = useMemo(() =>
-        checklists.filter(c => dentroDoPeriodo(c.created_at) && (!filtroPlaca || c.veiculo_id === filtroPlaca))
-    , [checklists, filtroPlaca, dentroDoPeriodo]);
-    // Placas do próprio motorista, extraídas dos registros (não a frota toda) —
-    // relevante para motoristas que dirigem mais de um veículo
-    const minhasPlacas = useMemo(() => {
-        const terceiros = new Set(veiculos.filter(v => v.is_terceiro).map(v => v.id));
-        const map = new Map();
-        [...registros, ...romaneiosFerragem, ...abast, ...checklists].forEach(r => {
-            if (r.veiculo_id && r.veiculo?.placa && !terceiros.has(r.veiculo_id)) map.set(r.veiculo_id, r.veiculo.placa);
-        });
-        return Array.from(map, ([id, placa]) => ({ id, placa })).sort((a, b) => a.placa.localeCompare(b.placa));
-    }, [registros, romaneiosFerragem, abast, checklists, veiculos]);
-    // Seletor de placa — frota própria apenas (exclui veículos de terceiros), só
-    // aparece quando o motorista tem mais de um veículo próprio no histórico
-    const seletorPlaca = minhasPlacas.length > 1 && (
-        <PrettySelect value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)}
-            className="px-3 py-2 rounded-lg border text-xs font-medium outline-none" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)' }}>
-            <option value="">Todas as placas</option>
-            {minhasPlacas.map(v => <option key={v.id} value={v.id}>{v.placa}</option>)}
-        </PrettySelect>
-    );
-
-    const totais = useMemo(() => ({
-        viagens:     carregamentos.length,
-        finalizadas: carregamentos.length, // todos os carregamentos são considerados finalizados
-        emTransito:  viagens.filter(v => v.status === 'Em trânsito').length,
-        totalBonus:  totalBonusViagens + totalBonusExtras,
-        totalBonusViagens,
-        totalBonusExtras,
-        litrosDiesel: abastFiltrados.reduce((s, a) => s + Number(a.litros_diesel || 0), 0),
-        gastoTotal:   abastFiltrados.reduce((s, a) => s + Number(a.valor_total || 0), 0),
-    }), [carregamentos, viagens, totalBonusViagens, totalBonusExtras, abastFiltrados]);
-
-    // ── Preços: posto tem prioridade sobre config global ───────────────────────
-    const getPrecoCarreteiro = useCallback((postoId, tipo) => {
-        const posto = postos.find(p => p.id === postoId);
-        if (tipo === 'diesel') return Number(posto?.preco_diesel || configAbast?.preco_diesel || 0);
-        if (tipo === 'arla')   return Number(posto?.preco_arla   || configAbast?.preco_arla   || 0);
-        return 0;
-    }, [postos, configAbast]);
-
-    const handlePostoChangeCarreteiro = (postoId) => {
-        const posto = postos.find(p => p.id === postoId);
-        const precoDiesel = getPrecoCarreteiro(postoId, 'diesel');
-        const precoArla   = getPrecoCarreteiro(postoId, 'arla');
-        setFormAbast(f => ({
-            ...f,
-            posto_id: postoId,
-            posto: posto?.nome || '',
-            valor_diesel: precoDiesel && f.litros_diesel
-                ? (Number(f.litros_diesel) * precoDiesel).toFixed(2) : f.valor_diesel,
-            valor_arla: precoArla && f.litros_arla
-                ? (Number(f.litros_arla) * precoArla).toFixed(2) : f.valor_arla,
-        }));
-    };
-
-    const handleLitrosCarreteiro = (campo, valor) => {
-        setFormAbast(f => {
-            const precoDiesel = getPrecoCarreteiro(f.posto_id, 'diesel');
-            const precoArla   = getPrecoCarreteiro(f.posto_id, 'arla');
-            const n = { ...f, [campo]: valor };
-            if (campo === 'litros_diesel' && precoDiesel)
-                n.valor_diesel = valor ? (Number(valor) * precoDiesel).toFixed(2) : '';
-            if (campo === 'litros_arla' && precoArla)
-                n.valor_arla = valor ? (Number(valor) * precoArla).toFixed(2) : '';
-            return n;
-        });
-    };
-
-    const handleAbast = async () => {
-        if (salvandoAbast) return;
-        if (!formAbast.veiculo_id || !formAbast.data_abastecimento) { showToast('Veículo e data são obrigatórios', 'error'); return; }
-        if (!formAbast.cupom_fiscal?.trim()) { showToast('Informe o N° do cupom fiscal', 'error'); return; }
-        if (!formAbast.posto_id) { showToast('Selecione o posto de abastecimento', 'error'); return; }
-        const precoDiesel = getPrecoCarreteiro(formAbast.posto_id, 'diesel');
-        const precoArla   = getPrecoCarreteiro(formAbast.posto_id, 'arla');
-        const valorDiesel = formAbast.valor_diesel
-            ? Number(formAbast.valor_diesel)
-            : Number(formAbast.litros_diesel || 0) * precoDiesel;
-        const valorArla = formAbast.valor_arla
-            ? Number(formAbast.valor_arla)
-            : Number(formAbast.litros_arla || 0) * precoArla;
-        const payload = {
-            ...formAbast,
-            motorista_id: user.id,
-            litros_diesel: Number(formAbast.litros_diesel || 0),
-            litros_arla:   Number(formAbast.litros_arla || 0),
-            valor_diesel: valorDiesel.toFixed(2),
-            valor_arla:   valorArla.toFixed(2),
-        };
-        if (!payload.posto_id) delete payload.posto_id;
-        setSalvandoAbast(true);
-        try {
-            if (editandoAbastId) {
-                await updateAbastecimento(editandoAbastId, payload);
-                showToast('Abastecimento atualizado!', 'success');
-            } else {
-                await createAbastecimento(payload);
-                showToast('Abastecimento registrado!', 'success');
-            }
-            setModalAbast(false);
-            setEditandoAbastId(null);
-            load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-        finally { setSalvandoAbast(false); }
-    };
-
-    const handleEditAbast = (a) => {
-        setEditandoAbastId(a.id);
-        setFormAbast({
-            veiculo_id: a.veiculo_id || '',
-            data_abastecimento: a.data_abastecimento || new Date().toISOString().split('T')[0],
-            horario: a.horario || '',
-            posto_id: a.posto_id || '',
-            posto: a.posto || '',
-            litros_diesel: a.litros_diesel ?? '',
-            valor_diesel: a.valor_diesel ?? '',
-            litros_arla: a.litros_arla ?? '',
-            valor_arla: a.valor_arla ?? '',
-            cupom_fiscal: a.cupom_fiscal || '',
-            observacoes: a.observacoes || '',
-        });
-        setModalAbast(true);
-    };
-
-    const handleDeleteAbast = async (id) => {
-        const ok = await confirm({ title: 'Excluir abastecimento?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
-        if (!ok) return;
-        try { await deleteAbastecimento(id); showToast('Abastecimento excluído.', 'success'); load(); }
-        catch (e) { showToast('Erro: ' + e.message, 'error'); }
-    };
-
-    const handleCheck = async () => {
-        if (salvandoCheck) return;
-        if (!formCheck.veiculo_id) { showToast('Selecione o veículo', 'error'); return; }
-        if (formCheck.odometro === '' || formCheck.odometro == null) { showToast('Informe o odômetro do veículo', 'error'); return; }
-        const semana = new Date(); semana.setDate(semana.getDate() - semana.getDay() + 1);
-        setSalvandoCheck(true);
-        try {
-            const payload = { ...formCheck, foto_url: formCheck.fotos_urls[0] || '', odometro: formCheck.odometro !== '' && formCheck.odometro != null ? Number(formCheck.odometro) : null };
-            const onProgressoFotos = (atual, total) => setProgressoFotosCheck(total > 0 ? { atual, total } : null);
-            let salvo;
-            if (editandoCheckId) {
-                salvo = await updateChecklist(editandoCheckId, payload, onProgressoFotos);
-                showToast('Checklist atualizado!', 'success');
-                setEditandoCheckId(null);
-            } else {
-                salvo = await createChecklist({ ...payload, motorista_id: user.id, semana_ref: semana.toISOString().split('T')[0] }, onProgressoFotos);
-                showToast('Checklist enviado para análise!', 'success');
-            }
-            if (salvo?._fotosFalhas) {
-                setTimeout(() => showToast(`Atenção: ${salvo._fotosFalhas} foto(s) não foram enviadas. Edite o checklist para tentar novamente.`, 'error'), 1400);
-            }
-            setModalCheck(false);
-            setFormCheck({ veiculo_id: '', odometro: '', itens: {}, problemas: '', necessidades: '', observacoes_livres: '', foto_url: '', fotos_urls: [] });
-            load();
-        } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-        finally { setSalvandoCheck(false); setProgressoFotosCheck(null); }
-    };
-
-    const handleEditCheck = (c) => {
-        setEditandoCheckId(c.id);
-        setFormCheck({
-            veiculo_id: c.veiculo_id || '',
-            odometro: c.odometro != null ? String(c.odometro) : '',
-            itens: c.itens || {},
-            problemas: c.problemas || '',
-            necessidades: c.necessidades || '',
-            observacoes_livres: c.observacoes_livres || '',
-            foto_url: c.foto_url || '',
-            fotos_urls: (c.fotos_urls && c.fotos_urls.length) ? c.fotos_urls : (c.foto_url ? [c.foto_url] : []),
-        });
-        setModalCheck(true);
-    };
-
-    const handleDeleteChecklist = async (id) => {
-        const ok = await confirm({ title: 'Excluir checklist?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
-        if (!ok) return;
-        try { await deleteChecklist(id); showToast('Checklist excluído.', 'success'); load(); }
-        catch (e) { showToast('Erro: ' + e.message, 'error'); }
-    };
-
-    const handleDeleteRegistro = async (id) => {
-        const ok = await confirm({ title: 'Excluir registro de viagem?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
-        if (!ok) return;
-        try { await deleteRegistroViagem(id); showToast('Registro excluído.', 'success'); load(); }
-        catch (e) { showToast('Erro: ' + e.message, 'error'); }
-    };
-
-    const handleEditRegistro = (r) => {
-        setEditandoRegistroId(r.id);
-        setFormRegistro({
-            data_carregamento: r.data_carregamento || new Date().toISOString().split('T')[0],
-            numero_nota_fiscal: r.numero_nota_fiscal || '',
-            veiculo_id: r.veiculo_id || '',
-            destino: r.destino || '',
-            data_descarga: r.data_descarga || '',
-            observacoes: r.observacoes || '',
-            local_carregamento: r.local_carregamento || '',
-            tipo_cimento: r.tipo_cimento || '',
-        });
-        setParadasRegistro(parseParadas(r.paradas));
-        setModalRegistro(true);
-    };
-
+    useDeviceProfile(); const { carregamentosComBonus, carregamentosComBonusPag, bonusExtrasPag, viagensComBonus, totalBonusViagens, totalBonusExtras } = useCarreteiroBonus({ bonusConfig, bonusExtras, carregamentos, period, periodoCustom, viagens });
+    
+    
+    
+    
+    
+    const { registrosFiltrados, romaneiosFerragemFiltrados, romaneiosCarreteiroFiltrados, pontosParadaFiltrados, abastFiltrados, checklistsFiltrados, seletorPlaca, totais } = useCarreteiroFiltros({ abast, carregamentos, checklists, filtroPlaca, period, periodoCustom, pontosParada, registros, romaneiosCarreteiro, romaneiosFerragem, setFiltroPlaca, totalBonusExtras, totalBonusViagens, veiculos, viagens });
+    
+     
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     const exportar = () => {
         if (!viagensComBonus.length) { showToast('Nenhum dado para exportar no período selecionado.', 'error'); return; }
         const rows = viagensComBonus.map(v => ({
@@ -627,28 +158,8 @@ export default function CarreteiroDashboard() {
         { id: 'checklist',     label: 'Checklist',         icon: 'ClipboardCheck' },
     ];
 
-    const abrirEditarPonto = (p) => {
-        setEditandoPontoId(p.id);
-        setFormPonto({
-            tipo_local: p.tipo_local || 'Fábrica', local: p.local || '',
-            veiculo_id: p.veiculo_id || '',
-            data_saida: p.data_saida || '',
-            horario_saida: p.horario_saida || '', km_saida: p.km_saida ?? '',
-            tipo_local_chegada: p.tipo_local_chegada || 'Fábrica', local_chegada: p.local_chegada || '',
-            data_chegada: p.data_chegada || '',
-            horario_chegada: p.horario_chegada || '', km_chegada: p.km_chegada ?? '',
-            cupom_fiscal: p.cupom_fiscal || '', observacoes: p.observacoes || '',
-            horarios_extras: p.horarios_extras || [],
-        });
-        setModalPonto(true);
-    };
-    const excluirPonto = async (p) => {
-        const ok = await confirm({ title: 'Excluir registro?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
-        if (!ok) return;
-        try { await deletePontoParada(p.id); showToast('Registro excluído.', 'success'); setPontoDetalhe(null); load(); }
-        catch (e) { showToast('Erro: ' + e.message, 'error'); }
-    };
-
+    
+    
     const tabAtual = TABS.find(t => t.id === tab);
     const { setPageTabs } = usePageTabs();
     useEffect(() => {
@@ -830,890 +341,69 @@ export default function CarreteiroDashboard() {
                             ) : (
                                 <>
                                     {tab === 'viagens' && (
-                                        <div className="flex flex-col gap-4">
-                                            {/* ── Romaneios do Sistema Principal ─── */}
-                                        {romaneiosPrincipais.length > 0 && (
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                                                            <Icon name="FileText" size={14} color="#1D4ED8" />
-                                                        </div>
-                                                        <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                                                            Romaneios Lançados pelo Admin
-                                                        </h3>
-                                                        <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>
-                                                            {romaneiosPrincipais.length}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex flex-col gap-2">
-                                                        {romaneiosPrincipaisPag.pageItems.map(r => {
-                                                            const nf = r.romaneio_pedidos?.[0]?.numero_pedido || '—';
-                                                            const statusColors = {
-                                                                'Aprovado': { bg: '#D1FAE5', text: '#065F46' },
-                                                                'Pendente': { bg: '#FEF9C3', text: '#B45309' },
-                                                                'Cancelado': { bg: '#FEE2E2', text: '#B91C1C' },
-                                                            };
-                                                            const sc = statusColors[r.status] || { bg: '#F3F4F6', text: '#6B7280' };
-                                                            const frete = Number(r.valor_frete_calculado || r.valor_frete) || 0;
-                                                            return (
-                                                                <div key={r.id} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
-                                                                    {/* Header do card */}
-                                                                    <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ backgroundColor: '#F8FAFF', borderColor: '#DBEAFE' }}>
-                                                                        <div className="flex items-center gap-2">
-                                                                            <Icon name="FileText" size={14} color="#1D4ED8" />
-                                                                            <span className="text-xs font-semibold font-data" style={{ color: '#1D4ED8' }}>
-                                                                                Romaneio #{r.numero || r.id?.slice(0, 8)}
-                                                                            </span>
-                                                                        </div>
-                                                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: sc.bg, color: sc.text }}>
-                                                                            {r.status || 'Pendente'}
-                                                                        </span>
-                                                                    </div>
-                                                                    {/* Corpo do card — grid 2 colunas */}
-                                                                    <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-3">
-                                                                        <div>
-                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Nota Fiscal</p>
-                                                                            <p className="text-sm font-semibold font-data" style={{ color: 'var(--color-text-primary)' }}>{nf}</p>
-                                                                        </div>
-                                                                        <div style={{ display: 'none' }}>
-                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Valor do Frete</p>
-                                                                            <p className="text-sm font-bold font-data text-purple-600">{frete > 0 ? BRL(frete) : '—'}</p>
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Motorista</p>
-                                                                            <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.motorista || '—'}</p>
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Placa</p>
-                                                                            <p className="text-sm font-semibold font-data" style={{ color: 'var(--color-text-primary)' }}>{r.placa || '—'}</p>
-                                                                        </div>
-                                                                        <div className="col-span-2">
-                                                                            <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Destino</p>
-                                                                            <div className="flex items-center gap-1.5">
-                                                                                <Icon name="MapPin" size={13} color="#1D4ED8" />
-                                                                                <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
-                                                                            </div>
-                                                                        </div>
-                                                                        {r.saida && (
-                                                                            <div className="col-span-2 pt-2 border-t flex items-center gap-1.5" style={{ borderColor: 'var(--color-border)' }}>
-                                                                                <Icon name="Calendar" size={13} color="var(--color-muted-foreground)" />
-                                                                                <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                                    Saída: {FMT_DATE(r.saida)}
-                                                                                </p>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                    <PaginationBar page={romaneiosPrincipaisPag.page} setPage={romaneiosPrincipaisPag.setPage} totalPages={romaneiosPrincipaisPag.totalPages}
-                                                        totalItems={romaneiosPrincipaisPag.totalItems} pageSize={romaneiosPrincipaisPag.pageSize} itemLabel="romaneio" itemLabelPlural="romaneios" className="rounded-xl border bg-white mt-2" />
-                                                </div>
-                                            )}
-
-                                            {/* ── Romaneios de Ferragem lançados pelo motorista ─── */}
-                                            {romaneiosFerragem.length > 0 && (
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#FEF3C7' }}>
-                                                            <Icon name="Wrench" size={14} color="#D97706" />
-                                                        </div>
-                                                        <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                                                            Romaneios de Ferragem
-                                                        </h3>
-                                                        <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#FEF3C7', color: '#D97706' }}>
-                                                            {romaneiosFerragem.length}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex flex-col gap-2">
-                                                        {romaneiosFerragem.map(r => (
-                                                            <div key={r.id} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: '#FDE68A' }}>
-                                                                <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }}>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <Icon name="Wrench" size={14} color="#D97706" />
-                                                                        <span className="text-xs font-semibold font-data" style={{ color: '#D97706' }}>
-                                                                            Romaneio #{r.numero || '—'}
-                                                                        </span>
-                                                                        <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
-                                                                            Ferragem
-                                                                        </span>
-                                                                    </div>
-                                                                    <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>
-                                                                        {r.status || 'Aguardando'}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-2">
-                                                                    {r.numero_nf && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Nota Fiscal</p><p className="text-sm font-semibold font-data">{r.numero_nf}</p></div>}
-                                                                    {r.data_saida && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Data Saída</p><p className="text-sm font-medium font-data">{FMT_DATE(r.data_saida)}</p></div>}
-                                                                    {r.toneladas && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Toneladas</p><p className="text-sm font-semibold font-data" style={{ color: '#7C3AED' }}>{Number(r.toneladas).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ton</p></div>}
-                                                                    {r.empresa && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Empresa</p><p className="text-sm font-medium">{r.empresa}</p></div>}
-                                                                    {r.destino && <div className="col-span-2"><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Destino</p><div className="flex items-center gap-1.5"><Icon name="MapPin" size={13} color="#D97706" /><p className="text-sm font-medium">{r.destino}</p></div></div>}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* ── Carregamentos (sistema de carretas) ─── */}
-                                            <div>
-                                                {(carregamentosComBonus.length > 0 || romaneiosPrincipais.length > 0) && (
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#D1FAE5' }}>
-                                                            <Icon name="Package" size={14} color="#059669" />
-                                                        </div>
-                                                        <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Carregamentos</h3>
-                                                        {carregamentosComBonus.length > 0 && (
-                                                            <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
-                                                                {carregamentosComBonus.length}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                                {carregamentosComBonus.length === 0
-                                                    ? (romaneiosPrincipais.length === 0 && romaneiosFerragem.length === 0
-                                                        ? <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Package" size={28} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem no período</span></div>
-                                                        : null)
-                                                    : carregamentosComBonus.map(c => (
-                                                        <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm mb-2" style={{ borderColor: 'var(--color-border)' }}>
-                                                            <div className="flex items-start justify-between mb-2">
-                                                                <p className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{c.destino || '—'}</p>
-                                                                <span className="font-data font-bold text-purple-600 text-sm">{BRL(c.bonus)}</span>
-                                                            </div>
-                                                            <div className="flex items-center justify-between text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                <div className="flex items-center gap-3">
-                                                                    {c.data_carregamento && <span>{new Date(c.data_carregamento + 'T00:00:00').toLocaleDateString('pt-BR')}</span>}
-                                                                    {c.veiculo?.placa && <span className="font-data">{c.veiculo.placa}</span>}
-                                                                    {c.empresa?.nome && <span className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">{c.empresa.nome}</span>}
-                                                                </div>
-                                                                <span className="font-data font-medium" style={{ color: 'var(--color-primary)' }}>
-                                                                    {(Number(c.quantidade) || 0).toLocaleString('pt-BR')} sacos
-                                                                </span>
-                                                            </div>
-                                                            {c.numero_nota_fiscal && (
-                                                                <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>NF: {c.numero_nota_fiscal}</p>
-                                                            )}
-                                                        </div>
-                                                    ))
-                                                }
-                                            </div>
-                                        </div>
+                                        <TabViagens carregamentosComBonus={carregamentosComBonus} romaneiosFerragem={romaneiosFerragem} romaneiosPrincipais={romaneiosPrincipais} romaneiosPrincipaisPag={romaneiosPrincipaisPag} />
                                     )}
 
                                     {tab === 'romaneios' && (
-                                        <div className="flex flex-col gap-3">
-                                            {/* Header informativo */}
-                                            <div className="flex items-center gap-2 p-3 rounded-xl border"
-                                                style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }}>
-                                                <Icon name="Info" size={15} color="#1D4ED8" />
-                                                <p className="text-xs" style={{ color: '#1D4ED8' }}>
-                                                    Romaneios e viagens lançados pelo administrador e vinculados ao seu perfil.
-                                                </p>
-                                            </div>
-
-                                            {romaneiosCarreteiroFiltrados.length === 0 ? (
-                                                <div className="bg-white rounded-xl border p-10 flex flex-col items-center justify-center gap-3"
-                                                    style={{ borderColor: 'var(--color-border)' }}>
-                                                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                                                        <Icon name="FileText" size={28} color="#1D4ED8" />
-                                                    </div>
-                                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Nenhum romaneio encontrado</p>
-                                                    <p className="text-xs text-center" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                        Quando o admin lançar um romaneio para você, ele aparecerá aqui.
-                                                    </p>
-                                                </div>
-                                            ) : romaneiosCarreteiroFiltrados.map(r => {
-                                                const STATUS_ROM = {
-                                                    'Aguardando':        { bg: '#FEF9C3', text: '#B45309', icon: 'Clock' },
-                                                    'Carregando':        { bg: '#FEF3C7', text: '#D97706', icon: 'Package' },
-                                                    'Em Trânsito':       { bg: '#D1FAE5', text: '#065F46', icon: 'Truck' },
-                                                    'Entrega finalizada':{ bg: '#DCFCE7', text: '#15803D', icon: 'CheckCircle2' },
-                                                    'Cancelado':         { bg: '#FEE2E2', text: '#B91C1C', icon: 'XCircle' },
-                                                };
-                                                const sc = STATUS_ROM[r.status] || { bg: '#F3F4F6', text: '#6B7280', icon: 'FileText' };
-                                                const itens = r.carretas_romaneio_itens || [];
-                                                const pesoTotal = itens.reduce((s, i) => s + Number(i.peso_total || i.quantidade || 0), 0);
-                                                const nfs = r.numero_nf || itens.map(i => i.descricao).filter(Boolean).join(', ');
-                                                return (
-                                                    <div key={r.id} className="bg-white rounded-xl border shadow-sm overflow-hidden"
-                                                        style={{ borderColor: 'var(--color-border)' }}>
-                                                        {/* Header */}
-                                                        <div className="flex items-center justify-between px-4 py-3 border-b"
-                                                            style={{ backgroundColor: '#F8FAFF', borderColor: '#DBEAFE' }}>
-                                                            <div className="flex items-center gap-2">
-                                                                <Icon name="FileText" size={15} color="#1D4ED8" />
-                                                                <span className="font-semibold text-sm font-data" style={{ color: '#1D4ED8' }}>
-                                                                    Romaneio #{r.numero}
-                                                                </span>
-                                                                {r.aprovado && (
-                                                                    <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-medium"
-                                                                        style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
-                                                                        <Icon name="CheckCircle2" size={10} />Aprovado
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <span className="flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium"
-                                                                style={{ backgroundColor: sc.bg, color: sc.text }}>
-                                                                <Icon name={sc.icon} size={11} />{r.status}
-                                                            </span>
-                                                        </div>
-
-                                                        {/* Grid de informações */}
-                                                        <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-3">
-                                                            {/* NF / Descrição */}
-                                                            <div className="col-span-2">
-                                                                <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Nota(s) Fiscal / Carga</p>
-                                                                <p className="text-sm font-semibold font-data" style={{ color: 'var(--color-text-primary)' }}>
-                                                                    {nfs || '—'}
-                                                                </p>
-                                                            </div>
-
-                                                            {/* Data saída */}
-                                                            <div>
-                                                                <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Data Saída</p>
-                                                                <div className="flex items-center gap-1">
-                                                                    <Icon name="Calendar" size={13} color="#1D4ED8" />
-                                                                    <p className="text-sm font-medium font-data" style={{ color: 'var(--color-text-primary)' }}>
-                                                                        {r.data_saida ? FMT_DATE(r.data_saida) : '—'}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Peso total */}
-                                                            <div>
-                                                                <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Peso / Toneladas</p>
-                                                                <div className="flex items-center gap-1">
-                                                                    <Icon name="Weight" size={13} color="#7C3AED" />
-                                                                    <p className="text-sm font-semibold font-data" style={{ color: '#7C3AED' }}>
-                                                                        {(pesoTotal || Number(r.toneladas) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ton
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Placa */}
-                                                            <div>
-                                                                <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Placa</p>
-                                                                <p className="text-sm font-semibold font-data" style={{ color: 'var(--color-text-primary)' }}>
-                                                                    {r.veiculo?.placa || '—'}
-                                                                </p>
-                                                            </div>
-
-                                                            {/* Empresa */}
-                                                            {r.empresa && (
-                                                                <div>
-                                                                    <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Empresa</p>
-                                                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.empresa}</p>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Destino */}
-                                                            <div className="col-span-2">
-                                                                <p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Destino</p>
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <Icon name="MapPin" size={13} color="#1D4ED8" />
-                                                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Frete oculto para motorista */}
-
-                                                            {/* Observações */}
-                                                            {r.observacoes && (
-                                                                <div className="col-span-2 pt-2 border-t" style={{ borderColor: 'var(--color-border)' }}>
-                                                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>{r.observacoes}</p>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
+                                        <TabRomaneios romaneiosCarreteiroFiltrados={romaneiosCarreteiroFiltrados} />
                                     )}
 
                                     {tab === 'pontos' && (
-                                        <div>
-                                            <div className="flex justify-end mb-4">
-                                                <Button onClick={() => {
-                                                    setEditandoPontoId(null);
-                                                    setFormPonto({
-                                                        tipo_local: 'Fábrica', local: '', veiculo_id: '',
-                                                        data_saida: new Date().toISOString().split('T')[0],
-                                                        horario_saida: '', km_saida: '',
-                                                        tipo_local_chegada: 'Fábrica', local_chegada: '',
-                                                        data_chegada: '', horario_chegada: '', km_chegada: '',
-                                                        cupom_fiscal: '', observacoes: '',
-                                                        horarios_extras: [],
-                                                    });
-                                                    setModalPonto(true);
-                                                }} iconName="Plus" size="sm">
-                                                    Novo Registro
-                                                </Button>
-                                            </div>
-
-                                            {pontosParadaFiltrados.length === 0 ? (
-                                                <div className="bg-white rounded-xl border p-10 flex flex-col items-center justify-center gap-3"
-                                                    style={{ borderColor: 'var(--color-border)' }}>
-                                                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                                                        <Icon name="MapPin" size={28} color="#1D4ED8" />
-                                                    </div>
-                                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>Nenhum ponto de parada registrado</p>
-                                                    <p className="text-xs text-center" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                        Registre os horários de saída e chegada em fábricas, estoques e entregas.
-                                                    </p>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                {/* Mobile: resumo compacto — toque no card para ver todos os dados */}
-                                                <div className="md:hidden rounded-xl border overflow-hidden shadow-sm bg-white" style={{ borderColor: 'var(--color-border)' }}>
-                                                    {pontosParadaFiltrados.map((p, idx) => {
-                                                        const rodado = p.km_saida != null && p.km_chegada != null ? Number(p.km_chegada) - Number(p.km_saida) : null;
-                                                        return (
-                                                            <button key={p.id} type="button" onClick={() => setPontoDetalhe(p)}
-                                                                className="w-full text-left px-3 py-2.5 flex items-center gap-2 active:bg-blue-50"
-                                                                style={{ borderTop: idx === 0 ? 'none' : '1px solid var(--color-border)' }}>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <p className="text-sm font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>
-                                                                        {p.local || '—'}{p.local_chegada ? ` → ${p.local_chegada}` : ''}
-                                                                    </p>
-                                                                    <p className="text-xs font-data truncate" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                        {p.data_saida ? FMT_DATE(p.data_saida) : '—'}{p.horario_saida ? ` · ${String(p.horario_saida).slice(0, 5)}` : ''}
-                                                                        {p.veiculo?.placa ? ` · ${p.veiculo.placa}` : ''}
-                                                                    </p>
-                                                                </div>
-                                                                {rodado != null && rodado >= 0 && (
-                                                                    <span className="text-xs font-data font-semibold flex-shrink-0 px-2 py-0.5 rounded-full" style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>
-                                                                        {rodado.toLocaleString('pt-BR')} km
-                                                                    </span>
-                                                                )}
-                                                                <Icon name="ChevronRight" size={16} color="var(--color-muted-foreground)" />
-                                                            </button>
-                                                        );
-                                                    })}
-                                                    <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
-                                                        {pontosParadaFiltrados.length} registro{pontosParadaFiltrados.length !== 1 ? 's' : ''}
-                                                    </div>
-                                                </div>
-                                                {/* Desktop/tablet: tabela estilo planilha */}
-                                                <div className="hidden md:block rounded-xl border overflow-hidden shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                    <div className="overflow-x-auto">
-                                                        <table className="w-full text-xs" style={{ minWidth: 700 }}>
-                                                            <thead>
-                                                                <tr style={{ backgroundColor: '#1D4ED8' }}>
-                                                                    {['Saída','Data Saída','Hor. Saída','KM Saída','Chegada','Data Chegada','Hor. Chegada','KM Chegada','Cupom','Obs.',''].map(h => (
-                                                                        <th key={h} className="px-3 py-2.5 text-left font-semibold text-white whitespace-nowrap">{h}</th>
-                                                                    ))}
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {pontosParadaFiltrados.map((p, idx) => {
-                                                                    const TIPO_COLOR = {
-                                                                        'Fábrica': '#EFF6FF', 'Empresa': '#FEF3C7', 'Estoque': '#FEF9C3',
-                                                                        'Entrega': '#D1FAE5', 'Posto': '#EDE9FE',
-                                                                        'Oficina': '#FEE2E2', 'Outro': '#F3F4F6',
-                                                                    };
-                                                                    const TIPO_TEXT = {
-                                                                        'Fábrica': '#1D4ED8', 'Empresa': '#D97706', 'Estoque': '#B45309',
-                                                                        'Entrega': '#065F46', 'Posto': '#7C3AED',
-                                                                        'Oficina': '#B91C1C', 'Outro': '#6B7280',
-                                                                    };
-                                                                    return (
-                                                                        <>
-                                                                        <tr key={p.id}
-                                                                            className="border-t transition-colors hover:bg-blue-50/30"
-                                                                            style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
-                                                                            <td className="px-3 py-2.5">
-                                                                                <div>
-                                                                                    <p className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{p.local}</p>
-                                                                                    <span className="inline-block px-1.5 py-0.5 rounded text-xs font-medium mt-0.5"
-                                                                                        style={{ backgroundColor: TIPO_COLOR[p.tipo_local] || '#F3F4F6', color: TIPO_TEXT[p.tipo_local] || '#6B7280' }}>
-                                                                                        {p.tipo_local}
-                                                                                    </span>
-                                                                                    {p.veiculo?.placa && (
-                                                                                        <p className="font-data text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>{p.veiculo.placa}</p>
-                                                                                    )}
-                                                                                </div>
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
-                                                                                {p.data_saida ? FMT_DATE(p.data_saida) : '—'}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
-                                                                                {p.horario_saida || '—'}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 font-data text-right" style={{ color: '#1D4ED8' }}>
-                                                                                {p.km_saida != null ? Number(p.km_saida).toLocaleString('pt-BR') : '—'}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5">
-                                                                                {p.local_chegada ? (
-                                                                                    <div>
-                                                                                        <p className="font-semibold" style={{ color: 'var(--color-text-primary)' }}>{p.local_chegada}</p>
-                                                                                        <span className="inline-block px-1.5 py-0.5 rounded text-xs font-medium mt-0.5"
-                                                                                            style={{ backgroundColor: TIPO_COLOR[p.tipo_local_chegada] || '#F3F4F6', color: TIPO_TEXT[p.tipo_local_chegada] || '#6B7280' }}>
-                                                                                            {p.tipo_local_chegada}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                ) : '—'}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
-                                                                                {p.data_chegada ? FMT_DATE(p.data_chegada) : '—'}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
-                                                                                {p.horario_chegada || '—'}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 font-data text-right" style={{ color: '#059669' }}>
-                                                                                {p.km_chegada != null ? Number(p.km_chegada).toLocaleString('pt-BR') : '—'}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
-                                                                                {p.cupom_fiscal || '—'}
-                                                                            </td>
-                                                                            <td className="px-3 py-2.5 max-w-[120px] truncate" style={{ color: 'var(--color-muted-foreground)' }}
-                                                                                title={p.observacoes}>
-                                                                                {p.observacoes || ''}
-                                                                            </td>
-                                                                            <td className="px-2 py-2.5">
-                                                                                <ActionButtonsGroup>
-                                                                                    <EditButton title="Editar" onClick={() => {
-                                                                                        setEditandoPontoId(p.id);
-                                                                                        setFormPonto({
-                                                                                            tipo_local: p.tipo_local || 'Fábrica', local: p.local || '',
-                                                                                            veiculo_id: p.veiculo_id || '',
-                                                                                            data_saida: p.data_saida || '',
-                                                                                            horario_saida: p.horario_saida || '', km_saida: p.km_saida ?? '',
-                                                                                            tipo_local_chegada: p.tipo_local_chegada || 'Fábrica', local_chegada: p.local_chegada || '',
-                                                                                            data_chegada: p.data_chegada || '',
-                                                                                            horario_chegada: p.horario_chegada || '', km_chegada: p.km_chegada ?? '',
-                                                                                            cupom_fiscal: p.cupom_fiscal || '', observacoes: p.observacoes || '',
-                                                                                            horarios_extras: p.horarios_extras || [],
-                                                                                        });
-                                                                                        setModalPonto(true);
-                                                                                    }} />
-                                                                                    <DeleteButton title="Excluir" onClick={async () => {
-                                                                                        const ok = await confirm({ title: 'Excluir registro?', message: 'Esta ação não pode ser desfeita.', confirmLabel: 'Excluir', variant: 'danger' });
-                                                                                        if (!ok) return;
-                                                                                        try { await deletePontoParada(p.id); showToast('Registro excluído.', 'success'); load(); }
-                                                                                        catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                                                                                    }} />
-                                                                                </ActionButtonsGroup>
-                                                                            </td>
-                                                                        </tr>
-                                                                        {p.horarios_extras && p.horarios_extras.length > 0 && p.horarios_extras.map((ex, exIdx) => (
-                                                                            <tr key={`${p.id}-extra-${exIdx}`} className="border-t" style={{ borderColor: '#E9D5FF', backgroundColor: '#FAF5FF' }}>
-                                                                                <td className="px-3 py-1.5">
-                                                                                    <div>
-                                                                                        <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#E9D5FF', color: '#6D28D9' }}>
-                                                                                            {ex.local || `Extra #${exIdx + 1}`}
-                                                                                        </span>
-                                                                                        {ex.tipo_local && <span className="ml-1 text-xs" style={{ color: '#9CA3AF' }}>{ex.tipo_local}</span>}
-                                                                                    </div>
-                                                                                </td>
-                                                                                <td className="px-3 py-1.5 font-data text-xs whitespace-nowrap" style={{ color: '#6D28D9' }}>{ex.data_saida ? FMT_DATE(ex.data_saida) : '—'}</td>
-                                                                                <td className="px-3 py-1.5 font-data text-xs" style={{ color: '#6D28D9' }}>{ex.horario_saida || '—'}</td>
-                                                                                <td className="px-3 py-1.5 font-data text-xs text-right" style={{ color: '#1D4ED8' }}>{ex.km_saida != null ? Number(ex.km_saida).toLocaleString('pt-BR') : '—'}</td>
-                                                                                <td className="px-3 py-1.5">
-                                                                                    {ex.local_chegada ? (
-                                                                                        <div>
-                                                                                            <span className="text-xs font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: '#D1FAE5', color: '#065F46' }}>
-                                                                                                {ex.local_chegada}
-                                                                                            </span>
-                                                                                            {ex.tipo_local_chegada && <span className="ml-1 text-xs" style={{ color: '#9CA3AF' }}>{ex.tipo_local_chegada}</span>}
-                                                                                        </div>
-                                                                                    ) : '—'}
-                                                                                </td>
-                                                                                <td className="px-3 py-1.5 font-data text-xs whitespace-nowrap" style={{ color: '#6D28D9' }}>{ex.data_chegada ? FMT_DATE(ex.data_chegada) : '—'}</td>
-                                                                                <td className="px-3 py-1.5 font-data text-xs" style={{ color: '#6D28D9' }}>{ex.horario_chegada || '—'}</td>
-                                                                                <td className="px-3 py-1.5 font-data text-xs text-right" style={{ color: '#059669' }}>{ex.km_chegada != null ? Number(ex.km_chegada).toLocaleString('pt-BR') : '—'}</td>
-                                                                                <td colSpan={3} />
-                                                                            </tr>
-                                                                        ))}
-                                                                    </>
-                                                                    );
-                                                                })}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                    <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
-                                                        {pontosParadaFiltrados.length} registro{pontosParadaFiltrados.length !== 1 ? 's' : ''}
-                                                    </div>
-                                                </div>
-                                                </>
-                                            )}
-                                        </div>
+                                        <TabPontos
+                    confirm={confirm}
+                    load={load}
+                    pontosParadaFiltrados={pontosParadaFiltrados}
+                    setEditandoPontoId={setEditandoPontoId}
+                    setFormPonto={setFormPonto}
+                    setModalPonto={setModalPonto}
+                    setPontoDetalhe={setPontoDetalhe}
+                    showToast={showToast}
+                />
                                     )}
 
                                     {tab === 'bonificacoes' && (
-                                        <div className="flex flex-col gap-4">
-                                            {/* Filtro de período personalizado */}
-                                            <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                                                    <h3 className="font-heading font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>Filtrar por período específico</h3>
-                                                    {(periodoCustom || periodoCustomInput) && (
-                                                        <button onClick={() => { setPeriodoCustom(null); setPeriodoCustomInput(null); }}
-                                                            className="text-xs font-medium flex items-center gap-1" style={{ color: 'var(--color-primary)' }}>
-                                                            <Icon name="X" size={12} /> Limpar filtro
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                <div className="flex items-end gap-2 flex-wrap">
-                                                    <div>
-                                                        <label className="block text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>De</label>
-                                                        <input type="date" value={periodoCustomInput?.inicio || ''}
-                                                            onChange={e => setPeriodoCustomInput(pc => ({ inicio: e.target.value, fim: pc?.fim || '' }))}
-                                                            className="h-10 px-3 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }} />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Até</label>
-                                                        <input type="date" value={periodoCustomInput?.fim || ''}
-                                                            onChange={e => setPeriodoCustomInput(pc => ({ inicio: pc?.inicio || '', fim: e.target.value }))}
-                                                            className="h-10 px-3 rounded-lg border text-sm" style={{ borderColor: 'var(--color-border)' }} />
-                                                    </div>
-                                                    <Button size="sm" iconName="Search" disabled={!periodoCustomInput?.inicio || !periodoCustomInput?.fim}
-                                                        onClick={() => setPeriodoCustom(periodoCustomInput)}>
-                                                        Buscar viagens
-                                                    </Button>
-                                                </div>
-                                                {periodoCustom?.inicio && periodoCustom?.fim && (
-                                                    <p className="text-xs mt-2" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                        <Icon name="Info" size={11} className="inline mr-1" />
-                                                        Os cards abaixo mostram os valores de {new Date(periodoCustom.inicio + 'T00:00:00').toLocaleDateString('pt-BR')} até {new Date(periodoCustom.fim + 'T00:00:00').toLocaleDateString('pt-BR')}, em vez do filtro de "{PERIOD_OPTIONS.find(p=>p.days===period)?.label || (typeof period === 'number' ? period + ' dias' : period)}" da barra lateral.
-                                                    </p>
-                                                )}
-                                            </div>
-                                            {/* Resumo */}
-                                            <div className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                <h3 className="font-heading font-semibold text-sm mb-3" style={{ color: 'var(--color-text-primary)' }}>Resumo do Período</h3>
-                                                <div className="grid grid-cols-3 gap-3">
-                                                    <div>
-                                                        <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Bônus Viagens</p>
-                                                        <p className="text-xl font-bold font-data text-purple-600">{BRL(totais.totalBonusViagens)}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Bônus Extras</p>
-                                                        <p className="text-xl font-bold font-data text-amber-600">{BRL(totais.totalBonusExtras)}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs font-caption" style={{ color: 'var(--color-muted-foreground)' }}>Total a Receber</p>
-                                                        <p className="text-xl font-bold font-data text-emerald-600">{BRL(totais.totalBonus)}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Bônus por carregamentos */}
-                                            <div>
-                                                <p className="text-sm font-semibold px-1 mb-2" style={{ color: 'var(--color-text-secondary)' }}>Bônus por carregamento</p>
-                                                <div className="flex flex-col gap-2">
-                                                    {carregamentosComBonus.length === 0
-                                                        ? <div className="bg-white rounded-xl border p-6 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Package" size={24} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum carregamento no período</span></div>
-                                                        : carregamentosComBonusPag.pageItems.map(c => (
-                                                            <div key={c.id} className="bg-white rounded-xl border p-3 flex items-center justify-between shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                                <div>
-                                                                    <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{c.destino || '—'}</p>
-                                                                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                        {c.data_carregamento ? new Date(c.data_carregamento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
-                                                                        {c.veiculo?.placa ? ` · ${c.veiculo.placa}` : ''}
-                                                                    </p>
-                                                                </div>
-                                                                <span className="font-data font-bold text-purple-600">{BRL(c.bonus)}</span>
-                                                            </div>
-                                                        ))
-                                                    }
-                                                </div>
-                                                <PaginationBar page={carregamentosComBonusPag.page} setPage={carregamentosComBonusPag.setPage} totalPages={carregamentosComBonusPag.totalPages}
-                                                    totalItems={carregamentosComBonusPag.totalItems} pageSize={carregamentosComBonusPag.pageSize} itemLabel="carregamento" itemLabelPlural="carregamentos" className="rounded-xl border bg-white mt-2" />
-                                            </div>
-
-                                            {/* Bonificações extras */}
-                                            <div>
-                                                <p className="text-sm font-semibold px-1 mb-2" style={{ color: 'var(--color-text-secondary)' }}>Bonificações extras</p>
-                                                <div className="flex flex-col gap-2">
-                                                    {bonusExtras.length === 0
-                                                        ? <div className="bg-white rounded-xl border p-6 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Award" size={24} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma bonificação extra no período</span></div>
-                                                        : bonusExtrasPag.pageItems.map(e => (
-                                                            <div key={e.id} className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: '#FDE68A', backgroundColor: '#FFFBEB' }}>
-                                                                <div className="flex items-center justify-between mb-1">
-                                                                    <span className="text-xs font-medium" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                        {e.data ? new Date(e.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
-                                                                    </span>
-                                                                    <span className="font-data font-bold text-amber-600">{BRL(e.valor)}</span>
-                                                                </div>
-                                                                <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{e.observacao || '—'}</p>
-                                                            </div>
-                                                        ))
-                                                    }
-                                                </div>
-                                                <PaginationBar page={bonusExtrasPag.page} setPage={bonusExtrasPag.setPage} totalPages={bonusExtrasPag.totalPages}
-                                                    totalItems={bonusExtrasPag.totalItems} pageSize={bonusExtrasPag.pageSize} itemLabel="bonificação" itemLabelPlural="bonificações" className="rounded-xl border bg-white mt-2" />
-                                            </div>
-                                        </div>
+                                        <TabBonificacoes
+                    bonusExtras={bonusExtras}
+                    bonusExtrasPag={bonusExtrasPag}
+                    carregamentosComBonus={carregamentosComBonus}
+                    carregamentosComBonusPag={carregamentosComBonusPag}
+                    period={period}
+                    periodoCustom={periodoCustom}
+                    periodoCustomInput={periodoCustomInput}
+                    setPeriodoCustom={setPeriodoCustom}
+                    setPeriodoCustomInput={setPeriodoCustomInput}
+                    totais={totais}
+                />
                                     )}
 
                                     {tab === 'registros' && (
-                                        <div>
-                                            {seletorPlaca && <div className="flex justify-end mb-3">{seletorPlaca}</div>}
-                                            {/* Dois botões de ação separados */}
-                                            <div className="grid grid-cols-1 gap-3 mb-5">
-                                                <button onClick={() => { setEditandoRegistroId(null); setFormRegistro(emptyRegistro()); setParadasRegistro([]); setModalRegistro(true); }}
-                                                    className="flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:shadow-md active:scale-[0.99]"
-                                                    style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
-                                                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#1D4ED8' }}>
-                                                        <Icon name="Package" size={22} color="white" />
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <p className="font-bold text-sm" style={{ color: '#1D4ED8' }}>Registrar Viagem de Cimento</p>
-                                                        <p className="text-xs mt-0.5" style={{ color: '#3B82F6' }}>Nota fiscal, placa, destino e data de descarga</p>
-                                                    </div>
-                                                    <Icon name="ChevronRight" size={18} color="#1D4ED8" />
-                                                </button>
-                                                <button onClick={() => { setFormFerragem({ numero_romaneio: '', numero_nf: '', veiculo_id: '', data_saida: new Date().toISOString().split('T')[0], destino: '', toneladas: '', empresa: '', observacoes: '' }); setParadasFerragem([]); setModalFerragem(true); }}
-                                                    className="flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all hover:shadow-md active:scale-[0.99]"
-                                                    style={{ borderColor: '#D1FAE5', backgroundColor: '#ECFDF5' }}>
-                                                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#059669' }}>
-                                                        <Icon name="FileText" size={22} color="white" />
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <p className="font-bold text-sm" style={{ color: '#065F46' }}>Registrar Romaneio de Ferragens</p>
-                                                        <p className="text-xs mt-0.5" style={{ color: '#059669' }}>NF, placa, destino, peso e empresa</p>
-                                                    </div>
-                                                    <Icon name="ChevronRight" size={18} color="#059669" />
-                                                </button>
-                                            </div>
-
-                                            {registrosFiltrados.length > 0 && (
-                                                <div>
-                                                    <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>Viagens de Cimento</p>
-                                                    <div className="flex flex-col gap-2">
-                                                        {registrosFiltrados.map(r => (
-                                                            <div key={r.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: r.local_carregamento === 'Estoque' ? '#FDE68A' : 'var(--color-border)' }}>
-                                                                <div className="flex items-start justify-between mb-2">
-                                                                    <div>
-                                                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                                                            <p className="font-semibold text-sm" style={{ color: 'var(--color-text-primary)' }}>{r.destino || '—'}</p>
-                                                                            {r.local_carregamento === 'Estoque' && (
-                                                                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
-                                                                                    📦 Estoque
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
-                                                                        <p className="text-xs font-data" style={{ color: 'var(--color-muted-foreground)' }}>{r.veiculo?.placa || '—'}</p>
-                                                                    </div>
-                                                                    <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">
-                                                                        {r.data_carregamento ? new Date(r.data_carregamento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                    {r.local_carregamento === 'Estoque'
-                                                                        ? (r.tipo_cimento && <span>Cimento: <strong>{r.tipo_cimento}</strong></span>)
-                                                                        : <>
-                                                                            {r.numero_nota_fiscal && <span>NF: <strong>{r.numero_nota_fiscal}</strong></span>}
-                                                                            {r.data_descarga && <span>Descarga: <strong>{new Date(r.data_descarga + 'T00:00:00').toLocaleDateString('pt-BR')}</strong></span>}
-                                                                        </>}
-                                                                </div>
-                                                                {r.observacoes && <p className="text-xs mt-2 text-gray-500">{r.observacoes}</p>}
-                                                                <div className="flex justify-end gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
-                                                                    <button onClick={() => handleDeleteRegistro(r.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
-                                                                        <Icon name="Trash2" size={16} />Excluir
-                                                                    </button>
-                                                                    <button onClick={() => handleEditRegistro(r)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
-                                                                        <Icon name="Pencil" size={16} />Editar
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* ── Romaneios de Ferragem lançados pelo motorista — editáveis aqui ── */}
-                                            {romaneiosFerragemFiltrados.length > 0 && (
-                                                <div className="mt-4">
-                                                    <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: 'var(--color-muted-foreground)' }}>Romaneios de Ferragem</p>
-                                                    <div className="flex flex-col gap-2">
-                                                        {romaneiosFerragemFiltrados.map(r => (
-                                                            <div key={r.id} className="bg-white rounded-xl border shadow-sm overflow-hidden" style={{ borderColor: '#FDE68A' }}>
-                                                                <div className="flex items-center justify-between px-4 py-2.5 border-b" style={{ backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }}>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <Icon name="Wrench" size={13} color="#D97706" />
-                                                                        <span className="text-xs font-semibold font-data" style={{ color: '#D97706' }}>
-                                                                            Romaneio #{r.numero || '—'}
-                                                                        </span>
-                                                                        <span className="text-xs px-1.5 py-0.5 rounded-full font-medium" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
-                                                                            Ferragem
-                                                                        </span>
-                                                                    </div>
-                                                                    <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}>
-                                                                        {r.status || 'Aguardando'}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="p-4">
-                                                                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-3">
-                                                                        {r.numero_nf && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Nota Fiscal</p><p className="text-sm font-semibold font-data">{r.numero_nf}</p></div>}
-                                                                        {r.data_saida && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Data Saída</p><p className="text-sm font-medium font-data">{FMT_DATE(r.data_saida)}</p></div>}
-                                                                        {r.toneladas && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Toneladas</p><p className="text-sm font-semibold font-data" style={{ color: '#7C3AED' }}>{Number(r.toneladas).toLocaleString('pt-BR', { maximumFractionDigits: 3 })} ton</p></div>}
-                                                                        {r.empresa && <div><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Empresa</p><p className="text-sm font-medium">{r.empresa}</p></div>}
-                                                                        {r.destino && <div className="col-span-2"><p className="text-xs mb-0.5" style={{ color: 'var(--color-muted-foreground)' }}>Destino</p><div className="flex items-center gap-1.5"><Icon name="MapPin" size={12} color="#D97706" /><p className="text-sm font-medium">{r.destino}</p></div></div>}
-                                                                    </div>
-                                                                    <div className="flex justify-end gap-2 pt-3 border-t" style={{ borderColor: '#FDE68A' }}>
-                                                                        <button
-                                                                            onClick={async () => {
-                                                                                const ok = await confirm({
-                                                                                    title: 'Excluir romaneio?',
-                                                                                    message: 'Esta ação não pode ser desfeita.',
-                                                                                    confirmLabel: 'Excluir',
-                                                                                    variant: 'danger',
-                                                                                });
-                                                                                if (!ok) return;
-                                                                                try {
-                                                                                    await deleteRomaneio(r.id);
-                                                                                    showToast('Romaneio excluído!', 'success');
-                                                                                    setRomaneiosFerragem(prev => prev.filter(x => x.id !== r.id));
-                                                                                } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                                                                            }}
-                                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
-                                                                            <Icon name="Trash2" size={16} />Excluir
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                setEditandoFerragemId(r.id);
-                                                                                setFormFerragem({
-                                                                                    numero_nf:   r.numero_nf || '',
-                                                                                    veiculo_id:  r.veiculo_id || '',
-                                                                                    data_saida:  r.data_saida || new Date().toISOString().split('T')[0],
-                                                                                    destino:     r.destino || '',
-                                                                                    toneladas:   r.toneladas ? String(r.toneladas) : '',
-                                                                                    empresa:     r.empresa || '',
-                                                                                    observacoes: r.observacoes || '',
-                                                                                });
-                                                                                setParadasFerragem(parseParadas(r.paradas));
-                                                                                setModalFerragem(true);
-                                                                            }}
-                                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-200 text-amber-700 hover:bg-amber-50">
-                                                                            <Icon name="Pencil" size={16} />Editar
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {registrosFiltrados.length === 0 && romaneiosFerragemFiltrados.length === 0 && (
-                                                <div className="bg-white rounded-xl border p-8 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
-                                                    <Icon name="Navigation" size={28} color="var(--color-muted-foreground)" />
-                                                    <span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhuma viagem registrada</span>
-                                                </div>
-                                            )}
-                                        </div>
+                                        <TabRegistros
+                    confirm={confirm}
+                    emptyRegistro={emptyRegistro}
+                    handleDeleteRegistro={handleDeleteRegistro}
+                    handleEditRegistro={handleEditRegistro}
+                    registrosFiltrados={registrosFiltrados}
+                    romaneiosFerragemFiltrados={romaneiosFerragemFiltrados}
+                    seletorPlaca={seletorPlaca}
+                    setEditandoFerragemId={setEditandoFerragemId}
+                    setEditandoRegistroId={setEditandoRegistroId}
+                    setFormFerragem={setFormFerragem}
+                    setFormRegistro={setFormRegistro}
+                    setModalFerragem={setModalFerragem}
+                    setModalRegistro={setModalRegistro}
+                    setParadasFerragem={setParadasFerragem}
+                    setParadasRegistro={setParadasRegistro}
+                    setRomaneiosFerragem={setRomaneiosFerragem}
+                    showToast={showToast}
+                />
                                     )}
 
                                     {tab === 'abastecimentos' && (
-                                        <div>
-                                            {seletorPlaca && <div className="flex justify-end mb-3">{seletorPlaca}</div>}
-                                            <div className="grid grid-cols-2 gap-3 mb-4">
-                                                <div className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                    <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Diesel Total</p>
-                                                    <p className="text-lg font-bold font-data text-blue-600">{totais.litrosDiesel.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L</p>
-                                                </div>
-                                                <div className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                    <p className="text-xs mb-1" style={{ color: 'var(--color-muted-foreground)' }}>Gasto Total</p>
-                                                    <p className="text-lg font-bold font-data text-purple-600">{BRL(totais.gastoTotal)}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex flex-col gap-2">
-                                                {abastFiltrados.length === 0
-                                                    ? <div className="bg-white rounded-xl border p-6 flex flex-col items-center justify-center gap-2" style={{ borderColor: 'var(--color-border)' }}><Icon name="Fuel" size={24} color="var(--color-muted-foreground)" /><span className="text-sm" style={{ color: 'var(--color-muted-foreground)' }}>Nenhum abastecimento no período</span></div>
-                                                    : abastFiltrados.map(a => (
-                                                        <div key={a.id} className="bg-white rounded-xl border p-3 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                            <div className="flex items-center justify-between mb-1">
-                                                                <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>{FMT_DATE(a.data_abastecimento)}</span>
-                                                                <span className="font-data font-bold text-purple-600">{BRL(a.valor_total)}</span>
-                                                            </div>
-                                                            <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                <span className="font-data">{a.veiculo?.placa || '—'}</span>
-                                                                {a.posto && <span>{a.posto}</span>}
-                                                                <span className="text-blue-600">{Number(a.litros_diesel || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L diesel</span>
-                                                                {Number(a.litros_arla) > 0 && <span className="text-emerald-600">{Number(a.litros_arla).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L arla</span>}
-                                                            </div>
-                                                            {a.cupom_fiscal && (
-                                                                <div className="mt-1 text-xs" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                                    Cupom: <span className="font-data font-medium" style={{ color: 'var(--color-text-primary)' }}>{a.cupom_fiscal}</span>
-                                                                </div>
-                                                            )}
-                                                            <div className="flex justify-end gap-2 mt-2 pt-2 border-t" style={{ borderColor: 'var(--color-border)' }}>
-                                                                <button onClick={() => handleEditAbast(a)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
-                                                                    <Icon name="Pencil" size={16} />Editar
-                                                                </button>
-                                                                <button onClick={() => handleDeleteAbast(a.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
-                                                                    <Icon name="Trash2" size={16} />Excluir
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    ))
-                                                }
-                                            </div>
-                                        </div>
+                                        <TabAbastecimentos abastFiltrados={abastFiltrados} handleDeleteAbast={handleDeleteAbast} handleEditAbast={handleEditAbast} seletorPlaca={seletorPlaca} totais={totais} />
                                     )}
 
                                     {tab === 'checklist' && (
-                                        <div className="flex flex-col gap-4">
-                                            {seletorPlaca && <div className="flex justify-end">{seletorPlaca}</div>}
-                                            {checklistsFiltrados.length === 0 && (
-                                                <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ color: 'var(--color-muted-foreground)' }}>
-                                                    <Icon name="ClipboardCheck" size={32} color="var(--color-muted-foreground)" />
-                                                    <span className="text-sm">Nenhum checklist enviado ainda</span>
-                                                </div>
-                                            )}
-                                            {checklistsFiltrados.map(c => {
-                                                const itens = c.itens || {};
-                                                const entradas = Object.entries(itens);
-                                                const ok = contarItensOk(itens);
-                                                const total = entradas.length || checklistItens.length || CHECKLIST_ITENS.length;
-                                                const reprovados = entradas.filter(([, v]) => !itemIsOk(v));
-                                                const fotos = (c.fotos_urls && c.fotos_urls.length) ? c.fotos_urls : (c.foto_url ? [c.foto_url] : []);
-                                                return (
-                                                    <div key={c.id} className="bg-white rounded-xl border p-4 shadow-sm" style={{ borderColor: 'var(--color-border)' }}>
-                                                        <div className="flex items-center justify-between mb-2">
-                                                            <div>
-                                                                <p className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.veiculo?.placa || '—'}</p>
-                                                                <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Semana de {c.semana_ref ? new Date(c.semana_ref + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</p>
-                                                            </div>
-                                                            {c.aprovado
-                                                                ? <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"><Icon name="CheckCircle2" size={11} />Aprovado</span>
-                                                                : <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><Icon name="Clock" size={11} />Pendente</span>
-                                                            }
-                                                        </div>
-                                                        <div className="flex items-center justify-between text-xs mb-1">
-                                                            <span style={{ color: 'var(--color-muted-foreground)' }}>Itens OK</span>
-                                                            <span className="font-medium">{ok}/{total}</span>
-                                                        </div>
-                                                        <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                                                            <div className="h-full rounded-full" style={{ width: `${total ? (ok / total) * 100 : 0}%`, backgroundColor: ok === total ? '#059669' : '#D97706' }} />
-                                                        </div>
-                                                        {reprovados.length > 0 && (
-                                                            <div className="mt-2 space-y-1">
-                                                                {reprovados.map(([id, v]) => (
-                                                                    <p key={id} className="text-xs px-2 py-1 rounded bg-red-50 text-red-700">
-                                                                        <Icon name="X" size={10} className="inline mr-1" />{itemLabelOf(v, id)}{itemObsOf(v) && ` — ${itemObsOf(v)}`}
-                                                                    </p>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                        {fotos.length > 0 && (
-                                                            <div className="flex flex-wrap gap-1.5 mt-2">
-                                                                {fotos.map((f, i) => <img key={i} src={f} alt="" className="w-12 h-12 rounded-md border object-cover" style={{ borderColor: 'var(--color-border)' }} />)}
-                                                            </div>
-                                                        )}
-                                                        <div className="flex justify-end gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
-                                                            <button onClick={() => handleEditCheck(c)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-blue-200 text-blue-600 hover:bg-blue-50">
-                                                                <Icon name="Pencil" size={16} />Editar
-                                                            </button>
-                                                            <button onClick={() => handleDeleteChecklist(c.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50">
-                                                                <Icon name="Trash2" size={16} />Excluir
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
+                                        <TabChecklist checklistItens={checklistItens} checklistsFiltrados={checklistsFiltrados} handleDeleteChecklist={handleDeleteChecklist} handleEditCheck={handleEditCheck} seletorPlaca={seletorPlaca} />
                                     )}
                                 </>
                             )}
@@ -1724,446 +414,77 @@ export default function CarreteiroDashboard() {
 
             {/* Modais */}
             {modalAbast && (
-                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
-                   >
-                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-xl sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '92dvh' }}>
-                        <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
-                        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                                    <Icon name="Fuel" size={18} color="#1D4ED8" />
-                                </div>
-                                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>{editandoAbastId ? 'Editar Abastecimento' : 'Registrar Abastecimento'}</h2>
-                            </div>
-                            <button onClick={() => setModalAbast(false)} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
-                        </div>
-                        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
-                            <Field label="Veículo" required>
-                                <PrettySelect value={formAbast.veiculo_id} onChange={e => setFormAbast(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione...</option>
-                                    {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </PrettySelect>
-                            </Field>
-                            <Field label="Data" required><input type="date" value={formAbast.data_abastecimento} onChange={e => setFormAbast(f => ({ ...f, data_abastecimento: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
-                            <Field label="Horário"><input type="time" value={formAbast.horario} onChange={e => setFormAbast(f => ({ ...f, horario: e.target.value }))} className={inputCls} style={inputStyle} /></Field>
-                            <Field label="N° do Cupom Fiscal" required>
-                                <input
-                                    type="text"
-                                    value={formAbast.cupom_fiscal}
-                                    onChange={e => setFormAbast(f => ({ ...f, cupom_fiscal: e.target.value }))}
-                                    className={inputCls}
-                                    style={inputStyle}
-                                    placeholder="Ex: 000123456"
-                                    maxLength={50}
-                                />
-                            </Field>
-                            <Field label="Posto" required>
-                                <PrettySelect value={formAbast.posto_id} onChange={e => handlePostoChangeCarreteiro(e.target.value)} className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione o posto...</option>
-                                    {postos.map(p => (
-                                        <option key={p.id} value={p.id}>{p.nome}{p.cidade ? ` — ${p.cidade}` : ''}</option>
-                                    ))}
-                                </PrettySelect>
-                                {/* Preços efetivos do posto selecionado (ou padrão) */}
-                                {(getPrecoCarreteiro(formAbast.posto_id, 'diesel') > 0 || getPrecoCarreteiro(formAbast.posto_id, 'arla') > 0) && (
-                                    <div className="flex gap-3 mt-1 text-xs">
-                                        {getPrecoCarreteiro(formAbast.posto_id, 'diesel') > 0 && (
-                                            <span className="text-blue-600 font-medium">🛢️ R${getPrecoCarreteiro(formAbast.posto_id, 'diesel').toFixed(3)}/L</span>
-                                        )}
-                                        {getPrecoCarreteiro(formAbast.posto_id, 'arla') > 0 && (
-                                            <span className="text-emerald-600 font-medium">💧 R${getPrecoCarreteiro(formAbast.posto_id, 'arla').toFixed(3)}/L</span>
-                                        )}
-                                    </div>
-                                )}
-                            </Field>
-                            <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
-                                <div className="flex items-center justify-between mb-2">
-                                    <p className="text-xs font-semibold text-blue-700">🛢️ Diesel</p>
-                                    {getPrecoCarreteiro(formAbast.posto_id, 'diesel') > 0 && (
-                                        <span className="text-xs text-blue-600">R$ {getPrecoCarreteiro(formAbast.posto_id, 'diesel').toFixed(3)}/L</span>
-                                    )}
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Field label="Litros"><input type="number" step="0.01" value={formAbast.litros_diesel} onChange={e => handleLitrosCarreteiro('litros_diesel', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
-                                    <Field label="Valor calculado">
-                                        <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0F9FF', color: '#1D4ED8' }}>
-                                            {formAbast.valor_diesel
-                                                ? Number(formAbast.valor_diesel).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                                                : 'R$ 0,00'}
-                                        </div>
-                                    </Field>
-                                </div>
-                            </div>
-                            <div className="sm:col-span-2 p-3 rounded-xl border" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
-                                <div className="flex items-center justify-between mb-2">
-                                    <p className="text-xs font-semibold text-emerald-700">💧 ARLA 32</p>
-                                    {getPrecoCarreteiro(formAbast.posto_id, 'arla') > 0 && (
-                                        <span className="text-xs text-emerald-600">R$ {getPrecoCarreteiro(formAbast.posto_id, 'arla').toFixed(3)}/L</span>
-                                    )}
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Field label="Litros"><input type="number" step="0.01" value={formAbast.litros_arla} onChange={e => handleLitrosCarreteiro('litros_arla', e.target.value)} className={inputCls} style={inputStyle} placeholder="0,00" /></Field>
-                                    <Field label="Valor calculado">
-                                        <div className="px-3 py-2 rounded-lg border text-sm font-semibold" style={{ borderColor: 'var(--color-border)', backgroundColor: '#F0FDF4', color: '#059669' }}>
-                                            {formAbast.valor_arla
-                                                ? Number(formAbast.valor_arla).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-                                                : 'R$ 0,00'}
-                                        </div>
-                                    </Field>
-                                </div>
-                            </div>
-                            <div className="sm:col-span-2 p-2 rounded-lg text-sm font-bold flex items-center justify-between" style={{ backgroundColor: '#7C3AED', color: 'white' }}>
-                                <span>Total do abastecimento:</span>
-                                <span>{(Number(formAbast.valor_diesel || 0) + Number(formAbast.valor_arla || 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                            </div>
-                        </div>
-                        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => { setModalAbast(false); setEditandoAbastId(null); }} disabled={salvandoAbast} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center disabled:opacity-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleAbast} disabled={salvandoAbast} loading={salvandoAbast} size="sm" iconName="Check" className="w-full sm:w-auto">{editandoAbastId ? 'Salvar' : 'Registrar'}</Button>
-                        </div>
-                    </div>
-                </div>
+                <ModalAbast
+                    editandoAbastId={editandoAbastId}
+                    formAbast={formAbast}
+                    getPrecoCarreteiro={getPrecoCarreteiro}
+                    handleAbast={handleAbast}
+                    handleLitrosCarreteiro={handleLitrosCarreteiro}
+                    handlePostoChangeCarreteiro={handlePostoChangeCarreteiro}
+                    postos={postos}
+                    salvandoAbast={salvandoAbast}
+                    setEditandoAbastId={setEditandoAbastId}
+                    setFormAbast={setFormAbast}
+                    setModalAbast={setModalAbast}
+                    veiculosProprios={veiculosProprios}
+                />
             )}
 
             {modalCheck && (
-                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
-                   >
-                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '95dvh' }}>
-                        <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
-                        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                                    <Icon name="ClipboardCheck" size={18} color="#1D4ED8" />
-                                </div>
-                                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>{editandoCheckId ? 'Editar Checklist' : 'Checklist Semanal'}</h2>
-                            </div>
-                            <button onClick={() => { setModalCheck(false); setEditandoCheckId(null); }} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
-                        </div>
-                        <div className="p-5 space-y-4 overflow-y-auto flex-1">
-                            <Field label="Veículo" required>
-                                <PrettySelect value={formCheck.veiculo_id} onChange={e => setFormCheck(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione...</option>
-                                    {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </PrettySelect>
-                            </Field>
-                            <Field label="Odômetro (km)" required>
-                                <input type="number" inputMode="decimal" min="0" value={formCheck.odometro}
-                                    onChange={e => setFormCheck(f => ({ ...f, odometro: e.target.value }))}
-                                    placeholder="Ex: 152340" className={inputCls} style={inputStyle} />
-                            </Field>
-                            <div className="rounded-xl border-2 border-dashed p-4"
-                                style={{ borderColor: formCheck.fotos_urls.length ? '#059669' : '#93C5FD', backgroundColor: formCheck.fotos_urls.length ? '#F0FDF4' : '#EFF6FF' }}>
-                                <p className="text-xs font-semibold mb-3 flex items-center gap-1.5"
-                                    style={{ color: formCheck.fotos_urls.length ? '#065F46' : '#1D4ED8' }}>
-                                    <Icon name="Camera" size={14} color={formCheck.fotos_urls.length ? '#059669' : '#1D4ED8'} />
-                                    {formCheck.fotos_urls.length ? `✅ ${formCheck.fotos_urls.length} foto(s) anexada(s)` : '📷 Fotos do problema (opcional)'}
-                                </p>
-                                <MultiFotoField fotos={formCheck.fotos_urls} onChange={fotos_urls => setFormCheck(f => ({ ...f, fotos_urls }))} showToast={showToast} max={8} />
-                            </div>
-
-                            <div>
-                                <p className="text-xs font-medium mb-2" style={{ color: 'var(--color-text-secondary)' }}>Itens verificados</p>
-                                <ChecklistItemsField itens={checklistItens} value={formCheck.itens} onChange={itens => setFormCheck(f => ({ ...f, itens }))} />
-                            </div>
-                            <Field label="Problemas identificados"><textarea value={formCheck.problemas} onChange={e => setFormCheck(f => ({ ...f, problemas: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Descreva problemas..." /></Field>
-                            <Field label="Necessidades"><textarea value={formCheck.necessidades} onChange={e => setFormCheck(f => ({ ...f, necessidades: e.target.value }))} className={inputCls} style={inputStyle} rows={2} placeholder="Pneus, cintas, peças..." /></Field>
-                            <Field label="Observações livres"><textarea value={formCheck.observacoes_livres} onChange={e => setFormCheck(f => ({ ...f, observacoes_livres: e.target.value }))} className={inputCls} style={inputStyle} rows={2} /></Field>
-                        </div>
-                        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => { setModalCheck(false); setEditandoCheckId(null); }} disabled={salvandoCheck} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center disabled:opacity-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={handleCheck} disabled={salvandoCheck} loading={salvandoCheck} size="sm" iconName={editandoCheckId ? 'Check' : 'Send'} className="w-full sm:w-auto">{salvandoCheck && progressoFotosCheck ? `Foto ${progressoFotosCheck.atual}/${progressoFotosCheck.total}...` : (editandoCheckId ? 'Salvar' : 'Enviar')}</Button>
-                        </div>
-                    </div>
-                </div>
+                <ModalCheck
+                    checklistItens={checklistItens}
+                    editandoCheckId={editandoCheckId}
+                    formCheck={formCheck}
+                    handleCheck={handleCheck}
+                    progressoFotosCheck={progressoFotosCheck}
+                    salvandoCheck={salvandoCheck}
+                    setEditandoCheckId={setEditandoCheckId}
+                    setFormCheck={setFormCheck}
+                    setModalCheck={setModalCheck}
+                    showToast={showToast}
+                    veiculosProprios={veiculosProprios}
+                />
             )}
 
             {modalRegistro && (
-                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
-                   >
-                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-lg sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '92dvh' }}>
-                        <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
-                        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                                    <Icon name="FilePlus" size={18} color="#1D4ED8" />
-                                </div>
-                                <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>{editandoRegistroId ? 'Editar Viagem' : 'Registrar Viagem'}</h2>
-                            </div>
-                            <button onClick={() => { setModalRegistro(false); setEditandoRegistroId(null); }} className="p-1.5 rounded-lg hover:bg-gray-100"><Icon name="X" size={18} color="var(--color-muted-foreground)" /></button>
-                        </div>
-                        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 overflow-y-auto flex-1">
-                            {/* Tipo de lançamento */}
-                            <div className="sm:col-span-2">
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Tipo de lançamento</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button type="button"
-                                        onClick={() => setFormRegistro(f => ({ ...f, local_carregamento: '' }))}
-                                        className="px-3 py-2.5 rounded-xl text-xs font-bold text-left border-2 transition-all"
-                                        style={{
-                                            background: formRegistro.local_carregamento !== 'Estoque' ? '#EFF6FF' : '#fff',
-                                            borderColor: formRegistro.local_carregamento !== 'Estoque' ? '#1D4ED8' : 'var(--color-border)',
-                                            color: formRegistro.local_carregamento !== 'Estoque' ? '#1D4ED8' : 'var(--color-muted-foreground)',
-                                        }}>
-                                        🏭 Viagem Normal
-                                    </button>
-                                    <button type="button"
-                                        onClick={() => setFormRegistro(f => ({ ...f, local_carregamento: 'Estoque' }))}
-                                        className="px-3 py-2.5 rounded-xl text-xs font-bold text-left border-2 transition-all"
-                                        style={{
-                                            background: formRegistro.local_carregamento === 'Estoque' ? '#FFFBEB' : '#fff',
-                                            borderColor: formRegistro.local_carregamento === 'Estoque' ? '#D97706' : 'var(--color-border)',
-                                            color: formRegistro.local_carregamento === 'Estoque' ? '#D97706' : 'var(--color-muted-foreground)',
-                                        }}>
-                                        📦 Carregamento no Estoque
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de carregamento <span className="text-red-500">*</span></label>
-                                <input type="date" value={formRegistro.data_carregamento} onChange={e => setFormRegistro(f => ({ ...f, data_carregamento: e.target.value }))} className={inputCls} style={inputStyle} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Placa do veículo <span className="text-red-500">*</span></label>
-                                <PrettySelect value={formRegistro.veiculo_id} onChange={e => setFormRegistro(f => ({ ...f, veiculo_id: e.target.value }))} className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione...</option>
-                                    {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </PrettySelect>
-                            </div>
-                            <div className={formRegistro.local_carregamento === 'Estoque' ? 'sm:col-span-2' : ''}>
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Destino da carga <span className="text-red-500">*</span></label>
-                                <PrettySelect value={formRegistro.destino} onChange={e => setFormRegistro(f => ({ ...f, destino: e.target.value }))}
-                                    className={inputCls} style={inputStyle} placeholder="Cidade de destino">
-                                    <option value="">Cidade de destino</option>
-                                    {cidadesFrete.map(c => <option key={c.id} value={c.cidade}>{c.cidade}</option>)}
-                                </PrettySelect>
-                            </div>
-                            <div className="sm:col-span-2">
-                                <CidadesAdicionaisField
-                                    cidades={[...new Set((cidadesFrete || []).map(c => c.cidade).filter(Boolean))]}
-                                    value={paradasRegistro}
-                                    onChange={setParadasRegistro}
-                                    label="Essa viagem passa por mais de uma cidade?"
-                                />
-                            </div>
-
-                            {formRegistro.local_carregamento === 'Estoque' ? (
-                                <div className="sm:col-span-2">
-                                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Tipo de cimento <span className="text-red-500">*</span></label>
-                                    <PrettySelect value={formRegistro.tipo_cimento} onChange={e => setFormRegistro(f => ({ ...f, tipo_cimento: e.target.value }))} className={inputCls} style={inputStyle}>
-                                        <option value="">Selecione...</option>
-                                        <option value="Montes Claros">Montes Claros</option>
-                                        <option value="Liz">Liz</option>
-                                        <option value="Ambas">Ambas (Montes Claros + Liz)</option>
-                                    </PrettySelect>
-                                </div>
-                            ) : (
-                                <>
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Nº da Nota Fiscal <span className="text-red-500">*</span></label>
-                                        <input value={formRegistro.numero_nota_fiscal} onChange={e => setFormRegistro(f => ({ ...f, numero_nota_fiscal: e.target.value }))} className={inputCls} style={inputStyle} placeholder="Ex: 381469" />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Data de descarga</label>
-                                        <input type="date" value={formRegistro.data_descarga} onChange={e => setFormRegistro(f => ({ ...f, data_descarga: e.target.value }))} className={inputCls} style={inputStyle} />
-                                    </div>
-                                </>
-                            )}
-
-                            <div className="sm:col-span-2">
-                                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>Observações</label>
-                                <textarea value={formRegistro.observacoes} onChange={e => setFormRegistro(f => ({ ...f, observacoes: e.target.value }))} className={inputCls} style={inputStyle} rows={2} />
-                            </div>
-                        </div>
-                        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => { setModalRegistro(false); setEditandoRegistroId(null); }} disabled={salvandoRegistro} className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center disabled:opacity-50" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={async () => {
-                                if (salvandoRegistro) return;
-                                const isEstoque = formRegistro.local_carregamento === 'Estoque';
-                                // Placa era exibida como obrigatória (*) mas não era validada — corrigido aqui.
-                                if (!formRegistro.data_carregamento || !formRegistro.destino || !formRegistro.veiculo_id) {
-                                    showToast('Data, placa e destino são obrigatórios', 'error'); return;
-                                }
-                                if (isEstoque && !formRegistro.tipo_cimento) {
-                                    showToast('Selecione o tipo de cimento', 'error'); return;
-                                }
-                                if (!isEstoque && !formRegistro.numero_nota_fiscal?.trim()) {
-                                    showToast('Informe o Nº da Nota Fiscal', 'error'); return;
-                                }
-                                const payload = {
-                                    ...formRegistro,
-                                    // Limpa campos que não fazem sentido para o tipo escolhido
-                                    numero_nota_fiscal: isEstoque ? null : (formRegistro.numero_nota_fiscal || null),
-                                    data_descarga:      isEstoque ? null : (formRegistro.data_descarga || null),
-                                    tipo_cimento:        isEstoque ? formRegistro.tipo_cimento : null,
-                                    local_carregamento:  isEstoque ? 'Estoque' : null,
-                                    paradas: paradasRegistro.filter(p => p && p.trim()),
-                                };
-                                setSalvandoRegistro(true);
-                                try {
-                                    if (editandoRegistroId) {
-                                        await updateRegistroViagem(editandoRegistroId, payload);
-                                        showToast('Viagem atualizada!', 'success');
-                                    } else {
-                                        await createRegistroViagem({ ...payload, motorista_id: user.id });
-                                        showToast('Viagem registrada!', 'success');
-                                    }
-                                    setEditandoRegistroId(null);
-                                    setModalRegistro(false); load();
-                                } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                                finally { setSalvandoRegistro(false); }
-                            }} disabled={salvandoRegistro} loading={salvandoRegistro} size="sm" iconName="Check" className="w-full sm:w-auto">{editandoRegistroId ? 'Salvar' : 'Registrar'}</Button>
-                        </div>
-
-                    </div>
-                </div>
+                <ModalRegistro
+                    cidadesFrete={cidadesFrete}
+                    editandoRegistroId={editandoRegistroId}
+                    formRegistro={formRegistro}
+                    load={load}
+                    paradasRegistro={paradasRegistro}
+                    salvandoRegistro={salvandoRegistro}
+                    setEditandoRegistroId={setEditandoRegistroId}
+                    setFormRegistro={setFormRegistro}
+                    setModalRegistro={setModalRegistro}
+                    setParadasRegistro={setParadasRegistro}
+                    setSalvandoRegistro={setSalvandoRegistro}
+                    showToast={showToast}
+                    user={user}
+                    veiculosProprios={veiculosProprios}
+                />
             )}
 
             {modalFerragem && (
-                <ModalOverlay onClose={() => { setModalFerragem(false); setEditandoFerragemId(null); }}>
-                    <ModalHeader title={editandoFerragemId ? 'Editar Romaneio de Ferragens' : 'Novo Romaneio de Ferragens'} icon="FileText" onClose={() => { setModalFerragem(false); setEditandoFerragemId(null); }} />
-                    <div className="p-5 space-y-4 overflow-y-auto">
-                        <div className="flex items-center gap-2 p-3 rounded-xl border" style={{ backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }}>
-                            <Icon name="Info" size={14} color="#065F46" />
-                            <p className="text-xs" style={{ color: '#065F46' }}>Este romaneio ficará visível para conferência do administrador.</p>
-                        </div>
-                        {/* Vincular a ROM existente do admin */}
-                        <Field label="Nº do Romaneio (opcional)">
-                            {romsAbertos.length > 0 ? (
-                                <PrettySelect
-                                    value={formFerragem.numero_romaneio}
-                                    onChange={e => {
-                                        const num = e.target.value;
-                                        const rom = romsAbertos.find(r => r.numero === num);
-                                        setFormFerragem(f => ({
-                                            ...f,
-                                            numero_romaneio: num,
-                                            destino: rom?.destino || f.destino,
-                                            empresa: rom?.empresa_origem || f.empresa,
-                                        }));
-                                    }}
-                                    className={inputCls} style={inputStyle}>
-                                    <option value="">Deixar em branco (gera número automático)</option>
-                                    {romsAbertos.map(r => (
-                                        <option key={r.id} value={r.numero}>
-                                            {r.numero} — {r.destino || 'Sem destino'} — {r.empresa_origem || ''}
-                                        </option>
-                                    ))}
-                                </PrettySelect>
-                            ) : (
-                                <input
-                                    value={formFerragem.numero_romaneio}
-                                    onChange={e => setFormFerragem(f => ({ ...f, numero_romaneio: e.target.value }))}
-                                    className={inputCls} style={inputStyle}
-                                    placeholder="Ex: ROM-00001 (se o admin já criou)"
-                                />
-                            )}
-                            <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>
-                                Se o administrador já criou o romaneio, selecione para vincular. Caso contrário, será gerado automaticamente.
-                            </p>
-                        </Field>
-                        <div className="grid grid-cols-2 gap-4">
-                            <Field label="Nº da Nota Fiscal" required>
-                                <input value={formFerragem.numero_nf} onChange={e => setFormFerragem(f => ({ ...f, numero_nf: e.target.value }))}
-                                    className={inputCls} style={inputStyle} placeholder="Ex: 395240" />
-                            </Field>
-                            <Field label="Data de Saída" required>
-                                <input type="date" value={formFerragem.data_saida} onChange={e => setFormFerragem(f => ({ ...f, data_saida: e.target.value }))}
-                                    className={inputCls} style={inputStyle} />
-                            </Field>
-                        </div>
-                        <Field label="Veículo / Placa" required>
-                            <PrettySelect value={formFerragem.veiculo_id} onChange={e => setFormFerragem(f => ({ ...f, veiculo_id: e.target.value }))}
-                                className={inputCls} style={inputStyle}>
-                                <option value="">Selecione...</option>
-                                {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                            </PrettySelect>
-                        </Field>
-                        <div className="grid grid-cols-2 gap-4">
-                            <Field label="Destino" required>
-                                <PrettySelect value={formFerragem.destino} onChange={e => setFormFerragem(f => ({ ...f, destino: e.target.value }))}
-                                    className={inputCls} style={inputStyle}>
-                                    <option value="">Cidade ou estoque</option>
-                                    <option value="Estoque">Estoque</option>
-                                    {cidadesFrete.map(c => <option key={c.id} value={c.cidade}>{c.cidade}</option>)}
-                                </PrettySelect>
-                            </Field>
-                            <Field label="Peso (ton)">
-                                <input type="number" step="0.001" value={formFerragem.toneladas} onChange={e => setFormFerragem(f => ({ ...f, toneladas: e.target.value }))}
-                                    className={inputCls} style={inputStyle} placeholder="Ex: 5.920" />
-                            </Field>
-                        </div>
-                        <CidadesAdicionaisField
-                            cidades={[...new Set((cidadesFrete || []).map(c => c.cidade).filter(Boolean))]}
-                            value={paradasFerragem}
-                            onChange={setParadasFerragem}
-                            label="Essa viagem passa por mais de uma cidade?"
-                        />
-                        <Field label="Empresa / Fornecedor">
-                            <PrettySelect value={formFerragem.empresa} onChange={e => setFormFerragem(f => ({ ...f, empresa: e.target.value }))}
-                                className={inputCls} style={inputStyle}>
-                                <option value="">Selecione...</option>
-                                {empresas.map(e => <option key={e.id} value={e.nome}>{e.nome}</option>)}
-                            </PrettySelect>
-                        </Field>
-                        <Field label="Observações">
-                            <textarea value={formFerragem.observacoes} onChange={e => setFormFerragem(f => ({ ...f, observacoes: e.target.value }))}
-                                className={inputCls} style={{ ...inputStyle, resize: 'vertical' }} rows={2} placeholder="Informações adicionais..." />
-                        </Field>
-                    </div>
-                    <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end" style={{ borderColor: 'var(--color-border)' }}>
-                        <button onClick={() => { setModalFerragem(false); setEditandoFerragemId(null); }} className="px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 w-full sm:w-auto" style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                        <Button disabled={salvandoFerragem} onClick={async () => {
-                            if (!formFerragem.numero_nf?.trim() || !formFerragem.data_saida || !formFerragem.destino?.trim() || !formFerragem.veiculo_id) {
-                                showToast('NF, data, veículo e destino são obrigatórios', 'error'); return;
-                            }
-                            setSalvandoFerragem(true);
-                            try {
-                                if (editandoFerragemId) {
-                                    await updateRomaneio(editandoFerragemId, {
-                                        numero_nf:   formFerragem.numero_nf,
-                                        data_saida:  formFerragem.data_saida,
-                                        veiculo_id:  formFerragem.veiculo_id,
-                                        destino:     formFerragem.destino,
-                                        toneladas:   formFerragem.toneladas ? Number(formFerragem.toneladas) : null,
-                                        empresa:     formFerragem.empresa || null,
-                                        observacoes: formFerragem.observacoes || null,
-                                        paradas:     paradasFerragem.filter(p => p && p.trim()),
-                                    });
-                                    showToast('Romaneio atualizado!', 'success');
-                                    setRomaneiosFerragem(prev => prev.map(r =>
-                                        r.id === editandoFerragemId
-                                            ? { ...r, ...formFerragem, toneladas: formFerragem.toneladas ? Number(formFerragem.toneladas) : null }
-                                            : r
-                                    ));
-                                } else {
-                                    await createRomaneioFerragem({
-                                        numero_romaneio: formFerragem.numero_romaneio?.trim() || null,
-                                        numero_nf:    formFerragem.numero_nf,
-                                        data_saida:   formFerragem.data_saida,
-                                        veiculo_id:   formFerragem.veiculo_id,
-                                        destino:      formFerragem.destino,
-                                        toneladas:    formFerragem.toneladas ? Number(formFerragem.toneladas) : null,
-                                        empresa:      formFerragem.empresa || null,
-                                        observacoes:  formFerragem.observacoes || null,
-                                        motorista_id: user.id,
-                                        paradas:      paradasFerragem.filter(p => p && p.trim()),
-                                    });
-                                    showToast('Romaneio de ferragens registrado!', 'success');
-                                }
-                                setEditandoFerragemId(null);
-                                setModalFerragem(false);
-                                load();
-                            } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                            finally { setSalvandoFerragem(false); }
-                        }} size="sm" iconName="Check" className="w-full sm:w-auto">
-                            {salvandoFerragem ? 'Salvando...' : editandoFerragemId ? 'Salvar' : 'Registrar'}
-                        </Button>
-                    </div>
-                </ModalOverlay>
+                <ModalFerragem
+                    cidadesFrete={cidadesFrete}
+                    editandoFerragemId={editandoFerragemId}
+                    empresas={empresas}
+                    formFerragem={formFerragem}
+                    load={load}
+                    paradasFerragem={paradasFerragem}
+                    romsAbertos={romsAbertos}
+                    salvandoFerragem={salvandoFerragem}
+                    setEditandoFerragemId={setEditandoFerragemId}
+                    setFormFerragem={setFormFerragem}
+                    setModalFerragem={setModalFerragem}
+                    setParadasFerragem={setParadasFerragem}
+                    setRomaneiosFerragem={setRomaneiosFerragem}
+                    setSalvandoFerragem={setSalvandoFerragem}
+                    showToast={showToast}
+                    user={user}
+                    veiculosProprios={veiculosProprios}
+                />
             )}
 
             {pontoDetalhe && (() => {
@@ -2225,306 +546,19 @@ export default function CarreteiroDashboard() {
             })()}
 
             {modalPonto && (
-                <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)' }}
-                   >
-                    <div className="bg-white w-full sm:rounded-2xl sm:max-w-2xl sm:mx-4 rounded-t-2xl shadow-2xl flex flex-col" style={{ maxHeight: '94dvh' }}>
-                        <div className="flex justify-center pt-3 pb-1 sm:hidden flex-shrink-0"><div className="w-10 h-1 rounded-full bg-gray-300" /></div>
-                        <div className="flex items-center justify-between p-5 border-b flex-shrink-0" style={{ borderColor: 'var(--color-border)' }}>
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#EFF6FF' }}>
-                                    <Icon name="MapPin" size={18} color="#1D4ED8" />
-                                </div>
-                                <div>
-                                    <h2 className="font-heading font-bold text-lg" style={{ color: 'var(--color-text-primary)' }}>
-                                        {editandoPontoId ? 'Editar Ponto de Parada' : 'Novo Ponto de Parada'}
-                                    </h2>
-                                    <p className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>Registre saída e chegada no local</p>
-                                </div>
-                            </div>
-                            <button onClick={() => { setModalPonto(false); setEditandoPontoId(null); }} className="p-1.5 rounded-lg hover:bg-gray-100">
-                                <Icon name="X" size={18} color="var(--color-muted-foreground)" />
-                            </button>
-                        </div>
-
-                        <div className="p-5 space-y-4 overflow-y-auto flex-1">
-                            <Field label="Cupom Fiscal / NF">
-                                <input
-                                    value={formPonto.cupom_fiscal}
-                                    onChange={e => setFormPonto(f => ({ ...f, cupom_fiscal: e.target.value }))}
-                                    className={inputCls} style={inputStyle}
-                                    placeholder="Nº do cupom fiscal / nota (opcional)"
-                                />
-                            </Field>
-
-                            <Field label="Veículo" required>
-                                <PrettySelect value={formPonto.veiculo_id}
-                                    onChange={e => setFormPonto(f => ({ ...f, veiculo_id: e.target.value }))}
-                                    className={inputCls} style={inputStyle}>
-                                    <option value="">Selecione...</option>
-                                    {veiculosProprios.map(v => <option key={v.id} value={v.id}>{v.placa} — {v.modelo}</option>)}
-                                </PrettySelect>
-                            </Field>
-
-                            {/* Bloco SAÍDA — de onde o motorista está saindo */}
-                            <div className="p-4 rounded-xl border space-y-3"
-                                style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
-                                <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#1D4ED8' }}>
-                                    <Icon name="LogOut" size={14} color="#1D4ED8" />SAÍDA
-                                </p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <Field label="Tipo de Local">
-                                        <PrettySelect value={formPonto.tipo_local}
-                                            onChange={e => setFormPonto(f => ({ ...f, tipo_local: e.target.value, local: '' }))}
-                                            className={inputCls} style={inputStyle}>
-                                            {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
-                                                <option key={t} value={t}>{t}</option>
-                                            ))}
-                                        </PrettySelect>
-                                    </Field>
-                                    <Field label="Destino / Local" required>
-                                        <PrettySelect
-                                            value={formPonto.local}
-                                            onChange={e => setFormPonto(f => ({ ...f, local: e.target.value }))}
-                                            className={inputCls} style={inputStyle}>
-                                            <option value="">Selecione...</option>
-                                            {destinosParaTipo(formPonto.tipo_local).map(nome => (
-                                                <option key={nome} value={nome}>{nome}</option>
-                                            ))}
-                                        </PrettySelect>
-                                    </Field>
-                                </div>
-                                <div className="grid grid-cols-3 gap-3">
-                                    <Field label="Data" required>
-                                        <input type="date" value={formPonto.data_saida}
-                                            onChange={e => setFormPonto(f => ({ ...f, data_saida: e.target.value }))}
-                                            className={inputCls} style={inputStyle} />
-                                    </Field>
-                                    <Field label="Horário">
-                                        <input type="time" value={formPonto.horario_saida}
-                                            onChange={e => setFormPonto(f => ({ ...f, horario_saida: e.target.value }))}
-                                            className={inputCls} style={inputStyle} />
-                                    </Field>
-                                    <Field label="KM Saída">
-                                        <input type="number" value={formPonto.km_saida}
-                                            onChange={e => setFormPonto(f => ({ ...f, km_saida: e.target.value }))}
-                                            className={inputCls} style={inputStyle} placeholder="Ex: 641300" />
-                                    </Field>
-                                </div>
-                            </div>
-
-                            {/* Bloco CHEGADA — para onde o motorista está indo */}
-                            <div className="p-4 rounded-xl border space-y-3"
-                                style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
-                                <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#065F46' }}>
-                                    <Icon name="LogIn" size={14} color="#065F46" />CHEGADA
-                                </p>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <Field label="Tipo de Local">
-                                        <PrettySelect value={formPonto.tipo_local_chegada}
-                                            onChange={e => setFormPonto(f => ({ ...f, tipo_local_chegada: e.target.value, local_chegada: '' }))}
-                                            className={inputCls} style={inputStyle}>
-                                            {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
-                                                <option key={t} value={t}>{t}</option>
-                                            ))}
-                                        </PrettySelect>
-                                    </Field>
-                                    <Field label="Destino / Local">
-                                        <PrettySelect
-                                            value={formPonto.local_chegada}
-                                            onChange={e => setFormPonto(f => ({ ...f, local_chegada: e.target.value }))}
-                                            className={inputCls} style={inputStyle}>
-                                            <option value="">Selecione...</option>
-                                            {destinosParaTipo(formPonto.tipo_local_chegada).map(nome => (
-                                                <option key={nome} value={nome}>{nome}</option>
-                                            ))}
-                                        </PrettySelect>
-                                    </Field>
-                                </div>
-                                <div className="grid grid-cols-3 gap-3">
-                                    <Field label="Data">
-                                        <input type="date" value={formPonto.data_chegada}
-                                            onChange={e => setFormPonto(f => ({ ...f, data_chegada: e.target.value }))}
-                                            className={inputCls} style={inputStyle} />
-                                    </Field>
-                                    <Field label="Horário">
-                                        <input type="time" value={formPonto.horario_chegada}
-                                            onChange={e => setFormPonto(f => ({ ...f, horario_chegada: e.target.value }))}
-                                            className={inputCls} style={inputStyle} />
-                                    </Field>
-                                    <Field label="KM Chegada">
-                                        <input type="number" value={formPonto.km_chegada}
-                                            onChange={e => setFormPonto(f => ({ ...f, km_chegada: e.target.value }))}
-                                            className={inputCls} style={inputStyle} placeholder="Ex: 642600" />
-                                    </Field>
-                                </div>
-                            </div>
-
-                            {/* Horários extras (saídas/chegadas adicionais no mesmo dia) */}
-                            {formPonto.horarios_extras && formPonto.horarios_extras.length > 0 && formPonto.horarios_extras.map((extra, idx) => (
-                                <div key={idx} className="rounded-xl border space-y-3" style={{ borderColor: '#E9D5FF', backgroundColor: '#FAF5FF' }}>
-                                    <div className="flex items-center justify-between px-4 pt-3">
-                                        <p className="text-xs font-bold" style={{ color: '#6D28D9' }}>PONTO EXTRA #{idx + 1}</p>
-                                        <button type="button" onClick={() => setFormPonto(f => ({ ...f, horarios_extras: f.horarios_extras.filter((_, i) => i !== idx) }))}
-                                            className="p-1 rounded hover:bg-red-50" title="Remover">
-                                            <Icon name="X" size={14} color="#DC2626" />
-                                        </button>
-                                    </div>
-                                    <div className="px-4 pb-3 space-y-3">
-                                        <Field label="Cupom Fiscal / NF">
-                                            <input value={extra.cupom_fiscal || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], cupom_fiscal: e.target.value }; return { ...f, horarios_extras: h }; })}
-                                                className={inputCls} style={inputStyle} placeholder="Nº do cupom fiscal / nota (opcional)" />
-                                        </Field>
-                                        <div className="p-3 rounded-lg border space-y-2" style={{ borderColor: '#BFDBFE', backgroundColor: '#EFF6FF' }}>
-                                            <p className="text-xs font-bold flex items-center gap-1" style={{ color: '#1D4ED8' }}><Icon name="LogOut" size={12} color="#1D4ED8" />SAÍDA</p>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <Field label="Tipo de Local">
-                                                    <PrettySelect value={extra.tipo_local || 'Fábrica'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local: e.target.value, local: '' }; return { ...f, horarios_extras: h }; })}
-                                                        className={inputCls} style={inputStyle}>
-                                                        {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
-                                                            <option key={t} value={t}>{t}</option>
-                                                        ))}
-                                                    </PrettySelect>
-                                                </Field>
-                                                <Field label="Destino / Local" required>
-                                                    <PrettySelect value={extra.local || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], local: e.target.value }; return { ...f, horarios_extras: h }; })}
-                                                        className={inputCls} style={inputStyle}>
-                                                        <option value="">Selecione...</option>
-                                                        {destinosParaTipo(extra.tipo_local || 'Fábrica').map(nome => (
-                                                            <option key={nome} value={nome}>{nome}</option>
-                                                        ))}
-                                                    </PrettySelect>
-                                                </Field>
-                                            </div>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                <Field label="Data" required>
-                                                    <input type="date" value={extra.data_saida || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], data_saida: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} />
-                                                </Field>
-                                                <Field label="Horário">
-                                                    <input type="time" value={extra.horario_saida || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], horario_saida: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} />
-                                                </Field>
-                                                <Field label="KM Saída">
-                                                    <input type="number" value={extra.km_saida || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], km_saida: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} placeholder="Ex: 641300" />
-                                                </Field>
-                                            </div>
-                                        </div>
-                                        <div className="p-3 rounded-lg border space-y-2" style={{ borderColor: '#A7F3D0', backgroundColor: '#ECFDF5' }}>
-                                            <p className="text-xs font-bold flex items-center gap-1" style={{ color: '#065F46' }}><Icon name="LogIn" size={12} color="#065F46" />CHEGADA</p>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <Field label="Tipo de Local">
-                                                    <PrettySelect value={extra.tipo_local_chegada || 'Fábrica'} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], tipo_local_chegada: e.target.value, local_chegada: '' }; return { ...f, horarios_extras: h }; })}
-                                                        className={inputCls} style={inputStyle}>
-                                                        {['Empresa','Fábrica','Entrega','Posto','Outro'].map(t => (
-                                                            <option key={t} value={t}>{t}</option>
-                                                        ))}
-                                                    </PrettySelect>
-                                                </Field>
-                                                <Field label="Destino / Local">
-                                                    <PrettySelect value={extra.local_chegada || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], local_chegada: e.target.value }; return { ...f, horarios_extras: h }; })}
-                                                        className={inputCls} style={inputStyle}>
-                                                        <option value="">Selecione...</option>
-                                                        {destinosParaTipo(extra.tipo_local_chegada || 'Fábrica').map(nome => (
-                                                            <option key={nome} value={nome}>{nome}</option>
-                                                        ))}
-                                                    </PrettySelect>
-                                                </Field>
-                                            </div>
-                                            <div className="grid grid-cols-3 gap-2">
-                                                <Field label="Data">
-                                                    <input type="date" value={extra.data_chegada || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], data_chegada: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} />
-                                                </Field>
-                                                <Field label="Horário">
-                                                    <input type="time" value={extra.horario_chegada || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], horario_chegada: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} />
-                                                </Field>
-                                                <Field label="KM Chegada">
-                                                    <input type="number" value={extra.km_chegada || ''} onChange={e => setFormPonto(f => { const h = [...f.horarios_extras]; h[idx] = { ...h[idx], km_chegada: e.target.value }; return { ...f, horarios_extras: h }; })} className={inputCls} style={inputStyle} placeholder="Ex: 642600" />
-                                                </Field>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                            {(formPonto.horarios_extras || []).length === 0 ? (
-                                <button type="button" onClick={() => setFormPonto(f => ({ ...f, horarios_extras: [...(f.horarios_extras || []), { tipo_local: 'Fábrica', local: '', cupom_fiscal: '', data_saida: formPonto.data_saida || new Date().toISOString().split('T')[0], horario_saida: '', km_saida: '', data_chegada: '', horario_chegada: '', km_chegada: '' }] }))}
-                                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed text-xs font-medium w-full justify-center hover:bg-purple-50 transition-colors"
-                                    style={{ borderColor: '#C4B5FD', color: '#6D28D9' }}>
-                                    <Icon name="Plus" size={14} color="#6D28D9" />
-                                    Adicionar mais um registro de saída e chegada
-                                </button>
-                            ) : (
-                                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg" style={{ backgroundColor: '#FEF3C7', border: '1px solid #FDE68A' }}>
-                                    <Icon name="Info" size={14} color="#B45309" />
-                                    <p className="text-xs" style={{ color: '#92400E' }}>
-                                        Cada registro de parada permite no máximo um ponto principal e um ponto extra. Crie um novo registro de parada para adicionar outro ponto.
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Observações */}
-                            <div>
-                                <Field label="Observações">
-                                    <input value={formPonto.observacoes}
-                                        onChange={e => setFormPonto(f => ({ ...f, observacoes: e.target.value }))}
-                                        className={inputCls} style={inputStyle} placeholder="Irregularidades, barulhos..." />
-                                </Field>
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 p-5 border-t flex-shrink-0 sm:justify-end"
-                            style={{ borderColor: 'var(--color-border)' }}>
-                            <button onClick={() => { setModalPonto(false); setEditandoPontoId(null); }}
-                                className="w-full sm:w-auto px-4 py-2.5 rounded-lg border text-sm font-medium hover:bg-gray-50 text-center"
-                                style={{ borderColor: 'var(--color-border)' }}>Cancelar</button>
-                            <Button onClick={async () => {
-                                if (!formPonto.local?.trim() || !formPonto.data_saida) {
-                                    showToast('Local e data de saída são obrigatórios', 'error'); return;
-                                }
-                                if (!formPonto.veiculo_id) {
-                                    showToast('Selecione o veículo — obrigatório pra saber qual placa fez essa parada', 'error'); return;
-                                }
-                                if ((formPonto.horarios_extras || []).length > 1) {
-                                    showToast('Cada registro permite no máximo um ponto principal e um ponto extra. Crie um novo registro de parada.', 'error'); return;
-                                }
-                                const payload = {
-                                    ...formPonto,
-                                    motorista_id: user.id,
-                                    km_saida: formPonto.km_saida !== '' ? Number(formPonto.km_saida) : null,
-                                    km_chegada: formPonto.km_chegada !== '' ? Number(formPonto.km_chegada) : null,
-                                    veiculo_id: formPonto.veiculo_id || null,
-                                    data_chegada: formPonto.data_chegada || null,
-                                    horario_saida: formPonto.horario_saida || null,
-                                    horario_chegada: formPonto.horario_chegada || null,
-                                    horarios_extras: (formPonto.horarios_extras || []).map(e => ({
-                                        ...e,
-                                        km_saida: e.km_saida !== '' && e.km_saida != null ? Number(e.km_saida) : null,
-                                        km_chegada: e.km_chegada !== '' && e.km_chegada != null ? Number(e.km_chegada) : null,
-                                        data_chegada: e.data_chegada || null,
-                                        horario_saida: e.horario_saida || null,
-                                        horario_chegada: e.horario_chegada || null,
-                                    })),
-                                };
-                                try {
-                                    const okTacografo = await confirm({
-                                        title: 'Confira o disco do tacógrafo',
-                                        message: 'Os horários e KMs registrados aqui devem ser coerentes com as informações do disco do tacógrafo do veículo. Confirma que os dados batem com o tacógrafo?',
-                                        confirmLabel: 'Sim, está coerente', variant: 'info',
-                                    });
-                                    if (!okTacografo) return;
-                                    if (editandoPontoId) {
-                                        await updatePontoParada(editandoPontoId, payload);
-                                        showToast('Registro atualizado!', 'success');
-                                    } else {
-                                        await createPontoParada(payload);
-                                        showToast('Ponto de parada registrado!', 'success');
-                                    }
-                                    setModalPonto(false); setEditandoPontoId(null); load();
-                                } catch (e) { showToast('Erro: ' + e.message, 'error'); }
-                            }} size="sm" iconName="Check" className="w-full sm:w-auto">
-                                {editandoPontoId ? 'Salvar' : 'Registrar'}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
+                <ModalPonto
+                    confirm={confirm}
+                    destinosParaTipo={destinosParaTipo}
+                    editandoPontoId={editandoPontoId}
+                    formPonto={formPonto}
+                    load={load}
+                    setEditandoPontoId={setEditandoPontoId}
+                    setFormPonto={setFormPonto}
+                    setModalPonto={setModalPonto}
+                    showToast={showToast}
+                    user={user}
+                    veiculosProprios={veiculosProprios}
+                />
             )}
 
             <Toast toast={toast} />

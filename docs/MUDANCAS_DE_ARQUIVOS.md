@@ -1,0 +1,173 @@
+# Arquivos movidos/removidos na reorganização
+
+Gerado automaticamente comparando o projeto original com o reorganizado.
+**Extraia o ZIP numa pasta limpa** (ou apague `src/` antiga antes) para que arquivos antigos não fiquem misturados.
+
+## Removidos (não existem mais)
+- image-hosts.config.js
+- next-env.d.ts
+- next.config.mjs
+- src/Routes.jsx
+- src/app/admin-dashboard/components/AdminPanel.tsx
+- src/app/admin-dashboard/components/ProductModal.tsx
+- src/app/admin-dashboard/components/QuoteResponseModal.tsx
+- src/app/admin-dashboard/page.tsx
+- src/app/cart/page.tsx
+- src/app/homepage/components/AboutSection.tsx
+- src/app/homepage/components/GrupoHCSection.tsx
+- src/app/homepage/components/HeroSection.tsx
+- src/app/homepage/components/ProductsPreview.tsx
+- src/app/homepage/components/QuoteForm.tsx
+- src/app/homepage/components/StatsSection.tsx
+- src/app/homepage/page.tsx
+- src/app/layout.tsx
+- src/app/login/page.tsx
+- src/app/not-found.tsx
+- src/app/perfil/page.tsx
+- src/app/products/[id]/page.tsx
+- src/app/products/components/ProductCatalog.tsx
+- src/app/products/page.tsx
+- src/app/register/page.tsx
+- src/app/sobre/page.tsx
+- src/components/AISuggestionsP.jsx
+- src/components/AppImage.jsx
+- src/components/CompanyBanner.tsx
+- src/components/Footer.tsx
+- src/components/Header.tsx
+- src/components/RomaneiosTable.jsx
+- src/components/ui/AppIcon.tsx
+- src/components/ui/AppImage.tsx
+- src/components/ui/AppLogo.tsx
+- src/components/ui/Checkbox.jsx
+- src/components/ui/QuantityInput.tsx
+- src/components/ui/Select.jsx
+- src/components/ui/carretasService.js
+- src/components/ui/romaneioService.js
+- src/context/AuthContext.tsx
+- src/context/CartContext.tsx
+- src/context/CompanyContext.tsx
+- src/context/PriceContext.tsx
+- src/hooks/useVisibilityRefetch.ts
+- src/lib/supabase.ts
+- src/lib/supabase/client.ts
+- src/lib/supabase/middleware-client.ts
+- src/lib/supabase/server.ts
+- src/middleware.ts
+- src/pages/boletos/index.jsx
+- src/pages/carretas/TabCustos.jsx
+- src/pages/carretas/TabPneus.jsx
+- src/pages/carretas/TabRomaneios.jsx
+- src/pages/carretas/TabVolume.jsx
+- src/pages/financeiro/index.jsx
+- src/pages/main-dashboard/components/MetricsCards.jsx
+- src/pages/main-dashboard/components/RecentActivityFeed.jsx
+- src/pages/romaneios/components/RomaneioDetailModal.jsx
+- src/pages/romaneios/components/RomaneioFormModal.jsx
+- src/utils/backupService.js
+- src/utils/caminhoesDespesasService.js
+- src/utils/carretasService.js
+- src/utils/despesasAdmTransporteService.js
+- src/utils/excelUtils.js
+- src/utils/romaneioService.js
+
+## Movidos/renomeados (antigo → novo)
+- src/pages/icons/fiveicon.svg → src/assets/icons/fiveicon.svg
+- src/components/ui/AccessDeniedModal.jsx → src/components/AccessDeniedModal/index.jsx
+- src/components/ActionButtons.jsx → src/components/ActionButtons/index.jsx
+- src/components/AppIcon.jsx → src/components/AppIcon/index.jsx
+- src/components/ui/Autocomplete.jsx → src/components/Autocomplete/index.jsx
+- src/components/ui/BoletosPainel.jsx → src/components/BoletosPainel/index.jsx
+- src/components/ui/BreadcrumbTrail.jsx → src/components/BreadcrumbTrail/index.jsx
+- src/components/ui/Button.jsx → src/components/Button/index.jsx
+- src/components/ui/CardMesParcelas.jsx → src/components/CardMesParcelas/index.jsx
+- src/components/ui/ChecklistItemsField.jsx → src/components/ChecklistItemsField/index.jsx
+- src/components/ui/ChecklistItensManagerModal.jsx → src/components/ChecklistItensManagerModal/index.jsx
+- src/components/ui/CidadesAdicionaisField.jsx → src/components/CidadesAdicionaisField/index.jsx
+- src/components/ui/ConfirmDialog.jsx → src/components/ConfirmDialog/index.jsx
+- src/components/ui/DiagramaPneuVeiculo.jsx → src/components/DiagramaPneuVeiculo/index.jsx
+- src/components/ErrorBoundary.jsx → src/components/ErrorBoundary/index.jsx
+- src/components/ui/ExpandableList.jsx → src/components/ExpandableList/index.jsx
+- src/components/ui/Input.jsx → src/components/Input/index.jsx
+- src/components/ui/MobileMenuOverlay.jsx → src/components/MobileMenuOverlay/index.jsx
+- src/components/ui/ModalShell.jsx → src/components/ModalShell/index.jsx
+- src/components/ui/MultiFotoField.jsx → src/components/MultiFotoField/index.jsx
+- src/components/ui/NavigationBar.jsx → src/components/NavigationBar/index.jsx
+- src/components/ui/NotificationBell.jsx → src/components/NotificationBell/index.jsx
+- src/components/ui/Pagination.jsx → src/components/Pagination/index.jsx
+- src/components/ui/PeriodRangeFilter.jsx → src/components/PeriodRangeFilter/index.jsx
+- src/components/ui/PneuIcon.jsx → src/components/PneuIcon/index.jsx
+- src/components/ui/PrettySelect.jsx → src/components/PrettySelect/index.jsx
+- src/components/ui/QuickActionPanel.jsx → src/components/QuickActionPanel/index.jsx
+- src/components/ScrollToTop.jsx → src/components/ScrollToTop/index.jsx
+- src/components/ui/SearchableSelect.jsx → src/components/SearchableSelect/index.jsx
+- src/components/ui/SelectBusca.jsx → src/components/SelectBusca/index.jsx
+- src/components/ui/TabelaLancamentosPaginada.jsx → src/components/TabelaLancamentosPaginada/index.jsx
+- src/components/ui/Toast.jsx → src/components/Toast/index.jsx
+- src/components/ui/VeiculoSilhueta.jsx → src/components/VeiculoSilhueta/index.jsx
+- src/utils/freteConfig.js → src/config/freteConfig.js
+- src/utils/pneuDiagramaConfig.js → src/config/pneuDiagramaConfig.js
+- src/utils/AuthContext.jsx → src/context/AuthContext.jsx
+- src/utils/PageTabsContext.jsx → src/context/PageTabsContext.jsx
+- src/utils/useDeviceProfile.js → src/hooks/useDeviceProfile.js
+- src/utils/useRecarregarAoVoltar.js → src/hooks/useRecarregarAoVoltar.js
+- src/utils/useToast.js → src/hooks/useToast.js
+- src/pages/carretas/TabFretes.jsx → src/pages/carretas/components/TabFretes/components/TabelaFretes/index.jsx
+- src/pages/main-dashboard/components/AISuggestionsP.jsx → src/pages/main-dashboard/components/AISuggestionsP/index.jsx
+- src/pages/main-dashboard/components/FleetUtilizationChart.jsx → src/pages/main-dashboard/components/FleetUtilizationChart/index.jsx
+- src/pages/main-dashboard/components/RomaneiosTable.jsx → src/pages/main-dashboard/components/RomaneiosTable/index.jsx
+- src/pages/main-dashboard/components/StatusBadge.jsx → src/pages/main-dashboard/components/StatusBadge/index.jsx
+- src/pages/material-catalog/components/BulkActionsBar.jsx → src/pages/material-catalog/components/BulkActionsBar/index.jsx
+- src/pages/material-catalog/components/CategoryManagerModal.jsx → src/pages/material-catalog/components/CategoryManagerModal/index.jsx
+- src/pages/material-catalog/components/DeleteConfirmDialog.jsx → src/pages/material-catalog/components/DeleteConfirmDialog/index.jsx
+- src/pages/material-catalog/components/FilterPanel.jsx → src/pages/material-catalog/components/FilterPanel/index.jsx
+- src/pages/material-catalog/components/MaterialCardMobile.jsx → src/pages/material-catalog/components/MaterialCardMobile/index.jsx
+- src/pages/material-catalog/components/MaterialFormModal.jsx → src/pages/material-catalog/components/MaterialFormModal/index.jsx
+- src/pages/material-catalog/components/MaterialTable.jsx → src/pages/material-catalog/components/MaterialTable/index.jsx
+- src/pages/NotFound.jsx → src/pages/not-found/index.jsx
+- src/pages/romaneios/components/RomaneioImportModal.jsx → src/pages/romaneios/components/RomaneioImportModal/index.jsx
+- src/pages/vehicle-fleet-management/components/CostsPanel.jsx → src/pages/vehicle-fleet-management/components/CostsPanel/index.jsx
+- src/pages/vehicle-fleet-management/components/FilterBar.jsx → src/pages/vehicle-fleet-management/components/FilterBar/index.jsx
+- src/pages/vehicle-fleet-management/components/HistoryModal.jsx → src/pages/vehicle-fleet-management/components/HistoryModal/index.jsx
+- src/pages/vehicle-fleet-management/components/MetricCards.jsx → src/pages/vehicle-fleet-management/components/MetricCards/index.jsx
+- src/pages/vehicle-fleet-management/components/StatusBadge.jsx → src/pages/vehicle-fleet-management/components/StatusBadge/index.jsx
+- src/pages/vehicle-fleet-management/components/StatusUpdateModal.jsx → src/pages/vehicle-fleet-management/components/StatusUpdateModal/index.jsx
+- src/pages/vehicle-fleet-management/components/VehicleCards.jsx → src/pages/vehicle-fleet-management/components/VehicleCards/index.jsx
+- src/pages/vehicle-fleet-management/components/VehicleFormModal.jsx → src/pages/vehicle-fleet-management/components/VehicleFormModal/index.jsx
+- src/pages/vehicle-fleet-management/components/VehicleTable.jsx → src/pages/vehicle-fleet-management/components/VehicleTable/index.jsx
+- src/components/ProtectedRoute.jsx → src/routes/private-routes.jsx
+- src/utils/aiSuggestionsService.js → src/services/aiSuggestionsService.js
+- src/utils/boletosService.js → src/services/boletosService.js
+- src/utils/bonificacaoService.js → src/services/bonificacaoService.js
+- src/utils/corredoresService.js → src/services/corredoresService.js
+- src/utils/custosFrotaService.js → src/services/custosFrotaService.js
+- src/utils/desempenhoMotoristaService.js → src/services/desempenhoMotoristaService.js
+- src/utils/entregasAcessoriosService.js → src/services/entregasAcessoriosService.js
+- src/utils/fornecedoresService.js → src/services/fornecedoresService.js
+- src/utils/materialService.js → src/services/materialService.js
+- src/utils/parcelasGenerator.js → src/services/parcelasGenerator.js
+- src/utils/pneusService.js → src/services/pneusService.js
+- src/utils/romaneioImportService.js → src/services/romaneioImportService.js
+- src/utils/settingsService.js → src/services/settingsService.js
+- src/utils/supabaseClient.js → src/services/supabaseClient.js
+- src/utils/userService.js → src/services/userService.js
+- src/utils/vehicleService.js → src/services/vehicleService.js
+- src/lib/add-company-column.sql → supabase/schema/add-company-column.sql
+- src/lib/database.sql → supabase/schema/database.sql
+- src/lib/migration-company.sql → supabase/schema/migration-company.sql
+- src/lib/quote-response.sql → supabase/schema/quote-response.sql
+- src/lib/rls-fix.sql → supabase/schema/rls-fix.sql
+- src/lib/settings.sql → supabase/schema/settings.sql
+- supabase/migrations/admin_delete_policies.sql → supabase/scripts/admin_delete_policies.sql
+- supabase/migrations/fix_rls_carretas_romaneios.sql → supabase/scripts/fix_rls_carretas_romaneios.sql
+- supabase/migrations/fix_rls_delete_romaneio.sql → supabase/scripts/fix_rls_delete_romaneio.sql
+- supabase/migrations/fix_rls_motorista_ferragem.sql → supabase/scripts/fix_rls_motorista_ferragem.sql
+- supabase/migrations/fix_romaneios_rls_carreteiro.sql → supabase/scripts/fix_romaneios_rls_carreteiro.sql
+- supabase/migrations/fn_delete_driver_user.sql → supabase/scripts/fn_delete_driver_user.sql
+- supabase/migrations/migration_add_empresa_tipo_local.sql → supabase/scripts/migration_add_empresa_tipo_local.sql
+- supabase/migrations/migration_fretes.sql → supabase/scripts/migration_fretes.sql
+- supabase/migrations/migration_retira_realtime.sql → supabase/scripts/migration_retira_realtime.sql
+- supabase/migrations/migration_rls_romaneios_ferragem.sql → supabase/scripts/migration_rls_romaneios_ferragem.sql
+- supabase/migrations/migration_romaneio_vinculo.sql → supabase/scripts/migration_romaneio_vinculo.sql
+- supabase/migrations/migration_terceiros.sql → supabase/scripts/migration_terceiros.sql
+- supabase/migrations/rascunhos_migration.sql → supabase/scripts/rascunhos_migration.sql
+- supabase/migrations/rascunhos_romaneios_migration.sql → supabase/scripts/rascunhos_romaneios_migration.sql

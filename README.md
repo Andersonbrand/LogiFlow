@@ -1,105 +1,64 @@
-# React
+# LogiFlow — Gestão Logística
 
-A modern React-based project utilizing the latest frontend technologies and tools for building responsive web applications.
-
-## 🚀 Features
-
-- **React 18** - React version with improved rendering and concurrent features
-- **Vite** - Lightning-fast build tool and development server
-- **Redux Toolkit** - State management with simplified Redux setup
-- **TailwindCSS** - Utility-first CSS framework with extensive customization
-- **React Router v6** - Declarative routing for React applications
-- **Data Visualization** - Integrated D3.js and Recharts for powerful data visualization
-- **Form Management** - React Hook Form for efficient form handling
-- **Animation** - Framer Motion for smooth UI animations
-- **Testing** - Jest and React Testing Library setup
-
-## 📋 Prerequisites
-
-- Node.js (v14.x or higher)
-- npm or yarn
-
-## 🛠️ Installation
-
-1. Install dependencies:
-   ```bash
-   npm install
-   # or
-   yarn install
-   ```
-2. Start the development server:
-   ```bash
-   npm start
-   # or
-   yarn start
-   ```
-
-## 📁 Project Structure
-
-```
-react_app/
-├── public/             # Static assets
-├── src/
-│   ├── components/     # Reusable UI components
-│   ├── pages/          # Page components
-│   ├── styles/         # Global styles and Tailwind configuration
-│   ├── App.jsx         # Main application component
-│   ├── Routes.jsx      # Application routes
-│   └── index.jsx       # Application entry point
-├── .env                # Environment variables
-├── index.html          # HTML template
-├── package.json        # Project dependencies and scripts
-├── tailwind.config.js  # Tailwind CSS configuration
-└── vite.config.js      # Vite configuration
-```
-
-## 🧩 Adding Routes
-
-To add new routes to the application, update the `Routes.jsx` file:
-
-```jsx
-import { useRoutes } from "react-router-dom";
-import HomePage from "pages/HomePage";
-import AboutPage from "pages/AboutPage";
-
-const ProjectRoutes = () => {
-  let element = useRoutes([
-    { path: "/", element: <HomePage /> },
-    { path: "/about", element: <AboutPage /> },
-    // Add more routes as needed
-  ]);
-
-  return element;
-};
-```
-
-## 🎨 Styling
-
-This project uses Tailwind CSS for styling. The configuration includes:
-
-- Forms plugin for form styling
-- Typography plugin for text styling
-- Aspect ratio plugin for responsive elements
-- Container queries for component-specific responsive design
-- Fluid typography for responsive text
-- Animation utilities
-
-## 📱 Responsive Design
-
-The app is built with responsive design using Tailwind CSS breakpoints.
-
-## 📦 Deployment
-
-Build the application for production:
+Aplicação web (React 18 + Vite + Tailwind) com Supabase (Postgres, Auth, Realtime, Storage, Edge Functions).
 
 ```bash
-npm run build
+npm install --legacy-peer-deps
+cp .env.example .env      # preencha as variáveis do Supabase
+npm start                 # http://localhost:4028
+npm run build · npm test · npm run lint
 ```
 
-## 🙏 Acknowledgments
+## Estrutura (`src/`)
 
-- Built with [Rocket.new](https://rocket.new)
-- Powered by React and Vite
-- Styled with Tailwind CSS
+```
+src/
+├── index.jsx            ponto de entrada (monta <App />)
+├── App.jsx              verifica variáveis de ambiente e renderiza as rotas
+├── routes/              routes.jsx (todas as rotas) · private-routes.jsx (guardas por papel)
+├── constants/           paths.js — URLs de todas as telas (fonte única)
+├── pages/               uma pasta por tela (ver abaixo) + index.js (barrel)
+├── components/          componentes compartilhados: components/<Nome>/index.jsx + index.js (barrel)
+├── context/             provedores globais: AuthContext, PageTabsContext
+├── hooks/               hooks reutilizáveis: useToast, useRecarregarAoVoltar, useDeviceProfile
+├── services/            acesso a dados e regras de negócio (Supabase): supabaseClient.js + *Service.js
+├── config/              configurações de domínio: freteConfig, pneuDiagramaConfig, mobileDevices
+├── utils/               funções puras (formatação, planilhas, cidades, rota, erros amigáveis)
+├── styles/              CSS global (tailwind, index, mobile)
+├── assets/              ícones e imagens
+└── tests/               testes (vitest)
+```
 
-Built with ❤️ on Rocket.new
+### Anatomia de uma tela (`pages/<tela>/`)
+```
+pages/carretas/
+├── index.jsx            componente da página (layout, abas, estado da página)
+├── components/          componentes DESTA tela, cada um em sua pasta
+│   └── TabViagens/
+│       ├── index.jsx    o componente
+│       ├── components/  sub-componentes só dele (quando existirem)
+│       └── utils/       helpers.js / constants.js só dele
+└── utils/               helpers.js / constants.js compartilhados entre os componentes da tela
+```
+
+### Regras de importação
+- Entre pastas de topo, use o **alias**: `import { Button } from 'components'`, `import paths from 'constants/paths'`,
+  `import { fetchRomaneios } from 'services/romaneioService'`.
+- Dentro da mesma tela, use **caminho relativo**: `import TabViagens from './components/TabViagens'`.
+- Componentes compartilhados entram pelo barrel `components` (`index.js`). Ao criar um, exporte-o lá.
+- Telas só são importadas por `routes/routes.jsx` (via barrel `pages`).
+- Dependência vai sempre "para baixo": pages → components/hooks/context → services → utils/config.
+
+### Onde colocar código novo
+| Quero…                               | Vai em…                                   |
+|--------------------------------------|--------------------------------------------|
+| nova tela                            | `pages/<nome>/` + rota em `routes/routes.jsx` + `constants/paths.js` |
+| botão/modal usado em várias telas    | `components/<Nome>/index.jsx` + barrel     |
+| componente usado só numa tela        | `pages/<tela>/components/<Nome>/`          |
+| consulta/gravação no banco           | `services/<dominio>Service.js`             |
+| função pura (formatar, calcular)     | `utils/`                                   |
+| tabela de valores/regras de negócio  | `config/`                                  |
+| estado global                        | `context/`                                 |
+| nova tabela/política SQL             | `supabase/migrations/AAAAMMDD_*.sql`       |
+
+Mais detalhes de publicação em [DEPLOY.md](DEPLOY.md).

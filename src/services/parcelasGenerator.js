@@ -1,0 +1,288 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// LogiFlow — Geração automática de parcelas (boletos/cartão/cheque) e
+// detecção de lançamentos de despesa possivelmente duplicados.
+//
+// Usado nas 3 telas de despesa a prazo: Despesas (caminhões),
+// Despesas Administrativas (transporte) e Despesas (dentro de Carretas).
+// ═══════════════════════════════════════════════════════════════════════════
+
+import { supabase } from './supabaseClient';
+
+/**
+ * Calcula o próximo número de uma sequência, incrementando apenas o grupo de
+ * dígitos no FINAL da string e preservando tudo que vem antes (prefixo,
+ * hífen, zeros à esquerda). Isso cobre os dois padrões comuns de numeração:
+ *   - "14532-1"  → passo 1 → "14532-2" → "14532-3"  (incrementa só o sufixo)
+ *   - "4536"     → passo 1 → "4537"    → "4538"      (incrementa o número todo)
+ *   - "007"      → passo 1 → "008"                   (mantém zeros à esquerda)
+ * Se a string não terminar em dígito, devolve o valor original sem alterar.
+ */
+export function proximoNumeroSequencial(base, passo) {
+    const str = String(base ?? '');
+    const m = str.match(/^(.*?)(\d+)$/);
+    if (!m) return str;
+    const [, prefixo, numStr] = m;
+    const largura = numStr.length;
+    const novoNum = String(Math.max(0, Number(numStr) + passo)).padStart(largura, '0');
+    return prefixo + novoNum;
+}
+
+/**
+ * Soma dias ÚTEIS (pula sábado e domingo) a uma data 'YYYY-MM-DD'.
+ * Usado para calcular o 1º vencimento a partir da data contábil da nota
+ * fiscal + prazo informado (ex: NF de 01/07 + 30 dias úteis).
+ * Observação: considera apenas fins de semana — feriados nacionais/locais
+ * não entram no cálculo automaticamente.
+ */
+export function adicionarDiasUteis(dataISO, quantidadeDias) {
+    if (!dataISO) return null;
+    const [ano, mes, dia] = dataISO.split('-').map(Number);
+    const data = new Date(Date.UTC(ano, mes - 1, dia));
+    let restantes = Math.max(0, Math.floor(Number(quantidadeDias) || 0));
+    while (restantes > 0) {
+        data.setUTCDate(data.getUTCDate() + 1);
+        const diaSemana = data.getUTCDay(); // 0 = domingo, 6 = sábado
+        if (diaSemana !== 0 && diaSemana !== 6) restantes--;
+    }
+    return data.toISOString().slice(0, 10);
+}
+
+/**
+ * Gera um array de parcelas (boleto, cartão ou cheque) a partir do valor
+ * total, quantidade de parcelas e regras de vencimento — sem exigir que o
+ * admin digite cada parcela uma a uma. O resultado continua 100% editável
+ * (cada campo pode ser alterado ou removido manualmente depois de gerado).
+ *
+ * @param {Object} opcoes
+ * @param {number} opcoes.valorTotal            - valor total da despesa a prazo
+ * @param {number} opcoes.quantidade            - número de parcelas
+ * @param {string} opcoes.primeiroVencimento    - 'YYYY-MM-DD' da 1ª parcela (normalmente já calculada a partir da data da NF + prazo em dias úteis)
+ * @param {number} [opcoes.intervaloDias=30]    - intervalo ENTRE as parcelas seguintes, em dias corridos (padrão do mercado para boletos mensais)
+ * @param {'boleto'|'cartao'|'cheque'} [opcoes.tipo='boleto']
+ * @param {string} [opcoes.numeroBoletoInicial] - nº do 1º boleto — aceita "4536" ou "14532-1" (ver proximoNumeroSequencial)
+ * @param {string} [opcoes.cartao]              - nome do cartão (quando tipo === 'cartao')
+ * @returns {Array<object>} parcelas prontas para ir em `boletos` ou `parcelas_cartao`
+ */
+export function gerarParcelasAutomaticas({
+    valorTotal,
+    quantidade,
+    primeiroVencimento,
+    intervaloDias = 30,
+    tipo = 'boleto',
+    numeroBoletoInicial = null,
+    cartao = '',
+}) {
+    const total = Number(valorTotal) || 0;
+    const qtd = Math.max(1, Math.floor(Number(quantidade) || 1));
+    if (!primeiroVencimento) throw new Error('Informe a data de vencimento da 1ª parcela.');
+
+    // Divide em centavos pra evitar erro de arredondamento (ex: 100/3 = 33,33 x3 ≠ 100,00).
+    // A diferença de centavos fica toda na última parcela.
+    const totalCentavos = Math.round(total * 100);
+    const baseCentavos = Math.floor(totalCentavos / qtd);
+    const restoCentavos = totalCentavos - baseCentavos * qtd;
+
+    const [ano, mes, dia] = primeiroVencimento.split('-').map(Number);
+
+    const parcelas = [];
+    for (let i = 0; i < qtd; i++) {
+        const centavos = baseCentavos + (i === qtd - 1 ? restoCentavos : 0);
+        const dataVenc = new Date(Date.UTC(ano, mes - 1, dia + intervaloDias * i));
+        const vencimento = dataVenc.toISOString().slice(0, 10);
+
+        const base = {
+            valor: Number((centavos / 100).toFixed(2)),
+            vencimento,
+            pago: false,
+            entregue_financeiro: false,
+        };
+
+        if (tipo === 'boleto') {
+            parcelas.push({
+                ...base,
+                numero_boleto: numeroBoletoInicial ? proximoNumeroSequencial(numeroBoletoInicial, i) : String(i + 1).padStart(2, '0') + `/${String(qtd).padStart(2, '0')}`,
+            });
+        } else if (tipo === 'cartao') {
+            parcelas.push({ ...base, cartao, parcela: `${i + 1}/${qtd}` });
+        } else {
+            parcelas.push({ ...base, numero: i + 1 });
+        }
+    }
+    return parcelas;
+}
+
+/**
+ * Soma de conferência: garante que a geração bateu centavo a centavo com o
+ * valor total informado (útil pra exibir junto do botão "Gerar parcelas").
+ */
+export function somaParcelas(parcelas) {
+    return (parcelas || []).reduce((s, p) => s + (Number(p.valor) || 0), 0);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Detecção de lançamentos duplicados
+// ═══════════════════════════════════════════════════════════════════════════
+
+function normalizarTexto(v) {
+    return String(v || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // remove acentos
+}
+
+function normalizarPlaca(v) {
+    return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); // ABC-1234 / ABC1D23 → só letras/números
+}
+
+function diasEntre(d1, d2) {
+    if (!d1 || !d2) return Infinity;
+    const t1 = new Date(d1).getTime();
+    const t2 = new Date(d2).getTime();
+    if (Number.isNaN(t1) || Number.isNaN(t2)) return Infinity;
+    return Math.abs(t1 - t2) / 86400000;
+}
+
+/**
+ * Compara uma despesa nova (ainda não salva) contra as despesas já
+ * cadastradas, e retorna as que parecem ser o mesmo lançamento repetido —
+ * mesma nota fiscal, ou mesmo fornecedor + placa/veículo + valor muito
+ * próximo em data. Não bloqueia o salvamento sozinho: quem decide é o admin,
+ * a função só sinaliza pra tela mostrar o alerta.
+ *
+ * @param {Array<object>} despesasExistentes - lista já carregada na tela
+ * @param {object} novaDespesa - dados do formulário antes de salvar
+ * @param {Object} [opcoes]
+ * @param {string} [opcoes.excluirId] - id da própria despesa (ao editar, não comparar consigo mesma)
+ * @param {number} [opcoes.janelaDias=5] - tolerância de dias para considerar "mesma época"
+ * @returns {Array<{despesa: object, motivo: string, confianca: 'alta'|'media'}>}
+ */
+export function detectarPossiveisDuplicatas(despesasExistentes, novaDespesa, { excluirId, janelaDias = 5 } = {}) {
+    const nf = normalizarTexto(novaDespesa.nota_fiscal);
+    const fornecedor = normalizarTexto(novaDespesa.empresa || novaDespesa.fornecedor);
+    const placa = normalizarPlaca(novaDespesa.placa || novaDespesa.veiculo?.placa);
+    const valor = Number(novaDespesa.valor) || 0;
+    const data = novaDespesa.data_despesa;
+    const numerosBoletoNovos = (novaDespesa.boletos || []).map(b => normalizarTexto(b.numero_boleto)).filter(Boolean);
+
+    const achados = [];
+
+    for (const d of despesasExistentes || []) {
+        if (excluirId && d.id === excluirId) continue;
+
+        const dNf = normalizarTexto(d.nota_fiscal);
+        const dFornecedor = normalizarTexto(d.empresa || d.fornecedor);
+        const dPlaca = normalizarPlaca(d.placa || d.veiculo?.placa);
+        const dValor = Number(d.valor) || 0;
+        const mesmaPlaca = placa && dPlaca && placa === dPlaca;
+
+        // Confiança ALTA: mesma nota fiscal + mesmo fornecedor (não pode ser coincidência)
+        if (nf && dNf && nf === dNf && fornecedor && dFornecedor && fornecedor === dFornecedor) {
+            achados.push({ despesa: d, motivo: `Mesma nota fiscal (${novaDespesa.nota_fiscal}) e mesmo fornecedor.`, confianca: 'alta' });
+            continue;
+        }
+
+        // Confiança ALTA: mesma nota fiscal + mesma placa, MESMO que o fornecedor esteja
+        // escrito diferente (nome digitado errado é o erro de lançamento mais comum aqui).
+        if (nf && dNf && nf === dNf && mesmaPlaca) {
+            achados.push({ despesa: d, motivo: `Mesma nota fiscal (${novaDespesa.nota_fiscal}) já lançada para a placa ${novaDespesa.placa || dPlaca}, mesmo que o fornecedor esteja digitado diferente.`, confianca: 'alta' });
+            continue;
+        }
+
+        // Confiança ALTA: algum número de boleto já lançado se repete na mesma placa
+        if (mesmaPlaca && numerosBoletoNovos.length > 0) {
+            const numerosExistentes = (d.boletos || []).map(b => normalizarTexto(b.numero_boleto)).filter(Boolean);
+            const repetido = numerosBoletoNovos.find(n => numerosExistentes.includes(n));
+            if (repetido) {
+                achados.push({ despesa: d, motivo: `Boleto nº ${repetido} já lançado para a placa ${novaDespesa.placa || dPlaca}.`, confianca: 'alta' });
+                continue;
+            }
+        }
+
+        // Confiança MÉDIA: mesmo fornecedor + mesma placa/veículo + valor idêntico + data próxima
+        const mesmoValor = valor > 0 && Math.abs(dValor - valor) < 0.01;
+        const mesmaEpoca = diasEntre(data, d.data_despesa) <= janelaDias;
+        if (fornecedor && dFornecedor && fornecedor === dFornecedor && mesmoValor && mesmaEpoca) {
+            if (mesmaPlaca) {
+                achados.push({ despesa: d, motivo: `Mesmo fornecedor, mesma placa (${novaDespesa.placa || ''}) e mesmo valor, em data próxima.`, confianca: 'alta' });
+            } else {
+                achados.push({ despesa: d, motivo: `Mesmo fornecedor e mesmo valor, em data próxima (${Math.round(diasEntre(data, d.data_despesa))} dia(s) de diferença).`, confianca: 'media' });
+            }
+        }
+    }
+
+    return achados;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Checagem GLOBAL de nota fiscal duplicada — consulta direto o banco de dados
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// A verificação acima (detectarPossiveisDuplicatas) só enxerga as despesas já
+// carregadas na tela — que podem estar restritas pelos filtros ativos (mês,
+// veículo, categoria etc). Isso deixava passar duplicidade de NF quando os
+// dois lançamentos caíam em períodos/filtros diferentes. Esta função resolve
+// isso consultando a tabela inteira no Supabase, sem depender do que está
+// carregado na tela — a NF precisa ser única em toda a tabela, sempre.
+//
+// @param {string} table - nome da tabela ('caminhoes_despesas', 'transporte_despesas_adm', 'carretas_despesas_extras')
+// @param {string} notaFiscal - número da NF a verificar
+// @param {string} [excluirId] - id da própria despesa (ao editar, não compara consigo mesma)
+// @returns {Promise<Array<object>>} despesas já existentes com a mesma NF
+export async function buscarDespesasComMesmaNf(table, notaFiscal, excluirId) {
+    const nf = String(notaFiscal ?? '').trim();
+    if (!nf) return [];
+    const nfNormalizada = nf.toLowerCase();
+    // Busca todos os lançamentos (colunas enxutas) e compara em JS — evita
+    // depender de operadores de texto (ilike) que quebram silenciosamente se
+    // a coluna nota_fiscal for numérica em alguma das tabelas.
+    const { data, error } = await supabase
+        .from(table)
+        .select('id, nota_fiscal, fornecedor, empresa, categoria, data_despesa, valor, boletos')
+        .limit(5000);
+    if (error) { console.error(`Erro ao checar NF duplicada em ${table}:`, error.message); return []; }
+    return (data || []).filter(d =>
+        d.id !== excluirId &&
+        String(d.nota_fiscal ?? '').trim().toLowerCase() === nfNormalizada
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Cadastro automático de fornecedor a partir da NF (XML ou código de barras)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Quando o admin importa uma NF (XML ou leitura de código de barras), o
+// fornecedor extraído passa a existir automaticamente no catálogo de
+// fornecedores do LogiFlow — sem precisar cadastrar manualmente depois.
+// Cada tela de despesa (caminhões/carretas/adm.) tem seu próprio catálogo,
+// então recebe as funções fetch/create específicas do módulo.
+//
+// @param {Function} fetchFn  - função que retorna a lista de fornecedores já cadastrados
+// @param {Function} createFn - função que cria um novo fornecedor ({nome, cnpj})
+// @param {{nome: string, cnpj?: string}} dados - dados extraídos da NF
+// @returns {Promise<'existente'|'cadastrado'|null>}
+export async function garantirFornecedorCadastrado(fetchFn, createFn, { nome, cnpj } = {}) {
+    const nomeLimpo = String(nome ?? '').trim();
+    if (!nomeLimpo) return null;
+    try {
+        const existentes = await fetchFn();
+        const cnpjLimpo = String(cnpj ?? '').replace(/\D/g, '');
+        const jaExiste = (existentes || []).some(f => {
+            const fCnpj = String(f.cnpj ?? '').replace(/\D/g, '');
+            if (cnpjLimpo && fCnpj && fCnpj === cnpjLimpo) return true;
+            return String(f.nome ?? '').trim().toLowerCase() === nomeLimpo.toLowerCase();
+        });
+        if (jaExiste) return 'existente';
+        await createFn({ nome: nomeLimpo, cnpj: cnpjLimpo || '' });
+        return 'cadastrado';
+    } catch (e) {
+        console.error('Erro ao verificar/cadastrar fornecedor automaticamente:', e.message);
+        return null;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Empresas do grupo — lista fixa usada no campo "Empresa" das 3 telas de
+// despesa (não é um cadastro dinâmico; são as próprias empresas do grupo
+// que emitem/recebem a despesa).
+// ═══════════════════════════════════════════════════════════════════════════
+export const EMPRESAS_LOGIFLOW = ['Comercial Araguaia', 'Indústria Confiance', 'Aços Confiance'];
