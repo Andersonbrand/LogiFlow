@@ -85,7 +85,7 @@ export default function TabMapaRegional() {
                                 {modoCor === 'regiao'
                                     ? POLOS.filter(p => regioes.find(r => r.id === p.id)?.cidades).map(p => <span key={p.id} className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{ background: p.cor }} />{p.nome.split(' · ')[1]}</span>)
                                     : [['#22C55E', '≥ 25%'], ['#EAB308', '10–25%'], ['#F97316', '0–10%'], ['#EF4444', 'negativa']].map(([c, t]) => <span key={t} className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{ background: c }} />margem {t}</span>)}
-                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full border border-dashed border-gray-400" />sem atendimento</span>
+                                <span className="inline-flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#EF4444' }} />sem atendimento</span>
                                 <span>· tamanho do círculo = {metrica.label.toLowerCase()}</span>
                             </div>
                         </div>

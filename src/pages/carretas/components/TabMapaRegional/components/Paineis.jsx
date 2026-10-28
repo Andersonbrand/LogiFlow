@@ -107,9 +107,10 @@ export function DetalheCidade({ cidade, polo, onFechar }) {
                             <span className="font-semibold">Margem bruta</span>
                             <span className="font-bold" style={{ color: corMargem(cidade.margemReal) }}>{fBRL(cidade.margemReal)}{cidade.margemRealPct != null ? ` · ${fPct(cidade.margemRealPct)}` : ''}</span>
                         </div>
-                        {cidade.margemPorSaco != null && <div className="flex justify-between text-xs"><span style={{ color: 'var(--color-text-secondary)' }}>Margem bruta por saco</span><span>{fBRL(cidade.margemPorSaco).replace(/^R\$\s?/, 'R$ ')}</span></div>}
+                        {cidade.margemPorSaco != null && <div className="flex justify-between"><span className="font-semibold">Margem bruta por saco</span><span className="font-bold" style={{ color: corMargem(cidade.margemPorSaco) }}>{fBRL2(cidade.margemPorSaco)}</span></div>}
                         <div className="flex justify-between text-xs"><span style={{ color: 'var(--color-text-secondary)' }}>Última entrega</span><span>{fData(cidade.ultimaData)}</span></div>
                     </div>
+                    {cidade.viagensCif > 0 && <p className="mt-3 text-xs px-2 py-1.5 rounded bg-blue-50 text-blue-800">{cidade.viagensCif} viagem(ns) CIF: entrega sem custo de transporte — não contam como venda.</p>}
                     {cidade.viagensSemPreco > 0 && <p className="mt-3 text-xs px-2 py-1.5 rounded bg-amber-50 text-amber-800">{cidade.viagensSemPreco} viagem(ns) sem preço de venda na tabela de fretes — fora do cálculo de venda.</p>}
                     {clientes.length > 0 && (
                         <div className="mt-3">

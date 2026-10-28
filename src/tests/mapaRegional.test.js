@@ -43,3 +43,27 @@ describe('mapa regional — agregação', () => {
         expect(chaveMunicipio('Palmas de M. Alto, BA')).toBe('palmas de monte alto');
     });
 });
+
+import { calcCaptacaoDistribuicao } from 'pages/carretas/components/TabVolume/utils/helpers';
+describe('captação x distribuição', () => {
+    it('Carregamento no Estoque: sem captação, só distribuição', () => {
+        const r = calcCaptacaoDistribuicao({ empresa_origem: 'ESTOQUE', destino: 'Barreiras, BA', quantidade: 800, valor_frete_calculado: 6520 }, 7.15);
+        expect(r.captacao).toBe(0); expect(r.distribuicao).toBe(6520);
+    });
+    it('carga normal mantém a captação por saco', () => {
+        const r = calcCaptacaoDistribuicao({ empresa_origem: 'FOB_BARR|CSN', destino: 'Barreiras, BA', quantidade: 800, valor_frete_calculado: 6520 }, 7.15);
+        expect(r.captacao).toBeCloseTo(5720); expect(r.distribuicao).toBeCloseTo(800);
+    });
+});
+describe('CIF não é venda', () => {
+    it('CIF entra no volume mas não em venda/margem', () => {
+        const fretes = [{ cidade: 'Barreiras, BA', km: 100, frete_por_saco: 2, valor_venda: 50 }];
+        const r = agregarMapa({ carregamentos: [
+            { empresa_origem: 'CIF_BARR|CSN', destino: 'Barreiras, BA', quantidade: 800, valor_frete_calculado: 0 },
+            { empresa_origem: 'ARA_BARR_FOB|CSN', destino: 'Barreiras, BA', quantidade: 100, valor_frete_calculado: 200 },
+        ], fretes, custoConfig: { custoMedioProduto: 30, custoOperacional: 1 }, dadosMargem: null });
+        const b = r.cidades.find(c => c.chave === 'barreiras');
+        expect(b.sacos).toBe(900); expect(b.venda).toBe(5000); expect(b.margemReal).toBe(5000 - 3100 - 200);
+        expect(b.margemPorSaco).toBeCloseTo(17);
+    });
+});

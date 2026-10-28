@@ -506,7 +506,7 @@ export default function TabVolume({ isAdmin }) {
                                     {previewFrete > 0 && captacaoConfig.valorPorSaco > 0 && (
                                         <div className="mt-2 p-2.5 rounded-lg text-xs" style={{ backgroundColor: '#F5F3FF', border: '1px solid #DDD6FE' }}>
                                             <div className="flex items-center justify-between mb-1">
-                                                <span style={{ color: '#6D28D9' }}>↳ Captação (MOC → Estoque)</span>
+                                                <span style={{ color: '#6D28D9' }}>↳ Captação (MOC → Estoque){form.tipo === 'ESTOQUE' ? ' — já em estoque' : ''}</span>
                                                 <span className="font-mono font-semibold" style={{ color: '#6D28D9' }}>{BRL(previewCaptacaoTotal)}</span>
                                             </div>
                                             <div className="flex items-center justify-between">

@@ -2,7 +2,7 @@ import React from 'react';
 
 import { useAuth } from 'context/AuthContext';
 import { useToast } from 'hooks/useToast';
-import { AppIcon as Icon, Button, Toast, PrettySelect, PeriodRangeFilter, PaginationBar, Field, ModalHeader, ModalOverlay } from 'components';
+import { AppIcon as Icon, Button, Toast, PrettySelect, SearchInput, PaginationBar, Field, ModalHeader, ModalOverlay } from 'components';
 import { exportBonificacoesAdminExcel } from 'utils/excel';
 
 import { inputStyle, inputCls } from '../../utils/constants';
@@ -39,8 +39,25 @@ export default function TabBonificacoes() {
 
             {/* Filtros */}
             <div className="flex items-end gap-3 flex-wrap">
-                <PeriodRangeFilter preset={b.preset} onPresetChange={b.onPresetChange} periodo={b.periodo} onPeriodoChange={b.setPeriodo}
-                    presets={['mes', 'mes_passado', 'todos', 'personalizado']} />
+                <div className="flex flex-wrap items-center gap-2">
+                    <input type="month" value={b.filtroMes} onChange={e => { b.setFiltroMes(e.target.value); b.setUsarPeriodo(false); }}
+                        className="px-3 py-1.5 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-blue-500/20" style={{ borderColor: 'var(--color-border)' }} title="Mês de exercício" />
+                    <button type="button" data-repeat onClick={() => b.setUsarPeriodo(u => !u)}
+                        className="px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors"
+                        style={b.usarPeriodo ? { backgroundColor: 'var(--color-primary)', color: '#fff', borderColor: 'var(--color-primary)' } : { borderColor: 'var(--color-border)', color: 'var(--color-text-secondary)' }}>
+                        {b.usarPeriodo ? '✓ Período ativo' : 'Período'}
+                    </button>
+                    {b.usarPeriodo && (
+                        <>
+                            <input type="date" value={b.periodoCustom.inicio} onChange={e => b.setPeriodoCustom(p => ({ ...p, inicio: e.target.value }))} className="px-2.5 py-1.5 rounded-lg border text-xs outline-none" style={{ borderColor: 'var(--color-border)' }} />
+                            <span className="text-xs" style={{ color: 'var(--color-muted-foreground)' }}>até</span>
+                            <input type="date" value={b.periodoCustom.fim} onChange={e => b.setPeriodoCustom(p => ({ ...p, fim: e.target.value }))} className="px-2.5 py-1.5 rounded-lg border text-xs outline-none" style={{ borderColor: 'var(--color-border)' }} />
+                        </>
+                    )}
+                </div>
+                <div className="flex-1 max-w-sm">
+                    <SearchInput value={b.pesquisa} onChange={b.setPesquisa} placeholder="Pesquisar motorista, observação…" width="220px" />
+                </div>
                 <div className="min-w-[200px]">
                     <PrettySelect value={b.filtroMotorista} onChange={e => b.setFiltroMotorista(e.target.value)}
                         className="w-full px-2.5 py-1.5 rounded-lg border text-xs outline-none" style={inputStyle}>

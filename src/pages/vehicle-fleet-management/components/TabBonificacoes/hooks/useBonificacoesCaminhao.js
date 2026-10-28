@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { usePagination, usePeriodRangeFilter, useConfirm } from 'components';
+import { usePagination, useConfirm } from 'components';
 import { fetchMotoristasCaminhao } from 'services/carretas';
 import { subscribeTabela } from 'services/supabaseClient';
 import {
@@ -15,7 +15,19 @@ const FORM_VAZIO = () => ({ motorista_id: '', valor: '', data: hoje(), observaca
 export function useBonificacoesCaminhao({ showToast, profile }) {
     const { confirm, ConfirmDialog } = useConfirm();
     const { bonusCaminhaoConfig, reloadBonusCaminhaoConfig } = useBonusCaminhaoConfig();
-    const { preset, periodo, setPeriodo, onPresetChange } = usePeriodRangeFilter('mes');
+    // Filtro padrão do LogiFlow: seletor de mês (padrão = mês atual) + "Usar período" quando necessário
+    const [filtroMes, setFiltroMes] = useState(() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`; });
+    const [usarPeriodo, setUsarPeriodo] = useState(false);
+    const [periodoCustom, setPeriodoCustom] = useState({ inicio: '', fim: '' });
+    const [pesquisa, setPesquisa] = useState('');
+    const periodo = useMemo(() => {
+        if (usarPeriodo) return { inicio: periodoCustom.inicio, fim: periodoCustom.fim };
+        if (filtroMes) {
+            const [a, m] = filtroMes.split('-').map(Number);
+            return { inicio: `${filtroMes}-01`, fim: `${filtroMes}-${String(new Date(a, m, 0).getDate()).padStart(2, '0')}` };
+        }
+        return { inicio: '', fim: '' };
+    }, [filtroMes, usarPeriodo, periodoCustom]);
 
     const [subTab, setSubTab] = useState('resumo'); // 'resumo' | 'extras'
     const [loading, setLoading] = useState(true);
@@ -65,13 +77,16 @@ export function useBonificacoesCaminhao({ showToast, profile }) {
     }, [load, aoMudarRealtime]);
 
     // Filtro por motorista (resumo e extras)
-    const bonifsFiltrados = useMemo(() =>
-        filtroMotorista ? bonifs.filter(b => b.motoristaId === filtroMotorista) : bonifs
-    , [bonifs, filtroMotorista]);
-    const extrasFiltrados = useMemo(() =>
-        filtroMotorista ? extras.filter(e => e.motorista_id === filtroMotorista) : extras
-    , [extras, filtroMotorista]);
-    const extrasPag = usePagination(extrasFiltrados, 15, [extrasFiltrados.length, periodo.inicio, periodo.fim, filtroMotorista]);
+    const q = pesquisa.trim().toLowerCase();
+    const bonifsFiltrados = useMemo(() => bonifs.filter(b =>
+        (!filtroMotorista || b.motoristaId === filtroMotorista) &&
+        (!q || String(b.motorista || '').toLowerCase().includes(q))
+    ), [bonifs, filtroMotorista, q]);
+    const extrasFiltrados = useMemo(() => extras.filter(e =>
+        (!filtroMotorista || e.motorista_id === filtroMotorista) &&
+        (!q || [e.motorista?.name, e.observacao, e.criador?.name, e.valor, e.data].some(v => String(v ?? '').toLowerCase().includes(q)))
+    ), [extras, filtroMotorista, q]);
+    const extrasPag = usePagination(extrasFiltrados, 15, [extrasFiltrados.length, periodo.inicio, periodo.fim, filtroMotorista, q]);
 
     const totais = useMemo(() => ({
         motoristas: bonifsFiltrados.length,
@@ -144,7 +159,7 @@ export function useBonificacoesCaminhao({ showToast, profile }) {
 
     return {
         subTab, setSubTab, loading, bonifsFiltrados, extrasFiltrados, extrasPag, motoristas, filtroMotorista, setFiltroMotorista,
-        preset, periodo, setPeriodo, onPresetChange, totais, bonusCaminhaoConfig,
+        filtroMes, setFiltroMes, usarPeriodo, setUsarPeriodo, periodoCustom, setPeriodoCustom, pesquisa, setPesquisa, periodo, totais, bonusCaminhaoConfig,
         modalExtra, setModalExtra, formExtra, setFormExtra, savingExtra, abrirNovaExtra, abrirEditExtra, salvarExtra, excluirExtra,
         modalValores, setModalValores, formValores, setFormValores, savingValores, abrirValores, salvarValores,
         ConfirmDialog,

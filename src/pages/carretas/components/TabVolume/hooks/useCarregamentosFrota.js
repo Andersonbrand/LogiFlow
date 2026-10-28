@@ -30,7 +30,7 @@ export function useCarregamentosFrota({ confirm, fretesEstoque, load, showToast,
     const previewFrete = calcularFrete(form.tipo_calculo_frete, form.quantidade, form.valor_base_frete, veiculoSelecionado?.media_consumo);
     // Captação (MOC → Estoque) x Distribuição — apenas informativo, frota própria
     const { captacaoConfig } = useCaptacaoConfig();
-    const previewCaptacaoTotal = Number(captacaoConfig.valorPorSaco || 0) * Number(form.quantidade || 0);
+    const previewCaptacaoTotal = form.tipo === 'ESTOQUE' ? 0 : Number(captacaoConfig.valorPorSaco || 0) * Number(form.quantidade || 0);
     const previewDistribuicao = Math.max(0, previewFrete - previewCaptacaoTotal);
     const previewPctDistribuicao = previewFrete > 0 ? (previewDistribuicao / previewFrete) * 100 : 0;
 

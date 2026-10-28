@@ -90,7 +90,10 @@ export default function MapaSvg({ cidades, metrica, modoCor, selecionada, onSele
                 {/* cidades sem atendimento */}
                 {cidades.filter(c => !c.atendida).map(c => (
                     <g key={c.chave} onMouseEnter={() => setHover(c.chave)} onMouseLeave={() => setHover(null)} onClick={() => onSelecionar(c.chave)} style={{ cursor: 'pointer' }}>
-                        <circle cx={c.x} cy={c.y} r={6 * Math.max(0.5, escala)} fill="rgba(15,36,71,.8)" stroke="#94A3B8" strokeWidth={1.2} strokeDasharray="3 3" opacity={regiaoDestaque && regiaoDestaque !== c.polo ? 0.25 : 0.9} />
+                        <g opacity={regiaoDestaque && regiaoDestaque !== c.polo ? 0.25 : 1}>
+                            <circle cx={c.x} cy={c.y} r={9 * Math.max(0.5, escala)} fill="#EF4444" opacity={0.28} filter="url(#mrGlow)" />
+                            <circle cx={c.x} cy={c.y} r={5 * Math.max(0.5, escala)} fill="#EF4444" stroke="#FEE2E2" strokeWidth={1.2 * Math.max(0.6, escala)} />
+                        </g>
                     </g>
                 ))}
 
@@ -126,7 +129,7 @@ export default function MapaSvg({ cidades, metrica, modoCor, selecionada, onSele
                         <>
                             <p>{hoverCid.viagens} viagens · {fMetrica('num', hoverCid.sacos)} sacos</p>
                             <p>Venda {fMetrica('brl', hoverCid.venda)} · Frete {fMetrica('brl', hoverCid.frete)}</p>
-                            <p className="font-semibold" style={{ color: corMargem(hoverCid.margemRealPct) }}>Margem bruta {fMetrica('brl', hoverCid.margemReal)}</p>
+                            <p className="font-semibold" style={{ color: corMargem(hoverCid.margemRealPct) }}>Margem bruta {fMetrica('brl', hoverCid.margemReal)}{hoverCid.margemPorSaco != null ? ` · R$ ${hoverCid.margemPorSaco.toFixed(2).replace('.', ',')}/saco` : ''}</p>
                         </>
                     ) : <p style={{ color: '#FCA5A5' }}>Sem atendimento no período</p>}
                 </div>

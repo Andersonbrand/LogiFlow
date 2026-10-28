@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 
 import { useAuth } from 'context/AuthContext';
 import { useToast } from 'hooks/useToast';
-import { useConfirm, usePeriodRangeFilter, NavigationBar, BreadcrumbTrail, AppIcon as Icon, Button, PeriodRangeFilter, Toast } from 'components';
+import { useConfirm, usePeriodRangeFilter, usePagination, PaginationBar, NavigationBar, BreadcrumbTrail, AppIcon as Icon, Button, PeriodRangeFilter, Toast } from 'components';
 import { fetchEntregasAcessorios, fetchItensAcessorios, createEntregaAcessorio, updateEntregaAcessorio, deleteEntregaAcessorio, createItemAcessorio, updateItemAcessorio, deleteItemAcessorio } from 'services/entregasAcessoriosService';
 import { fetchMotoristasProprios, fetchVeiculosProprios } from 'services/carretas';
 import { fetchVehicles } from 'services/vehicleService';
@@ -81,6 +81,8 @@ export default function EntregasAcessorios() {
         }
         return true;
     }), [entregas, filtroMotorista, filtroItem, pesquisa]);
+
+    const entregasPag = usePagination(entregasFiltradas, 15, [entregasFiltradas.length, pesquisa, filtroMotorista, filtroItem]);
 
     // ── Rankings / resumo ──────────────────────────────────────────────────────
     const resumo = useMemo(() => {
@@ -358,7 +360,7 @@ export default function EntregasAcessorios() {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {entregasFiltradas.map((e, idx) => (
+                                        {entregasPag.pageItems.map((e, idx) => (
                                             <tr key={e.id} className="border-t hover:bg-blue-50/30 transition-colors"
                                                 style={{ borderColor: 'var(--color-border)', backgroundColor: idx % 2 === 0 ? 'white' : '#F9FAFB' }}>
                                                 <td className="px-3 py-2.5 font-data whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>{FMT_DATE(e.data_entrega)}</td>
@@ -380,9 +382,8 @@ export default function EntregasAcessorios() {
                                     </tbody>
                                 </table>
                             </div>
-                            <div className="px-4 py-2 border-t text-xs" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted-foreground)', backgroundColor: '#F9FAFB' }}>
-                                {entregasFiltradas.length} registro{entregasFiltradas.length !== 1 ? 's' : ''}
-                            </div>
+                            <PaginationBar page={entregasPag.page} setPage={entregasPag.setPage} totalPages={entregasPag.totalPages}
+                                totalItems={entregasPag.totalItems} pageSize={entregasPag.pageSize} itemLabel="registro" itemLabelPlural="registros" />
                         </div>
                     )}
                 </div>

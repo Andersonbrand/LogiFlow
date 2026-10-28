@@ -32,7 +32,7 @@ export function poloMaisProximo(chave) {
 
 const vazio = (chave, nome) => ({
     chave, nome, viagens: 0, sacos: 0, sacosPreco: 0, frete: 0, venda: 0, custoProduto: 0, freteMargem: 0, rodagemMargem: 0, custoRodagem: 0,
-    viagensSemPreco: 0, viagensCustoEstimado: 0, viagensSemCusto: 0, ultimaData: '', clientes: {},
+    viagensSemPreco: 0, viagensCif: 0, viagensCustoEstimado: 0, viagensSemCusto: 0, ultimaData: '', clientes: {},
 });
 
 /**
@@ -85,13 +85,16 @@ export function agregarMapa({ carregamentos, fretes, custoConfig, dadosMargem })
         const precoSaco = Number(linha?.valor_venda || 0);
 
         a.viagens += 1; a.sacos += sacos; a.frete += frete;
-        const comPreco = precoSaco > 0 && sacos > 0;
+        // Carga CIF é entrega (frete e produto já embutidos na compra): não conta como venda nem entra na margem
+        const isCif = String(parseTipo(c).tipo || '').startsWith('CIF');
+        const comPreco = !isCif && precoSaco > 0 && sacos > 0;
+        if (isCif) a.viagensCif += 1;
         if (comPreco) {
             a.venda += sacos * precoSaco;
             a.sacosPreco += sacos;
             a.custoProduto += sacos * custoProduto;
             a.freteMargem += frete;
-        } else a.viagensSemPreco += 1;
+        } else if (!isCif) a.viagensSemPreco += 1;
 
         // custo de rodagem da viagem
         const m = dadosMargem ? calcularMargemFrete({ destinoTexto: destinoEfetivo, valorFrete: frete, ...dadosMargem }) : null;
@@ -123,7 +126,7 @@ export function agregarMapa({ carregamentos, fretes, custoConfig, dadosMargem })
             atendida: a.viagens > 0,
             margemReal: temVenda ? a.venda - custosMargem : null,
             margemRealPct: temVenda ? ((a.venda - custosMargem) / a.venda) * 100 : null,
-            margemPorSaco: temVenda && a.sacos > 0 ? (a.venda - custosMargem) / a.sacos : null,
+            margemPorSaco: temVenda && a.sacosPreco > 0 ? (a.venda - custosMargem) / a.sacosPreco : null,
         };
     });
 

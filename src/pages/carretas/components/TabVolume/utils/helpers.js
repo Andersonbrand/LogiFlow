@@ -25,6 +25,11 @@ export function parseTipo(row) {
 export function calcCaptacaoDistribuicao(r, captacaoPorSaco) {
     const total = Number(r.valor_frete_calculado) || 0;
     if (total <= 0) return null;
+    // "Carregamento no Estoque" (retirada do estoque próprio): o cimento já está em estoque,
+    // então não há captação — todo o frete é distribuição.
+    if (parseTipo(r).tipo === 'ESTOQUE') {
+        return { captacao: 0, distribuicao: total, pctDistribuicao: 100, isEstoque: false };
+    }
     const destinoNorm = (r.destino || '').trim().toLowerCase();
     if (destinoNorm === 'estoque') {
         return { captacao: total, distribuicao: 0, pctDistribuicao: 0, isEstoque: true };

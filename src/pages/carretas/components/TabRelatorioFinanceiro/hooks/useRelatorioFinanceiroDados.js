@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { fetchEmpresas, fetchTodosMotoristas, fetchVeiculosProprios, fetchCarreteirosPropriosOnly, fetchCarregamentos, fetchAbastecimentos, fetchViagens, fetchDespesasExtras, fetchDiarias, fetchRomaneios, fetchBonificacoesExtras, calcularBonusCarreteiro } from 'services/carretas';
 import { fetchDadosMargemFrete, calcularAbatimentoCustosFrota } from 'services/custosFrotaService';
 import { fetchCaminhoesPlacas } from 'services/vehicleService';
+import { parseTipo } from '../../TabVolume/utils/helpers';
 import { somarDespesasPorVencimento, agruparDespesasPorCategoriaVencimento } from 'utils/despesasParcelasUtils';
 
 /** Estado e ações extraídos da tela — ver o componente que usa este hook. */
@@ -190,7 +191,9 @@ const calcularRelatorio = useCallback(async () => {
             // Estoque (valor fixo por saco, configurável em Fretes > Fretes da Frota).
             // Distribuição = Receita de Carregamentos − Captação total do período.
             const totalSacosCarregamentos = carregamentos.reduce((s, c) => s + (Number(c.quantidade) || 0), 0);
-            const valorCaptacaoTotal      = totalSacosCarregamentos * Number(captacaoConfig.valorPorSaco || 0);
+            // "Carregamento no Estoque" não gera captação (o cimento já está em estoque) — só distribuição
+            const sacosComCaptacao        = carregamentos.reduce((s, c) => s + (parseTipo(c).tipo === 'ESTOQUE' ? 0 : (Number(c.quantidade) || 0)), 0);
+            const valorCaptacaoTotal      = sacosComCaptacao * Number(captacaoConfig.valorPorSaco || 0);
             const valorDistribuicaoTotal  = Math.max(0, receitaCarregamentos - valorCaptacaoTotal);
             const percentualDistribuicao  = receitaCarregamentos > 0 ? (valorDistribuicaoTotal / receitaCarregamentos) * 100 : 0;
 
