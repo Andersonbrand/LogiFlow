@@ -39,6 +39,8 @@ describe('mapa regional — agregação', () => {
         expect(r.totais.viagens).toBe(5);
         expect(r.totais.sacos).toBe(660);   // volume do tipo Estoque não entra
         expect(r.totais.frete).toBe(1300);  // mas o frete dele entra, como na aba Volume
+        expect(chaveMunicipio('Ibitira, BA')).toBe('ibitira'); // distrito de Rio do Antônio ≠ município de Ibitiara
+        expect(chaveMunicipio('Ibitiara, BA')).toBe('ibitiara');
         expect(chaveMunicipio('Livramento, BA')).toBe('livramento de nossa senhora');
         expect(chaveMunicipio('Palmas de M. Alto, BA')).toBe('palmas de monte alto');
     });

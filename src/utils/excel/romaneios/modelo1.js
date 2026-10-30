@@ -166,47 +166,58 @@ export function exportRomaneioModelo1(romaneio) {
 
     let R = 0;
 
+    // ── Largura automática das colunas (nada fica cortado) ───────────────────
+    const maxLen = (arr, min) => Math.max(min, ...arr.map(v => String(v ?? '').length));
+    const todosItens = empresasArr.flatMap(e => e.cidades.flatMap(ci => ci.pedidos.flatMap(p => p.itens)));
+    const COL_MATERIAL = Math.min(70, Math.max(38, Math.ceil(maxLen(todosItens.map(i => i.nome), 0) * 1.05) + 2));
+    const fmtBR = v => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+    const COL_PEDIDO = Math.min(22, Math.max(14, maxLen(empresasArr.flatMap(e => e.cidades.flatMap(ci => ci.pedidos.map(p => p.pedidoNum))), 0) + 4));
+    const COL_VALOR  = Math.max(14, maxLen(empresasArr.flatMap(e => e.cidades.flatMap(ci => ci.pedidos.map(p => fmtBR(p.valorPedido)))), 0) + 4);
+    const COL_FRETE  = Math.max(14, maxLen(empresasArr.flatMap(e => e.cidades.flatMap(ci => ci.pedidos.map(p => fmtBR(p.fretePedido)))), 0) + 4);
+    const COL_PLACA  = 30; // Conferência de Material (também comporta a placa na linha de cabeçalho)
+
     // Linha 1
     rowsData.push([
-        c(`ROMANEIO DE N.º  ${romaneio.numero||''}`, 1), NULL, NULL, NULL, NULL, NULL,
+        c(`ROMANEIO DE N.º  ${romaneio.numero||''}`, 1), NULL, NULL, NULL, NULL, NULL, NULL,
         c(String(romaneio.destino||''), 2), NULL,
     ]);
     rowsHt.push(26);
-    merges.push({r1:R,c1:0,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:7}); R++;
+    merges.push({r1:R,c1:0,r2:R,c2:6}); merges.push({r1:R,c1:7,r2:R,c2:8}); R++;
 
     // Linha 2: labels
-    rowsData.push([c('Motorista',3), NULL, NULL, c('Placa',3), c('Saída',3), NULL, c('Peso Total',3), NULL]);
+    rowsData.push([c('Motorista',3), NULL, NULL, c('Placa',3), c('Saída',3), NULL, c('Peso Total',3), NULL, NULL]);
     rowsHt.push(16);
-    merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:4,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:7}); R++;
+    merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:4,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:8}); R++;
 
     // Linha 3: valores
     const ptFmt = pesoTotal.toLocaleString('pt-BR',{minimumFractionDigits:2})+' kg';
-    rowsData.push([c(String(romaneio.motorista||''),4),NULL,NULL,c(String(romaneio.placa||''),4),c(dtSaida,4),NULL,c(ptFmt,4),NULL]);
+    rowsData.push([c(String(romaneio.motorista||''),4),NULL,NULL,c(String(romaneio.placa||''),4),c(dtSaida,4),NULL,c(ptFmt,4),NULL,NULL]);
     rowsHt.push(20);
-    merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:4,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:7}); R++;
+    merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:4,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:8}); R++;
 
     // Linha 4: cabeçalhos
-    rowsData.push(['Material','Un.','Quant.','Peso Unit.(kg)','Peso Total(kg)','Pedido','Valor Pedido','Frete']
-        .map(v => c(v, 5)));
-    rowsHt.push(26); R++;
+    // Coluna "Conferência de Material": em branco para o operador anotar como conferiu cada item
+    rowsData.push(['Material','Un.','Quant.','Conferência de Material','Peso Unit.(kg)','Peso Total(kg)','Pedido','Valor Pedido','Frete']
+        .map(v => c(v, v === 'Conferência de Material' ? 17 : 5)));
+    rowsHt.push(30); R++;
 
     // Dados por Empresa → Cidade → Pedido → material
     empresasArr.forEach(({ empresa, cidades }) => {
-        rowsData.push([c(`🏢 ${empresa}`, 6), NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
+        rowsData.push([c(`🏢 ${empresa}`, 6), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
         rowsHt.push(18);
-        merges.push({r1:R,c1:0,r2:R,c2:7}); R++;
+        merges.push({r1:R,c1:0,r2:R,c2:8}); R++;
 
         let pesoEmpresaTotal = 0;
         cidades.forEach(({ cidade, pedidos: pedidosArr }) => {
-            rowsData.push([c(`📍 ${cidade}`, 15), NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
+            rowsData.push([c(`📍 ${cidade}`, 15), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
             rowsHt.push(16);
-            merges.push({r1:R,c1:0,r2:R,c2:7}); R++;
+            merges.push({r1:R,c1:0,r2:R,c2:8}); R++;
 
             let pesoCidade = 0;
             pedidosArr.forEach(({ pedidoNum, valorPedido, fretePedido, itens: itensPedido }) => {
-                rowsData.push([c(`📦 Pedido ${pedidoNum}`, 3), NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
+                rowsData.push([c(`📦 Pedido ${pedidoNum}`, 3), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL]);
                 rowsHt.push(15);
-                merges.push({r1:R,c1:0,r2:R,c2:7}); R++;
+                merges.push({r1:R,c1:0,r2:R,c2:8}); R++;
 
                 itensPedido.forEach(item => {
                     pesoCidade += item.pesoTotal;
@@ -218,73 +229,78 @@ export function exportRomaneioModelo1(romaneio) {
                         c(nomeExibido, 7),
                         c(unidadeExibida, 8),
                         n(item.quant, 8),
+                        e(16),
                         n(item.pesoUnit > 0 ? item.pesoUnit : 0, 8),
                         n(Math.round(item.pesoTotal*100)/100, 8),
                         c(pedidoNum || '—', 8),
                         valorPedido > 0 ? n(valorPedido, 14) : e(14),
                         fretePedido > 0 ? n(fretePedido, 14) : e(14),
                     ]);
-                    rowsHt.push(15); R++;
+                    // altura conforme o nome quebra de linha na coluna Material (evita texto cortado)
+                    const linhasNome = Math.max(1, Math.ceil(String(nomeExibido).length / (COL_MATERIAL - 2)));
+                    rowsHt.push(Math.max(18, linhasNome * 15 + 3)); R++;
                 });
             });
             pesoEmpresaTotal += pesoCidade;
 
             // Subtotal por cidade
             rowsData.push([
-                e(11), e(11), e(11),
-                c(`Subtotal ${cidade}:`, 9),
+                c(`Subtotal ${cidade}:`, 9), NULL, NULL, NULL, NULL,
                 n(Math.round(pesoCidade*100)/100, 10),
                 e(11), e(11), e(11),
             ]);
-            rowsHt.push(14); R++;
+            rowsHt.push(16);
+            merges.push({r1:R,c1:0,r2:R,c2:4}); R++;
         });
 
         // Subtotal por empresa
         rowsData.push([
-            e(11), e(11), e(11),
-            c(`Subtotal ${empresa}:`, 9),
+            c(`Subtotal ${empresa}:`, 9), NULL, NULL, NULL, NULL,
             n(Math.round(pesoEmpresaTotal*100)/100, 10),
             e(11), e(11), e(11),
         ]);
-        rowsHt.push(14); R++;
+        rowsHt.push(16);
+        merges.push({r1:R,c1:0,r2:R,c2:4}); R++;
     });
 
     // Total geral
-    rowsData.push([c('PESO TOTAL DA CARGA',12),NULL,NULL,NULL,n(Math.round(pesoTotal*100)/100,12),e(12),e(12),e(12)]);
+    rowsData.push([c('PESO TOTAL DA CARGA',12),NULL,NULL,NULL,NULL,n(Math.round(pesoTotal*100)/100,12),e(12),e(12),e(12)]);
     rowsHt.push(20);
-    merges.push({r1:R,c1:0,r2:R,c2:3}); R++;
+    merges.push({r1:R,c1:0,r2:R,c2:4}); R++;
 
     // Assinaturas
-    rowsData.push(Array(8).fill(e(0))); rowsHt.push(14); R++;
-    rowsData.push(Array(8).fill(e(0))); rowsHt.push(14); R++;
+    rowsData.push(Array(9).fill(e(0))); rowsHt.push(14); R++;
+    rowsData.push(Array(9).fill(e(0))); rowsHt.push(14); R++;
     rowsData.push([
         c('________________________________',13), NULL, NULL,
         c('________________________________',13), NULL, NULL,
-        c('________________________________',13), NULL,
+        c('________________________________',13), NULL, NULL,
     ]);
     rowsHt.push(14);
-    merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:3,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:7}); R++;
+    merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:3,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:8}); R++;
     rowsData.push([
         c('Motorista',13), NULL, NULL,
         c('Conferente',13), NULL, NULL,
-        c('Responsável',13), NULL,
+        c('Responsável',13), NULL, NULL,
     ]);
     rowsHt.push(14);
-    merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:3,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:7}); R++;
+    merges.push({r1:R,c1:0,r2:R,c2:2}); merges.push({r1:R,c1:3,r2:R,c2:5}); merges.push({r1:R,c1:6,r2:R,c2:8}); R++;
 
     // ── Montar sheetData XML ─────────────────────────────────────────────────
     let sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
 <sheetFormatPr defaultRowHeight="15"/>
 <cols>
-  <col min="1" max="1" width="38" customWidth="1"/>
+  <col min="1" max="1" width="${COL_MATERIAL}" customWidth="1"/>
   <col min="2" max="2" width="7"  customWidth="1"/>
   <col min="3" max="3" width="9"  customWidth="1"/>
-  <col min="4" max="4" width="16" customWidth="1"/>
+  <col min="4" max="4" width="${COL_PLACA}" customWidth="1"/>
   <col min="5" max="5" width="16" customWidth="1"/>
-  <col min="6" max="6" width="20" customWidth="1"/>
-  <col min="7" max="7" width="18" customWidth="1"/>
-  <col min="8" max="8" width="14" customWidth="1"/>
+  <col min="6" max="6" width="16" customWidth="1"/>
+  <col min="7" max="7" width="${COL_PEDIDO}" customWidth="1"/>
+  <col min="8" max="8" width="${COL_VALOR}" customWidth="1"/>
+  <col min="9" max="9" width="${COL_FRETE}" customWidth="1"/>
 </cols>
 <sheetData>`;
 
@@ -315,7 +331,7 @@ export function exportRomaneioModelo1(romaneio) {
 
     sheetXml += `
 <pageMargins left="0.4" right="0.4" top="0.4" bottom="0.4" header="0" footer="0"/>
-<pageSetup paperSize="9" orientation="portrait"/>
+<pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>
 </worksheet>`;
 
     // ── Shared strings XML ───────────────────────────────────────────────────
@@ -345,14 +361,14 @@ export function exportRomaneioModelo1(romaneio) {
   <fill><patternFill patternType="solid"><fgColor rgb="FF${AMAR}"/></patternFill></fill>
   <fill><patternFill patternType="solid"><fgColor rgb="FF${CINZA}"/></patternFill></fill>
   <fill><patternFill patternType="solid"><fgColor rgb="FF${VERDE}"/></patternFill></fill>
-  <fill><patternFill patternType="none"/></fill>
+  <fill><patternFill patternType="solid"><fgColor rgb="FFFFFBE6"/></patternFill></fill>
 </fills>
 <borders count="2">
   <border><left/><right/><top/><bottom/><diagonal/></border>
   <border><left style="thin"><color rgb="FFAAAAAA"/></left><right style="thin"><color rgb="FFAAAAAA"/></right><top style="thin"><color rgb="FFAAAAAA"/></top><bottom style="thin"><color rgb="FFAAAAAA"/></bottom><diagonal/></border>
 </borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="16">
+<cellXfs count="18">
   <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
   <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
   <xf numFmtId="0" fontId="2" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
@@ -369,6 +385,8 @@ export function exportRomaneioModelo1(romaneio) {
   <xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
   <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
   <xf numFmtId="0" fontId="3" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" indent="1"/></xf>
+  <xf numFmtId="0" fontId="4" fillId="7" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+  <xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
 </cellXfs>
 </styleSheet>`;
 

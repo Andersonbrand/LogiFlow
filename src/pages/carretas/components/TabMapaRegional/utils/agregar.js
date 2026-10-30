@@ -1,10 +1,10 @@
 import { calcularMargemFrete } from 'services/custosFrotaService';
-import { MUNICIPIOS_BA } from '../data/bahiaGeo';
+import { MUNICIPIOS_MAPA as MUNICIPIOS_BA } from '../data/localidades';
 import { POLOS } from './regioes';
 import { parseTipo } from '../../TabVolume/utils/helpers';
 
 // Grafias abreviadas/erradas comuns nos lançamentos → município real
-const ALIASES = { 'livramento': 'livramento de nossa senhora', 'ibitira': 'ibitiara', 'malhada de pedra': 'malhada de pedras', 'palmas de m. alto': 'palmas de monte alto', 'palmas de m alto': 'palmas de monte alto' };
+const ALIASES = { 'livramento': 'livramento de nossa senhora', 'malhada de pedra': 'malhada de pedras', 'palmas de m. alto': 'palmas de monte alto', 'palmas de m alto': 'palmas de monte alto' };
 
 export const semAcento = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
