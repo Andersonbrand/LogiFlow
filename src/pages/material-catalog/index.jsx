@@ -4,7 +4,7 @@ import { fetchMaterials, createMaterial, updateMaterial, deleteMaterial, fetchMa
 import { useRecarregarAoVoltar } from 'hooks/useRecarregarAoVoltar';
 import { exportMaterialsToExcel, parseMaterialsFromFile } from 'utils/excel';
 import { useAuth } from 'context/AuthContext';
-import { AccessDeniedModal, NavigationBar, BreadcrumbTrail, QuickActionPanel, AppIcon as Icon, Button } from 'components';
+import { AccessDeniedModal, NavigationBar, BreadcrumbTrail, QuickActionPanel, AppIcon as Icon, Button, usePagination, PaginationBar } from 'components';
 
 import MaterialTable from './components/MaterialTable';
 import MaterialCardMobile from './components/MaterialCardMobile';
@@ -29,9 +29,8 @@ export default function MaterialCatalog() {
     const [deletingMaterial, setDeletingMaterial] = useState(null);
     const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
     const [toast, setToast] = useState(null);
-    const [page, setPage] = useState(1);
     const [accessDenied, setAccessDenied] = useState(false);
-    const PAGE_SIZE = 30;
+    const PAGE_SIZE = 15;
 
     const showToast = (msg, type = 'success') => {
         setToast({ msg, type });
@@ -72,23 +71,19 @@ export default function MaterialCatalog() {
 
     // Recarrega as categorias sempre que o modal de cadastro/edição é fechado,
     // pois categorias podem ter sido criadas/excluídas via "Gerenciar" dentro dele.
-    useEffect(() => { if (!modalOpen) loadCategorias(); }, [modalOpen, loadCategorias]);
+    // (e recarrega os materiais: uma categoria renomeada altera o nome nos materiais).
+    useEffect(() => { if (!modalOpen) { loadCategorias(); loadMaterials(); } }, [modalOpen, loadCategorias, loadMaterials]);
+
+    // Se a categoria filtrada foi renomeada/excluída, volta o filtro para "Todas"
+    useEffect(() => {
+        if (categoriasRegistradas.length && filters.categoria !== 'Todas' && !categoriasRegistradas.includes(filters.categoria)) setFilters(f => ({ ...f, categoria: 'Todas' }));
+    }, [categoriasRegistradas, filters.categoria]);
 
     const handleSort = (key) => {
         setSortConfig((prev) =>
             prev?.key === key ? { key, dir: prev?.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }
         );
     };
-
-    // Reset para página 1 ao mudar busca ou filtros
-    const prevFiltersRef = React.useRef({ search, filters });
-    React.useEffect(() => {
-        if (prevFiltersRef.current.search !== search ||
-            prevFiltersRef.current.filters !== filters) {
-            setPage(1);
-            prevFiltersRef.current = { search, filters };
-        }
-    }, [search, filters]);
 
     const filteredMaterials = useMemo(() => {
         let list = [...materials];
@@ -110,16 +105,9 @@ export default function MaterialCatalog() {
         return list;
     }, [materials, search, filters, sortConfig]);
 
-    const totalPages = Math.ceil(filteredMaterials.length / PAGE_SIZE);
-    const pagedMaterials = useMemo(() => {
-        // Se há busca ativa, mostra todos os resultados sem paginar
-        if (search?.trim() || filters?.categoria !== 'Todas' || filters?.unidade !== 'Todas' || filters?.pesoMax < 50000) {
-            return filteredMaterials;
-        }
-        return filteredMaterials.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-    }, [filteredMaterials, page, search, filters]);
-
-    const isPaginated = !search?.trim() && filters?.categoria === 'Todas' && filters?.unidade === 'Todas' && filters?.pesoMax >= 50000;
+    // Paginação sempre ativa (15 por página), inclusive com busca/filtros — volta à página 1 ao mudar busca/filtros/ordem
+    const pag = usePagination(filteredMaterials, PAGE_SIZE, [search, filters, sortConfig]);
+    const pagedMaterials = pag.pageItems;
 
     const handleSave = async (data) => {
         if (!can.gerenciarMateriais()) { setAccessDenied(true); return; }
@@ -258,7 +246,7 @@ export default function MaterialCatalog() {
                     {/* Main Layout: Filters sidebar + Table */}
                     <div className="flex gap-5">
                         {/* Desktop Filters */}
-                        <aside className="hidden lg:block w-64 flex-shrink-0">
+                        <aside className="hidden lg:block w-64 flex-shrink-0 self-start sticky top-[76px] max-h-[calc(100vh-92px)] overflow-y-auto">
                             <FilterPanel
                                 filters={filters}
                                 onChange={setFilters}
@@ -318,50 +306,8 @@ export default function MaterialCatalog() {
                                 )}
                             </div>
 
-                            {/* Pagination info */}
-                            {/* Paginação */}
-                            {isPaginated && filteredMaterials.length > PAGE_SIZE ? (
-                                <div className="flex items-center justify-between mt-4">
-                                    <p className="text-xs text-[var(--color-text-secondary)]">
-                                        Página {page} de {totalPages} · {filteredMaterials.length} materiais
-                                    </p>
-                                    <div className="flex items-center gap-1">
-                                        <button
-                                            onClick={() => setPage(1)} disabled={page === 1}
-                                            className="px-2 py-1 rounded text-xs border disabled:opacity-40 hover:bg-gray-50"
-                                            style={{ borderColor: 'var(--color-border)' }}>«</button>
-                                        <button
-                                            onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                                            className="px-3 py-1 rounded text-xs border disabled:opacity-40 hover:bg-gray-50"
-                                            style={{ borderColor: 'var(--color-border)' }}>Anterior</button>
-                                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                                            const start = Math.max(1, Math.min(page - 2, totalPages - 4));
-                                            const p = start + i;
-                                            if (p > totalPages) return null;
-                                            return (
-                                                <button key={p} onClick={() => setPage(p)}
-                                                    className="px-3 py-1 rounded text-xs border font-medium"
-                                                    style={p === page
-                                                        ? { backgroundColor: 'var(--color-primary)', color: '#fff', borderColor: 'var(--color-primary)' }
-                                                        : { borderColor: 'var(--color-border)' }
-                                                    }>{p}</button>
-                                            );
-                                        })}
-                                        <button
-                                            onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                                            className="px-3 py-1 rounded text-xs border disabled:opacity-40 hover:bg-gray-50"
-                                            style={{ borderColor: 'var(--color-border)' }}>Próxima</button>
-                                        <button
-                                            onClick={() => setPage(totalPages)} disabled={page === totalPages}
-                                            className="px-2 py-1 rounded text-xs border disabled:opacity-40 hover:bg-gray-50"
-                                            style={{ borderColor: 'var(--color-border)' }}>»</button>
-                                    </div>
-                                </div>
-                            ) : filteredMaterials?.length > 0 ? (
-                                <p className="text-xs text-[var(--color-text-secondary)] mt-3 text-right">
-                                    {search?.trim() ? `${filteredMaterials.length} resultado(s) encontrado(s)` : `Exibindo ${filteredMaterials.length} de ${materials.length} materiais`}
-                                </p>
-                            ) : null}
+                            <PaginationBar page={pag.page} setPage={pag.setPage} totalPages={pag.totalPages}
+                                totalItems={pag.totalItems} pageSize={pag.pageSize} itemLabel="material" itemLabelPlural="materiais" className="mt-4" />
                         </div>
                     </div>
                 </div>

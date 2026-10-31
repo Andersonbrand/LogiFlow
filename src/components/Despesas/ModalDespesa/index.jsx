@@ -154,9 +154,11 @@ export default function ModalDespesa({ modal, config, veiculos = [], despesasExi
                         valor_total: p.querySelector('vProd')?.textContent || '',
                     });
                 });
-                const novaNF = { numero: nNF, fornecedor, valor: vnf, data: dhEmi, descricao: '', nf_itens: itens };
+                const novaNF = { numero: nNF, fornecedor, valor: vnf, data: dhEmi, descricao: '', nf_itens: itens, _origem: 'xml' };
                 setForm(f => {
-                    const novasNFs = [...(f.notas_fiscais || []), novaNF];
+                    // se a NF já tinha sido lida pelo código de barras (sem itens), o XML completa a mesma nota
+                    const anteriores = (f.notas_fiscais || []).filter(n => !(n._origem === 'chave' && String(n.numero) === String(nNF) && !(n.nf_itens || []).length));
+                    const novasNFs = [...anteriores, novaNF];
                     const soma = novasNFs.reduce((s, n) => s + Number(n.valor || 0), 0);
                     return {
                         ...f, nota_fiscal: f.nota_fiscal || nNF,
@@ -196,6 +198,9 @@ export default function ModalDespesa({ modal, config, veiculos = [], despesasExi
             const cnpjFmt = cnpjEmit.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
             setForm(f => ({
                 ...f, nota_fiscal: nNF, data_despesa: dataEmissao,
+                notas_fiscais: (f.notas_fiscais || []).some(n => String(n.numero) === String(nNF))
+                    ? f.notas_fiscais
+                    : [...(f.notas_fiscais || []), { numero: nNF, fornecedor: fornecedor || '', valor: '', data: '', descricao: `Série ${serie}`, nf_itens: [], _origem: 'chave' }],
                 fornecedor: fornecedor || f.fornecedor || `CNPJ ${cnpjFmt}`,
                 descricao: f.descricao || `NF ${nNF} · Série ${serie}`,
             }));
@@ -308,7 +313,8 @@ export default function ModalDespesa({ modal, config, veiculos = [], despesasExi
                 [campoVeiculo]: form[campoVeiculo] || null,
                 valor: Number(form.valor),
                 notas_fiscais: form.notas_fiscais || [],
-                nf_itens: form.nf_itens || [],
+                // lista geral de itens = itens de todas as NFs (mantém compatibilidade com despesas antigas)
+                nf_itens: (form.notas_fiscais || []).length > 0 ? (form.notas_fiscais || []).flatMap(n => n.nf_itens || []) : (form.nf_itens || []),
                 boletos: form.boletos || [],
                 parcelas_cartao: form.parcelas_cartao || [],
                 cheques: form.cheques || [],
@@ -392,7 +398,7 @@ export default function ModalDespesa({ modal, config, veiculos = [], despesasExi
                                 {(form.notas_fiscais || []).map((nf, nfIdx) => (
                                     <div key={nfIdx} className="rounded-xl border border-blue-200 bg-white overflow-hidden">
                                         <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50 border-b border-blue-100">
-                                            <span className="text-xs font-semibold text-blue-800">NF {nfIdx + 1} {nf._manual ? '— manual' : '— XML'}</span>
+                                            <span className="text-xs font-semibold text-blue-800">NF {nfIdx + 1} {nf._manual ? '— manual' : nf._origem === 'chave' ? '— código de barras' : '— XML'}</span>
                                             <button type="button" onClick={() => setForm(f => { const novas = f.notas_fiscais.filter((_, i) => i !== nfIdx); const soma = novas.reduce((s, n) => s + Number(n.valor || 0), 0); return { ...f, notas_fiscais: novas, valor: soma > 0 ? String(soma) : f.valor }; })} className="p-1 rounded hover:bg-red-100"><Icon name="X" size={12} color="#DC2626" /></button>
                                         </div>
                                         <div className="p-3 grid grid-cols-2 gap-2">
@@ -421,7 +427,39 @@ export default function ModalDespesa({ modal, config, veiculos = [], despesasExi
                                                     className={inputCls} style={inputStyle} />
                                             </div>
                                         </div>
-                                        {nf.nf_itens?.length > 0 && (
+                                        {(nf._manual || nf._origem === 'chave') && (
+                                            <div className="px-3 pb-3">
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <p className="text-xs text-blue-700 font-medium">Itens da nota ({(nf.nf_itens || []).length})</p>
+                                                    <button type="button" onClick={() => setForm(f => { const a = [...f.notas_fiscais]; a[nfIdx] = { ...a[nfIdx], nf_itens: [...(a[nfIdx].nf_itens || []), { codigo: '', descricao: '', quantidade: '', unidade: 'UN', valor_unit: '', valor_total: '' }] }; return { ...f, notas_fiscais: a }; })}
+                                                        className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-medium border border-blue-300 text-blue-700 hover:bg-blue-100"><Icon name="Plus" size={11} /> Adicionar item</button>
+                                                </div>
+                                                {(nf.nf_itens || []).map((it, itIdx) => {
+                                                    const setIt = (campo, valor) => setForm(f => {
+                                                        const a = [...f.notas_fiscais];
+                                                        const itens = [...(a[nfIdx].nf_itens || [])];
+                                                        const novo = { ...itens[itIdx], [campo]: valor };
+                                                        if (campo === 'quantidade' || campo === 'valor_unit') {
+                                                            const t = Number(String(novo.quantidade).replace(',', '.')) * Number(String(novo.valor_unit).replace(',', '.'));
+                                                            novo.valor_total = Number.isFinite(t) && t > 0 ? String(Math.round(t * 100) / 100) : '';
+                                                        }
+                                                        itens[itIdx] = novo; a[nfIdx] = { ...a[nfIdx], nf_itens: itens };
+                                                        return { ...f, notas_fiscais: a };
+                                                    });
+                                                    return (
+                                                        <div key={itIdx} className="grid grid-cols-12 gap-1.5 mb-1.5 items-center">
+                                                            <input value={it.descricao || ''} onChange={e => setIt('descricao', e.target.value)} placeholder="Descrição do item / serviço" className={inputCls + ' col-span-12 sm:col-span-5'} style={inputStyle} />
+                                                            <input value={it.quantidade ?? ''} onChange={e => setIt('quantidade', e.target.value)} placeholder="Qtd" inputMode="decimal" className={inputCls + ' col-span-3 sm:col-span-2'} style={inputStyle} />
+                                                            <input value={it.unidade || ''} onChange={e => setIt('unidade', e.target.value)} placeholder="Un" className={inputCls + ' col-span-3 sm:col-span-1'} style={inputStyle} />
+                                                            <input value={it.valor_unit ?? ''} onChange={e => setIt('valor_unit', e.target.value)} placeholder="V. unit." inputMode="decimal" className={inputCls + ' col-span-4 sm:col-span-2'} style={inputStyle} />
+                                                            <span className="col-span-1 sm:col-span-1 text-xs font-data text-right text-blue-700 truncate">{it.valor_total ? BRL(it.valor_total) : '—'}</span>
+                                                            <button type="button" onClick={() => setForm(f => { const a = [...f.notas_fiscais]; a[nfIdx] = { ...a[nfIdx], nf_itens: (a[nfIdx].nf_itens || []).filter((_, k) => k !== itIdx) }; return { ...f, notas_fiscais: a }; })} className="col-span-1 p-1 rounded hover:bg-red-100 justify-self-center"><Icon name="X" size={12} color="#DC2626" /></button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                        {!nf._manual && nf._origem !== 'chave' && nf.nf_itens?.length > 0 && (
                                             <div className="px-3 pb-3 overflow-x-auto">
                                                 <p className="text-xs text-blue-600 font-medium mb-1">{nf.nf_itens.length} item(s) do XML:</p>
                                                 <table className="w-full text-xs">

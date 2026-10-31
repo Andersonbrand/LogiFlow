@@ -32,7 +32,7 @@ export function poloMaisProximo(chave) {
 
 const vazio = (chave, nome) => ({
     chave, nome, viagens: 0, sacos: 0, sacosPreco: 0, frete: 0, venda: 0, custoProduto: 0, freteMargem: 0, rodagemMargem: 0, custoRodagem: 0,
-    viagensSemPreco: 0, viagensCif: 0, viagensCustoEstimado: 0, viagensSemCusto: 0, ultimaData: '', clientes: {},
+    viagensSemPreco: 0, viagensCif: 0, viagensTer: 0, sacosTer: 0, sacosFrota: 0, viagensCustoEstimado: 0, viagensSemCusto: 0, ultimaData: '', clientes: {},
 });
 
 /**
@@ -43,8 +43,13 @@ const vazio = (chave, nome) => ({
  *  custo de rodagem = custo da viagem na tabela de Custos de Rodagem (carreta); sem cadastro → km×2×custo/km
  *  margem bruta     = preço de venda − (custo do produto + frete)  [só viagens com preço de venda]
  *  (o custo de rodagem já é abatido da receita de frete do transporte; aqui é só informativo)
+ *
+ * Registros marcados com `__ter: true` (carregamento de TERCEIROS):
+ *  - NÃO geram receita de frete nem custo de rodagem no mapa;
+ *  - preço de venda e frete (custo p/ a margem) vêm da tabela "Fretes de Terceiros"
+ *    (se a linha não tiver valor_venda, usa o preço de venda da tabela da frota para a mesma cidade).
  */
-export function agregarMapa({ carregamentos, fretes, custoConfig, dadosMargem }) {
+export function agregarMapa({ carregamentos, fretes, fretesTerceiros = [], custoConfig, dadosMargem }) {
     const porCidade = new Map();
     const naoLocalizados = new Map();
     const fora = { estoque: { viagens: 0, sacos: 0, frete: 0 }, outros: { viagens: 0, sacos: 0, frete: 0 } };
@@ -59,6 +64,9 @@ export function agregarMapa({ carregamentos, fretes, custoConfig, dadosMargem })
         if (!freteDaChave.has(k) || (exata && !freteDaChave.get(k).__exata)) freteDaChave.set(k, { ...f, __exata: exata });
     });
 
+    const freteTerDaChave = new Map();
+    (fretesTerceiros || []).forEach(f => { const k = chaveMunicipio(f.cidade); if (k && !freteTerDaChave.has(k)) freteTerDaChave.set(k, f); });
+
     const garantir = (chave) => {
         if (!porCidade.has(chave)) porCidade.set(chave, vazio(chave, MUNICIPIOS_BA[chave][0]));
         return porCidade.get(chave);
@@ -67,7 +75,8 @@ export function agregarMapa({ carregamentos, fretes, custoConfig, dadosMargem })
     (carregamentos || []).forEach(c => {
         const destino = String(c.destino || '').trim();
         const qtd = Number(c.quantidade || 0);
-        const frete = Number(c.valor_frete_calculado || 0);
+        const ter = !!c.__ter;
+        const frete = ter ? 0 : Number(c.valor_frete_calculado || 0); // terceiros não geram receita de frete
         // Tipo "Carregamento no Estoque" (retirada do estoque próprio): não conta como volume, igual à aba Volume de carregamento.
         // Só o frete/viagem entra nos totais (a aba Volume soma o frete de todos os registros).
         if (parseTipo(c).tipo === 'ESTOQUE') { fora.estoque.viagens += 1; fora.estoque.frete += frete; return; }
@@ -81,10 +90,17 @@ export function agregarMapa({ carregamentos, fretes, custoConfig, dadosMargem })
         }
         const a = garantir(chave);
         const sacos = qtd;
-        const linha = freteDaChave.get(chave);
-        const precoSaco = Number(linha?.valor_venda || 0);
+        const linhaFrota = freteDaChave.get(chave);
+        const linhaTer = ter ? freteTerDaChave.get(chave) : null;
+        const linha = ter ? (linhaTer || linhaFrota) : linhaFrota;
+        const precoSaco = ter ? Number(linhaTer?.valor_venda || linhaFrota?.valor_venda || 0) : Number(linhaFrota?.valor_venda || 0);
+        // frete usado na margem: terceiros = tabela "Fretes de Terceiros" × sacos (fallback: valor do carregamento)
+        const freteMargem = ter
+            ? (Number(linhaTer?.frete_por_saco) > 0 ? Number(linhaTer.frete_por_saco) * sacos : Number(c.valor_frete_calculado || 0))
+            : frete;
 
         a.viagens += 1; a.sacos += sacos; a.frete += frete;
+        if (ter) { a.viagensTer += 1; a.sacosTer += sacos; } else { a.sacosFrota += sacos; }
         // Carga CIF é entrega (frete e produto já embutidos na compra): não conta como venda nem entra na margem
         const isCif = String(parseTipo(c).tipo || '').startsWith('CIF');
         const comPreco = !isCif && precoSaco > 0 && sacos > 0;
@@ -93,17 +109,19 @@ export function agregarMapa({ carregamentos, fretes, custoConfig, dadosMargem })
             a.venda += sacos * precoSaco;
             a.sacosPreco += sacos;
             a.custoProduto += sacos * custoProduto;
-            a.freteMargem += frete;
+            a.freteMargem += freteMargem;
         } else if (!isCif) a.viagensSemPreco += 1;
 
-        // custo de rodagem da viagem
-        const m = dadosMargem ? calcularMargemFrete({ destinoTexto: destinoEfetivo, valorFrete: frete, ...dadosMargem }) : null;
+        // custo de rodagem da viagem (só frota própria)
         let rod = 0;
+        if (!ter) {
+        const m = dadosMargem ? calcularMargemFrete({ destinoTexto: destinoEfetivo, valorFrete: frete, ...dadosMargem }) : null;
         if (m) rod = m.custoTotal;
         else if (Number(linha?.km) > 0 && dadosMargem?.custoPorKm) { rod = Number(linha.km) * 2 * dadosMargem.custoPorKm; a.viagensCustoEstimado += 1; }
         else a.viagensSemCusto += 1;
         a.custoRodagem += rod;
         if (comPreco) a.rodagemMargem += rod;
+        }
 
         if (c.data_carregamento && c.data_carregamento > a.ultimaData) a.ultimaData = c.data_carregamento;
         const cli = (c.nome_cliente || c.empresa?.nome || '').trim();
@@ -112,6 +130,7 @@ export function agregarMapa({ carregamentos, fretes, custoConfig, dadosMargem })
 
     // cidades da tabela de fretes sem carregamento → "sem atendimento"
     (fretes || []).forEach(f => { const k = chaveMunicipio(f.cidade); if (k) garantir(k); });
+    (fretesTerceiros || []).forEach(f => { const k = chaveMunicipio(f.cidade); if (k) garantir(k); });
 
     const cidades = Array.from(porCidade.values()).map(a => {
         const m = MUNICIPIOS_BA[a.chave];
@@ -123,6 +142,8 @@ export function agregarMapa({ carregamentos, fretes, custoConfig, dadosMargem })
             ...a, x: m[1], y: m[2], lat: m[3], lng: m[4], polo: polo?.id || null,
             km: linha?.km != null ? Number(linha.km) : null,
             precoSaco: linha?.valor_venda != null ? Number(linha.valor_venda) : null,
+            precoSacoTer: Number(freteTerDaChave.get(a.chave)?.valor_venda) > 0 ? Number(freteTerDaChave.get(a.chave).valor_venda) : (linha?.valor_venda != null ? Number(linha.valor_venda) : null),
+            freteSacoTer: freteTerDaChave.get(a.chave)?.frete_por_saco != null ? Number(freteTerDaChave.get(a.chave).frete_por_saco) : null,
             atendida: a.viagens > 0,
             margemReal: temVenda ? a.venda - custosMargem : null,
             margemRealPct: temVenda ? ((a.venda - custosMargem) / a.venda) * 100 : null,
@@ -137,7 +158,7 @@ export function agregarMapa({ carregamentos, fretes, custoConfig, dadosMargem })
         const custosMargem = soma('custoProduto') + soma('freteMargem');
         return {
             ...p, cidades: doPolo.length, atendidas: doPolo.filter(c => c.atendida).length,
-            viagens: soma('viagens'), sacos: soma('sacos'), sacosPreco: soma('sacosPreco'), frete: soma('frete'), venda,
+            viagens: soma('viagens'), sacos: soma('sacos'), sacosTer: soma('sacosTer'), sacosFrota: soma('sacosFrota'), sacosPreco: soma('sacosPreco'), frete: soma('frete'), venda,
             custoProduto: soma('custoProduto'), custoRodagem: soma('custoRodagem'),
             margemReal: venda > 0 ? venda - custosMargem : null,
             margemRealPct: venda > 0 ? ((venda - custosMargem) / venda) * 100 : null,
@@ -150,6 +171,8 @@ export function agregarMapa({ carregamentos, fretes, custoConfig, dadosMargem })
         viagens: cidades.reduce((s, c) => s + c.viagens, 0) + fora.estoque.viagens + fora.outros.viagens,
         sacos: cidades.reduce((s, c) => s + c.sacos, 0) + fora.outros.sacos,
         sacosPreco: cidades.reduce((s, c) => s + c.sacosPreco, 0),
+        sacosTer: cidades.reduce((s, c) => s + c.sacosTer, 0),
+        sacosFrota: cidades.reduce((s, c) => s + c.sacosFrota, 0),
         frete: cidades.reduce((s, c) => s + c.frete, 0) + fora.estoque.frete + fora.outros.frete,
         freteCidades: cidades.reduce((s, c) => s + c.frete, 0),
         fora,

@@ -5,6 +5,7 @@ import { AppIcon as Icon, Toast, ModalHeader, ModalOverlay } from 'components';
 
 import { FMT, BRL } from '../utils/helpers';
 import { TIPO_PAGAMENTO_LABEL } from '../utils/constants';
+import NotasFiscaisItens from './NotasFiscaisItens';
 
 // ─── Modal: Visualizar Despesa + Baixas/Revogações ───────────────────────────
 export default function ModalVisualizacaoDespesa({ despesa, config, onClose, onAtualizado, admin }) {
@@ -86,6 +87,9 @@ export default function ModalVisualizacaoDespesa({ despesa, config, onClose, onA
                         </span>
                     )}
                 </div>
+
+                {/* Notas fiscais / serviços e seus itens */}
+                <NotasFiscaisItens despesa={dados} />
 
                 {/* Boletos */}
                 {boletos.length > 0 && (

@@ -19,28 +19,44 @@ export function Kpi({ icon, label, valor, sub, cor = '#1D4ED8' }) {
     );
 }
 
-export function KpisTotais({ t, regioes }) {
+export function KpisTotais({ t, regioes, origem = 'frota' }) {
     const melhorFrete = [...regioes].sort((a, b) => b.frete - a.frete)[0];
     const maiorRodagem = [...regioes].sort((a, b) => b.custoRodagem - a.custoRodagem)[0];
     const precoMedio = t.sacosPreco > 0 ? t.venda / t.sacosPreco : null;
     const margemSaco = t.sacosPreco > 0 && t.margemReal != null ? t.margemReal / t.sacosPreco : null;
     const f = t.fora || { estoque: { viagens: 0, frete: 0 }, outros: { viagens: 0, frete: 0 } };
     const subFrete = [f.estoque.viagens > 0 ? `${f.estoque.viagens} viagens 'Carregamento no Estoque' (${fBRL(f.estoque.frete)}) só no frete` : '', f.outros.viagens > 0 ? `${f.outros.viagens} sem cidade no mapa` : ''].filter(Boolean).join(' · ');
+    const ter = origem === 'terceiros';
+    const corM = t.margemReal != null && t.margemReal < 0 ? '#DC2626' : '#15803D';
+    const subVolume = origem === 'todas' ? `Frota ${fNum(t.sacosFrota)} · Terceiros ${fNum(t.sacosTer)} sacos` : `${fNum(t.viagens)} viagens`;
     return (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Kpi icon="MapPin" label="Cidades atendidas" valor={`${t.atendidas} de ${t.total}`} sub={`${t.total - t.atendidas} sem atendimento`} cor="#1D4ED8" />
-            <Kpi icon="Package" label="Volume entregue" valor={`${fNum(t.sacos)} sacos`} sub={`${fNum(t.viagens)} viagens`} cor="#0EA5E9" />
-            <Kpi icon="DollarSign" label="Receita de frete" valor={fBRL(t.frete)} sub={subFrete || (melhorFrete?.frete > 0 ? `Maior: ${melhorFrete.nome.split(' · ')[1] || melhorFrete.nome}` : '')} cor="#16A34A" />
-            <Kpi icon="Fuel" label="Custo de rodagem" valor={fBRL(t.custoRodagem)} sub={maiorRodagem?.custoRodagem > 0 ? `Maior: ${maiorRodagem.nome.split(' · ')[1] || maiorRodagem.nome}` : ''} cor="#F97316" />
+            <Kpi icon="Package" label="Volume entregue" valor={`${fNum(t.sacos)} sacos`} sub={subVolume} cor="#0EA5E9" />
+            {ter ? (
+                <Kpi icon="ShoppingCart" label="Preço de venda (total)" valor={fBRL(t.venda)} sub="sacos × preço da tabela" cor="#6366F1" />
+            ) : (
+                <Kpi icon="DollarSign" label="Receita de frete" valor={fBRL(t.frete)} sub={subFrete || (melhorFrete?.frete > 0 ? `Maior: ${melhorFrete.nome.split(' · ')[1] || melhorFrete.nome}` : '')} cor="#16A34A" />
+            )}
+            {ter ? (
+                <Kpi icon="Package" label="Custo do produto" valor={fBRL(t.custoProduto)} sub="sacos × (produto + operacional)" cor="#8B5CF6" />
+            ) : (
+                <Kpi icon="Fuel" label="Custo de rodagem" valor={fBRL(t.custoRodagem)} sub={maiorRodagem?.custoRodagem > 0 ? `Maior: ${maiorRodagem.nome.split(' · ')[1] || maiorRodagem.nome}` : ''} cor="#F97316" />
+            )}
             <Kpi icon="ShoppingCart" label="Preço médio de venda / saco" valor={fBRL2(precoMedio)} sub={`vendas ${fBRL(t.venda)} ÷ ${fNum(t.sacosPreco)} sacos`} cor="#6366F1" />
-            <Kpi icon="TrendingUp" label="Margem bruta média / saco" valor={fBRL2(margemSaco)} sub={`total ${fBRL(t.margemReal)} ÷ ${fNum(t.sacosPreco)} sacos`} cor={t.margemReal != null && t.margemReal < 0 ? '#DC2626' : '#15803D'} />
-            <Kpi icon="Percent" label="Margem bruta (%)" valor={t.margemReal != null ? fPct((t.margemReal / t.venda) * 100) : '—'} sub="venda − (produto + frete)" cor={t.margemReal != null && t.margemReal < 0 ? '#DC2626' : '#15803D'} />
-            <Kpi icon="Package" label="Custo do produto" valor={fBRL(t.custoProduto)} sub="sacos × (produto + operacional)" cor="#8B5CF6" />
+            <Kpi icon="TrendingUp" label="Margem bruta média / saco" valor={fBRL2(margemSaco)} sub={`total ${fBRL(t.margemReal)} ÷ ${fNum(t.sacosPreco)} sacos`} cor={corM} />
+            <Kpi icon="Percent" label="Margem bruta (%)" valor={t.margemReal != null ? fPct((t.margemReal / t.venda) * 100) : '—'} sub="venda − (produto + frete)" cor={corM} />
+            {ter ? (
+                <Kpi icon="TrendingUp" label="Margem bruta (total)" valor={fBRL(t.margemReal)} sub="venda − (produto + frete da tabela)" cor={corM} />
+            ) : (
+                <Kpi icon="Package" label="Custo do produto" valor={fBRL(t.custoProduto)} sub="sacos × (produto + operacional)" cor="#8B5CF6" />
+            )}
         </div>
     );
 }
 
-export function CardsRegioes({ regioes, destaque, onDestaque }) {
+export function CardsRegioes({ regioes, destaque, onDestaque, origem = 'frota' }) {
+    const ter = origem === 'terceiros';
     const ordenadas = [...regioes].sort((a, b) => b.sacos - a.sacos);
     const maxSacos = Math.max(1, ...ordenadas.map(r => r.sacos));
     return (
@@ -59,10 +75,10 @@ export function CardsRegioes({ regioes, destaque, onDestaque }) {
                         <div className="h-1.5 rounded-full bg-gray-100 mt-2 overflow-hidden"><div className="h-full rounded-full" style={{ width: `${(r.sacos / maxSacos) * 100}%`, background: r.cor }} /></div>
                         <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-3 text-xs">
                             <span style={{ color: 'var(--color-text-secondary)' }}>Volume</span><span className="text-right font-medium">{fNum(r.sacos)} sacos</span>
-                            <span style={{ color: 'var(--color-text-secondary)' }}>Frete</span><span className="text-right font-medium">{fBRL(r.frete)}</span>
+                            {!ter && <><span style={{ color: 'var(--color-text-secondary)' }}>Frete</span><span className="text-right font-medium">{fBRL(r.frete)}</span></>}
                             <span style={{ color: 'var(--color-text-secondary)' }}>Venda</span><span className="text-right font-medium">{fBRL(r.venda)}</span>
                             <span style={{ color: 'var(--color-text-secondary)' }}>Produto</span><span className="text-right font-medium">{fBRL(r.custoProduto)}</span>
-                            <span style={{ color: 'var(--color-text-secondary)' }}>Rodagem</span><span className="text-right font-medium">{fBRL(r.custoRodagem)}</span>
+                            {!ter && <><span style={{ color: 'var(--color-text-secondary)' }}>Rodagem</span><span className="text-right font-medium">{fBRL(r.custoRodagem)}</span></>}
                             <span className="font-semibold">Margem bruta</span>
                             <span className="text-right font-bold" style={{ color: corMargem(r.margemReal) }}>{fBRL(r.margemReal)}{r.margemRealPct != null ? ` · ${fPct(r.margemRealPct)}` : ''}</span>
                         </div>
@@ -73,7 +89,8 @@ export function CardsRegioes({ regioes, destaque, onDestaque }) {
     );
 }
 
-export function DetalheCidade({ cidade, polo, onFechar }) {
+export function DetalheCidade({ cidade, polo, onFechar, origem = 'frota' }) {
+    const ter = origem === 'terceiros';
     if (!cidade) {
         return (
             <div className={`${card} p-5 text-center text-sm`} style={{ ...bord, color: 'var(--color-text-secondary)' }}>
@@ -86,7 +103,7 @@ export function DetalheCidade({ cidade, polo, onFechar }) {
     const linhas = [
         ['Viagens', fNum(cidade.viagens)], ['Volume', `${fNum(cidade.sacos)} sacos`],
         ['Preço de venda', fBRL(cidade.venda)], ['Preço por saco (tabela)', cidade.precoSaco != null ? `R$ ${cidade.precoSaco.toFixed(2).replace('.', ',')}` : '—'], ['(−) Custo do produto', fBRL(cidade.custoProduto)],
-        ['(−) Frete do transporte', fBRL(cidade.freteMargem)],
+        [ter ? '(−) Frete (Fretes de Terceiros)' : '(−) Frete do transporte', fBRL(cidade.freteMargem)],
     ];
     return (
         <div className={`${card} p-5`} style={bord}>
@@ -98,7 +115,7 @@ export function DetalheCidade({ cidade, polo, onFechar }) {
                 <button type="button" onClick={onFechar} aria-label="Fechar" className="p-1 rounded hover:bg-gray-100"><Icon name="X" size={16} color="currentColor" /></button>
             </div>
             {!cidade.atendida ? (
-                <p className="mt-4 text-sm px-3 py-2 rounded-lg" style={{ background: '#FEF2F2', color: '#B91C1C' }}>Sem carregamentos da frota própria no período — oportunidade de atendimento.</p>
+                <p className="mt-4 text-sm px-3 py-2 rounded-lg" style={{ background: '#FEF2F2', color: '#B91C1C' }}>{ter ? 'Sem carregamentos de terceiros no período — oportunidade de atendimento.' : origem === 'todas' ? 'Sem carregamentos (frota própria ou terceiros) no período — oportunidade de atendimento.' : 'Sem carregamentos da frota própria no período — oportunidade de atendimento.'}</p>
             ) : (
                 <>
                     <div className="mt-3 space-y-1.5 text-sm">
@@ -107,6 +124,7 @@ export function DetalheCidade({ cidade, polo, onFechar }) {
                             <span className="font-semibold">Margem bruta</span>
                             <span className="font-bold" style={{ color: corMargem(cidade.margemReal) }}>{fBRL(cidade.margemReal)}{cidade.margemRealPct != null ? ` · ${fPct(cidade.margemRealPct)}` : ''}</span>
                         </div>
+                        {origem === 'todas' && <div className="flex justify-between text-xs"><span style={{ color: 'var(--color-text-secondary)' }}>Origem do volume</span><span>Frota {fNum(cidade.sacosFrota)} · Terceiros {fNum(cidade.sacosTer)} sacos</span></div>}
                         {cidade.margemPorSaco != null && <div className="flex justify-between"><span className="font-semibold">Margem bruta por saco</span><span className="font-bold" style={{ color: corMargem(cidade.margemPorSaco) }}>{fBRL2(cidade.margemPorSaco)}</span></div>}
                         <div className="flex justify-between text-xs"><span style={{ color: 'var(--color-text-secondary)' }}>Última entrega</span><span>{fData(cidade.ultimaData)}</span></div>
                     </div>
@@ -146,12 +164,12 @@ export function RankingCidades({ cidades, metrica, onSelecionar, selecionada }) 
     );
 }
 
-export function SemAtendimento({ cidades, onSelecionar, naoLocalizados }) {
+export function SemAtendimento({ cidades, onSelecionar, naoLocalizados, origem = 'frota' }) {
     const lista = cidades.filter(c => !c.atendida).sort((a, b) => a.nome.localeCompare(b.nome));
     return (
         <div className={`${card} p-4`} style={bord}>
             <p className="text-sm font-semibold mb-1">Cidades da tabela de fretes sem atendimento ({lista.length})</p>
-            <p className="text-xs mb-3" style={{ color: 'var(--color-text-secondary)' }}>Sem carregamentos da frota própria no período selecionado.</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--color-text-secondary)' }}>{origem === 'terceiros' ? 'Sem carregamentos de terceiros' : origem === 'todas' ? 'Sem carregamentos (frota própria ou terceiros)' : 'Sem carregamentos da frota própria'} no período selecionado.</p>
             <div className="flex flex-wrap gap-1.5">
                 {lista.length === 0 && <span className="text-xs text-green-700">Todas as cidades da tabela foram atendidas 🎉</span>}
                 {lista.map(c => (

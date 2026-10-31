@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createMaterialCategory, deleteMaterialCategory } from 'services/materialService';
+import { createMaterialCategory, updateMaterialCategory, deleteMaterialCategory } from 'services/materialService';
 import { AppIcon as Icon, Button, useConfirm } from 'components';
 
 /**
@@ -11,6 +11,8 @@ export default function CategoryManagerModal({ isOpen, onClose, categorias, onCh
     const [loading, setLoading]   = useState(false);
     const [error, setError]       = useState('');
     const { confirm, ConfirmDialog } = useConfirm();
+    const [editId, setEditId]     = useState(null);
+    const [editNome, setEditNome] = useState('');
 
     if (!isOpen) return null;
 
@@ -29,6 +31,23 @@ export default function CategoryManagerModal({ isOpen, onClose, categorias, onCh
             setNovoNome('');
         } catch (err) {
             setError('Erro ao criar categoria: ' + (err.message || ''));
+        } finally { setLoading(false); }
+    };
+
+    const startEdit = (cat) => { setEditId(cat.id); setEditNome(cat.nome); setError(''); };
+    const cancelEdit = () => { setEditId(null); setEditNome(''); };
+    const handleRename = async (cat) => {
+        const nome = editNome.trim();
+        if (!nome) return;
+        if (nome === cat.nome) { cancelEdit(); return; }
+        if (categorias.some(c => c.id !== cat.id && c.nome.toLowerCase() === nome.toLowerCase())) { setError('Já existe uma categoria com esse nome.'); return; }
+        setLoading(true); setError('');
+        try {
+            const updated = await updateMaterialCategory(cat.id, cat.nome, nome);
+            onChange(categorias.map(c => (c.id === cat.id ? { ...c, ...updated } : c)).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')));
+            cancelEdit();
+        } catch (err) {
+            setError('Erro ao renomear categoria: ' + (err.message || ''));
         } finally { setLoading(false); }
     };
 
@@ -79,10 +98,25 @@ export default function CategoryManagerModal({ isOpen, onClose, categorias, onCh
                         ) : (
                             categorias.map((c, i) => (
                                 <div key={c.id} className={`flex items-center justify-between px-3 py-2 ${i !== categorias.length - 1 ? 'border-b' : ''}`} style={{ borderColor: 'var(--color-border)' }}>
-                                    <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.nome}</span>
-                                    <button onClick={() => handleDelete(c)} className="rounded-md p-1 hover:bg-red-50">
-                                        <Icon name="Trash2" size={14} color="#DC2626" />
-                                    </button>
+                                    {editId === c.id ? (
+                                        <>
+                                            <input autoFocus value={editNome} onChange={e => { setEditNome(e.target.value); setError(''); }}
+                                                onKeyDown={e => { if (e.key === 'Enter') handleRename(c); if (e.key === 'Escape') cancelEdit(); }}
+                                                className="flex-1 h-8 px-2 mr-2 rounded-md border border-blue-300 text-sm focus:outline-none bg-white" />
+                                            <div className="flex items-center gap-1">
+                                                <button onClick={() => handleRename(c)} disabled={loading} title="Salvar" className="rounded-md p-1 hover:bg-green-50"><Icon name="Check" size={14} color="#15803D" /></button>
+                                                <button onClick={cancelEdit} title="Cancelar" className="rounded-md p-1 hover:bg-gray-100"><Icon name="X" size={14} color="#64748B" /></button>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="text-sm" style={{ color: 'var(--color-text-primary)' }}>{c.nome}</span>
+                                            <div className="flex items-center gap-1">
+                                                <button onClick={() => startEdit(c)} title="Renomear" className="rounded-md p-1 hover:bg-blue-50"><Icon name="Pencil" size={14} color="#1D4ED8" /></button>
+                                                <button onClick={() => handleDelete(c)} title="Excluir" className="rounded-md p-1 hover:bg-red-50"><Icon name="Trash2" size={14} color="#DC2626" /></button>
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             ))
                         )}

@@ -20,13 +20,17 @@ export default function TabMapaRegional() {
         }
         return { inicio: '', fim: '' };
     }, [filtroMes, usarPeriodo, periodoCustom]);
-    const { cidades, regioes, totais, naoLocalizados, loading, erro, recarregar } = useMapaRegionalDados(periodo);
+    const { dados, loading, erro, recarregar } = useMapaRegionalDados(periodo);
+    const [origem, setOrigem] = useState('frota'); // 'frota' | 'terceiros' | 'todas'
+    const { cidades, regioes, totais, naoLocalizados } = dados[origem === 'terceiros' ? 'terceiros' : origem === 'todas' ? 'todas' : 'frota'];
     const [metricaId, setMetricaId] = useState('sacos');
     const [modoCor, setModoCor] = useState('regiao');
     const [foco, setFoco] = useState(true);
     const [selecionada, setSelecionada] = useState(null);
     const [regiaoDestaque, setRegiaoDestaque] = useState(null);
-    const metrica = METRICAS.find(m => m.id === metricaId);
+    // Terceiros não geram frete nem custo de rodagem no mapa — essas métricas ficam ocultas nessa visão
+    const metricasVisiveis = origem === 'terceiros' ? METRICAS.filter(m => m.id !== 'frete' && m.id !== 'custoRodagem') : METRICAS;
+    const metrica = metricasVisiveis.find(m => m.id === metricaId) || metricasVisiveis[0];
     const cidadeSel = useMemo(() => cidades.find(c => c.chave === selecionada) || null, [cidades, selecionada]);
     const poloSel = cidadeSel ? POLOS.find(p => p.id === cidadeSel.polo) : null;
 
@@ -67,11 +71,19 @@ export default function TabMapaRegional() {
                 </div>
             ) : (
                 <>
-                    <KpisTotais t={totais} regioes={regioes} />
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium mr-1">Origem das vendas:</span>
+                        {[['frota', 'Frota própria'], ['terceiros', 'Terceiros'], ['todas', 'Frota + Terceiros']].map(([id, l]) => (
+                            <button key={id} type="button" data-repeat className={chip(origem === id)} onClick={() => setOrigem(id)}>{l}</button>
+                        ))}
+                        {origem === 'terceiros' && <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>Vendas de terceiros não geram frete nem rodagem aqui — a margem usa o preço de venda e o frete da tabela "Fretes de Terceiros".</span>}
+                    </div>
+
+                    <KpisTotais t={totais} regioes={regioes} origem={origem} />
 
                     <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-medium mr-1">Exibir no mapa:</span>
-                        {METRICAS.map(m => <button key={m.id} type="button" data-repeat className={chip(metricaId === m.id)} onClick={() => setMetricaId(m.id)}>{m.label}</button>)}
+                        {metricasVisiveis.map(m => <button key={m.id} type="button" data-repeat className={chip(metricaId === m.id)} onClick={() => setMetricaId(m.id)}>{m.label}</button>)}
                         <span className="mx-2 h-4 w-px bg-gray-300 hidden sm:block" />
                         <button type="button" data-repeat className={chip(modoCor === 'regiao')} onClick={() => setModoCor('regiao')}>Cor por região</button>
                         <button type="button" data-repeat className={chip(modoCor === 'margem')} onClick={() => setModoCor('margem')}>Cor por margem</button>
@@ -90,17 +102,17 @@ export default function TabMapaRegional() {
                             </div>
                         </div>
                         <div className="space-y-4">
-                            <DetalheCidade cidade={cidadeSel} polo={poloSel} onFechar={() => setSelecionada(null)} />
+                            <DetalheCidade cidade={cidadeSel} polo={poloSel} origem={origem} onFechar={() => setSelecionada(null)} />
                             <RankingCidades cidades={cidades} metrica={metrica} onSelecionar={setSelecionada} selecionada={selecionada} />
                         </div>
                     </div>
 
                     <div>
                         <h3 className="text-sm font-semibold mb-2">Resultado por região <span className="font-normal text-xs" style={{ color: 'var(--color-text-secondary)' }}>(clique para destacar no mapa)</span></h3>
-                        <CardsRegioes regioes={regioes} destaque={regiaoDestaque} onDestaque={setRegiaoDestaque} />
+                        <CardsRegioes regioes={regioes} destaque={regiaoDestaque} onDestaque={setRegiaoDestaque} origem={origem} />
                     </div>
 
-                    <SemAtendimento cidades={cidades} onSelecionar={setSelecionada} naoLocalizados={naoLocalizados} />
+                    <SemAtendimento cidades={cidades} onSelecionar={setSelecionada} naoLocalizados={naoLocalizados} origem={origem} />
 
                 </>
             )}

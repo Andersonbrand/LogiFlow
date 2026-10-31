@@ -69,3 +69,30 @@ describe('CIF não é venda', () => {
         expect(b.margemPorSaco).toBeCloseTo(17);
     });
 });
+
+describe('terceiros no mapa de vendas', () => {
+    const base = { custoConfig: { custoMedioProduto: 30, custoOperacional: 2 }, dadosMargem: { custoPorKm: 1, custoPorDia: 0, margemPadrao: 20, custosDestinos: [] } };
+    it('não gera frete de receita nem rodagem; margem usa venda e frete da tabela de terceiros', () => {
+        const r = agregarMapa({
+            ...base,
+            carregamentos: [{ __ter: true, destino: 'Guanambi, BA', quantidade: 100, valor_frete_calculado: 999 }],
+            fretes: [{ cidade: 'Guanambi, BA', km: 100, frete_por_saco: 2, valor_venda: 40 }],
+            fretesTerceiros: [{ cidade: 'Guanambi, BA', km: 100, frete_por_saco: 3, valor_venda: 45 }],
+        });
+        const g = r.cidades.find(c => c.chave === 'guanambi');
+        expect(g.frete).toBe(0); expect(g.custoRodagem).toBe(0);
+        expect(g.venda).toBe(4500);
+        expect(g.margemReal).toBe(4500 - 3200 - 300);
+        expect(r.totais.frete).toBe(0);
+    });
+    it('sem preço na tabela de terceiros usa o preço de venda da frota', () => {
+        const r = agregarMapa({
+            ...base,
+            carregamentos: [{ __ter: true, destino: 'Guanambi, BA', quantidade: 100, valor_frete_calculado: 500 }],
+            fretes: [{ cidade: 'Guanambi, BA', km: 100, frete_por_saco: 2, valor_venda: 40 }],
+            fretesTerceiros: [],
+        });
+        const g = r.cidades.find(c => c.chave === 'guanambi');
+        expect(g.venda).toBe(4000); expect(g.frete).toBe(0);
+    });
+});
