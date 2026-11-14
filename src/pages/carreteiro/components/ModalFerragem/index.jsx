@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { AppIcon as Icon, PrettySelect, CidadesAdicionaisField, Button, Field, ModalHeader } from 'components';
+import { AppIcon as Icon, PrettySelect, SearchableSelect, CidadesAdicionaisField, Button, Field, ModalHeader } from 'components';
 import { updateRomaneio, createRomaneioFerragem } from 'services/carretas';
 
 import { inputCls, inputStyle } from '../../utils/constants';
@@ -28,37 +28,30 @@ export default function ModalFerragem({ cidadesFrete, editandoFerragemId, empres
                         </div>
                         {/* Vincular a ROM existente do admin */}
                         <Field label="Nº do Romaneio (opcional)">
-                            {romsAbertos.length > 0 ? (
-                                <PrettySelect
-                                    value={formFerragem.numero_romaneio}
-                                    onChange={e => {
-                                        const num = e.target.value;
-                                        const rom = romsAbertos.find(r => r.numero === num);
-                                        setFormFerragem(f => ({
-                                            ...f,
-                                            numero_romaneio: num,
-                                            destino: rom?.destino || f.destino,
-                                            empresa: rom?.empresa_origem || f.empresa,
-                                        }));
-                                    }}
-                                    className={inputCls} style={inputStyle}>
-                                    <option value="">Deixar em branco (gera número automático)</option>
-                                    {romsAbertos.map(r => (
-                                        <option key={r.id} value={r.numero}>
-                                            {r.numero} — {r.destino || 'Sem destino'} — {r.empresa_origem || ''}
-                                        </option>
-                                    ))}
-                                </PrettySelect>
-                            ) : (
-                                <input
-                                    value={formFerragem.numero_romaneio}
-                                    onChange={e => setFormFerragem(f => ({ ...f, numero_romaneio: e.target.value }))}
-                                    className={inputCls} style={inputStyle}
-                                    placeholder="Ex: ROM-00001 (se o admin já criou)"
-                                />
-                            )}
+                            <SearchableSelect
+                                value={formFerragem.numero_romaneio}
+                                allowCustom
+                                placeholder="Deixar em branco (gera número automático)"
+                                emptyLabel="Nenhum romaneio encontrado — digite o número para usar"
+                                options={[...romsAbertos]
+                                    .sort((x, y) => (parseInt(String(y.numero).replace(/\D/g, ''), 10) || 0) - (parseInt(String(x.numero).replace(/\D/g, ''), 10) || 0))
+                                    .map(r => ({
+                                        value: r.numero,
+                                        label: `${r.numero} — ${r.destino || 'Sem destino'}`,
+                                        sublabel: [r.empresa, r.numero_nf && `NF ${r.numero_nf}`, r.data_saida && new Date(r.data_saida + 'T00:00:00').toLocaleDateString('pt-BR'), r.status].filter(Boolean).join(' · '),
+                                    }))}
+                                onChange={num => {
+                                    const rom = romsAbertos.find(r => r.numero === num);
+                                    setFormFerragem(f => ({
+                                        ...f,
+                                        numero_romaneio: num,
+                                        destino: rom?.destino || f.destino,
+                                        empresa: rom?.empresa || f.empresa,
+                                    }));
+                                }}
+                            />
                             <p className="text-xs mt-1" style={{ color: 'var(--color-muted-foreground)' }}>
-                                Se o administrador já criou o romaneio, selecione para vincular. Caso contrário, será gerado automaticamente.
+                                Se o administrador já criou o romaneio, busque pelo número, destino, empresa ou NF e selecione para vincular. Caso contrário, será gerado automaticamente.
                             </p>
                         </Field>
                         <div className="grid grid-cols-2 gap-4">

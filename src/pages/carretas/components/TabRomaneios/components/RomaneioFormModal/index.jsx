@@ -12,7 +12,10 @@ import { BRL } from '../../utils/helpers';
 import PedidoCardCarretas from '../PedidoCardCarretas';
 
 // ─── Card de Pedido — cabeçalho (cliente/vendedor/frete) + materiais do pedido ─
+let _pedidoKeySeq = 0;
+const novaKeyPedido = () => `pk-${Date.now()}-${++_pedidoKeySeq}`;
 const EMPTY_PEDIDO_CARRETAS = () => ({
+    _key: novaKeyPedido(),
     numero_pedido: '', cidade_destino: '', valor_pedido: '', categoria_frete: 'Cimento',
     categorias_extra: [], empresa: '', nome_cliente: '', nome_vendedor: '', itens: [], observacao: '',
 });
@@ -82,7 +85,7 @@ export default function RomaneioFormModal({ modal, onClose, onSaved, motoristas,
                 };
             };
             let pedidosCarregados = (rom.pedidos || []).map(p => ({
-                id: p.id,
+                id: p.id, _key: novaKeyPedido(),
                 numero_pedido: p.numero_pedido || '', cidade_destino: p.cidade_destino || '',
                 valor_pedido: p.valor_pedido != null ? String(p.valor_pedido) : '',
                 categoria_frete: p.categoria_frete || 'Cimento',
@@ -96,6 +99,7 @@ export default function RomaneioFormModal({ modal, onClose, onSaved, motoristas,
             // perder nada, já convertendo pro novo formato ao salvar de novo.
             if (pedidosCarregados.length === 0 && (rom.itens || []).length > 0) {
                 pedidosCarregados = [{
+                    _key: novaKeyPedido(),
                     numero_pedido: rom.numero_pedido || '', cidade_destino: rom.destino || '',
                     valor_pedido: rom.valor_carga != null ? String(rom.valor_carga) : '',
                     categoria_frete: 'Cimento', categorias_extra: [],
@@ -160,7 +164,7 @@ export default function RomaneioFormModal({ modal, onClose, onSaved, motoristas,
             });
 
             if (pedidos.length === 0) { showToast('Adicione pelo menos um pedido', 'error'); setSaving(false); return; }
-            const pedidosPayload = pedidos.map(p => {
+            const pedidosPayload = pedidos.map(({ _key, _novo, ...p }) => {
                 const freteMulti = calcularFretePedidoMulti(p);
                 return {
                     numero_pedido: p.numero_pedido || null,
@@ -422,7 +426,7 @@ export default function RomaneioFormModal({ modal, onClose, onSaved, motoristas,
                     ) : (
                         <div className="space-y-3">
                             {pedidos.map((pedido, idx) => (
-                                <PedidoCardCarretas key={idx} pedido={pedido} index={idx} materiais={materiais} empresas={empresas}
+                                <PedidoCardCarretas key={pedido._key || idx} pedido={pedido} index={idx} materiais={materiais} empresas={empresas}
                                     onUpdate={updatePedido} onRemove={removePedido}
                                     defaultAberto={pedido._novo} />
                             ))}

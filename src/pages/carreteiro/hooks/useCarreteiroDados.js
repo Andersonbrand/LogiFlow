@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { usePagination } from 'components';
-import { fetchViagens, fetchAbastecimentos, fetchChecklists, fetchVeiculosProprios, fetchConfigAbastecimento, fetchPostos, fetchEmpresas, fetchFretesCidades, fetchLocaisParada, fetchChecklistItens, fetchCarregamentos, fetchBonificacoesExtras, fetchRegistrosViagem, fetchNotificacoesCarreteiro, fetchPontosParada, fetchRomaneiosCarreteiro, fetchRomaneios } from 'services/carretas';
+import { fetchViagens, fetchAbastecimentos, fetchChecklists, fetchVeiculosProprios, fetchConfigAbastecimento, fetchPostos, fetchEmpresas, fetchFretesCidades, fetchLocaisParada, fetchChecklistItens, fetchCarregamentos, fetchBonificacoesExtras, fetchRegistrosViagem, fetchNotificacoesCarreteiro, fetchPontosParada, fetchRomaneiosCarreteiro, fetchRomaneiosParaVincular } from 'services/carretas';
 import { fetchRomaneiosPorMotorista } from 'services/romaneio';
 import { supabase, subscribeTabela } from 'services/supabaseClient';
 import { setIntervalVisivel } from 'utils/pollingVisivel';
@@ -149,7 +149,7 @@ const load = useCallback(async () => {
             try {
                 const [roms, romsAdminAbertos] = await Promise.all([
                     fetchRomaneiosCarreteiro(user.id),
-                    fetchRomaneios({ status: 'Aguardando' }).catch(() => []),
+                    fetchRomaneiosParaVincular(user.id).catch(err => { console.error('[Carreteiro] ROMs para vincular:', err); return []; }),
                 ]);
                 setRomaneiosCarreteiro((roms || []).filter(r =>
                     r.tipo_carga !== 'ferragem' && !r.lancado_por_motorista
@@ -157,10 +157,8 @@ const load = useCallback(async () => {
                 setRomaneiosFerragem((roms || []).filter(r =>
                     r.tipo_carga === 'ferragem' || r.lancado_por_motorista
                 ));
-                // ROMs do admin disponíveis para vincular (sem motorista ainda ou do próprio motorista)
-                setRomsAbertos((romsAdminAbertos || []).filter(r =>
-                    !r.motorista_id || r.motorista_id === user.id
-                ));
+                // ROMs do admin disponíveis para vincular (já filtrados no serviço)
+                setRomsAbertos(romsAdminAbertos || []);
             } catch { setRomaneiosCarreteiro([]); setRomaneiosFerragem([]); }
         } catch (e) { showToast('Erro ao carregar: ' + e.message, 'error'); }
         finally { setLoading(false); }

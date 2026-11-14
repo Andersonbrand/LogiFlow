@@ -153,7 +153,15 @@ export default function TabRomaneios({ isAdmin }) {
             variant: 'danger',
         });
         if (!ok) return;
-        try { await deleteRomaneio(id); showToast('Excluído!', 'warning'); load(); }
+        try {
+            const { renumerados } = await deleteRomaneio(id);
+            showToast(
+                renumerados === null ? 'Excluído! (renumeração automática indisponível — rode a migration 20261113b no Supabase)'
+                : renumerados > 0 ? `Excluído! ${renumerados} romaneio${renumerados > 1 ? 's' : ''} renumerado${renumerados > 1 ? 's' : ''}.`
+                : 'Excluído!',
+                'warning');
+            load();
+        }
         catch (e) { showToast('Erro: ' + e.message, 'error'); }
     };
 

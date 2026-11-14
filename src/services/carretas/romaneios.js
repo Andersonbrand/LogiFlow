@@ -148,6 +148,27 @@ export async function createRomaneio(romaneio) {
     return data;
 }
 
+
+/**
+ * Apaga as linhas filhas (pedidos/itens) de um romaneio e CONFIRMA que sumiram.
+ * Com RLS, um DELETE sem permissão não dá erro — apenas afeta 0 linhas. Sem essa
+ * conferência o pedido "excluído" na tela continuava no banco e voltava a
+ * aparecer (duplicado) depois de salvar.
+ */
+async function apagarFilhosDoRomaneio(tabela, romaneioId) {
+    const { error } = await supabase.from(tabela).delete().eq('romaneio_id', romaneioId);
+    if (error) throw error;
+    const { count, error: eCount } = await supabase
+        .from(tabela).select('id', { count: 'exact', head: true }).eq('romaneio_id', romaneioId);
+    if (eCount) throw eCount;
+    if (count > 0) {
+        throw new Error(
+            `Sem permissão para excluir registros em ${tabela} (política RLS). ` +
+            'Execute a migration 20261113a_carretas_romaneio_pedidos_rls_escrita.sql no Supabase.'
+        );
+    }
+}
+
 export async function updateRomaneio(id, romaneio) {
     const { itens, _pedidos, ...payload } = romaneio;
     // Não deletar veiculo_id quando é undefined — só quando explicitamente vazio
@@ -165,13 +186,11 @@ export async function updateRomaneio(id, romaneio) {
     // Itens ANTES dos pedidos — romaneio_itens.pedido_id tem FK para
     // carretas_romaneio_pedidos.id, mesma ordem usada no módulo de caminhões.
     if (itens !== undefined || _pedidos !== undefined) {
-        const { error: delItensErr } = await supabase.from('carretas_romaneio_itens').delete().eq('romaneio_id', id);
-        if (delItensErr) throw delItensErr;
+        await apagarFilhosDoRomaneio('carretas_romaneio_itens', id);
     }
     let pedidoIdMap = {};
     if (_pedidos !== undefined) {
-        const { error: delPedidosErr } = await supabase.from('carretas_romaneio_pedidos').delete().eq('romaneio_id', id);
-        if (delPedidosErr) throw delPedidosErr;
+        await apagarFilhosDoRomaneio('carretas_romaneio_pedidos', id);
         if (_pedidos.length > 0) {
             const { data: pd, error: pe } = await supabase
                 .from('carretas_romaneio_pedidos')
@@ -189,9 +208,43 @@ export async function updateRomaneio(id, romaneio) {
     return data;
 }
 
+/**
+ * Recompacta a numeração (ROM-001, ROM-002, ...) sem buracos, preservando a ordem.
+ * Roda no banco (função atômica, ver migration 20261113b). Retorna quantos mudaram,
+ * ou null se a função ainda não foi criada no Supabase.
+ */
+export async function renumerarRomaneios() {
+    const { data, error } = await supabase.rpc('renumerar_romaneios_carretas');
+    if (error) {
+        console.warn('[renumerarRomaneios] indisponível:', error.message);
+        return null;
+    }
+    return Number(data) || 0;
+}
+
+/** Exclui o romaneio e reordena automaticamente os números restantes. */
 export async function deleteRomaneio(id) {
     const { error } = await supabase.from('carretas_romaneios').delete().eq('id', id);
     if (error) throw error;
+    return { renumerados: await renumerarRomaneios() };
+}
+
+/**
+ * Romaneios que o carreteiro pode vincular ao registrar ferragens:
+ * criados pelo admin, ainda não lançados por motorista, sem motorista ou do próprio,
+ * e que não estão finalizados/cancelados (qualquer outro status serve — não só "Aguardando").
+ */
+export async function fetchRomaneiosParaVincular(motoristaId) {
+    const { data, error } = await supabase
+        .from('carretas_romaneios')
+        .select('id, numero, status, destino, empresa, data_saida, numero_nf, motorista_id, lancado_por_motorista, created_at')
+        .not('numero', 'is', null)
+        .not('status', 'in', '("Cancelado","Entrega finalizada")')
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).filter(r =>
+        !r.lancado_por_motorista && (!r.motorista_id || r.motorista_id === motoristaId)
+    );
 }
 
 export const STATUS_ROMANEIO = ['Aguardando', 'Carregando', 'Em Trânsito', 'Entrega finalizada', 'Cancelado'];

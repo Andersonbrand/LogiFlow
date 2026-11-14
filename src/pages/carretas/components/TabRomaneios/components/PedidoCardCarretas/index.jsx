@@ -23,26 +23,26 @@ export default function PedidoCardCarretas({ pedido, index, materiais, empresas,
 
     return (
         <div className="rounded-xl border overflow-hidden" style={{ borderColor: '#C4B5FD' }}>
-            <button type="button" onClick={() => setAberto(v => !v)}
-                className="w-full px-4 py-3 flex items-center justify-between gap-2 text-left hover:brightness-95 transition-all"
-                style={{ backgroundColor: '#FAF5FF' }}>
-                <div className="flex items-center gap-2 min-w-0">
+            {/* Cabeçalho: o botão de excluir é IRMÃO do botão de abrir/fechar — antes era um
+                <span> dentro de um <button> (HTML inválido), e o clique de excluir não
+                disparava de forma confiável. */}
+            <div className="w-full flex items-center justify-between gap-2" style={{ backgroundColor: '#FAF5FF' }}>
+                <button type="button" onClick={() => setAberto(v => !v)}
+                    className="flex-1 min-w-0 px-4 py-3 flex items-center gap-2 text-left hover:brightness-95 transition-all">
                     <Icon name={aberto ? 'ChevronUp' : 'ChevronDown'} size={14} color="#7C3AED" className="flex-shrink-0" />
                     <p className="text-xs font-semibold text-purple-700 truncate">
                         📦 Pedido {index + 1}{pedido.numero_pedido ? ` — Nº ${pedido.numero_pedido}` : ''}
                         {!aberto && pedido.nome_cliente ? ` — ${pedido.nome_cliente}` : ''}
                     </p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
                     {!aberto && nVal(pedido.valor_pedido) > 0 && (
-                        <span className="text-xs font-data font-semibold text-purple-700">{BRL(freteMulti.total)}</span>
+                        <span className="ml-auto text-xs font-data font-semibold text-purple-700 flex-shrink-0">{BRL(freteMulti.total)}</span>
                     )}
-                    <span onClick={e => { e.stopPropagation(); onRemove(index); }} role="button"
-                        className="p-1 rounded hover:bg-red-50">
-                        <Icon name="Trash2" size={14} color="#DC2626" />
-                    </span>
-                </div>
-            </button>
+                </button>
+                <button type="button" onClick={() => onRemove(index)} title="Excluir pedido"
+                    className="p-2 mr-2 rounded hover:bg-red-50 flex-shrink-0">
+                    <Icon name="Trash2" size={14} color="#DC2626" />
+                </button>
+            </div>
             {aberto && (
             <div className="p-4 space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

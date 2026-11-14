@@ -16,7 +16,7 @@ export async function createRomaneioFerragem(payload) {
         const numeroNorm = numero_romaneio.trim().toUpperCase();
         const { data: rowsExist } = await supabase
             .from('carretas_romaneios')
-            .select('id, numero, tipo_carga, motorista_id')
+            .select('id, numero, tipo_carga, motorista_id, destino, toneladas, empresa, observacoes')
             .eq('numero', numeroNorm)
             .limit(1);
         const existente = rowsExist?.[0] ?? null;
@@ -29,10 +29,11 @@ export async function createRomaneioFerragem(payload) {
                     numero_nf:   rest.numero_nf,
                     data_saida:  rest.data_saida,
                     veiculo_id:  rest.veiculo_id,
-                    destino:     rest.destino     || existente.destino,
-                    toneladas:   rest.toneladas   ?? null,
-                    empresa:     rest.empresa     ?? null,
-                    observacoes: rest.observacoes ?? null,
+                    // Campos que o motorista deixou em branco preservam o que o admin já lançou
+                    destino:     rest.destino     || existente.destino     || null,
+                    toneladas:   rest.toneladas   ?? existente.toneladas   ?? null,
+                    empresa:     rest.empresa     || existente.empresa     || null,
+                    observacoes: rest.observacoes || existente.observacoes || null,
                     motorista_id: rest.motorista_id || existente.motorista_id,
                     tipo_carga:  'ferragem',
                     lancado_por_motorista: true,
