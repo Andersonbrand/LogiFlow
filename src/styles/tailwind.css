@@ -413,9 +413,19 @@
 
     /* Main content offset */
     .main-content {
-        padding-top: 60px;
+        padding-top: calc(60px + var(--license-banner-h, 0px));
         min-height: 100vh;
         background-color: var(--color-background);
+    }
+
+    /* Sidebars que ficam presas abaixo do header: descem junto com a faixa de aviso */
+    .below-nav-sticky {
+        top: calc(60px + var(--license-banner-h, 0px));
+        height: calc(100vh - 60px - var(--license-banner-h, 0px));
+    }
+    .below-nav-sticky-catalog {
+        top: calc(76px + var(--license-banner-h, 0px));
+        max-height: calc(100vh - 92px - var(--license-banner-h, 0px));
     }
 
     /* Breakpoint MD→LG (768px–1199px): nav compacto */

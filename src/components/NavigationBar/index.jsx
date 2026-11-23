@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Icon from 'components/AppIcon';
 import { useAuth } from 'context/AuthContext';
 import { usePageTabs } from 'context/PageTabsContext';
+import { LicenseNoticeBanner } from 'components/LicenseNotice';
 import NotificationBell from 'components/NotificationBell';
 import paths from 'constants/paths';
 
@@ -149,6 +150,7 @@ export default function NavigationBar() {
                     </div>
                 </div>
             </nav>
+            <LicenseNoticeBanner />
             <MobileMenuOverlay
                 isOpen={mobileOpen}
                 onClose={() => setMobileOpen(false)}

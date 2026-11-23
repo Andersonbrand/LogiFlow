@@ -4,6 +4,7 @@ import Icon from 'components/AppIcon';
 import MobileMenuOverlay from './MobileMenuOverlay';
 import { useAuth } from 'utils/AuthContext';
 import { usePageTabs } from 'utils/PageTabsContext';
+import { LicenseNoticeBanner } from 'components/LicenseNotice';
 import NotificationBell from 'components/ui/NotificationBell';
 
 const NAV_ITEMS = [
@@ -145,6 +146,7 @@ export default function NavigationBar() {
                     </div>
                 </div>
             </nav>
+            <LicenseNoticeBanner />
             <MobileMenuOverlay
                 isOpen={mobileOpen}
                 onClose={() => setMobileOpen(false)}

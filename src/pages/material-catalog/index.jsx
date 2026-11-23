@@ -246,7 +246,7 @@ export default function MaterialCatalog() {
                     {/* Main Layout: Filters sidebar + Table */}
                     <div className="flex gap-5">
                         {/* Desktop Filters */}
-                        <aside className="hidden lg:block w-64 flex-shrink-0 self-start sticky top-[76px] max-h-[calc(100vh-92px)] overflow-y-auto">
+                        <aside className="hidden lg:block w-64 flex-shrink-0 self-start sticky below-nav-sticky-catalog overflow-y-auto">
                             <FilterPanel
                                 filters={filters}
                                 onChange={setFilters}

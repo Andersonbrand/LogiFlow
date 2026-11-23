@@ -151,7 +151,7 @@ export default function CarretasPage() {
                             um elemento sticky "anda" junto e fica cortado à esquerda. fixed
                             trava nos dois eixos, sempre relativo à janela, então a sidebar
                             nunca some, não importa o quanto o conteúdo role. */}
-                        <aside className="hidden lg:flex flex-col flex-shrink-0 fixed top-[60px] h-[calc(100vh-60px)] overflow-y-auto border-r z-20"
+                        <aside className="hidden lg:flex flex-col flex-shrink-0 fixed below-nav-sticky overflow-y-auto border-r z-20"
                             style={{ width: 220, left: 'max(0px, calc((100vw - 1920px) / 2))', borderColor: 'var(--color-border)', backgroundColor: 'var(--color-card)' }}>
                             <SidebarContent />
                         </aside>

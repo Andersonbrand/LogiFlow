@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase } from './supabaseClient';
+import { resetLicenseNotice } from 'utils/licenseNotice';
 
 const AuthContext = createContext({});
 
@@ -103,6 +104,8 @@ export function AuthProvider({ children }) {
     const signIn = async (email, password) => {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        // Novo login → o aviso central volta a aparecer no dashboard
+        resetLicenseNotice();
         return data;
     };
 
@@ -116,6 +119,7 @@ export function AuthProvider({ children }) {
         });
         if (error) throw error;
         if (data.user && data.session) {
+            resetLicenseNotice();
             await supabase.from('user_profiles')
                 .upsert({ id: data.user.id, name: name || email.split('@')[0], role: 'operador' }, { onConflict: 'id' });
         }

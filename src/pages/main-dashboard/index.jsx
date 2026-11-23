@@ -10,6 +10,7 @@ import { useAuth } from "context/AuthContext";
 import { subscribeTabela } from "services/supabaseClient";
 import { useRecarregarAoVoltar } from "hooks/useRecarregarAoVoltar";
 import { useToast } from "hooks/useToast";
+import { LicenseNoticeModal } from 'components/LicenseNotice';
 import { NavigationBar, BreadcrumbTrail, Button, AppIcon as Icon, Toast } from 'components';
 
 import RomaneiosTable from "./components/RomaneiosTable";
@@ -365,6 +366,7 @@ export default function MainDashboard() {
                     </footer>
                 </div>
             </main>
+            <LicenseNoticeModal />
             {toast && <Toast toast={toast} />}
         </div>
     );
